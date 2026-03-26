@@ -24,7 +24,7 @@ std::optional<NArrow::NMerger::TCursor> TBaseMergeTask::DrainMergerLinearScan(co
         Merger = nullptr;
     }
     Context->GetCommonContext()->GetCounters().OnLinearScanInterval(rbBuilder->GetRecordsCount());
-    ResultBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ rbBuilder->Finalize() }));
+    ResultBatch = NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({ rbBuilder->Finalize() }));
     return lastResultPosition;
 }
 

@@ -15,7 +15,7 @@ namespace NKikimr::NArrow {
 namespace {
 
 template <typename T>
-arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
+arrow20::Status AppendCell(arrow20::NumericBuilder<T>& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -23,7 +23,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.AsValue<typename T::c_type>());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::BooleanBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::BooleanBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -31,7 +31,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.AsValue<ui8>());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::UInt8Builder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::UInt8Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -39,7 +39,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.AsValue<ui8>());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::BinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -47,7 +47,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.Data(), cell.Size());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::StringBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::StringBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -55,7 +55,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.Data(), cell.Size());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::Decimal128Builder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::Decimal128Builder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -66,7 +66,7 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.Data());
 }
 
-[[maybe_unused]] arrow::Status AppendCell(arrow::FixedSizeBinaryBuilder& builder, const TCell& cell) {
+[[maybe_unused]] arrow20::Status AppendCell(arrow20::FixedSizeBinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
     }
@@ -75,13 +75,13 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
 }
 
 template <typename TDataType>
-arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum) {
-    using TBuilderType = typename arrow::TypeTraits<TDataType>::BuilderType;
+arrow20::Status AppendCell(arrow20::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum) {
+    using TBuilderType = typename arrow20::TypeTraits<TDataType>::BuilderType;
     return AppendCell(*builder.GetFieldAs<TBuilderType>(colNum), cell);
 }
 
-arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeInfo type) {
-    arrow::Status result;
+arrow20::Status AppendCell(arrow20::RecordBatchBuilder& builder, const TCell& cell, ui32 colNum, NScheme::TTypeInfo type) {
+    arrow20::Status result;
     auto callback = [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
         result = AppendCell<TType>(builder, cell, colNum);
@@ -89,24 +89,24 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
     };
     auto success = SwitchYqlTypeToArrowType(type, std::move(callback));
     if(!success) {
-        return arrow::Status::TypeError("Unsupported type");
+        return arrow20::Status::TypeError("Unsupported type");
     }
     return result;
 }
 
-arrow::Status AppendValue(arrow::RecordBatchBuilder& builder, const NUdf::TUnboxedValue& value, ui32 colNum, const NKikimr::NMiniKQL::TType* type) {
+arrow20::Status AppendValue(arrow20::RecordBatchBuilder& builder, const NUdf::TUnboxedValue& value, ui32 colNum, const NKikimr::NMiniKQL::TType* type) {
     try {
         NKqp::NFormats::AppendElement(value, builder.GetField(colNum), type);
     } catch (const std::exception& e) {
-        return arrow::Status::FromArgs(arrow::StatusCode::Invalid, e.what());
+        return arrow20::Status::FromArgs(arrow20::StatusCode::Invalid, e.what());
     }
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
 }
 
 NKikimr::NArrow::TRecordBatchConstructor::TRecordConstructor& TRecordBatchConstructor::TRecordConstructor::AddRecordValue(
-    const std::shared_ptr<arrow::Scalar>& value)
+    const std::shared_ptr<arrow20::Scalar>& value)
 {
     Y_ABORT_UNLESS(CurrentBuilder != Owner.Builders.end());
     AddValueToBuilder(**CurrentBuilder, value, WithCast);
@@ -114,8 +114,8 @@ NKikimr::NArrow::TRecordBatchConstructor::TRecordConstructor& TRecordBatchConstr
     return *this;
 }
 
-void TRecordBatchConstructor::AddValueToBuilder(arrow::ArrayBuilder& builder,
-    const std::shared_ptr<arrow::Scalar>& value, const bool withCast) {
+void TRecordBatchConstructor::AddValueToBuilder(arrow20::ArrayBuilder& builder,
+    const std::shared_ptr<arrow20::Scalar>& value, const bool withCast) {
     if (!value) {
         Y_ABORT_UNLESS(builder.AppendNull().ok());
     } else if (!withCast) {
@@ -128,12 +128,12 @@ void TRecordBatchConstructor::AddValueToBuilder(arrow::ArrayBuilder& builder,
 }
 
 NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBatchSlow(
-    const std::shared_ptr<arrow::RecordBatch>& value, const bool withCast /*= false*/, const bool withRemap /*= false*/)
+    const std::shared_ptr<arrow20::RecordBatch>& value, const bool withCast /*= false*/, const bool withRemap /*= false*/)
 {
     Y_ABORT_UNLESS(!!value);
     Y_ABORT_UNLESS(!!Schema);
     Y_ABORT_UNLESS(!InConstruction);
-    std::vector<std::shared_ptr<arrow::Array>> batchColumns;
+    std::vector<std::shared_ptr<arrow20::Array>> batchColumns;
     if (withRemap) {
         for (auto&& f : Schema->fields()) {
             batchColumns.emplace_back(value->GetColumnByName(f->name()));
@@ -149,13 +149,13 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBat
     }
     Y_ABORT_UNLESS((int)batchColumns.size() == Schema->num_fields());
     Y_ABORT_UNLESS((int)Builders.size() == Schema->num_fields());
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>>::const_iterator currentBuilder = Builders.begin();
+    std::vector<std::unique_ptr<arrow20::ArrayBuilder>>::const_iterator currentBuilder = Builders.begin();
     for (auto&& c : batchColumns) {
         if (!c) {
             Y_ABORT_UNLESS((*currentBuilder)->AppendNulls(value->num_rows()).ok());
         } else {
             for (ui32 r = 0; r < value->num_rows(); ++r) {
-                std::shared_ptr<arrow::Scalar> value;
+                std::shared_ptr<arrow20::Scalar> value;
                 if (c->IsNull(r)) {
                     value = nullptr;
                 } else {
@@ -172,13 +172,13 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::AddRecordsBat
     return *this;
 }
 
-NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(const std::shared_ptr<arrow::Schema>& schema) {
+NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(const std::shared_ptr<arrow20::Schema>& schema) {
     Schema = schema;
     Builders.clear();
     Builders.reserve(Schema->num_fields());
     for (auto&& f : Schema->fields()) {
-        std::unique_ptr<arrow::ArrayBuilder> arrayBuilder;
-        Y_ABORT_UNLESS(arrow::MakeBuilder(arrow::default_memory_pool(), f->type(), &arrayBuilder).ok());
+        std::unique_ptr<arrow20::ArrayBuilder> arrayBuilder;
+        Y_ABORT_UNLESS(arrow20::MakeBuilder(arrow20::default_memory_pool(), f->type(), &arrayBuilder).ok());
         Builders.emplace_back(std::move(arrayBuilder));
     }
     return *this;
@@ -186,14 +186,14 @@ NKikimr::NArrow::TRecordBatchConstructor& TRecordBatchConstructor::InitColumns(c
 
 TRecordBatchReader TRecordBatchConstructor::Finish() {
     Y_ABORT_UNLESS(!InConstruction);
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     columns.reserve(Builders.size());
     for (auto&& i : Builders) {
-        arrow::Result<std::shared_ptr<arrow::Array>> aData = i->Finish();
+        arrow20::Result<std::shared_ptr<arrow20::Array>> aData = i->Finish();
         Y_ABORT_UNLESS(aData.ok());
         columns.emplace_back(aData.ValueUnsafe());
     }
-    std::shared_ptr<arrow::RecordBatch> batch = arrow::RecordBatch::Make(Schema, RecordsCount, columns);
+    std::shared_ptr<arrow20::RecordBatch> batch = arrow20::RecordBatch::Make(Schema, RecordsCount, columns);
 #if !defined(NDEBUG)
     auto statusValidation = batch->ValidateFull();
     if (!statusValidation.ok()) {
@@ -212,7 +212,7 @@ void TRecordBatchReader::SerializeToStrings(TString& schema, TString& data) cons
 }
 
 bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, const TString& dataString) {
-    std::shared_ptr<arrow::Schema> schema = NArrow::DeserializeSchema(schemaString);
+    std::shared_ptr<arrow20::Schema> schema = NArrow::DeserializeSchema(schemaString);
     if (!schema) {
         return false;
     }
@@ -221,58 +221,58 @@ bool TRecordBatchReader::DeserializeFromStrings(const TString& schemaString, con
 }
 
 TArrowBatchBuilder::TArrowBatchBuilder(
-        arrow::Compression::type codec,
+        arrow20::Compression::type codec,
         const std::set<std::string>& notNullColumns,
-        arrow::MemoryPool* memoryPool)
-    : WriteOptions(arrow::ipc::IpcWriteOptions::Defaults())
+        arrow20::MemoryPool* memoryPool)
+    : WriteOptions(arrow20::ipc::IpcWriteOptions::Defaults())
     , NotNullColumns(notNullColumns)
     , MemoryPool(memoryPool)
 {
-    Y_ABORT_UNLESS(arrow::util::Codec::IsAvailable(codec));
-    auto resCodec = arrow::util::Codec::Create(codec);
+    Y_ABORT_UNLESS(arrow20::util::Codec::IsAvailable(codec));
+    auto resCodec = arrow20::util::Codec::Create(codec);
     Y_ABORT_UNLESS(resCodec.ok());
 
     WriteOptions.codec.reset((*resCodec).release());
     WriteOptions.use_threads = false;
 }
 
-arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
+arrow20::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns) {
     YdbSchema = ydbColumns;
     auto schema = MakeArrowSchema(ydbColumns, NotNullColumns);
     if (!schema.ok()) {
-        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
+        return arrow20::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
     }
-    auto status = arrow::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    auto status = arrow20::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
     if (!status.ok()) {
-        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
+        return arrow20::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
     }
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
-arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema) {
+arrow20::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow20::Schema>& schema) {
     YdbSchema = ydbColumns;
     Y_VERIFY(ydbColumns.size() == (size_t)schema->num_fields());
-    auto status = arrow::RecordBatchBuilder::Make(schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    auto status = arrow20::RecordBatchBuilder::Make(schema, MemoryPool, RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
     if (!status.ok()) {
-        return arrow::Status::FromArgs(status.code(), "Cannot make arrow builder: ", status.ToString());
+        return arrow20::Status::FromArgs(status.code(), "Cannot make arrow builder: ", status.ToString());
     }
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
-arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns) {
+arrow20::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns) {
     YqlSchema = yqlColumns;
     auto schema = MakeArrowSchema(yqlColumns, NotNullColumns);
     if (!schema.ok()) {
-        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
+        return arrow20::Status::FromArgs(schema.status().code(), "Cannot make arrow schema: ", schema.status().ToString());
     }
-    auto status = arrow::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    auto status = arrow20::RecordBatchBuilder::Make(*schema, MemoryPool, RowsToReserve, &BatchBuilder);
     NumRows = NumBytes = 0;
     if (!status.ok()) {
-        return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
+        return arrow20::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
     }
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
 void TArrowBatchBuilder::AppendCell(const TCell& cell, ui32 colNum) {
@@ -354,10 +354,10 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
 
     Y_ABORT_UNLESS(SwitchYqlTypeToArrowType(type, [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+        using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
 
-        if constexpr (std::is_same_v<typename TWrap::T, arrow::StringType> ||
-                      std::is_same_v<typename TWrap::T, arrow::BinaryType>)
+        if constexpr (std::is_same_v<typename TWrap::T, arrow20::StringType> ||
+                      std::is_same_v<typename TWrap::T, arrow20::BinaryType>)
         {
             auto status = BatchBuilder->GetFieldAs<TBuilder>(columnNo)->ReserveData(size);
             Y_ABORT_UNLESS(status.ok());
@@ -366,7 +366,7 @@ void TArrowBatchBuilder::ReserveData(ui32 columnNo, size_t size) {
     }));
 }
 
-std::shared_ptr<arrow::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize, bool flushEmpty) {
+std::shared_ptr<arrow20::RecordBatch> TArrowBatchBuilder::FlushBatch(bool reinitialize, bool flushEmpty) {
     if (NumRows || flushEmpty) {
         auto status = BatchBuilder->Flush(reinitialize, &Batch);
         Y_ABORT_UNLESS(status.ok(), "Failed to flush batch: %s", status.ToString().c_str());
@@ -385,15 +385,15 @@ TString TArrowBatchBuilder::Finish() {
     return str;
 }
 
-std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount) {
-    auto field = std::make_shared<arrow::Field>("", std::make_shared<arrow::NullType>());
-    std::shared_ptr<arrow::Schema> schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>({field}));
-    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-    auto status = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);
+std::shared_ptr<arrow20::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount) {
+    auto field = std::make_shared<arrow20::Field>("", std::make_shared<arrow20::NullType>());
+    std::shared_ptr<arrow20::Schema> schema = std::make_shared<arrow20::Schema>(std::vector<std::shared_ptr<arrow20::Field>>({field}));
+    std::unique_ptr<arrow20::RecordBatchBuilder> batchBuilder;
+    auto status = arrow20::RecordBatchBuilder::Make(schema, arrow20::default_memory_pool(), &batchBuilder);
     Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to create BatchBuilder: %s", status.ToString().c_str());
-    status = batchBuilder->GetFieldAs<arrow::NullBuilder>(0)->AppendNulls(rowsCount);
+    status = batchBuilder->GetFieldAs<arrow20::NullBuilder>(0)->AppendNulls(rowsCount);
     Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to Append nulls: %s", status.ToString().c_str());
-    std::shared_ptr<arrow::RecordBatch> batch;
+    std::shared_ptr<arrow20::RecordBatch> batch;
     status = batchBuilder->Flush(&batch);
     Y_DEBUG_ABORT_UNLESS(status.ok(), "Failed to Flush Batch: %s", status.ToString().c_str());
     return batch;

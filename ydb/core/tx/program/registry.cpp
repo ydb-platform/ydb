@@ -21,8 +21,8 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
     auto kernels = NYql::LoadKernels(serialized, *Registry.Get(), nodeFactory);
     Kernels.swap(kernels);
     for (const auto& kernel : Kernels) {
-        arrow::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());
-        auto func = std::make_shared<arrow::compute::ScalarFunction>("local_function", arity, nullptr);
+        arrow20::compute::Arity arity(kernel->signature->in_types().size(), kernel->signature->is_varargs());
+        auto func = std::make_shared<arrow20::compute::ScalarFunction>("local_function", arity, nullptr);
         auto res = func->AddKernel(*kernel);
         if (!res.ok()) {
             return false;
@@ -32,7 +32,7 @@ bool TKernelsRegistry::Parse(const TString& serialized) {
     return true;
 }
 
-std::shared_ptr<arrow::compute::ScalarFunction> TKernelsRegistry::GetFunction(const size_t index) const {
+std::shared_ptr<arrow20::compute::ScalarFunction> TKernelsRegistry::GetFunction(const size_t index) const {
     if (index < Functions.size()) {
         return Functions[index];
     }

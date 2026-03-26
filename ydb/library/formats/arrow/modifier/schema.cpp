@@ -5,23 +5,23 @@
 
 namespace NKikimr::NArrow::NModifier {
 
-std::shared_ptr<arrow::Schema> TSchema::Finish() {
+std::shared_ptr<arrow20::Schema> TSchema::Finish() {
     AFL_VERIFY(!Finished);
     Finished = true;
-    return std::make_shared<arrow::Schema>(Fields);
+    return std::make_shared<arrow20::Schema>(Fields);
 }
 
-const std::shared_ptr<arrow::Field>& TSchema::GetFieldByName(const std::string& name) const {
+const std::shared_ptr<arrow20::Field>& TSchema::GetFieldByName(const std::string& name) const {
     AFL_VERIFY(!Finished);
     auto it = IndexByName.find(name);
     if (it == IndexByName.end()) {
-        return Default<std::shared_ptr<arrow::Field>>();
+        return Default<std::shared_ptr<arrow20::Field>>();
     } else {
         return Fields[it->second];
     }
 }
 
-TConclusionStatus TSchema::AddField(const std::shared_ptr<arrow::Field>& f) {
+TConclusionStatus TSchema::AddField(const std::shared_ptr<arrow20::Field>& f) {
     AFL_VERIFY(!Finished);
     if (!IndexByName.emplace(f->name(), Fields.size()).second) {
         return TConclusionStatus::Fail("field name duplication: " + f->name());
@@ -44,17 +44,17 @@ TString TSchema::ToString() const {
     return result;
 }
 
-const std::shared_ptr<arrow::Field>& TSchema::field(const ui32 index) const {
+const std::shared_ptr<arrow20::Field>& TSchema::field(const ui32 index) const {
     AFL_VERIFY(index < Fields.size());
     return Fields[index];
 }
 
-const std::shared_ptr<arrow::Field>& TSchema::GetFieldVerified(const ui32 index) const {
+const std::shared_ptr<arrow20::Field>& TSchema::GetFieldVerified(const ui32 index) const {
     AFL_VERIFY(index < Fields.size());
     return Fields[index];
 }
 
-void TSchema::Initialize(const std::vector<std::shared_ptr<arrow::Field>>& fields) {
+void TSchema::Initialize(const std::vector<std::shared_ptr<arrow20::Field>>& fields) {
     AFL_VERIFY(!Initialized);
     Initialized = true;
     for (auto&& i : fields) {
@@ -68,7 +68,7 @@ TSchema::TSchema(const std::shared_ptr<TSchema>& schema) {
     Initialize(schema->Fields);
 }
 
-TSchema::TSchema(const std::shared_ptr<arrow::Schema>& schema) {
+TSchema::TSchema(const std::shared_ptr<arrow20::Schema>& schema) {
     AFL_VERIFY(schema);
     Initialize(schema->fields());
 }

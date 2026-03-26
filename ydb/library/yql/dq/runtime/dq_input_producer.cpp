@@ -584,7 +584,7 @@ private:
                     CurrentRow_.emplace_back(TArrowBlock::From(values[i]).GetDatum());
                 }
                 CurrBlockIndex_ = 0;
-                BlockLen_ = TArrowBlock::From(values[width]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                BlockLen_ = TArrowBlock::From(values[width]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
                 FetchedValues_.Pop();
             }
             return NUdf::EFetchStatus::Ok;
@@ -602,7 +602,7 @@ private:
             return reader->GetItem(*datum.array(), blockIndex);
         }
 
-        arrow::Datum GetScalarColumn(ui32 columnIndex) const {
+        arrow20::Datum GetScalarColumn(ui32 columnIndex) const {
             YQL_ENSURE(columnIndex < CurrentRow_.size());
             YQL_ENSURE(CurrentRow_[columnIndex].is_scalar());
             return CurrentRow_[columnIndex];
@@ -612,7 +612,7 @@ private:
         IDqInput::TPtr Input_;
         TUnboxedValueBatch FetchedValues_;
 
-        TVector<arrow::Datum> CurrentRow_;
+        TVector<arrow20::Datum> CurrentRow_;
         ui64 CurrBlockIndex_ = 0;
         ui64 BlockLen_ = 0;
         TVector<std::unique_ptr<IBlockReader>> Readers_;
@@ -690,7 +690,7 @@ private:
             return NUdf::EFetchStatus::Finish;
         }
 
-        std::vector<arrow::Datum> chunk;
+        std::vector<arrow20::Datum> chunk;
         ui64 blockLen = 0;
         while (!Output_ || !Output_->Next(chunk, blockLen)) {
             auto status = DoMerge();
@@ -707,7 +707,7 @@ private:
         }
 
         YQL_ENSURE(blockLen > 0);
-        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+        result[chunk.size()] = Factory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(blockLen)));
         if (Stats_) {
             Stats_.Add(result, width);
         }
@@ -792,7 +792,7 @@ private:
             return NUdf::EFetchStatus::Finish;
         }
 
-        std::vector<arrow::Datum> output;
+        std::vector<arrow20::Datum> output;
         Y_DEBUG_ABORT_UNLESS(FirstSeenInputIndex_.Defined());
         for (size_t i = 0; i < Builders_.size(); ++i) {
             if (Builders_[i]) {
@@ -860,7 +860,7 @@ void TDqMeteringStats::TInputStatsMeter::Add(const NKikimr::NUdf::TUnboxedValue*
         YQL_ENSURE(width == multiType->GetElementsCount());
         const bool isBlock = AnyOf(multiType->GetElements(), [](auto itemType) {  return itemType->IsBlock(); });
         if (isBlock) {
-            Stats->RowsConsumed += TArrowBlock::From(row[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+            Stats->RowsConsumed += TArrowBlock::From(row[width - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         } else {
             Stats->RowsConsumed += 1;
         }

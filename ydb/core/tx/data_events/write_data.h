@@ -29,7 +29,7 @@ public:
     using TPtr = std::shared_ptr<IDataContainer>;
     virtual ~IDataContainer() {
     }
-    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() = 0;
+    virtual TConclusion<std::shared_ptr<arrow20::RecordBatch>> ExtractBatch() = 0;
     virtual ui64 GetSchemaVersion() const = 0;
     virtual ui64 GetSize() const = 0;
 };
@@ -94,12 +94,12 @@ class TWriteData {
 private:
     std::shared_ptr<TWriteMeta> WriteMeta;
     YDB_READONLY_DEF(IDataContainer::TPtr, Data);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PrimaryKeySchema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, PrimaryKeySchema);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_ACCESSOR_DEF(std::optional<NArrow::TSchemaSubset>, SchemaSubset);
 
 public:
-    TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow::Schema>& primaryKeySchema,
+    TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContainer::TPtr data, const std::shared_ptr<arrow20::Schema>& primaryKeySchema,
         const std::shared_ptr<NOlap::IBlobsWritingAction>& blobsAction);
 
     const NArrow::TSchemaSubset& GetSchemaSubsetVerified() const {

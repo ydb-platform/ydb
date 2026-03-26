@@ -112,7 +112,7 @@ private:
 
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
-    const std::shared_ptr<arrow::Schema> PKSchema;
+    const std::shared_ptr<arrow20::Schema> PKSchema;
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
     const TPortionIntervalTree Intervals;
     const std::shared_ptr<TPortionStore> Portions;
@@ -179,8 +179,8 @@ private:
         PassAway();
     }
 
-    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
-        std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
+    std::map<ui32, std::shared_ptr<arrow20::Field>> GetFetchingColumns() const {
+        std::map<ui32, std::shared_ptr<arrow20::Field>> fieldsByColumn;
         {
             for (const auto& columnId : PKColumns->GetColumnIds()) {
                 fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));

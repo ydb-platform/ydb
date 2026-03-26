@@ -25,9 +25,9 @@ std::shared_ptr<NArrow::TColumnFilter> ISubsetToMerge::BuildPortionFilter(const 
             AFL_VERIFY(table);
             auto col = table->GetColumnByName(TIndexInfo::SPEC_COL_DELETE_FLAG);
             AFL_VERIFY(col);
-            AFL_VERIFY(col->type()->id() == arrow::Type::BOOL);
+            AFL_VERIFY(col->type()->id() == arrow20::Type::BOOL);
             for (auto&& c : col->chunks()) {
-                auto bCol = static_pointer_cast<arrow::BooleanArray>(c);
+                auto bCol = static_pointer_cast<arrow20::BooleanArray>(c);
                 for (ui32 i = 0; i < bCol->length(); ++i) {
                     filterDeleted.Add(!bCol->GetView(i));
                 }

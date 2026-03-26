@@ -26,29 +26,29 @@
 #include <arrow/util/decimal.h>
 
 #define FOR_INTERNAL_NUMERIC_TYPES(M) \
-        M(UInt8, arrow::UInt8Builder) \
-        M(Int8, arrow::Int8Builder) \
-        M(UInt16, arrow::UInt16Builder) \
-        M(Int16, arrow::Int16Builder) \
-        M(UInt32, arrow::UInt32Builder) \
-        M(Int32, arrow::Int32Builder) \
-        M(UInt64, arrow::UInt64Builder) \
-        M(Int64, arrow::Int64Builder) \
-        M(Float32, arrow::FloatBuilder) \
-        M(Float64, arrow::DoubleBuilder)
+        M(UInt8, arrow20::UInt8Builder) \
+        M(Int8, arrow20::Int8Builder) \
+        M(UInt16, arrow20::UInt16Builder) \
+        M(Int16, arrow20::Int16Builder) \
+        M(UInt32, arrow20::UInt32Builder) \
+        M(Int32, arrow20::Int32Builder) \
+        M(UInt64, arrow20::UInt64Builder) \
+        M(Int64, arrow20::Int64Builder) \
+        M(Float32, arrow20::FloatBuilder) \
+        M(Float64, arrow20::DoubleBuilder)
 
 #define FOR_ARROW_TYPES(M) \
-        M(UINT8, arrow::UInt8Type) \
-        M(INT8, arrow::Int8Type) \
-        M(UINT16, arrow::UInt16Type) \
-        M(INT16, arrow::Int16Type) \
-        M(UINT32, arrow::UInt32Type) \
-        M(INT32, arrow::Int32Type) \
-        M(UINT64, arrow::UInt64Type) \
-        M(INT64, arrow::Int64Type) \
-        M(FLOAT, arrow::FloatType) \
-        M(DOUBLE, arrow::DoubleType) \
-        M(BINARY, arrow::BinaryType)
+        M(UINT8, arrow20::UInt8Type) \
+        M(INT8, arrow20::Int8Type) \
+        M(UINT16, arrow20::UInt16Type) \
+        M(INT16, arrow20::Int16Type) \
+        M(UINT32, arrow20::UInt32Type) \
+        M(INT32, arrow20::Int32Type) \
+        M(UINT64, arrow20::UInt64Type) \
+        M(INT64, arrow20::Int64Type) \
+        M(FLOAT, arrow20::FloatType) \
+        M(DOUBLE, arrow20::DoubleType) \
+        M(BINARY, arrow20::BinaryType)
 
 namespace NDB
 {
@@ -59,29 +59,29 @@ namespace NDB
         extern const int LOGICAL_ERROR;
     }
 
-    static const std::initializer_list<std::pair<String, std::shared_ptr<arrow::DataType>>> internal_type_to_arrow_type =
+    static const std::initializer_list<std::pair<String, std::shared_ptr<arrow20::DataType>>> internal_type_to_arrow_type =
     {
-        {"UInt8", arrow::uint8()},
-        {"Int8", arrow::int8()},
-        {"UInt16", arrow::uint16()},
-        {"Int16", arrow::int16()},
-        {"UInt32", arrow::uint32()},
-        {"Int32", arrow::int32()},
-        {"UInt64", arrow::uint64()},
-        {"Int64", arrow::int64()},
-        {"Float32", arrow::float32()},
-        {"Float64", arrow::float64()},
+        {"UInt8", arrow20::uint8()},
+        {"Int8", arrow20::int8()},
+        {"UInt16", arrow20::uint16()},
+        {"Int16", arrow20::int16()},
+        {"UInt32", arrow20::uint32()},
+        {"Int32", arrow20::int32()},
+        {"UInt64", arrow20::uint64()},
+        {"Int64", arrow20::int64()},
+        {"Float32", arrow20::float32()},
+        {"Float64", arrow20::float64()},
 
-        {"Date", arrow::uint16()},      /// uint16 is used instead of date32, because Apache Arrow cannot correctly serialize Date32Array.
-        {"DateTime", arrow::uint32()},  /// uint32 is used instead of date64, because we don't need milliseconds.
-        {"Date32", arrow::date32()},
+        {"Date", arrow20::uint16()},      /// uint16 is used instead of date32, because Apache Arrow cannot correctly serialize Date32Array.
+        {"DateTime", arrow20::uint32()},  /// uint32 is used instead of date64, because we don't need milliseconds.
+        {"Date32", arrow20::date32()},
 
-        {"String", arrow::binary()},
-        {"FixedString", arrow::binary()},
+        {"String", arrow20::binary()},
+        {"FixedString", arrow20::binary()},
     };
 
 
-    static void checkStatus(const arrow::Status & status, const String & column_name, const String & format_name)
+    static void checkStatus(const arrow20::Status & status, const String & column_name, const String & format_name)
     {
         if (!status.ok())
             throw Exception{fmt::format("Error with a {} column \"{}\": {}.", format_name, column_name, status.ToString()), ErrorCodes::UNKNOWN_EXCEPTION};
@@ -92,13 +92,13 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const PaddedPODArray<NumericType> & internal_data = assert_cast<const ColumnVector<NumericType> &>(*write_column).getData();
         ArrowBuilderType & builder = assert_cast<ArrowBuilderType &>(*array_builder);
-        arrow::Status status;
+        arrow20::Status status;
 
         const UInt8 * arrow_null_bytemap_raw_ptr = nullptr;
         PaddedPODArray<UInt8> arrow_null_bytemap;
@@ -127,11 +127,11 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values);
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values);
 
     template <typename Builder>
     static void fillArrowArrayWithArrayColumnData(
@@ -139,11 +139,11 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values)
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values)
     {
         const auto * column_array = assert_cast<const ColumnArray *>(column.get());
         ColumnPtr nested_column = column_array->getDataPtr();
@@ -151,8 +151,8 @@ namespace NDB
         const auto & offsets = column_array->getOffsets();
 
         Builder & builder = assert_cast<Builder &>(*array_builder);
-        arrow::ArrayBuilder * value_builder = builder.value_builder();
-        arrow::Status components_status;
+        arrow20::ArrayBuilder * value_builder = builder.value_builder();
+        arrow20::Status components_status;
 
         for (size_t array_idx = start; array_idx < end; ++array_idx)
         {
@@ -168,16 +168,16 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values)
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values)
     {
         const auto * column_tuple = assert_cast<const ColumnTuple *>(column.get());
         const auto & nested_types =  assert_cast<const DataTypeTuple *>(column_type.get())->getElements();
 
-        arrow::StructBuilder & builder = assert_cast<arrow::StructBuilder &>(*array_builder);
+        arrow20::StructBuilder & builder = assert_cast<arrow20::StructBuilder &>(*array_builder);
 
         for (size_t i = 0; i != column_tuple->tupleSize(); ++i)
         {
@@ -226,23 +226,23 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values)
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values)
     {
         const auto * column_lc = assert_cast<const ColumnLowCardinality *>(column.get());
-        arrow::DictionaryBuilder<ValueType> * builder = assert_cast<arrow::DictionaryBuilder<ValueType> *>(array_builder);
+        arrow20::DictionaryBuilder<ValueType> * builder = assert_cast<arrow20::DictionaryBuilder<ValueType> *>(array_builder);
         auto & dict_values = dictionary_values[column_name];
 
         /// Convert dictionary from LowCardinality to Arrow dictionary only once and then reuse it.
         if (!dict_values)
         {
-            auto value_type = assert_cast<arrow::DictionaryType *>(builder->type().get())->value_type();
-            std::unique_ptr<arrow::ArrayBuilder> values_builder;
-            arrow::MemoryPool* pool = arrow::default_memory_pool();
-            arrow::Status status = MakeBuilder(pool, value_type, &values_builder);
+            auto value_type = assert_cast<arrow20::DictionaryType *>(builder->type().get())->value_type();
+            std::unique_ptr<arrow20::ArrayBuilder> values_builder;
+            arrow20::MemoryPool* pool = arrow20::default_memory_pool();
+            arrow20::Status status = MakeBuilder(pool, value_type, &values_builder);
             checkStatus(status, column->getName(), format_name);
 
             auto dict_column = column_lc->getDictionary().getNestedColumn();
@@ -252,7 +252,7 @@ namespace NDB
             checkStatus(status, column->getName(), format_name);
         }
 
-        arrow::Status status = builder->InsertMemoValues(*dict_values);
+        arrow20::Status status = builder->InsertMemoValues(*dict_values);
         checkStatus(status, column->getName(), format_name);
 
         /// AppendIndices in DictionaryBuilder works only with int64_t data, so we cannot use
@@ -280,16 +280,16 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values)
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values)
     {
-        auto value_type = assert_cast<arrow::DictionaryType *>(array_builder->type().get())->value_type();
+        auto value_type = assert_cast<arrow20::DictionaryType *>(array_builder->type().get())->value_type();
 
 #define DISPATCH(ARROW_TYPE_ID, ARROW_TYPE) \
-        if (arrow::Type::ARROW_TYPE_ID == value_type->id()) \
+        if (arrow20::Type::ARROW_TYPE_ID == value_type->id()) \
         { \
             fillArrowArrayWithLowCardinalityColumnDataImpl<ARROW_TYPE>(column_name, column, column_type, null_bytemap, array_builder, format_name, start, end, dictionary_values); \
             return; \
@@ -306,13 +306,13 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const auto & internal_column = assert_cast<const ColumnType &>(*write_column);
-        arrow::BinaryBuilder & builder = assert_cast<arrow::BinaryBuilder &>(*array_builder);
-        arrow::Status status;
+        arrow20::BinaryBuilder & builder = assert_cast<arrow20::BinaryBuilder &>(*array_builder);
+        arrow20::Status status;
 
         for (size_t string_i = start; string_i < end; ++string_i)
         {
@@ -333,13 +333,13 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const PaddedPODArray<UInt16> & internal_data = assert_cast<const ColumnVector<UInt16> &>(*write_column).getData();
-        arrow::UInt16Builder & builder = assert_cast<arrow::UInt16Builder &>(*array_builder);
-        arrow::Status status;
+        arrow20::UInt16Builder & builder = assert_cast<arrow20::UInt16Builder &>(*array_builder);
+        arrow20::Status status;
 
         for (size_t value_i = start; value_i < end; ++value_i)
         {
@@ -355,13 +355,13 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const auto & internal_data = assert_cast<const ColumnVector<UInt32> &>(*write_column).getData();
-        arrow::UInt32Builder & builder = assert_cast<arrow::UInt32Builder &>(*array_builder);
-        arrow::Status status;
+        arrow20::UInt32Builder & builder = assert_cast<arrow20::UInt32Builder &>(*array_builder);
+        arrow20::Status status;
 
         for (size_t value_i = start; value_i < end; ++value_i)
         {
@@ -378,13 +378,13 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const PaddedPODArray<Int32> & internal_data = assert_cast<const ColumnVector<Int32> &>(*write_column).getData();
-        arrow::Date32Builder & builder = assert_cast<arrow::Date32Builder &>(*array_builder);
-        arrow::Status status;
+        arrow20::Date32Builder & builder = assert_cast<arrow20::Date32Builder &>(*array_builder);
+        arrow20::Status status;
 
         for (size_t value_i = start; value_i < end; ++value_i)
         {
@@ -401,14 +401,14 @@ namespace NDB
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
         const String & format_name,
-        arrow::ArrayBuilder* array_builder,
+        arrow20::ArrayBuilder* array_builder,
         size_t start,
         size_t end)
     {
         const auto * datetime64_type = assert_cast<const DataTypeDateTime64 *>(type.get());
         const auto & column = assert_cast<const ColumnDecimal<DateTime64> &>(*write_column);
-        arrow::TimestampBuilder & builder = assert_cast<arrow::TimestampBuilder &>(*array_builder);
-        arrow::Status status;
+        arrow20::TimestampBuilder & builder = assert_cast<arrow20::TimestampBuilder &>(*array_builder);
+        arrow20::Status status;
 
         auto scale = datetime64_type->getScale();
         bool need_rescale = scale % 3;
@@ -438,11 +438,11 @@ namespace NDB
         ColumnPtr & column,
         const std::shared_ptr<const IDataType> & column_type,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         String format_name,
         size_t start,
         size_t end,
-        std::unordered_map<String, std::shared_ptr<arrow::Array>> & dictionary_values)
+        std::unordered_map<String, std::shared_ptr<arrow20::Array>> & dictionary_values)
     {
         const String column_type_name = column_type->getFamilyName();
 
@@ -477,7 +477,7 @@ namespace NDB
         }
         else if (isArray(column_type))
         {
-            fillArrowArrayWithArrayColumnData<arrow::ListBuilder>(column_name, column, column_type, null_bytemap, array_builder, format_name, start, end, dictionary_values);
+            fillArrowArrayWithArrayColumnData<arrow20::ListBuilder>(column_name, column, column_type, null_bytemap, array_builder, format_name, start, end, dictionary_values);
         }
         else if (isTuple(column_type))
         {
@@ -491,7 +491,7 @@ namespace NDB
         {
             ColumnPtr column_array = assert_cast<const ColumnMap *>(column.get())->getNestedColumnPtr();
             DataTypePtr array_type = assert_cast<const DataTypeMap *>(column_type.get())->getNestedType();
-            fillArrowArrayWithArrayColumnData<arrow::MapBuilder>(column_name, column_array, array_type, null_bytemap, array_builder, format_name, start, end, dictionary_values);
+            fillArrowArrayWithArrayColumnData<arrow20::MapBuilder>(column_name, column_array, array_type, null_bytemap, array_builder, format_name, start, end, dictionary_values);
         }
         else if (isDateTime64(column_type))
         {
@@ -508,13 +508,13 @@ namespace NDB
                     || std::is_same_v<ToDataType, DataTypeDecimal<Decimal64>>
                     || std::is_same_v<ToDataType, DataTypeDecimal<Decimal128>>)
                 {
-                    fillArrowArrayWithDecimalColumnData<ToDataType, Int128, arrow::Decimal128, arrow::Decimal128Builder>(column, null_bytemap, array_builder, format_name, start, end);
+                    fillArrowArrayWithDecimalColumnData<ToDataType, Int128, arrow20::Decimal128, arrow20::Decimal128Builder>(column, null_bytemap, array_builder, format_name, start, end);
                     return true;
                 }
 #if !defined(ARCADIA_BUILD)
                 if constexpr (std::is_same_v<ToDataType,DataTypeDecimal<Decimal256>>)
                 {
-                    fillArrowArrayWithDecimalColumnData<ToDataType, Int256, arrow::Decimal256, arrow::Decimal256Builder>(column, null_bytemap, array_builder, format_name, start, end);
+                    fillArrowArrayWithDecimalColumnData<ToDataType, Int256, arrow20::Decimal256, arrow20::Decimal256Builder>(column, null_bytemap, array_builder, format_name, start, end);
                     return true;
                 }
 #endif
@@ -547,14 +547,14 @@ namespace NDB
     static void fillArrowArrayWithDecimalColumnData(
         ColumnPtr write_column,
         const PaddedPODArray<UInt8> * null_bytemap,
-        arrow::ArrayBuilder * array_builder,
+        arrow20::ArrayBuilder * array_builder,
         const String & format_name,
         size_t start,
         size_t end)
     {
         const auto & column = assert_cast<const typename DataType::ColumnType &>(*write_column);
         ArrowBuilder & builder = assert_cast<ArrowBuilder &>(*array_builder);
-        arrow::Status status;
+        arrow20::Status status;
 
         for (size_t value_i = start; value_i < end; ++value_i)
         {
@@ -571,39 +571,39 @@ namespace NDB
         checkStatus(status, write_column->getName(), format_name);
     }
 
-    static std::shared_ptr<arrow::DataType> getArrowTypeForLowCardinalityIndexes(ColumnPtr indexes_column)
+    static std::shared_ptr<arrow20::DataType> getArrowTypeForLowCardinalityIndexes(ColumnPtr indexes_column)
     {
         /// Arrow docs recommend preferring signed integers over unsigned integers for representing dictionary indices.
         /// https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout
         switch (indexes_column->getDataType())
         {
             case TypeIndex::UInt8:
-                return arrow::int8();
+                return arrow20::int8();
             case TypeIndex::UInt16:
-                return arrow::int16();
+                return arrow20::int16();
             case TypeIndex::UInt32:
-                return arrow::int32();
+                return arrow20::int32();
             case TypeIndex::UInt64:
-                return arrow::int64();
+                return arrow20::int64();
             default:
                 throw Exception(fmt::format("Indexes column for getUniqueIndex must be ColumnUInt, got {}.", indexes_column->getName()),
                                       ErrorCodes::LOGICAL_ERROR);
         }
     }
 
-    static arrow::TimeUnit::type getArrowTimeUnit(const DataTypeDateTime64 * type)
+    static arrow20::TimeUnit::type getArrowTimeUnit(const DataTypeDateTime64 * type)
     {
         UInt32 scale = type->getScale();
         if (scale == 0)
-            return arrow::TimeUnit::SECOND;
+            return arrow20::TimeUnit::SECOND;
         if (scale > 0 && scale <= 3)
-            return arrow::TimeUnit::MILLI;
+            return arrow20::TimeUnit::MILLI;
         if (scale > 3 && scale <= 6)
-            return arrow::TimeUnit::MICRO;
-        return arrow::TimeUnit::NANO;
+            return arrow20::TimeUnit::MICRO;
+        return arrow20::TimeUnit::NANO;
     }
 
-    static std::shared_ptr<arrow::DataType> getArrowType(
+    static std::shared_ptr<arrow20::DataType> getArrowType(
         DataTypePtr column_type, ColumnPtr column, const std::string & column_name, const std::string & format_name, bool * out_is_column_nullable)
     {
         if (column_type->isNullable())
@@ -617,7 +617,7 @@ namespace NDB
 
         if (isDecimal(column_type))
         {
-            std::shared_ptr<arrow::DataType> arrow_type;
+            std::shared_ptr<arrow20::DataType> arrow_type;
             const auto create_arrow_type = [&](const auto & types) -> bool {
                 using Types = std::decay_t<decltype(types)>;
                 using ToDataType = typename Types::LeftType;
@@ -629,7 +629,7 @@ namespace NDB
                     || std::is_same_v<ToDataType, DataTypeDecimal<Decimal256>>)
                 {
                     const auto & decimal_type = assert_cast<const ToDataType *>(column_type.get());
-                    arrow_type = arrow::decimal(decimal_type->getPrecision(), decimal_type->getScale());
+                    arrow_type = arrow20::decimal(decimal_type->getPrecision(), decimal_type->getScale());
                     return true;
                 }
 
@@ -645,21 +645,21 @@ namespace NDB
             auto nested_type = assert_cast<const DataTypeArray *>(column_type.get())->getNestedType();
             auto nested_column = assert_cast<const ColumnArray *>(column.get())->getDataPtr();
             auto nested_arrow_type = getArrowType(nested_type, nested_column, column_name, format_name, out_is_column_nullable);
-            return arrow::list(nested_arrow_type);
+            return arrow20::list(nested_arrow_type);
         }
 
         if (isTuple(column_type))
         {
             const auto & nested_types = assert_cast<const DataTypeTuple *>(column_type.get())->getElements();
             const auto * tuple_column = assert_cast<const ColumnTuple *>(column.get());
-            std::vector<std::shared_ptr<arrow::Field>> nested_fields;
+            std::vector<std::shared_ptr<arrow20::Field>> nested_fields;
             for (size_t i = 0; i != nested_types.size(); ++i)
             {
                 String name = column_name + "." + std::to_string(i);
                 auto nested_arrow_type = getArrowType(nested_types[i], tuple_column->getColumnPtr(i), name, format_name, out_is_column_nullable);
-                nested_fields.push_back(std::make_shared<arrow::Field>(name, nested_arrow_type, *out_is_column_nullable));
+                nested_fields.push_back(std::make_shared<arrow20::Field>(name, nested_arrow_type, *out_is_column_nullable));
             }
-            return arrow::struct_(std::move(nested_fields));
+            return arrow20::struct_(std::move(nested_fields));
         }
 
         if (column_type->lowCardinality())
@@ -668,7 +668,7 @@ namespace NDB
             const auto * lc_column = assert_cast<const ColumnLowCardinality *>(column.get());
             const auto & nested_column = lc_column->getDictionaryPtr();
             const auto & indexes_column = lc_column->getIndexesPtr();
-            return arrow::dictionary(
+            return arrow20::dictionary(
                 getArrowTypeForLowCardinalityIndexes(indexes_column),
                 getArrowType(nested_type, nested_column, column_name, format_name, out_is_column_nullable));
         }
@@ -680,7 +680,7 @@ namespace NDB
             const auto & val_type = map_type->getValueType();
 
             const auto & columns =  assert_cast<const ColumnMap *>(column.get())->getNestedData().getColumns();
-            return arrow::map(
+            return arrow20::map(
                 getArrowType(key_type, columns[0], column_name, format_name, out_is_column_nullable),
                 getArrowType(val_type, columns[1], column_name, format_name, out_is_column_nullable));
         }
@@ -688,7 +688,7 @@ namespace NDB
         if (isDateTime64(column_type))
         {
             const auto * datetime64_type = assert_cast<const DataTypeDateTime64 *>(column_type.get());
-            return arrow::timestamp(getArrowTimeUnit(datetime64_type), datetime64_type->getTimeZone().getTimeZone());
+            return arrow20::timestamp(getArrowTimeUnit(datetime64_type), datetime64_type->getTimeZone().getTimeZone());
         }
 
         const std::string type_name = column_type->getFamilyName();
@@ -720,18 +720,18 @@ namespace NDB
             }
             bool is_column_nullable = false;
             auto arrow_type = getArrowType(column.type, column.column, column.name, format_name, &is_column_nullable);
-            arrow_fields.emplace_back(std::make_shared<arrow::Field>(column.name, arrow_type, is_column_nullable));
+            arrow_fields.emplace_back(std::make_shared<arrow20::Field>(column.name, arrow_type, is_column_nullable));
             header_columns.emplace_back(std::move(column));
         }
     }
 
     void CHColumnToArrowColumn::chChunkToArrowTable(
-        std::shared_ptr<arrow::Table> & res,
+        std::shared_ptr<arrow20::Table> & res,
         const Chunk & chunk,
         size_t columns_num)
     {
-        /// For arrow::Schema and arrow::Table creation
-        std::vector<std::shared_ptr<arrow::Array>> arrow_arrays;
+        /// For arrow20::Schema and arrow20::Table creation
+        std::vector<std::shared_ptr<arrow20::Array>> arrow_arrays;
         arrow_arrays.reserve(columns_num);
         for (size_t column_i = 0; column_i < columns_num; ++column_i)
         {
@@ -741,23 +741,23 @@ namespace NDB
             if (!low_cardinality_as_dictionary)
                 column = recursiveRemoveLowCardinality(column);
 
-            arrow::MemoryPool* pool = arrow::default_memory_pool();
-            std::unique_ptr<arrow::ArrayBuilder> array_builder;
-            arrow::Status status = MakeBuilder(pool, arrow_fields[column_i]->type(), &array_builder);
+            arrow20::MemoryPool* pool = arrow20::default_memory_pool();
+            std::unique_ptr<arrow20::ArrayBuilder> array_builder;
+            arrow20::Status status = MakeBuilder(pool, arrow_fields[column_i]->type(), &array_builder);
             checkStatus(status, column->getName(), format_name);
 
             fillArrowArray(
                 header_column.name, column, header_column.type, nullptr, array_builder.get(), format_name, 0, column->size(), dictionary_values);
 
-            std::shared_ptr<arrow::Array> arrow_array;
+            std::shared_ptr<arrow20::Array> arrow_array;
             status = array_builder->Finish(&arrow_array);
             checkStatus(status, column->getName(), format_name);
             arrow_arrays.emplace_back(std::move(arrow_array));
         }
 
-        std::shared_ptr<arrow::Schema> arrow_schema = std::make_shared<arrow::Schema>(arrow_fields);
+        std::shared_ptr<arrow20::Schema> arrow_schema = std::make_shared<arrow20::Schema>(arrow_fields);
 
-        res = arrow::Table::Make(arrow_schema, arrow_arrays);
+        res = arrow20::Table::Make(arrow_schema, arrow_arrays);
     }
 }
 

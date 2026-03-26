@@ -385,7 +385,7 @@ void TColumnShardScan::AddRow(const TConstArrayRef<TCell>& row) {
     Bytes += std::max((ui64)8, (ui64)Result->Rows.back().DataSize());
 }
 
-NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey) {
+NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<arrow20::RecordBatch>& lastReadKey) {
     Y_ABORT_UNLESS(lastReadKey, "last key must be passed");
 
     struct TSingeRowWriter: public IRowWriter {

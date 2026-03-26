@@ -113,7 +113,7 @@ struct TEvS3RangeError : public NActors::TEventLocal<TEvS3RangeError, EvS3RangeE
 struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
     TEvArrowFile(
         std::shared_ptr<NInference::FormatConfig> config,
-        std::shared_ptr<arrow::io::RandomAccessFile> file,
+        std::shared_ptr<arrow20::io::RandomAccessFile> file,
         TString path)
         : Config{std::move(config)}
         , File{std::move(file)}
@@ -121,7 +121,7 @@ struct TEvArrowFile : public NActors::TEventLocal<TEvArrowFile, EvArrowFile> {
     {}
 
     std::shared_ptr<NInference::FormatConfig> Config;
-    std::shared_ptr<arrow::io::RandomAccessFile> File;
+    std::shared_ptr<arrow20::io::RandomAccessFile> File;
     TString Path;
 };
 

@@ -12,7 +12,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType) {
+std::shared_ptr<arrow20::ArrayData> Unwrap(const arrow20::ArrayData& data, TType* itemType) {
     if (NeedWrapWithExternalOptional(itemType)) {
         MKQL_ENSURE(data.child_data.size() == 1, "Expected struct with one element");
         return data.child_data[0];
@@ -20,27 +20,27 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
         auto buffers = data.buffers;
         MKQL_ENSURE(buffers.size() >= 1, "Missing nullable bitmap");
         buffers[0] = nullptr;
-        return arrow::ArrayData::Make(data.type, data.length, buffers, data.child_data, data.dictionary, 0, data.offset);
+        return arrow20::ArrayData::Make(data.type, data.length, buffers, data.child_data, data.dictionary, 0, data.offset);
     }
 }
 
-std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, TType* itemType) {
+std::shared_ptr<arrow20::Scalar> UnwrapScalar(std::shared_ptr<arrow20::Scalar> scalar, TType* itemType) {
     if (NeedWrapWithExternalOptional(itemType)) {
-        return dynamic_cast<arrow::StructScalar&>(*scalar).value.at(0);
+        return dynamic_cast<arrow20::StructScalar&>(*scalar).value.at(0);
     }
     return scalar;
 }
 
-std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
+std::shared_ptr<arrow20::Buffer> MakeEmptyBuffer() {
     // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     static constexpr ui8 Data alignas(ArrowAlignment)[1]{};
-    return std::make_shared<arrow::Buffer>(Data, 0);
+    return std::make_shared<arrow20::Buffer>(Data, 0);
 }
 
-void UntrackScalar(const arrow::Scalar& scalar) {
-    // XXX: All derivatives of arrow::BaseBinaryScalar have buffer.
-    // All other derivatives of arrow::Scalar handle primitive values.
-    const auto binaryScalar = dynamic_cast<const arrow::BaseBinaryScalar*>(&scalar);
+void UntrackScalar(const arrow20::Scalar& scalar) {
+    // XXX: All derivatives of arrow20::BaseBinaryScalar have buffer.
+    // All other derivatives of arrow20::Scalar handle primitive values.
+    const auto binaryScalar = dynamic_cast<const arrow20::BaseBinaryScalar*>(&scalar);
     if (binaryScalar) {
         const auto& buffer = binaryScalar->value;
         if (buffer) {
@@ -49,7 +49,7 @@ void UntrackScalar(const arrow::Scalar& scalar) {
     }
 }
 
-void UntrackArrayData(const arrow::ArrayData& array) {
+void UntrackArrayData(const arrow20::ArrayData& array) {
     for (const auto& buffer : array.buffers) {
         if (buffer) {
             MKQLArrowUntrack(buffer->data());
@@ -60,7 +60,7 @@ void UntrackArrayData(const arrow::ArrayData& array) {
     }
 }
 
-void UntrackDatum(const arrow::Datum& datum) {
+void UntrackDatum(const arrow20::Datum& datum) {
     if (datum.is_scalar()) {
         UntrackScalar(*datum.scalar());
     } else {

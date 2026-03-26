@@ -14,7 +14,7 @@ TString TColumnLoader::DebugString() const {
 }
 
 TColumnLoader::TColumnLoader(const NSerialization::TSerializerContainer& serializer, const TConstructorContainer& accessorConstructor,
-    const std::shared_ptr<arrow::Field>& resultField, const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
+    const std::shared_ptr<arrow20::Field>& resultField, const std::shared_ptr<arrow20::Scalar>& defaultValue, const ui32 columnId)
     : Serializer(serializer)
     , AccessorConstructor(accessorConstructor)
     , ResultField(resultField)
@@ -25,7 +25,7 @@ TColumnLoader::TColumnLoader(const NSerialization::TSerializerContainer& seriali
     AFL_VERIFY(Serializer);
 }
 
-const std::shared_ptr<arrow::Field>& TColumnLoader::GetField() const {
+const std::shared_ptr<arrow20::Field>& TColumnLoader::GetField() const {
     return ResultField;
 }
 

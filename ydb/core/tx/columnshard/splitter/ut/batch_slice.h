@@ -6,10 +6,10 @@ namespace NKikimr::NOlap {
 class TBatchSerializedSlice: public TGeneralSerializedSlice {
 private:
     using TBase = TGeneralSerializedSlice;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, Batch);
 
 public:
-    TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
+    TBatchSerializedSlice(const std::shared_ptr<arrow20::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
         std::shared_ptr<NColumnShard::TSplitterCounters> counters, const NSplitter::TSplitSettings& settings);
 
     explicit TBatchSerializedSlice(NArrow::NSplitter::TVectorView<TBatchSerializedSlice>&& objects) {
@@ -24,7 +24,7 @@ public:
         TBase::MergeSlice(std::move(slice));
     }
 
-    static std::vector<TBatchSerializedSlice> BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch,
+    static std::vector<TBatchSerializedSlice> BuildSimpleSlices(const std::shared_ptr<arrow20::RecordBatch>& batch,
         const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
         const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo);
 };

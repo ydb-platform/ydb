@@ -21,7 +21,7 @@ class TProgramBuilder {
 private:
     const IColumnResolver& ColumnResolver;
     const TKernelsRegistry& KernelsRegistry;
-    mutable THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
+    mutable THashMap<ui32, std::shared_ptr<arrow20::Scalar>> Constants;
 
     NArrow::NSSA::NGraph::NOptimization::TGraph::TBuilder Builder;
 
@@ -44,7 +44,7 @@ private:
     [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MakeConstant(
         const TColumnInfo& name, const NKikimrSSA::TProgram::TConstant& constant) const;
     [[nodiscard]] TConclusion<std::shared_ptr<TConstProcessor>> MaterializeParameter(const TColumnInfo& name,
-        const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) const;
+        const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow20::RecordBatch>& parameterValues) const;
     [[nodiscard]] TConclusion<std::shared_ptr<IStepFunction>> MakeAggrFunction(
         const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func) const;
     [[nodiscard]] TConclusion<NAggregation::EAggregate> GetAggregationType(
@@ -52,7 +52,7 @@ private:
 
 public:
     [[nodiscard]] TConclusionStatus ReadAssign(
-        const NKikimrSSA::TProgram::TAssignment& assign, const std::shared_ptr<arrow::RecordBatch>& parameterValues);
+        const NKikimrSSA::TProgram::TAssignment& assign, const std::shared_ptr<arrow20::RecordBatch>& parameterValues);
     [[nodiscard]] TConclusionStatus ReadFilter(const NKikimrSSA::TProgram::TFilter& filter);
     [[nodiscard]] TConclusionStatus ReadProjection(const NKikimrSSA::TProgram::TProjection& projection);
     [[nodiscard]] TConclusionStatus ReadGroupBy(const NKikimrSSA::TProgram::TGroupBy& groupBy);

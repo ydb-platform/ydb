@@ -23,12 +23,12 @@ struct TDecimalBlockExec {
     }
 
     template <typename U>
-    const U* GetScalarValue(const arrow::Scalar& scalar) const {
+    const U* GetScalarValue(const arrow20::Scalar& scalar) const {
         return reinterpret_cast<const U*>(GetPrimitiveScalarValuePtr(scalar));
     }
 
     template <>
-    const NYql::NDecimal::TInt128* GetScalarValue<NYql::NDecimal::TInt128>(const arrow::Scalar& scalar) const {
+    const NYql::NDecimal::TInt128* GetScalarValue<NYql::NDecimal::TInt128>(const arrow20::Scalar& scalar) const {
         return reinterpret_cast<const NYql::NDecimal::TInt128*>(GetStringScalarValue(scalar).data());
     }
 
@@ -46,11 +46,11 @@ struct TDecimalBlockExec {
         Y_UNUSED(valid2);
         Y_UNUSED(offset2);
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++resPtr) {
-            if (!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) {
+            if (!valid1 || arrow20::BitUtil::GetBit(valid1, i + offset1)) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow::BitUtil::SetBit(resValid, i);
+                arrow20::BitUtil::SetBit(resValid, i);
             } else {
-                arrow::BitUtil::ClearBit(resValid, i);
+                arrow20::BitUtil::ClearBit(resValid, i);
             }
         }
     }
@@ -69,11 +69,11 @@ struct TDecimalBlockExec {
         Y_UNUSED(valid1);
         Y_UNUSED(offset1);
         for (int64_t i = 0; i < length; ++i, ++val2Ptr, ++resPtr) {
-            if (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2)) {
+            if (!valid2 || arrow20::BitUtil::GetBit(valid2, i + offset2)) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow::BitUtil::SetBit(resValid, i);
+                arrow20::BitUtil::SetBit(resValid, i);
             } else {
-                arrow::BitUtil::ClearBit(resValid, i);
+                arrow20::BitUtil::ClearBit(resValid, i);
             }
         }
     }
@@ -91,37 +91,37 @@ struct TDecimalBlockExec {
         val1Ptr += offset1;
         val2Ptr += offset2;
         for (int64_t i = 0; i < length; ++i, ++val1Ptr, ++val2Ptr, ++resPtr) {
-            if ((!valid1 || arrow::BitUtil::GetBit(valid1, i + offset1)) &&
-                (!valid2 || arrow::BitUtil::GetBit(valid2, i + offset2))) {
+            if ((!valid1 || arrow20::BitUtil::GetBit(valid1, i + offset1)) &&
+                (!valid2 || arrow20::BitUtil::GetBit(valid2, i + offset2))) {
                 *resPtr = Apply(*val1Ptr, *val2Ptr);
-                arrow::BitUtil::SetBit(resValid, i);
+                arrow20::BitUtil::SetBit(resValid, i);
             } else {
-                arrow::BitUtil::ClearBit(resValid, i);
+                arrow20::BitUtil::ClearBit(resValid, i);
             }
         }
     }
 
-    arrow::Status ExecScalarScalar(arrow::compute::KernelContext* kernelCtx,
-                                   const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status ExecScalarScalar(arrow20::compute::KernelContext* kernelCtx,
+                                   const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
         if (!arg1.scalar()->is_valid || !arg2.scalar()->is_valid) {
-            *res = arrow::MakeNullScalar(GetPrimitiveDataType<NYql::NDecimal::TInt128>());
+            *res = arrow20::MakeNullScalar(GetPrimitiveDataType<NYql::NDecimal::TInt128>());
         } else {
             const auto val1Ptr = GetScalarValue<NYql::NDecimal::TInt128>(*arg1.scalar());
             const auto val2Ptr = GetScalarValue<TRight>(*arg2.scalar());
-            std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(16, kernelCtx->memory_pool())));
+            std::shared_ptr<arrow20::Buffer> buffer(ARROW_RESULT(arrow20::AllocateBuffer(16, kernelCtx->memory_pool())));
             auto* mem = reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data());
-            auto resDatum = arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
+            auto resDatum = arrow20::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
             *mem = Apply(*val1Ptr, *val2Ptr);
             *res = resDatum;
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ExecScalarArray(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status ExecScalarArray(const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -140,10 +140,10 @@ struct TDecimalBlockExec {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ExecArrayScalar(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status ExecArrayScalar(const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -162,10 +162,10 @@ struct TDecimalBlockExec {
             GetBitmap(resArr, 0).SetBitsTo(false);
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ExecArrayArray(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status ExecArrayArray(const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
         const auto& arg2 = batch.values[1];
@@ -185,10 +185,10 @@ struct TDecimalBlockExec {
 
         ArrayArrayCore(val1Ptr, valid1, val2Ptr, valid2, resPtr, resValid, length, arr1.offset, arr2.offset);
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         Y_UNUSED(ctx);
         MKQL_ENSURE(batch.values.size() == 2, "Expected 2 args");
         const auto& arg1 = batch.values[0];
@@ -207,7 +207,7 @@ struct TDecimalBlockExec {
             }
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 };
 
@@ -242,7 +242,7 @@ struct TDecimalModBlockExec: NYql::NDecimal::TDecimalRemainder<TRight>, TDecimal
 };
 
 template <template <typename> class TExec>
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TType*>& argTypes, TType* resultType) {
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeBlockKernel(const TVector<TType*>& argTypes, TType* resultType) {
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
     MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
@@ -265,11 +265,11 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockKernel(const TVector<TTyp
     MKQL_ENSURE(precision >= 1 && precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
     auto createKernel = [&](auto exec) {
-        auto k = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        auto k = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                     return exec->Exec(ctx, batch, res);
                                                                 });
-        k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+        k->null_handling = arrow20::compute::NullHandling::INTERSECTION;
         return k;
     };
 
@@ -303,7 +303,7 @@ IComputationNode* WrapBlockDecimal(TStringBuf name, TCallable& callable, const T
     TComputationNodePtrVector argsNodes = {firstCompute, secondCompute};
     TVector<TType*> argsTypes = {firstType, secondType};
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel = MakeBlockKernel<TExec>(argsTypes, callable.GetType()->GetReturnType());
+    std::shared_ptr<arrow20::compute::ScalarKernel> kernel = MakeBlockKernel<TExec>(argsTypes, callable.GetType()->GetReturnType());
     return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), name, std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 

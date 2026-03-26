@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpOlapCompression) {
 
         TVector<NArrow::NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
-            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
+            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable(
                 "pk_int", false));
         auto batch = NArrow::NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100000);
         testHelper.BulkUpsert(testTable, batch);

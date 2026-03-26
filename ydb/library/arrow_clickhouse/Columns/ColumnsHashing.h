@@ -31,8 +31,8 @@ struct HashMethodOneNumber
 {
     using Self = HashMethodOneNumber<Value, Mapped, FieldType, use_cache, need_offset>;
     using Base = columns_hashing_impl::HashMethodBase<Self, Value, Mapped, use_cache, need_offset>;
-    using ArrowType = typename arrow::CTypeTraits<FieldType>::ArrowType;
-    using ArrowArrayType = arrow::NumericArray<ArrowType>;
+    using ArrowType = typename arrow20::CTypeTraits<FieldType>::ArrowType;
+    using ArrowArrayType = arrow20::NumericArray<ArrowType>;
 
     const FieldType * vec{};
 

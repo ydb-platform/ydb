@@ -49,14 +49,14 @@ public:
         return GetColumnSaver(TString(columnName.data(), columnName.size()));
     }
 
-    std::vector<std::shared_ptr<arrow::Field>> GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const;
+    std::vector<std::shared_ptr<arrow20::Field>> GetAbsentFields(const std::shared_ptr<arrow20::Schema>& existsSchema) const;
 
-    std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
-    std::shared_ptr<arrow::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Scalar> GetExternalDefaultValueVerified(const std::string& columnName) const;
+    std::shared_ptr<arrow20::Scalar> GetExternalDefaultValueVerified(const ui32 columnId) const;
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildDefaultBatch(
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> BuildDefaultBatch(
         const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const;
-    TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const;
+    TConclusionStatus CheckColumnsDefault(const std::vector<std::shared_ptr<arrow20::Field>>& fields) const;
 
     std::vector<std::string> GetPKColumnNames() const;
 
@@ -68,10 +68,10 @@ public:
     }
 
     ui32 GetColumnId(const std::string& columnName) const;
-    std::shared_ptr<arrow::Field> GetFieldByIndex(const int index) const;
-    std::shared_ptr<arrow::Field> GetFieldByIndexVerified(const int index) const;
-    std::shared_ptr<arrow::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
-    std::shared_ptr<arrow::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Field> GetFieldByIndex(const int index) const;
+    std::shared_ptr<arrow20::Field> GetFieldByIndexVerified(const int index) const;
+    std::shared_ptr<arrow20::Field> GetFieldByColumnIdOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Field> GetFieldByColumnIdVerified(const ui32 columnId) const;
 
     NJson::TJsonValue DebugJson() const {
         return DoDebugJson();
@@ -94,10 +94,10 @@ public:
 
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> NormalizeBatch(const ISnapshotSchema& dataSchema,
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
-    [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
-        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
+    [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow20::RecordBatch>> PrepareForModification(
+        const std::shared_ptr<arrow20::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
     [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
-        const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+        const std::shared_ptr<arrow20::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;

@@ -48,10 +48,10 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(
     if (!filterTable) {
         return true;
     }
-    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow20::boolean()->id());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& i : filterTable->column(0)->chunks()) {
-        auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
+        auto filterFlags = static_pointer_cast<arrow20::BooleanArray>(i);
         for (ui32 i = 0; i < filterFlags->length(); ++i) {
             filter.Add(!filterFlags->GetView(i));
         }
@@ -104,7 +104,7 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(
 
 TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     for (auto&& f : IIndexInfo::ArrowSchemaSnapshot()->fields()) {
         if (source->MutableStageData().GetTable().HasColumn(IIndexInfo::GetColumnIdVerified(f->name()))) {
             auto arr = source->MutableStageData().GetTable().GetArrayVerified(IIndexInfo::GetColumnIdVerified(f->name()));

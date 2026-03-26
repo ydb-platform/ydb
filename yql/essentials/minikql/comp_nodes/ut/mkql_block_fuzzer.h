@@ -26,7 +26,7 @@ public:
 
     virtual NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
                                            const THolderFactory& holderFactory,
-                                           arrow::MemoryPool& memoryPool,
+                                           arrow20::MemoryPool& memoryPool,
                                            IRandomProvider& randomProvider) const = 0;
 };
 
@@ -48,7 +48,7 @@ public:
     NYql::NUdf::TUnboxedValue ApplyFuzzers(NYql::NUdf::TUnboxedValue input,
                                            ui64 fuzzIdx,
                                            const THolderFactory& holderFactory,
-                                           arrow::MemoryPool& memoryPool,
+                                           arrow20::MemoryPool& memoryPool,
                                            IRandomProvider& randomProvider) const;
 
 private:

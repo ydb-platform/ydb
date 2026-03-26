@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
-ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length) {
+ui32 TColumnPortion::AppendSlice(const std::shared_ptr<arrow20::Array>& a, const ui32 startIndex, const ui32 length) {
     Y_ABORT_UNLESS(a);
     Y_ABORT_UNLESS(length);
     Y_ABORT_UNLESS(startIndex + length <= a->length());

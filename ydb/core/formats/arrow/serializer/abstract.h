@@ -17,11 +17,11 @@ namespace NKikimr::NArrow::NSerialization {
 
 class ISerializer {
 protected:
-    virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
-    virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const = 0;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(
-        const TString& data, const std::shared_ptr<arrow::Schema>& schema) const = 0;
+    virtual TString DoSerializeFull(const std::shared_ptr<arrow20::RecordBatch>& batch) const = 0;
+    virtual TString DoSerializePayload(const std::shared_ptr<arrow20::RecordBatch>& batch) const = 0;
+    virtual arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> DoDeserialize(const TString& data) const = 0;
+    virtual arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> DoDeserialize(
+        const TString& data, const std::shared_ptr<arrow20::Schema>& schema) const = 0;
     virtual TString DoDebugString() const {
         return "";
     }
@@ -56,21 +56,21 @@ public:
         return DoSerializeToProto(proto);
     }
 
-    TString SerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    TString SerializeFull(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         if (!batch) {
             return "";
         }
         return DoSerializeFull(batch);
     }
 
-    TString SerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    TString SerializePayload(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         if (!batch) {
             return "";
         }
         return DoSerializePayload(batch);
     }
 
-    std::shared_ptr<arrow::RecordBatch> Repack(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    std::shared_ptr<arrow20::RecordBatch> Repack(const std::shared_ptr<arrow20::RecordBatch>& batch) {
         if (!batch) {
             return batch;
         }
@@ -81,14 +81,14 @@ public:
         return SerializeFull(TStatusValidator::GetValid(Deserialize(batchString)));
     }
 
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data) const {
+    arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> Deserialize(const TString& data) const {
         if (!data) {
             return nullptr;
         }
         return DoDeserialize(data);
     }
 
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> Deserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
+    arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> Deserialize(const TString& data, const std::shared_ptr<arrow20::Schema>& schema) const {
         if (!data) {
             return nullptr;
         }

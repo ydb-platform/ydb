@@ -22,7 +22,7 @@ public:
         return Portion;
     }
 
-    void AppendSlice(const std::shared_ptr<arrow::Array>& data, const ui32 startIndex, const ui32 length);
+    void AppendSlice(const std::shared_ptr<arrow20::Array>& data, const ui32 startIndex, const ui32 length);
 
     TColumnPortionResult BuildResult();
 };

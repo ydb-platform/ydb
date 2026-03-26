@@ -10,64 +10,64 @@
 #include <util/system/hostname.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NOptimizer {
-std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
+std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::PathId::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(ExternalPathId.GetRawValue()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(ExternalPathId.GetRawValue()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::TabletId::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(GetTabletId()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::TaskId::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetTaskId());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i.GetTaskId());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::HostName::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::StringScalar(::HostName()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::StringScalar(::HostName()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::NodeId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(
-            arrow::MakeArrayFromScalar(arrow::UInt64Scalar(NActors::TActivationContext::AsActorContext().SelfID.NodeId()), recordsCount));
+            arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(NActors::TActivationContext::AsActorContext().SelfID.NodeId()), recordsCount));
     }
 
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Start::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(i.GetStart().data(), i.GetStart().size()));
+            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetStart().data(), i.GetStart().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
 
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Finish::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(i.GetFinish().data(), i.GetFinish().size()));
+            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetFinish().data(), i.GetFinish().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
 
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Details::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(i.GetDetails().data(), i.GetDetails().size()));
+            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(i.GetDetails().data(), i.GetDetails().size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
 
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Category::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetWeightCategory());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i.GetWeightCategory());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
 
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexOptimizerStats::Weight::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::int64());
+        auto builder = NArrow::MakeBuilder(arrow20::int64());
         for (auto&& i : OptimizerTasks) {
-            NArrow::Append<arrow::Int64Type>(*builder, i.GetWeight());
+            NArrow::Append<arrow20::Int64Type>(*builder, i.GetWeight());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

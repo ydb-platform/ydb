@@ -7,19 +7,19 @@
 
 namespace NYql::NUdf {
 
-class TYqlMemoryPool: public arrow::MemoryPool {
-    arrow::Status Allocate(int64_t size, uint8_t** out) final {
+class TYqlMemoryPool: public arrow20::MemoryPool {
+    arrow20::Status Allocate(int64_t size, uint8_t** out) final {
         Y_ENSURE(size >= 0 && out);
         *out = (uint8_t*)UdfArrowAllocate(size);
         UpdateAllocatedBytes(size);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Reallocate(int64_t old_size, int64_t new_size, uint8_t** ptr) final {
+    arrow20::Status Reallocate(int64_t old_size, int64_t new_size, uint8_t** ptr) final {
         Y_ENSURE(old_size >= 0 && new_size >= 0 && ptr);
         *ptr = (uint8_t*)UdfArrowReallocate(*ptr, old_size, new_size);
         UpdateAllocatedBytes(new_size - old_size);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     void Free(uint8_t* buffer, int64_t size) final {
@@ -53,7 +53,7 @@ private:
     std::atomic<int64_t> MaxMemory_{0};
 };
 
-arrow::MemoryPool* GetYqlMemoryPool() {
+arrow20::MemoryPool* GetYqlMemoryPool() {
     return Singleton<TYqlMemoryPool>();
 }
 

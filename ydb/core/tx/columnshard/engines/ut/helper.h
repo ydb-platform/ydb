@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NEngines::NTest {
 class TLocalHelper {
 public:
     static NKikimrTxColumnShard::TLogicalMetadata GetMetaProto();
-    static std::shared_ptr<arrow::Schema> GetMetaSchema();
+    static std::shared_ptr<arrow20::Schema> GetMetaSchema();
 };
 
 };   // namespace NKikimr::NOlap::NEngines::NTest

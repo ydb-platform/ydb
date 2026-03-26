@@ -28,9 +28,9 @@ public:
 
     bool IsHardPacker() const;
 
-    TString Apply(std::shared_ptr<arrow::Array> data, std::shared_ptr<arrow::Field> field) const;
+    TString Apply(std::shared_ptr<arrow20::Array> data, std::shared_ptr<arrow20::Field> field) const;
 
-    TString Apply(const std::shared_ptr<arrow::RecordBatch>& data) const;
+    TString Apply(const std::shared_ptr<arrow20::RecordBatch>& data) const;
 };
 
 }   // namespace NKikimr::NArrow::NAccessor

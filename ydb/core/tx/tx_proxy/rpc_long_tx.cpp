@@ -236,15 +236,15 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
     class TParsedBatchData: public NEvWrite::IShardsSplitter::IEvWriteDataAccessor {
     private:
         using TBase = NEvWrite::IShardsSplitter::IEvWriteDataAccessor;
-        std::shared_ptr<arrow::RecordBatch> Batch;
+        std::shared_ptr<arrow20::RecordBatch> Batch;
 
     public:
-        TParsedBatchData(std::shared_ptr<arrow::RecordBatch> batch)
+        TParsedBatchData(std::shared_ptr<arrow20::RecordBatch> batch)
             : TBase(NArrow::GetBatchMemorySize(batch))
             , Batch(batch) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
+        std::shared_ptr<arrow20::RecordBatch> GetDeserializedBatch() const override {
             return Batch;
         }
 
@@ -257,7 +257,7 @@ class TLongTxWriteInternal: public TLongTxWriteBase<TLongTxWriteInternal> {
 
 public:
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
-        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+        const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow20::RecordBatch> batch,
         std::shared_ptr<NYql::TIssues> issues, const TString& userSID)
         : TBase(databaseName, path, TString(), longTxId, dedupId, userSID)
         , ReplyTo(replyTo)
@@ -299,13 +299,13 @@ protected:
 private:
     const TActorId ReplyTo;
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::shared_ptr<arrow20::RecordBatch> Batch;
     std::shared_ptr<NYql::TIssues> Issues;
 };
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId,
     const TString& dedupId, const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow20::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
     const TString& userSID) {
     return ctx.RegisterWithSameMailbox(new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues, userSID));

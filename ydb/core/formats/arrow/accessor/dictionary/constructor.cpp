@@ -43,7 +43,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     sbOriginal.Skip(positionsBlobSize);
 
     auto schemaDictionary =
-        std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
+        std::make_shared<arrow20::Schema>(arrow20::FieldVector({ std::make_shared<arrow20::Field>("val", externalInfo.GetColumnType()) }));
     auto resultDictionary = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobDictionary.data(), blobDictionary.size()), schemaDictionary);
     if (!resultDictionary.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}
@@ -56,8 +56,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
     auto rbDictionary = TStatusValidator::GetValid(resultDictionary);
     AFL_VERIFY(rbDictionary->num_columns() == 1);
 
-    const std::shared_ptr<arrow::DataType> type = GetTypeByVariantsCount(rbDictionary->num_rows());
-    auto schemaPositions = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", type) }));
+    const std::shared_ptr<arrow20::DataType> type = GetTypeByVariantsCount(rbDictionary->num_rows());
+    auto schemaPositions = std::make_shared<arrow20::Schema>(arrow20::FieldVector({ std::make_shared<arrow20::Field>("val", type) }));
     auto resultPositions = externalInfo.GetDefaultSerializer()->Deserialize(TString(blobPositions.data(), blobPositions.size()), schemaPositions);
     if (!resultPositions.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}
@@ -77,7 +77,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
     return std::make_shared<NArrow::NAccessor::TDictionaryArray>(
         NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), 1),
-        NArrow::TThreadSimpleArraysCache::Get(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), externalInfo.GetRecordsCount()));
+        NArrow::TThreadSimpleArraysCache::Get(arrow20::uint8(), std::make_shared<arrow20::UInt8Scalar>(0), externalInfo.GetRecordsCount()));
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {
@@ -92,19 +92,19 @@ TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
     const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrDictionary = arr->GetDictionary();
-    std::shared_ptr<arrow::Array> arrPositions = arr->GetPositions();
-    const std::shared_ptr<arrow::DataType> requiredPositionsType = GetTypeByVariantsCount(arrDictionary->length());
+    std::shared_ptr<arrow20::Array> arrPositions = arr->GetPositions();
+    const std::shared_ptr<arrow20::DataType> requiredPositionsType = GetTypeByVariantsCount(arrDictionary->length());
     if (!arrPositions->type()->Equals(*requiredPositionsType)) {
-        auto castResult = arrow::compute::Cast(*arrPositions, requiredPositionsType);
+        auto castResult = arrow20::compute::Cast(*arrPositions, requiredPositionsType);
         AFL_VERIFY(castResult.ok())("error", castResult.status().ToString());
         arrPositions = std::move(*castResult);
     }
     auto schemaDictionary = NArrow::BuildFakeSchema({ arrDictionary });
     auto schemaPositions = NArrow::BuildFakeSchema({ arrPositions });
     const TString blobDictionary =
-        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaDictionary, arrDictionary->length(), { arrDictionary }));
+        externalInfo.GetDefaultSerializer()->SerializePayload(arrow20::RecordBatch::Make(schemaDictionary, arrDictionary->length(), { arrDictionary }));
     const TString blobPositions =
-        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaPositions, arrPositions->length(), { arrPositions }));
+        externalInfo.GetDefaultSerializer()->SerializePayload(arrow20::RecordBatch::Make(schemaPositions, arrPositions->length(), { arrPositions }));
 
     auto meta = std::make_shared<TDictionaryAccessorData>(blobDictionary.size(), blobPositions.size());
     TString blob;
@@ -124,11 +124,11 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
         return TConclusionStatus::Fail("dictionary accessor cannot convert types for transfer: " + originalArray->GetDataType()->ToString() +
                                        " to " + externalInfo.GetColumnType()->ToString());
     }
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
+    auto schema = std::make_shared<arrow20::Schema>(arrow20::FieldVector({ std::make_shared<arrow20::Field>("val", externalInfo.GetColumnType()) }));
     auto chunked = originalArray->GetChunkedArray();
     AFL_VERIFY(chunked->type()->id() == originalArray->GetDataType()->id());
-    std::unique_ptr<arrow::ArrayBuilder> builderRecords;
-    std::unique_ptr<arrow::ArrayBuilder> builderVariants = NArrow::MakeBuilder(originalArray->GetDataType());
+    std::unique_ptr<arrow20::ArrayBuilder> builderRecords;
+    std::unique_ptr<arrow20::ArrayBuilder> builderVariants = NArrow::MakeBuilder(originalArray->GetDataType());
     std::vector<i32> records;
     std::vector<i32> remap;
     AFL_VERIFY(SwitchType(chunked->type()->id(), [&](const auto type) {
@@ -197,7 +197,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     return std::make_shared<TDictionaryArray>(arrVariants, arrRecords);
 }
 
-TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyReader(
+TConclusion<std::shared_ptr<arrow20::Array>> TConstructor::BuildDictionaryOnlyReader(
     const TString& dictionaryBlob, const TChunkConstructionData& externalInfo) {
     if (!externalInfo.HasAdditionalAccessorData()) {
         return TConclusionStatus::Fail("dictionary-only reader requires additional accessor data in chunk metadata");
@@ -212,8 +212,8 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
     }
     // Use only the dictionary prefix; blob may be full (dictionary + positions) when e.g. cached or read for other purposes.
     TStringBuf dictionaryPrefix(dictionaryBlob.data(), dictData->DictionaryBlobSize);
-    auto schemaDictionary = std::make_shared<arrow::Schema>(arrow::FieldVector(
-        {std::make_shared<arrow::Field>("val", externalInfo.GetColumnType(), true)}));
+    auto schemaDictionary = std::make_shared<arrow20::Schema>(arrow20::FieldVector(
+        {std::make_shared<arrow20::Field>("val", externalInfo.GetColumnType(), true)}));
     auto result = externalInfo.GetDefaultSerializer()->Deserialize(TString(dictionaryPrefix), schemaDictionary);
     if (!result.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}
@@ -224,15 +224,15 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
     return rb->column(0);
 }
 
-std::shared_ptr<arrow::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
+std::shared_ptr<arrow20::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
     if (count <= Max<ui8>()) {
-        return arrow::uint8();
+        return arrow20::uint8();
     }
     if (count <= Max<ui16>()) {
-        return arrow::uint16();
+        return arrow20::uint16();
     }
     if (count <= Max<ui32>()) {
-        return arrow::uint32();
+        return arrow20::uint32();
     }
     AFL_VERIFY(false);
     return nullptr;

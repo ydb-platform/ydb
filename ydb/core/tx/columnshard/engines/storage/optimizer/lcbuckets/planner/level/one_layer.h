@@ -179,7 +179,7 @@ public:
 
     virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const override;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow20::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
         for (auto&& i : Portions) {
             result.AddPosition(i.GetStart().BuildSortablePosition(), false);

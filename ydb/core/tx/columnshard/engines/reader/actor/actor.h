@@ -87,7 +87,7 @@ private:
 
     NKqp::TScanStatistics GetScanStats();
 
-    TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
+    TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow20::RecordBatch>& lastReadKey);
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
     private:

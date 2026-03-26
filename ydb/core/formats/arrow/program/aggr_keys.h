@@ -18,19 +18,19 @@ private:
     std::vector<std::string> GetRegistryFunctionNames() const override {
         return { GetFunctionName(AggregationType), GetHouseFunctionName(AggregationType) };
     }
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+    virtual TConclusion<arrow20::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 
-    TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const override {
+    TConclusion<arrow20::Datum> PrepareResult(arrow20::Datum&& datum) const override {
         if (!datum.is_scalar()) {
             return TConclusionStatus::Fail("Aggregate result is not a scalar.");
         }
 
-        if (datum.scalar()->type->id() == arrow::Type::STRUCT) {
+        if (datum.scalar()->type->id() == arrow20::Type::STRUCT) {
             if (AggregationType == EAggregate::Min) {
-                const auto& minMax = datum.scalar_as<arrow::StructScalar>();
+                const auto& minMax = datum.scalar_as<arrow20::StructScalar>();
                 return minMax.value[0];
             } else if (AggregationType == EAggregate::Max) {
-                const auto& minMax = datum.scalar_as<arrow::StructScalar>();
+                const auto& minMax = datum.scalar_as<arrow20::StructScalar>();
                 return minMax.value[1];
             } else {
                 return TConclusionStatus::Fail("Unexpected struct result for aggregate function.");
@@ -55,7 +55,7 @@ public:
         return true;
     }
 
-    TAggregateFunction(const EAggregate aggregationType, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr)
+    TAggregateFunction(const EAggregate aggregationType, const std::shared_ptr<arrow20::compute::FunctionOptions>& functionOptions = nullptr)
         : TBase(functionOptions, true)
         , AggregationType(aggregationType) {
     }

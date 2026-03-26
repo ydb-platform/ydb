@@ -43,21 +43,21 @@ TString TSpecialKeys::DebugString() const {
     return BuildBatch()->ToString();
 }
 
-std::shared_ptr<arrow::RecordBatch> TSpecialKeys::BuildBatch() const {
+std::shared_ptr<arrow20::RecordBatch> TSpecialKeys::BuildBatch() const {
     return Rows.BuildBatch(Schema).GetResult();
 }
 
 void TSpecialKeys::Reallocate() {
-    std::shared_ptr<arrow::Schema> schema = Schema;
+    std::shared_ptr<arrow20::Schema> schema = Schema;
     Schema = std::move(schema);
     Rows.Reallocate();
 }
 
 TFirstLastSpecialKeys::TFirstLastSpecialKeys(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<TString>& columnNames /*= {}*/) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
-    std::shared_ptr<arrow::RecordBatch> keyBatch = batch;
+    std::shared_ptr<arrow20::RecordBatch> keyBatch = batch;
     if (columnNames.size()) {
         keyBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(batch, columnNames);
     }
@@ -73,7 +73,7 @@ TFirstLastSpecialKeys::TFirstLastSpecialKeys(
     }
 }
 
-TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema) {
+TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow20::RecordBatch> batch, const std::shared_ptr<arrow20::Schema>& schema) {
     Y_ABORT_UNLESS(batch);
     Y_ABORT_UNLESS(batch->num_rows());
     Y_ABORT_UNLESS(schema);

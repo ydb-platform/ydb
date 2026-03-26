@@ -56,7 +56,7 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
     }
 
     if (!accessor) {
-        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow::StringType>());
+        return NAccessor::TTrivialArray::BuildEmpty(std::make_shared<arrow20::StringType>());
     }
 
 
@@ -76,24 +76,24 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {
-    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::utf8());
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow20::utf8());
 }
 
 std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
     const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     auto arr = TBase::ExtractArray(jsonAcc, svPath);
     auto chunkedArray = arr->GetChunkedArray();
-    auto builder = NArrow::MakeBuilder(arrow::uint8(), arr->GetRecordsCount());
+    auto builder = NArrow::MakeBuilder(arrow20::uint8(), arr->GetRecordsCount());
     for (auto&& i : chunkedArray->chunks()) {
         for (ui32 idx = 0; idx < i->length(); ++idx) {
-            NArrow::Append<arrow::UInt8Type>(*builder, i->IsNull(idx) ? 0 : 1);
+            NArrow::Append<arrow20::UInt8Type>(*builder, i->IsNull(idx) ? 0 : 1);
         }
     }
     return std::make_shared<NAccessor::TTrivialArray>(FinishBuilder(std::move(builder)));
 }
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
-    return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
+    return NAccessor::TCompositeChunkedArray::TBuilder(arrow20::uint8());
 }
 
 TString TSimpleKernelLogic::SignalDescription() const {

@@ -40,12 +40,12 @@ TArrowSchema GetArrowSchema(const NMiniKQL::TType* mkqlItemType, const TVector<u
     return {arrowSchemaColumns, arrowNotNullColumns};
 }
 
-std::shared_ptr<arrow::RecordBatch> BuildArrowFromUnboxedValue(Ydb::ResultSet* ydbResult, const NMiniKQL::TUnboxedValueBatch& rows,
+std::shared_ptr<arrow20::RecordBatch> BuildArrowFromUnboxedValue(Ydb::ResultSet* ydbResult, const NMiniKQL::TUnboxedValueBatch& rows,
     const NMiniKQL::TType* mkqlItemType, const TVector<ui32>* columnOrder, const TVector<TString>* columnHints, TMaybe<ui64> rowsLimitPerWrite)
 {
     auto [arrowSchemaColumns, arrowNotNullColumns] = GetArrowSchema(mkqlItemType, columnOrder, columnHints);
 
-    NKikimr::NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+    NKikimr::NArrow::TArrowBatchBuilder batchBuilder(arrow20::Compression::UNCOMPRESSED, arrowNotNullColumns);
     batchBuilder.Reserve(rows.RowCount());
     YQL_ENSURE(batchBuilder.Start(arrowSchemaColumns).ok());
 
@@ -64,7 +64,7 @@ std::shared_ptr<arrow::RecordBatch> BuildArrowFromUnboxedValue(Ydb::ResultSet* y
     return batchBuilder.FlushBatch(false, /* flushEmpty */ true);
 }
 
-std::shared_ptr<arrow::RecordBatch> BuildArrowFromSerializedBatches(const NYql::NDq::TDqDataSerializer& dataSerializer,
+std::shared_ptr<arrow20::RecordBatch> BuildArrowFromSerializedBatches(const NYql::NDq::TDqDataSerializer& dataSerializer,
     TVector<NYql::NDq::TDqSerializedBatch>&& data, const NMiniKQL::TType* mkqlItemType, const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
 {
@@ -77,7 +77,7 @@ std::shared_ptr<arrow::RecordBatch> BuildArrowFromSerializedBatches(const NYql::
         }
     }
 
-    NKikimr::NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
+    NKikimr::NArrow::TArrowBatchBuilder batchBuilder(arrow20::Compression::UNCOMPRESSED, arrowNotNullColumns);
     batchBuilder.Reserve(rowsCount);
     YQL_ENSURE(batchBuilder.Start(arrowSchemaColumns).ok());
 
@@ -161,7 +161,7 @@ void FillValueResultSet(Ydb::ResultSet* ydbResult, const NYql::NDq::TDqDataSeria
     }
 }
 
-void FillArrowResultSet(Ydb::ResultSet* ydbResult, std::shared_ptr<arrow::RecordBatch> batch, const NFormats::TFormatsSettings& settings,
+void FillArrowResultSet(Ydb::ResultSet* ydbResult, std::shared_ptr<arrow20::RecordBatch> batch, const NFormats::TFormatsSettings& settings,
     const NMiniKQL::TType* mkqlItemType, bool fillSchema, const TVector<ui32>* columnOrder, const TVector<TString>* columnHints)
 {
     ydbResult->set_format(Ydb::ResultSet::FORMAT_ARROW);
@@ -170,7 +170,7 @@ void FillArrowResultSet(Ydb::ResultSet* ydbResult, std::shared_ptr<arrow::Record
         FillValueSchema(ydbResult, mkqlItemType, columnOrder, columnHints);
     }
 
-    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+    auto writeOptions = arrow20::ipc::IpcWriteOptions::Defaults();
     writeOptions.use_threads = false;
     if (auto arrowFormatSettings = settings.GetArrowSettings()) {
         arrowFormatSettings->FillWriteOptions(writeOptions);

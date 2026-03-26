@@ -13,10 +13,10 @@ namespace NKikimr::NOlap::NWritingPortions {
 class TWriteUnit: public NColumnShard::TMonitoringObjectsCounter<TWriteUnit> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, Data);
-    YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow20::RecordBatch>, Batch);
 
 public:
-    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& batch)
+    TWriteUnit(const std::shared_ptr<NEvWrite::TWriteData>& data, const NArrow::TContainerWithIndexes<arrow20::RecordBatch>& batch)
         : Data(data)
         , Batch(batch) {
         Data->MutableWriteMeta().OnStage(NEvWrite::EWriteStage::WaitFlush);

@@ -76,7 +76,7 @@ Header Aggregator::Params::getHeader(
             fields.emplace_back(std::make_shared<ColumnWithTypeAndName>(aggregate.column_name, type));
         }
     }
-    return std::make_shared<arrow::Schema>(fields);
+    return std::make_shared<arrow20::Schema>(fields);
 }
 
 
@@ -177,9 +177,9 @@ AggregatedDataVariants::Type Aggregator::chooseAggregationMethod()
     /// No key has been found to be nullable.
 
     /// Single numeric key.
-    if (params.keys_size == 1 && arrow::is_primitive(types[0]->id()))
+    if (params.keys_size == 1 && arrow20::is_primitive(types[0]->id()))
     {
-        size_t size_of_field = arrow::bit_width(types[0]->id()) / 8;
+        size_t size_of_field = arrow20::bit_width(types[0]->id()) / 8;
 
         if (size_of_field == 1)
             return AggregatedDataVariants::Type::key8;
@@ -694,7 +694,7 @@ void NO_INLINE Aggregator::convertToBlockImplFinal(
     PaddedPODArray<AggregateDataPtr> places;
     places.reserve(data.size());
 
-    std::vector<arrow::Type::type> typeIds;
+    std::vector<arrow20::Type::type> typeIds;
     for (auto&& i : key_columns) {
         typeIds.emplace_back(i->type()->id());
     }
@@ -765,7 +765,7 @@ void NO_INLINE Aggregator::convertToBlockImplNotFinal(
 #endif
     const auto & key_sizes_ref = key_sizes;
 
-    std::vector<arrow::Type::type> typeIds;
+    std::vector<arrow20::Type::type> typeIds;
     for (auto&& i : key_columns) {
         typeIds.emplace_back(i->type()->id());
     }
@@ -845,7 +845,7 @@ Block Aggregator::prepareBlockAndFill(
     }
 
     // TODO: check row == columns length()
-    return arrow::RecordBatch::Make(header, rows, columns);
+    return arrow20::RecordBatch::Make(header, rows, columns);
 }
 
 Block Aggregator::prepareBlockAndFillWithoutKey(AggregatedDataVariants & data_variants, bool final, bool /*is_overflows*/) const

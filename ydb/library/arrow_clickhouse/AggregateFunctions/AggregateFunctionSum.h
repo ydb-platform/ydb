@@ -194,7 +194,7 @@ struct AggregateFunctionSumData
 
         while (ptr < end_ptr)
         {
-            if (arrow::BitUtil::GetBit(condition_map, start))
+            if (arrow20::BitUtil::GetBit(condition_map, start))
                 Impl::add(sum, *ptr);
             ++ptr;
             ++start;
@@ -224,8 +224,8 @@ template <typename T, typename TResult, typename Data>
 class AggregateFunctionSum final : public IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data>>
 {
 public:
-    using ColumnType = arrow::NumericArray<T>;
-    using MutableColumnType = arrow::NumericBuilder<TResult>;
+    using ColumnType = arrow20::NumericArray<T>;
+    using MutableColumnType = arrow20::NumericBuilder<TResult>;
 
     explicit AggregateFunctionSum(const DataTypes & argument_types_)
         : IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data>>(argument_types_, {})
@@ -286,7 +286,7 @@ class WrappedSum final : public ArrowAggregateFunctionWrapper
 public:
     template <typename T, typename ResultT>
     using AggregateFunctionSumWithOverflow =
-        AggregateFunctionSum<T, ResultT, AggregateFunctionSumData<typename arrow::TypeTraits<ResultT>::CType>>;
+        AggregateFunctionSum<T, ResultT, AggregateFunctionSumData<typename arrow20::TypeTraits<ResultT>::CType>>;
 
     WrappedSum(std::string name)
         : ArrowAggregateFunctionWrapper(std::move(name))
@@ -306,28 +306,28 @@ public:
         const DataTypePtr & type = argument_types[0];
 
         switch (type->id()) {
-            case arrow::Type::INT8:
-                return std::make_shared<AggFunc<arrow::Int8Type, arrow::Int64Type>>(argument_types);
-            case arrow::Type::INT16:
-                return std::make_shared<AggFunc<arrow::Int16Type, arrow::Int64Type>>(argument_types);
-            case arrow::Type::INT32:
-                return std::make_shared<AggFunc<arrow::Int32Type, arrow::Int64Type>>(argument_types);
-            case arrow::Type::INT64:
-                return std::make_shared<AggFunc<arrow::Int64Type, arrow::Int64Type>>(argument_types);
-            case arrow::Type::UINT8:
-                return std::make_shared<AggFunc<arrow::UInt8Type, arrow::UInt64Type>>(argument_types);
-            case arrow::Type::UINT16:
-                return std::make_shared<AggFunc<arrow::UInt16Type, arrow::UInt64Type>>(argument_types);
-            case arrow::Type::UINT32:
-                return std::make_shared<AggFunc<arrow::UInt32Type, arrow::UInt64Type>>(argument_types);
-            case arrow::Type::UINT64:
-                return std::make_shared<AggFunc<arrow::UInt64Type, arrow::UInt64Type>>(argument_types);
-            case arrow::Type::FLOAT:
-                return std::make_shared<AggFunc<arrow::FloatType, arrow::DoubleType>>(argument_types);
-            case arrow::Type::DOUBLE:
-                return std::make_shared<AggFunc<arrow::DoubleType, arrow::DoubleType>>(argument_types);
-            case arrow::Type::DURATION:
-                return std::make_shared<AggFunc<arrow::DurationType, arrow::DurationType>>(argument_types);
+            case arrow20::Type::INT8:
+                return std::make_shared<AggFunc<arrow20::Int8Type, arrow20::Int64Type>>(argument_types);
+            case arrow20::Type::INT16:
+                return std::make_shared<AggFunc<arrow20::Int16Type, arrow20::Int64Type>>(argument_types);
+            case arrow20::Type::INT32:
+                return std::make_shared<AggFunc<arrow20::Int32Type, arrow20::Int64Type>>(argument_types);
+            case arrow20::Type::INT64:
+                return std::make_shared<AggFunc<arrow20::Int64Type, arrow20::Int64Type>>(argument_types);
+            case arrow20::Type::UINT8:
+                return std::make_shared<AggFunc<arrow20::UInt8Type, arrow20::UInt64Type>>(argument_types);
+            case arrow20::Type::UINT16:
+                return std::make_shared<AggFunc<arrow20::UInt16Type, arrow20::UInt64Type>>(argument_types);
+            case arrow20::Type::UINT32:
+                return std::make_shared<AggFunc<arrow20::UInt32Type, arrow20::UInt64Type>>(argument_types);
+            case arrow20::Type::UINT64:
+                return std::make_shared<AggFunc<arrow20::UInt64Type, arrow20::UInt64Type>>(argument_types);
+            case arrow20::Type::FLOAT:
+                return std::make_shared<AggFunc<arrow20::FloatType, arrow20::DoubleType>>(argument_types);
+            case arrow20::Type::DOUBLE:
+                return std::make_shared<AggFunc<arrow20::DoubleType, arrow20::DoubleType>>(argument_types);
+            case arrow20::Type::DURATION:
+                return std::make_shared<AggFunc<arrow20::DurationType, arrow20::DurationType>>(argument_types);
             default:
                 break;
         }

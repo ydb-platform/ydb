@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
+TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow20::RecordBatch>& batch, NArrow::NSplitter::ISchemaDetailInfo::TPtr schema,
     std::shared_ptr<NColumnShard::TSplitterCounters> counters, const NSplitter::TSplitSettings& settings)
     : TBase(TValidator::CheckNotNull(batch)->num_rows(), schema, counters)
     , Batch(batch) {
@@ -40,7 +40,7 @@ TBatchSerializedSlice::TBatchSerializedSlice(const std::shared_ptr<arrow::Record
     }
 }
 
-std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(const std::shared_ptr<arrow::RecordBatch>& batch,
+std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(const std::shared_ptr<arrow20::RecordBatch>& batch,
     const NSplitter::TSplitSettings& settings, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
     const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schemaInfo) {
     std::vector<TBatchSerializedSlice> slices;
@@ -55,7 +55,7 @@ std::vector<TBatchSerializedSlice> TBatchSerializedSlice::BuildSimpleSlices(cons
     }
     auto linearSplitInfo = NKikimr::NArrow::NSplitter::TSimpleSplitter::GetOptimalLinearSplitting(batch->num_rows(), recordsCount);
     for (auto it = linearSplitInfo.StartIterator(); it.IsValid(); it.Next()) {
-        std::shared_ptr<arrow::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
+        std::shared_ptr<arrow20::RecordBatch> current = batch->Slice(it.GetPosition(), it.GetCurrentPackSize());
         TBatchSerializedSlice slice(current, schemaInfo, counters, settings);
         slices.emplace_back(std::move(slice));
     }

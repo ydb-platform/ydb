@@ -410,12 +410,12 @@ public:
         Chunks = std::move(result);
     }
 
-    std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
+    std::shared_ptr<arrow20::Scalar> GetFirstScalar() const {
         Y_ABORT_UNLESS(Chunks.size());
         return Chunks.front()->GetFirstScalar();
     }
 
-    std::shared_ptr<arrow::Scalar> GetLastScalar() const {
+    std::shared_ptr<arrow20::Scalar> GetLastScalar() const {
         Y_ABORT_UNLESS(Chunks.size());
         return Chunks.back()->GetLastScalar();
     }

@@ -108,7 +108,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         while (dataOwners.size()) {
             GetDataExtractor()->VisitAll(
                 dataOwners.front(),
-                [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+                [&](const std::shared_ptr<arrow20::Array>& arr, const ui64 hashBase) {
                     auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                     const ui32 size = filterBits.Size();
                     const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
@@ -177,7 +177,7 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow20::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());

@@ -19,11 +19,11 @@ struct SingleValueDataFixed
 {
 private:
     using Self = SingleValueDataFixed;
-    using ColumnType = arrow::NumericArray<ArrowType>;
-    using MutableColumnType = arrow::NumericBuilder<ArrowType>;
+    using ColumnType = arrow20::NumericArray<ArrowType>;
+    using MutableColumnType = arrow20::NumericBuilder<ArrowType>;
 
     bool has_value = false; /// We need to remember if at least one value has been passed. This is necessary for AggregateFunctionIf.
-    typename arrow::TypeTraits<ArrowType>::CType value;
+    typename arrow20::TypeTraits<ArrowType>::CType value;
 
 public:
     static constexpr bool is_any = false;
@@ -189,11 +189,11 @@ public:
         return size <= MAX_SMALL_STRING_SIZE ? small_data : large_data;
     }
 
-    arrow::util::string_view getStringView() const
+    arrow20::util::string_view getStringView() const
     {
         if (!has())
             return {};
-        return arrow::util::string_view(getData(), size);
+        return arrow20::util::string_view(getData(), size);
     }
 
     void insertResultInto(MutableColumn & to) const
@@ -205,7 +205,7 @@ public:
     }
 
     /// Assuming to.has()
-    void changeImpl(arrow::util::string_view value, Arena * arena)
+    void changeImpl(arrow20::util::string_view value, Arena * arena)
     {
         Int32 value_size = value.size();
 
@@ -627,33 +627,33 @@ inline std::shared_ptr<IAggregateFunction> createAggregateFunctionSingleValue(co
     const DataTypePtr & argument_type = argument_types[0];
 
     switch (argument_type->id()) {
-        case arrow::Type::INT8:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::Int8Type>>>>(argument_type);
-        case arrow::Type::INT16:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::Int16Type>>>>(argument_type);
-        case arrow::Type::INT32:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::Int32Type>>>>(argument_type);
-        case arrow::Type::INT64:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::Int64Type>>>>(argument_type);
-        case arrow::Type::UINT8:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::UInt8Type>>>>(argument_type);
-        case arrow::Type::UINT16:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::UInt16Type>>>>(argument_type);
-        case arrow::Type::UINT32:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::UInt32Type>>>>(argument_type);
-        case arrow::Type::UINT64:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::UInt64Type>>>>(argument_type);
-        case arrow::Type::FLOAT:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::FloatType>>>>(argument_type);
-        case arrow::Type::DOUBLE:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::DoubleType>>>>(argument_type);
-        case arrow::Type::TIMESTAMP:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::TimestampType>>>>(argument_type);
-        case arrow::Type::DURATION:
-            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow::DurationType>>>>(argument_type);
-        case arrow::Type::BINARY:
+        case arrow20::Type::INT8:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::Int8Type>>>>(argument_type);
+        case arrow20::Type::INT16:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::Int16Type>>>>(argument_type);
+        case arrow20::Type::INT32:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::Int32Type>>>>(argument_type);
+        case arrow20::Type::INT64:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::Int64Type>>>>(argument_type);
+        case arrow20::Type::UINT8:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::UInt8Type>>>>(argument_type);
+        case arrow20::Type::UINT16:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::UInt16Type>>>>(argument_type);
+        case arrow20::Type::UINT32:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::UInt32Type>>>>(argument_type);
+        case arrow20::Type::UINT64:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::UInt64Type>>>>(argument_type);
+        case arrow20::Type::FLOAT:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::FloatType>>>>(argument_type);
+        case arrow20::Type::DOUBLE:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::DoubleType>>>>(argument_type);
+        case arrow20::Type::TIMESTAMP:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::TimestampType>>>>(argument_type);
+        case arrow20::Type::DURATION:
+            return std::make_shared<AggFunc<AggData<SingleValueDataFixed<arrow20::DurationType>>>>(argument_type);
+        case arrow20::Type::BINARY:
             return std::make_shared<AggFunc<AggData<SingleValueDataString<false>>>>(argument_type);
-        case arrow::Type::STRING:
+        case arrow20::Type::STRING:
             return std::make_shared<AggFunc<AggData<SingleValueDataString<true>>>>(argument_type);
         default:
             break;

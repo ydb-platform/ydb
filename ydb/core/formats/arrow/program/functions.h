@@ -35,7 +35,7 @@ public:
         return nullptr;
     }
 
-    arrow::compute::ExecContext* GetContext() const {
+    arrow20::compute::ExecContext* GetContext() const {
         return GetCustomExecContext();
     }
 
@@ -44,7 +44,7 @@ public:
     }
 
     virtual ~IStepFunction() = default;
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const = 0;
+    virtual TConclusion<arrow20::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const = 0;
     virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output) const = 0;
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = DoDebugJson();
@@ -58,20 +58,20 @@ public:
 class TInternalFunction: public IStepFunction {
 private:
     using TBase = IStepFunction;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::compute::FunctionOptions>, FunctionOptions);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::compute::FunctionOptions>, FunctionOptions);
 
 private:
     virtual std::vector<std::string> GetRegistryFunctionNames() const = 0;
-    virtual TConclusion<arrow::Datum> PrepareResult(arrow::Datum&& datum) const {
+    virtual TConclusion<arrow20::Datum> PrepareResult(arrow20::Datum&& datum) const {
         return std::move(datum);
     }
 
 public:
-    TInternalFunction(const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions, const bool needConcatenation = false)
+    TInternalFunction(const std::shared_ptr<arrow20::compute::FunctionOptions>& functionOptions, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , FunctionOptions(functionOptions) {
     }
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+    virtual TConclusion<arrow20::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 };
 
 class TSimpleFunction: public TInternalFunction {
@@ -326,7 +326,7 @@ public:
         return ValidateArgumentsCount(OperationId, input.size());
     }
 
-    TSimpleFunction(const EOperation operationId, const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr,
+    TSimpleFunction(const EOperation operationId, const std::shared_ptr<arrow20::compute::FunctionOptions>& functionOptions = nullptr,
         const bool needConcatenation = false)
         : TBase(functionOptions, needConcatenation)
         , OperationId(operationId) {
@@ -336,33 +336,33 @@ public:
 class TKernelFunction: public IStepFunction {
 private:
     using TBase = IStepFunction;
-    const std::shared_ptr<const arrow::compute::ScalarFunction> Function;
-    std::shared_ptr<arrow::compute::FunctionOptions> FunctionOptions;
+    const std::shared_ptr<const arrow20::compute::ScalarFunction> Function;
+    std::shared_ptr<arrow20::compute::FunctionOptions> FunctionOptions;
 
     virtual bool IsAggregation() const override {
         return false;
     }
 
 public:
-    TKernelFunction(const std::shared_ptr<const arrow::compute::ScalarFunction> kernelsFunction,
-        const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
+    TKernelFunction(const std::shared_ptr<const arrow20::compute::ScalarFunction> kernelsFunction,
+        const std::shared_ptr<arrow20::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , Function(kernelsFunction)
         , FunctionOptions(functionOptions) {
         AFL_VERIFY(Function);
     }
 
-    TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {
+    TConclusion<arrow20::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {
         auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
         TAccessorsCollection::TChunksMerger merger;
         while (auto args = argumentsReader.ReadNext()) {
             try {
                 for (auto& arg : *args) {
-                    if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::TIMESTAMP) {
-                        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
-                        arrow::TimeUnit::type unit = timestamp_type->unit();
-                        if (unit == arrow::TimeUnit::MICRO) {
-                            arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
+                    if (arg.kind() == arrow20::Datum::ARRAY && arg.descr().type->id() == arrow20::Type::TIMESTAMP) {
+                        auto timestamp_type = std::static_pointer_cast<arrow20::TimestampType>(arg.descr().type);
+                        arrow20::TimeUnit::type unit = timestamp_type->unit();
+                        if (unit == arrow20::TimeUnit::MICRO) {
+                            arrow20::util::get<std::shared_ptr<arrow20::ArrayData>>(arg.value)->type = arrow20::uint64();
                         }
                     }
                 }

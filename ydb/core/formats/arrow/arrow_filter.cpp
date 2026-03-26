@@ -122,11 +122,11 @@ TString TColumnFilter::TIterator::DebugString() const {
     return sb;
 }
 
-std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(
+std::shared_ptr<arrow20::BooleanArray> TColumnFilter::BuildArrowFilter(
     const ui32 expectedSize, const std::optional<ui32> startPos, const std::optional<ui32> count) const {
     AFL_VERIFY(!!startPos == !!count);
     auto& simpleFilter = BuildSimpleFilter();
-    arrow::BooleanBuilder builder;
+    arrow20::BooleanBuilder builder;
     auto res = builder.Reserve(count.value_or(expectedSize));
     if (startPos) {
         AFL_VERIFY(*startPos + *count <= simpleFilter.size());
@@ -134,7 +134,7 @@ std::shared_ptr<arrow::BooleanArray> TColumnFilter::BuildArrowFilter(
     } else {
         Y_VERIFY_OK(builder.AppendValues(simpleFilter));
     }
-    std::shared_ptr<arrow::BooleanArray> out;
+    std::shared_ptr<arrow20::BooleanArray> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
@@ -224,15 +224,15 @@ void TColumnFilter::Apply(std::shared_ptr<TGeneralContainer>& batch, const TAppl
     return ApplyImpl(*this, batch, context);
 }
 
-void TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context) const {
+void TColumnFilter::Apply(std::shared_ptr<arrow20::Table>& batch, const TApplyContext& context) const {
     return ApplyImpl(*this, batch, context);
 }
 
-void TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context) const {
+void TColumnFilter::Apply(std::shared_ptr<arrow20::RecordBatch>& batch, const TApplyContext& context) const {
     return ApplyImpl(*this, batch, context);
 }
 
-void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const {
+void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow20::Datum*>& datums) const {
     if (IsTotalAllowFilter()) {
         return;
     }
@@ -240,16 +240,16 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
         for (auto&& d : datums) {
             AFL_VERIFY(d);
             switch (d->kind()) {
-                case arrow::Datum::ARRAY:
+                case arrow20::Datum::ARRAY:
                     *d = d->array()->Slice(0, 0);
                     break;
-                case arrow::Datum::CHUNKED_ARRAY:
+                case arrow20::Datum::CHUNKED_ARRAY:
                     *d = d->chunked_array()->Slice(0, 0);
                     break;
-                case arrow::Datum::RECORD_BATCH:
+                case arrow20::Datum::RECORD_BATCH:
                     *d = d->record_batch()->Slice(0, 0);
                     break;
-                case arrow::Datum::TABLE:
+                case arrow20::Datum::TABLE:
                     *d = d->table()->Slice(0, 0);
                     break;
                 default:
@@ -260,7 +260,7 @@ void TColumnFilter::Apply(const ui32 expectedRecordsCount, std::vector<arrow::Da
         auto filter = BuildArrowFilter(expectedRecordsCount);
         for (auto&& d : datums) {
             AFL_VERIFY(d);
-            *d = TStatusValidator::GetValid(arrow::compute::Filter(*d, filter));
+            *d = TStatusValidator::GetValid(arrow20::compute::Filter(*d, filter));
         }
     }
 }

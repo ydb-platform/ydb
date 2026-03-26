@@ -163,19 +163,19 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+    void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow20::Array>& array, TFiller& fillData) {
+        AFL_VERIFY(array->type_id() == arrow20::utf8()->id())("id", array->type()->ToString());
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
-            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+            using TArray = typename arrow20::TypeTraits<T>::ArrayType;
             auto& typedArray = static_cast<const TArray&>(*array);
 
             for (ui32 row = 0; row < array->length(); ++row) {
                 if (array->IsNull(row)) {
                     continue;
                 }
-                if constexpr (arrow::has_string_view<T>()) {
+                if constexpr (arrow20::has_string_view<T>()) {
                     auto value = typedArray.GetView(row);
                     BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
                 } else {
@@ -302,7 +302,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             for (auto&& r : reader) {
                 GetDataExtractor()->VisitAll(
                     r.GetCurrentChunk(),
-                    [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                    [&](const std::shared_ptr<arrow20::Array>& arr, const ui32 /*hashBase*/) {
                         builder.FillNGrammHashes(NGrammSize, arr, inserter);
                     },
                     [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui32 /*hashBase*/) {
@@ -342,10 +342,10 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow20::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!category);
-    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    AFL_VERIFY(value->type->id() == arrow20::utf8()->id() || value->type->id() == arrow20::binary()->id())("id", value->type->ToString());
     bool result = true;
     const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {
@@ -373,7 +373,7 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
         default:
             AFL_VERIFY(false);
     }
-    auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
+    auto strVal = std::static_pointer_cast<arrow20::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());
     builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
     return result;

@@ -7,7 +7,7 @@
 
 namespace NKikimr::NArrow {
 
-void TRowsCollection::Initialize(const std::shared_ptr<arrow::RecordBatch>& data) {
+void TRowsCollection::Initialize(const std::shared_ptr<arrow20::RecordBatch>& data) {
     std::vector<TString> rawData;
     AFL_VERIFY(data->num_rows());
     rawData.resize(data->num_rows());
@@ -17,7 +17,7 @@ void TRowsCollection::Initialize(const std::shared_ptr<arrow::RecordBatch>& data
     RawData = std::move(rawData);
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TRowsCollection::BuildBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+TConclusion<std::shared_ptr<arrow20::RecordBatch>> TRowsCollection::BuildBatch(const std::shared_ptr<arrow20::Schema>& schema) const {
     auto builders = NArrow::MakeBuilders(schema, RawData.size());
     TString errorMessage;
     for (auto&& s : RawData) {
@@ -26,10 +26,10 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> TRowsCollection::BuildBatch(con
             return conclusion;
         }
     }
-    return arrow::RecordBatch::Make(schema, RawData.size(), FinishBuilders(std::move(builders)));
+    return arrow20::RecordBatch::Make(schema, RawData.size(), FinishBuilders(std::move(builders)));
 }
 
-TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow::Schema>& schema) const {
+TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow20::Schema>& schema) const {
     auto rb = BuildBatch(schema);
     if (rb.IsFail()) {
         return rb;
@@ -38,17 +38,17 @@ TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow::S
     return TString(str.data(), str.size());
 }
 
-TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow20::Schema>& schema) const {
     AFL_VERIFY(RawData.size());
     return TSimpleRow(RawData.front(), schema);
 }
 
-TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow20::Schema>& schema) const {
     AFL_VERIFY(RawData.size());
     return TSimpleRow(RawData.back(), schema);
 }
 
-TSimpleRow TRowsCollection::GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TRowsCollection::GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow20::Schema>& schema) const {
     AFL_VERIFY(recordIndex < RawData.size());
     return TSimpleRow(RawData[recordIndex], schema);
 }

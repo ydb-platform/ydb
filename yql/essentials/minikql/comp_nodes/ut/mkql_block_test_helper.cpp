@@ -94,7 +94,7 @@ TRuntimeNode TBlockHelper::MaterializeBlockStream(TProgramBuilder& pgmBuilder, T
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TString TBlockHelper::DatumToString(arrow::Datum datum) {
+TString TBlockHelper::DatumToString(arrow20::Datum datum) {
     if (datum.is_array()) {
         return datum.make_array()->ToString();
     } else if (datum.is_scalar()) {
@@ -106,22 +106,22 @@ TString TBlockHelper::DatumToString(arrow::Datum datum) {
     }
 }
 
-arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& pool) {
+arrow20::Datum ConvertDatumToArrowFormat(arrow20::Datum datum, arrow20::MemoryPool& pool) {
     if (datum.is_scalar()) {
         return datum;
     }
     MKQL_ENSURE(datum.is_array(), "Chunked array is not supported yet.");
     auto result = datum.array()->Copy();
-    if (result->type->id() == arrow::Type::STRUCT ||
-        result->type->id() == arrow::Type::DENSE_UNION ||
-        result->type->id() == arrow::Type::SPARSE_UNION) {
+    if (result->type->id() == arrow20::Type::STRUCT ||
+        result->type->id() == arrow20::Type::DENSE_UNION ||
+        result->type->id() == arrow20::Type::SPARSE_UNION) {
         if (result->buffers[0]) {
             result->buffers[0] = MakeDenseBitmapCopy(result->buffers[0]->data(), result->length, result->offset, &pool);
         }
         result->offset = 0;
     }
 
-    std::vector<std::shared_ptr<arrow::ArrayData>> children;
+    std::vector<std::shared_ptr<arrow20::ArrayData>> children;
     for (const auto& child : result->child_data) {
         children.push_back(ConvertDatumToArrowFormat(*child, pool).array());
     }

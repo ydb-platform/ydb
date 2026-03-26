@@ -25,9 +25,9 @@ public:
 
     /// Constructor that create header by arrow schema. It will be useful for inserting
     /// data from file without knowing table structure.
-    ArrowColumnToCHColumn(const arrow::Schema & schema, const std::string & format_name, bool import_nested_);
+    ArrowColumnToCHColumn(const arrow20::Schema & schema, const std::string & format_name, bool import_nested_);
 
-    void arrowTableToCHChunk(Chunk & res, std::shared_ptr<arrow::Table> & table, const FormatSettings & format_settings);
+    void arrowTableToCHChunk(Chunk & res, std::shared_ptr<arrow20::Table> & table, const FormatSettings & format_settings);
 
 private:
     const Block header;

@@ -49,7 +49,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     ui32 ScanId;
     ui32 Generation;
     TVector<TOwnedCellVec> Rows;
-    std::shared_ptr<arrow::Table> ArrowBatch;
+    std::shared_ptr<arrow20::Table> ArrowBatch;
     std::vector<std::vector<ui32>> SplittedBatches;
 
     TOwnedCellVec LastKey;
@@ -137,7 +137,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         if (pbEv->Record.HasArrowBatch()) {
             auto batch = pbEv->Record.GetArrowBatch();
             auto schema = NArrow::DeserializeSchema(batch.GetSchema());
-            ev->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ NArrow::DeserializeBatch(batch.GetBatch(), schema) }));
+            ev->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({ NArrow::DeserializeBatch(batch.GetBatch(), schema) }));
         }
         return ev.Release();
     }

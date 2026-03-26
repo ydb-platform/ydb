@@ -78,7 +78,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     return TFoundPosition(posFinish, comparision);
 }
 
-std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(const std::shared_ptr<arrow::RecordBatch>& batch,
+std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(const std::shared_ptr<arrow20::RecordBatch>& batch,
     const TSortableBatchPosition& forFound, const bool greater, const std::optional<ui32> includedStartPosition) {
     if (!batch || !batch->num_rows()) {
         return {};
@@ -102,7 +102,7 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
 }
 
 NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::BuildRWPosition(
-    std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const {
+    std::shared_ptr<arrow20::RecordBatch> batch, const ui32 position) const {
     std::vector<std::string> dataColumns;
     if (Data) {
         dataColumns = Data->GetFieldNames();
@@ -164,7 +164,7 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
 }
 
 TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
+    const ui64 position, const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
@@ -176,7 +176,7 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow20::RecordBatch>& batch) {
     for (auto&& c : batch->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
     }
@@ -184,7 +184,7 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow20::Table>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
@@ -196,8 +196,8 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-    const std::vector<std::shared_ptr<arrow::Field>>& fields)
+TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow20::Array>>& columns,
+    const std::vector<std::shared_ptr<arrow20::Field>>& fields)
     : RecordsCount(recordsCount)
     , Fields(fields) {
     for (auto&& i : columns) {
@@ -207,7 +207,7 @@ TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCoun
 }
 
 void TSortableScanData::AppendPositionTo(
-    const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
+    const std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
         AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(position), recordSize));
@@ -258,27 +258,27 @@ bool TSortableScanData::InitPosition(const ui64 position) {
     return true;
 }
 
-std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64 position) const {
+std::shared_ptr<arrow20::RecordBatch> TSortableScanData::MakeRecordBatch(const i64 position) const {
     AFL_VERIFY(Fields.size() == Columns.size());
     if (Columns.empty()) {
         return {};
     }
 
-    std::vector<std::shared_ptr<arrow::Array>> arrays;
+    std::vector<std::shared_ptr<arrow20::Array>> arrays;
 
     for (size_t i = 0; i < Columns.size(); ++i) {
         auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
         AFL_VERIFY(scalar && Fields[i]->type()->Equals(scalar->type));
 
-        auto scalarArr = arrow::MakeArrayFromScalar(*scalar, 1);
+        auto scalarArr = arrow20::MakeArrayFromScalar(*scalar, 1);
         if (!scalarArr.ok()) {
             return {};
         }
         arrays.push_back(scalarArr.ValueOrDie());
     }
 
-    auto schema = arrow::schema(Fields);
-    auto batch = arrow::RecordBatch::Make(schema, 1, arrays);
+    auto schema = arrow20::schema(Fields);
+    auto batch = arrow20::RecordBatch::Make(schema, 1, arrays);
 
     AFL_VERIFY_DEBUG(batch && batch->ValidateFull().ok());
 
@@ -318,7 +318,7 @@ void TCursor::ValidateSchema(const TSortableScanData& position) const {
     }
 }
 
-void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64* recordSize) const {
+void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
         AFL_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
@@ -326,7 +326,7 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
     }
 }
 
-TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns)
+TCursor::TCursor(const std::shared_ptr<arrow20::Table>& table, const ui64 position, const std::vector<std::string>& columns)
     : Position(position) {
     PositionAddress = TSortableScanData(position, table, columns).GetPositionAddress();
 }

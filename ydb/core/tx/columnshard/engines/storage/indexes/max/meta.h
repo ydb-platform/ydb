@@ -58,7 +58,7 @@ public:
         }
         if (!NArrow::SwitchType((*dataTypeResult)->id(), [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
-                if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                     return true;
                 }
                 return false;
@@ -73,7 +73,7 @@ public:
         return GetClassNameStatic();
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type) const;
+    std::shared_ptr<arrow20::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow20::DataType>& type) const;
 };
 
 }   // namespace NKikimr::NOlap::NIndexes::NMax

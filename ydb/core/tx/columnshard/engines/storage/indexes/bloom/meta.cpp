@@ -37,7 +37,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase)
+            [&](const std::shared_ptr<arrow20::Array>& arr, const ui64 hashBase)
             {
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
@@ -70,7 +70,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow20::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
@@ -148,9 +148,9 @@ void TBloomIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription&
 
 void TBloomIndexMeta::Initialize() {
     AFL_VERIFY(!ResultSchema);
-    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>(
-        "", arrow::TypeTraits<arrow::BooleanType>::type_singleton()) };
-    ResultSchema = std::make_shared<arrow::Schema>(fields);
+    std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>(
+        "", arrow20::TypeTraits<arrow20::BooleanType>::type_singleton()) };
+    ResultSchema = std::make_shared<arrow20::Schema>(fields);
     AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
     HashesCount = -1 * std::log(FalsePositiveProbability) / std::log(2);
 }

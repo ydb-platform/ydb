@@ -32,8 +32,8 @@ protected:
     virtual std::optional<ui32> DoGetRecordsCount() const = 0;
     virtual std::optional<ui64> DoGetRawBytes() const = 0;
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const = 0;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetFirstScalar() const = 0;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetLastScalar() const = 0;
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const = 0;
     virtual void DoAddInplaceIntoPortion(TPortionAccessorConstructor& /*portionInfo*/) const {
         AFL_VERIFY(false)("problem", "implemented only in index chunks");
@@ -104,12 +104,12 @@ public:
         return DoCopyWithAnotherBlob(std::move(data), rawBytes, columnInfo);
     }
 
-    std::shared_ptr<arrow::Scalar> GetFirstScalar() const {
+    std::shared_ptr<arrow20::Scalar> GetFirstScalar() const {
         auto result = DoGetFirstScalar();
         AFL_VERIFY(result);
         return result;
     }
-    std::shared_ptr<arrow::Scalar> GetLastScalar() const {
+    std::shared_ptr<arrow20::Scalar> GetLastScalar() const {
         auto result = DoGetLastScalar();
         AFL_VERIFY(result);
         return result;

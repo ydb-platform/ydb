@@ -285,7 +285,7 @@ private:
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& context, const TFetchIndexContext& fetchContext) = 0;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(
-        const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) = 0;
+        const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow20::Scalar>& value) = 0;
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& context, const TFetchHeaderContext& fetchContext) = 0;
@@ -331,7 +331,7 @@ public:
     }
 
     TConclusion<NArrow::TColumnFilter> CheckIndex(
-        const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+        const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow20::Scalar>& value) {
         return DoCheckIndex(context, fetchContext, value);
     }
 
@@ -418,7 +418,7 @@ private:
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
-        const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -449,7 +449,7 @@ private:
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
-        const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 };
@@ -508,7 +508,7 @@ private:
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
-        const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -543,7 +543,7 @@ public:
         Resources = std::make_unique<NAccessor::TAccessorsCollection>();
     }
 
-    void AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data);
+    void AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow20::Array>& data);
 };
 
 }   // namespace NKikimr::NArrow::NSSA

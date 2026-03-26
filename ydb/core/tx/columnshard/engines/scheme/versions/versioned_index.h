@@ -60,7 +60,7 @@ private:
 
     THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> ShardingInfo;
     std::map<TSnapshot, ISnapshotSchema::TPtr> Snapshots;
-    std::shared_ptr<arrow::Schema> PrimaryKey;
+    std::shared_ptr<arrow20::Schema> PrimaryKey;
     std::map<ui64, TSchemaInfoByVersion> SnapshotByVersion;
     ui64 LastSchemaVersion = 0;
     std::optional<ui64> SchemeVersionForActualization;
@@ -189,7 +189,7 @@ public:
         return SnapshotByVersion.empty();
     }
 
-    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const noexcept {
+    const std::shared_ptr<arrow20::Schema>& GetPrimaryKey() const noexcept {
         return PrimaryKey;
     }
 

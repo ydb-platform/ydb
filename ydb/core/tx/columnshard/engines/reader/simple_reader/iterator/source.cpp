@@ -243,7 +243,7 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
 }
 
 TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
-    const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+    const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow20::Scalar>& value) {
     auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});

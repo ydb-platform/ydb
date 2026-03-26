@@ -58,7 +58,7 @@ namespace {
 struct TResultBatch {
     using TPtr = std::shared_ptr<TResultBatch>;
     size_t RowsCnt;
-    std::vector<arrow::Datum> Columns;
+    std::vector<arrow20::Datum> Columns;
     TResultBatch(int64_t cnt) : RowsCnt(cnt) {}
     TResultBatch(int64_t cnt, decltype(Columns)&& columns) : RowsCnt(cnt), Columns(std::move(columns)) {}
 };
@@ -148,7 +148,7 @@ private:
 };
 
 class TListener {
-    using TBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+    using TBatchPtr = std::shared_ptr<arrow20::RecordBatch>;
 public:
     using TPromise = NYT::TPromise<TResultBatch>;
     using TPtr = std::shared_ptr<TListener>;
@@ -202,7 +202,7 @@ private:
 
 class TBlockBuilder {
 public:
-    void Init(std::shared_ptr<std::vector<TType*>> columnTypes, arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder) {
+    void Init(std::shared_ptr<std::vector<TType*>> columnTypes, arrow20::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder) {
         ColumnTypes_ = columnTypes;
         ColumnBuilders_.reserve(ColumnTypes_->size());
         size_t maxBlockItemSize = 0;
@@ -231,7 +231,7 @@ public:
     }
 
     TResultBatch::TPtr Build() {
-        std::vector<arrow::Datum> columns;
+        std::vector<arrow20::Datum> columns;
         columns.reserve(ColumnBuilders_.size());
         for (size_t i = 0; i < ColumnBuilders_.size(); ++i) {
             columns.emplace_back(std::move(ColumnBuilders_[i]->Build(false)));
@@ -247,13 +247,13 @@ private:
     std::shared_ptr<std::vector<TType*>> ColumnTypes_;
 };
 
-class TLocalListener : public arrow::ipc::Listener {
+class TLocalListener : public arrow20::ipc::Listener {
 public:
     TLocalListener(std::shared_ptr<TListener> consumer
         , std::unordered_map<std::string, ui32>& columnOrderMapping
         , std::shared_ptr<std::vector<TType*>> columnTypes
-        , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
-        , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
+        , std::shared_ptr<std::vector<std::shared_ptr<arrow20::DataType>>> arrowTypes
+        , arrow20::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
         , ui64 nativeYtTypeFlags, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
@@ -268,16 +268,16 @@ public:
 
     void Init(std::shared_ptr<TLocalListener> self) {
         Self_ = self;
-        Decoder_ = std::make_shared<arrow::ipc::NDqs::StreamDecoder2>(self, arrow::ipc::IpcReadOptions{.use_threads=false});
+        Decoder_ = std::make_shared<arrow20::ipc::NDqs::StreamDecoder2>(self, arrow20::ipc::IpcReadOptions{.use_threads=false});
     }
 
-    arrow::Status OnEOS() override {
+    arrow20::Status OnEOS() override {
         Decoder_->Reset();
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
-        std::vector<arrow::Datum> result;
+    arrow20::Status OnRecordBatchDecoded(std::shared_ptr<arrow20::RecordBatch> batch) override {
+        std::vector<arrow20::Datum> result;
         {
             auto ctx = NCommon::CreateMemoryArenaContext();
 
@@ -298,10 +298,10 @@ public:
             Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         }
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    void Consume(std::shared_ptr<arrow::Buffer> buff) {
+    void Consume(std::shared_ptr<arrow20::Buffer> buff) {
         ARROW_OK(Decoder_->Consume(buff));
     }
 
@@ -311,7 +311,7 @@ public:
 private:
     std::shared_ptr<TLocalListener> Self_;
     std::shared_ptr<TListener> Consumer_;
-    std::shared_ptr<arrow::ipc::NDqs::StreamDecoder2> Decoder_;
+    std::shared_ptr<arrow20::ipc::NDqs::StreamDecoder2> Decoder_;
     std::shared_ptr<std::vector<TType*>> ColumnTypes_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
@@ -322,7 +322,7 @@ class TSource : public TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TSource>;
     TSource(std::unique_ptr<TSettingsHolder>&& settings,
-        size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
+        size_t inflight, TType* type, std::shared_ptr<std::vector<std::shared_ptr<arrow20::DataType>>> types, const THolderFactory& holderFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : HolderFactory(holderFactory)
         , Settings_(std::move(settings))
         , Inputs_(Settings_->Requests.size())
@@ -421,7 +421,7 @@ public:
         }
         // TODO(): support row and range indexes
         auto payload = TMemoryInput(currentPayload.Begin(), currentPayload.Size());
-        arrow::BufferBuilder bb;
+        arrow20::BufferBuilder bb;
         ARROW_OK(bb.Reserve(currentPayload.Size()));
         ARROW_OK(bb.Append((const uint8_t*)payload.Buf(), currentPayload.Size()));
         LocalListeners_[inputIdx]->Consume(*bb.Finish());
@@ -524,7 +524,7 @@ private:
 class TReaderState: public TComputationValue<TReaderState> {
     using TBase = TComputationValue<TReaderState>;
 public:
-    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes)
+    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow20::DataType>>> arrowTypes)
         : TBase(memInfo)
         , Source_(std::move(source))
         , Width_(width)
@@ -550,7 +550,7 @@ public:
                 YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
                 output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
             }
-            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow20::Datum(ui64(batch->RowsCnt)));
         } catch (...) {
             Cerr << "YT RPC Reader exception:\n";
             throw;
@@ -561,7 +561,7 @@ public:
 private:
     TSource::TPtr Source_;
     const size_t Width_;
-    std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> Types_;
+    std::shared_ptr<std::vector<std::shared_ptr<arrow20::DataType>>> Types_;
     std::vector<NUdf::TUnboxedValue*> Result_;
     bool GotFinish_ = 0;
 };
@@ -600,9 +600,9 @@ public:
      NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto settings = CreateInputStreams(true, Token_, ClusterName_, Timeout_, Inflight_ > 1, Tables_, SamplingSpec_);
         settings->Specs = &Specs_;
-        settings->Pool = arrow::default_memory_pool();
+        settings->Pool = arrow20::default_memory_pool();
         settings->PgBuilder = &ctx.Builder->GetPgBuilder();
-        auto types = std::make_shared<std::vector<std::shared_ptr<arrow::DataType>>>(Width_);
+        auto types = std::make_shared<std::vector<std::shared_ptr<arrow20::DataType>>>(Width_);
         TVector<TString> columnNames;
         for (size_t i = 0; i < Width_; ++i) {
             columnNames.emplace_back(AS_TYPE(TStructType, Type_)->GetMemberName(i));

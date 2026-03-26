@@ -53,7 +53,7 @@ public:
         {
             auto * condition_map = flags + column.offset();
             auto length = row_end - row_begin;
-            data(place).count += arrow::internal::CountSetBits(condition_map, row_begin, length);
+            data(place).count += arrow20::internal::CountSetBits(condition_map, row_begin, length);
         }
         else
         {

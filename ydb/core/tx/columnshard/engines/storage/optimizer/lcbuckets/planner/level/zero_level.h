@@ -18,7 +18,7 @@ private:
 
     std::set<TOrderedPortion> Portions;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow20::Schema>& /*pkSchema*/) const override {
         return NArrow::NMerger::TIntervalPositions();
     }
 

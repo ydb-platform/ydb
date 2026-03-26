@@ -6,11 +6,11 @@
 
 namespace NKikimr::NArrow {
 
-bool IsDictionableArray(const std::shared_ptr<arrow::Array>& data);
-std::shared_ptr<arrow::DictionaryArray> ArrayToDictionary(const std::shared_ptr<arrow::Array>& data);
-std::shared_ptr<arrow::RecordBatch> ArrayToDictionary(const std::shared_ptr<arrow::RecordBatch>& data);
-std::shared_ptr<arrow::Array> DictionaryToArray(const std::shared_ptr<arrow::DictionaryArray>& data);
-std::shared_ptr<arrow::Array> DictionaryToArray(const arrow::DictionaryArray& data);
-std::shared_ptr<arrow::RecordBatch> DictionaryToArray(const std::shared_ptr<arrow::RecordBatch>& data);
+bool IsDictionableArray(const std::shared_ptr<arrow20::Array>& data);
+std::shared_ptr<arrow20::DictionaryArray> ArrayToDictionary(const std::shared_ptr<arrow20::Array>& data);
+std::shared_ptr<arrow20::RecordBatch> ArrayToDictionary(const std::shared_ptr<arrow20::RecordBatch>& data);
+std::shared_ptr<arrow20::Array> DictionaryToArray(const std::shared_ptr<arrow20::DictionaryArray>& data);
+std::shared_ptr<arrow20::Array> DictionaryToArray(const arrow20::DictionaryArray& data);
+std::shared_ptr<arrow20::RecordBatch> DictionaryToArray(const std::shared_ptr<arrow20::RecordBatch>& data);
 
 }

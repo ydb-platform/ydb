@@ -9,7 +9,7 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TFilterVisitor: public arrow::ArrayVisitor {
+class TFilterVisitor: public arrow20::ArrayVisitor {
     NArrow::TColumnFilter FiltersMerged = NArrow::TColumnFilter::BuildAllowFilter();
     bool Started = false;
 
@@ -22,15 +22,15 @@ public:
         return std::move(FiltersMerged);
     }
 
-    arrow::Status Visit(const arrow::BooleanArray& array) override {
+    arrow20::Status Visit(const arrow20::BooleanArray& array) override {
         return VisitImpl(array);
     }
 
-    arrow::Status Visit(const arrow::Int8Array& array) override {
+    arrow20::Status Visit(const arrow20::Int8Array& array) override {
         return VisitImpl(array);
     }
 
-    arrow::Status Visit(const arrow::UInt8Array& array) override {
+    arrow20::Status Visit(const arrow20::UInt8Array& array) override {
         return VisitImpl(array);
     }
 
@@ -56,12 +56,12 @@ public:
 
 private:
     template <class TArray>
-    arrow::Status VisitImpl(const TArray& array) {
+    arrow20::Status VisitImpl(const TArray& array) {
         AFL_VERIFY(Started);
         for (ui32 i = 0; i < array.length(); ++i) {
             FiltersMerged.Add(!array.IsNull(i) && (bool)array.Value(i));
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 };
 
@@ -78,7 +78,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     for (auto& arr : inputColumns) {
         AFL_VERIFY(arr->GetRecordsCount() == inputColumns.front()->GetRecordsCount())("arr", arr->GetRecordsCount())(
                                                "first", inputColumns.front()->GetRecordsCount());
-        std::shared_ptr<arrow::Scalar> monoValue;
+        std::shared_ptr<arrow20::Scalar> monoValue;
         const auto isMonoValue = arr->CheckOneValueAccessor(monoValue);
         if (isMonoValue && *isMonoValue) {
             const auto isTrueConclusion = ScalarIsTrue(monoValue);

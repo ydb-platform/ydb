@@ -7,7 +7,7 @@ namespace NKikimr::NMetadata::NCSIndex {
 
 class IIndexExtractor {
 protected:
-    virtual std::vector<ui64> DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
+    virtual std::vector<ui64> DoExtractIndex(const std::shared_ptr<arrow20::RecordBatch>& batch) const = 0;
     virtual bool DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) = 0;
     virtual NJson::TJsonValue DoSerializeToJson() const = 0;
 public:
@@ -16,7 +16,7 @@ public:
 
     virtual ~IIndexExtractor() = default;
 
-    std::vector<ui64> ExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    std::vector<ui64> ExtractIndex(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         return DoExtractIndex(batch);
     }
 

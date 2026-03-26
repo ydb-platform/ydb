@@ -89,10 +89,10 @@ TConclusion<bool> TDeletionFilter::DoExecuteInplace(
     if (!filterTable) {
         return true;
     }
-    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
+    AFL_VERIFY(filterTable->column(0)->type()->id() == arrow20::boolean()->id());
     NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
     for (auto&& i : filterTable->column(0)->chunks()) {
-        auto filterFlags = static_pointer_cast<arrow::BooleanArray>(i);
+        auto filterFlags = static_pointer_cast<arrow20::BooleanArray>(i);
         for (ui32 i = 0; i < filterFlags->length(); ++i) {
             filter.Add(!filterFlags->GetView(i));
         }
@@ -229,7 +229,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
     contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
-    std::shared_ptr<arrow::Table> resultBatch;
+    std::shared_ptr<arrow20::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
         if (!resultBatch->num_rows()) {

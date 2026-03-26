@@ -2711,8 +2711,8 @@ struct TFromPgExec {
         , IsCString(NPg::LookupType(sourceId).TypeLen == -2)
     {}
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum inputDatum = batch.values[0];
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
+        arrow20::Datum inputDatum = batch.values[0];
         Y_ENSURE(inputDatum.is_array());
         const auto& array= *inputDatum.array();
         size_t length = array.length;
@@ -2769,8 +2769,8 @@ struct TFromPgExec {
         case VARCHAROID:
         case BYTEAOID:
         case CSTRINGOID: {
-            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), SourceId == BYTEAOID ? arrow::binary() : arrow::utf8(), *ctx->memory_pool(), length);
+            NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), SourceId == BYTEAOID ? arrow20::binary() : arrow20::utf8(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2796,7 +2796,7 @@ struct TFromPgExec {
         }
         case DATEOID: {
             NUdf::TFixedSizeBlockReader<ui64, true> reader;
-            NUdf::TFixedSizeArrayBuilder<i32, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int32(), *ctx->memory_pool(), length);
+            NUdf::TFixedSizeArrayBuilder<i32, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::int32(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2818,7 +2818,7 @@ struct TFromPgExec {
         }
         case TIMESTAMPOID: {
             NUdf::TFixedSizeBlockReader<ui64, true> reader;
-            NUdf::TFixedSizeArrayBuilder<i64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::int64(), *ctx->memory_pool(), length);
+            NUdf::TFixedSizeArrayBuilder<i64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::int64(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2841,21 +2841,21 @@ struct TFromPgExec {
         default:
             ythrow yexception() << "Unsupported type: " << NPg::LookupType(SourceId).Name;
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     const ui32 SourceId;
     const bool IsCString;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType, TType* resultType, ui32 sourceId) {
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeFromPgKernel(TType* inputType, TType* resultType, ui32 sourceId) {
     const TVector<TType*> argTypes = { inputType };
 
-    std::shared_ptr<arrow::DataType> returnArrowType;
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TFromPgExec>(sourceId);
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
         return exec->Exec(ctx, batch, res);
     });
 
@@ -2873,7 +2873,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeFromPgKernel(TType* inputType,
     case CSTRINGOID:
     case DATEOID:
     case TIMESTAMPOID:
-        kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
         ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceId).Name;
@@ -2887,8 +2887,8 @@ struct TToPgExec {
         : SourceDataSlot(sourceDataSlot)
     {}
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum inputDatum = batch.values[0];
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
+        arrow20::Datum inputDatum = batch.values[0];
         Y_ENSURE(inputDatum.is_array());
         const auto& array= *inputDatum.array();
         size_t length = array.length;
@@ -2959,7 +2959,7 @@ struct TToPgExec {
         }
         case NUdf::EDataSlot::Uint64: {
             NUdf::TFixedSizeBlockReader<ui64, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -2996,8 +2996,8 @@ struct TToPgExec {
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson: {
-            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -3064,7 +3064,7 @@ struct TToPgExec {
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Interval64: {
             NUdf::TFixedSizeBlockReader<i64, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -3085,8 +3085,8 @@ struct TToPgExec {
         }
         case NUdf::EDataSlot::Json:
         {
-            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -3108,8 +3108,8 @@ struct TToPgExec {
         }
         case NUdf::EDataSlot::JsonDocument:
         {
-            NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
-            NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+            NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
+            NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
             for (size_t i = 0; i < length; ++i) {
                 auto item = reader.GetItem(array, i);
                 if (!item) {
@@ -3131,20 +3131,20 @@ struct TToPgExec {
         default:
             ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(SourceDataSlot).Name;
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     const NUdf::EDataSlot SourceDataSlot;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeToPgKernel(TType* inputType, TType* resultType, NUdf::EDataSlot dataSlot) {
     const TVector<TType*> argTypes = { inputType };
 
-    std::shared_ptr<arrow::DataType> returnArrowType;
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TToPgExec>(dataSlot);
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
         return exec->Exec(ctx, batch, res);
     });
 
@@ -3174,7 +3174,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     case NUdf::EDataSlot::Yson:
     case NUdf::EDataSlot::Json:
     case NUdf::EDataSlot::JsonDocument:
-        kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+        kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
         break;
     default:
         ythrow yexception() << "Unsupported type: " << NUdf::GetDataTypeInfo(dataSlot).Name;
@@ -3183,11 +3183,11 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeToPgKernel(TType* inputType, T
     return kernel;
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
-    std::shared_ptr<arrow::DataType> returnArrowType;
+std::shared_ptr<arrow20::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTypes, TType* resultType, TExecFunc execFunc, ui32 procId) {
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [execFunc](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+        [execFunc](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
         return execFunc(ctx, batch, res);
     });
 
@@ -3203,8 +3203,8 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         pgArgTypes.push_back(oid);
     }
 
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-    kernel->init = [procId, pgArgTypes](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+    kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->init = [procId, pgArgTypes](arrow20::compute::KernelContext*, const arrow20::compute::KernelInitArgs&) {
         auto state = std::make_unique<TPgKernelState>();
         Zero(state->flinfo);
         GetPgFuncAddr(procId, state->flinfo);
@@ -3228,7 +3228,7 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakePgKernel(TVector<TType*> argTy
         state->FmgrDataHolder = fmgrDataHolder;
         state->ProcDesc = &procDesc;
 
-        return arrow::Result(std::move(state));
+        return arrow20::Result(std::move(state));
     };
 
     return kernel;
@@ -4173,9 +4173,9 @@ extern "C" void WriteSkiffPgValue(TPgType* type, const NUdf::TUnboxedValuePod& v
 namespace {
 
 template<typename TScalarGetter, typename TPointerGetter>
-arrow::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow::MemoryPool& pool, const TScalarGetter& getScalar, const TPointerGetter& getPtr) {
+arrow20::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow20::MemoryPool& pool, const TScalarGetter& getScalar, const TPointerGetter& getPtr) {
     if (desc.PassByValue) {
-        return arrow::MakeScalar(getScalar());
+        return arrow20::MakeScalar(getScalar());
     } else {
         const char* ptr = getPtr();
         ui32 size;
@@ -4187,16 +4187,16 @@ arrow::Datum DoMakePgScalar(const NPg::TTypeDesc& desc, arrow::MemoryPool& pool,
             size = desc.TypeLen;
         }
 
-        std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(size + sizeof(void*), &pool)));
+        std::shared_ptr<arrow20::Buffer> buffer(ARROW_RESULT(arrow20::AllocateBuffer(size + sizeof(void*), &pool)));
         NUdf::ZeroMemoryContext(buffer->mutable_data() + sizeof(void*));
         std::memcpy(buffer->mutable_data() + sizeof(void*), ptr, size);
-        return arrow::Datum(std::make_shared<arrow::BinaryScalar>(buffer));
+        return arrow20::Datum(std::make_shared<arrow20::BinaryScalar>(buffer));
     }
 }
 
 } // namespace
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+arrow20::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow20::MemoryPool& pool) {
     return DoMakePgScalar(
         NPg::LookupType(type->GetTypeId()), pool,
         [&value]() { return (uint64_t)ScalarDatumFromPod(value); },
@@ -4204,7 +4204,7 @@ arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf:
     );
 }
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+arrow20::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow20::MemoryPool& pool) {
     return DoMakePgScalar(
         NPg::LookupType(type->GetTypeId()), pool,
         [&value]() { return (uint64_t)ScalarDatumFromItem(value); },

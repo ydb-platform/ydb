@@ -21,7 +21,7 @@
 #include <arrow/util/macros.h>
 #include <arrow/util/visibility.h>
 
-namespace arrow {
+namespace arrow20 {
 namespace ipc::NDqs {
 
 class ARROW_EXPORT MessageDecoder2 {
@@ -82,4 +82,4 @@ class ARROW_EXPORT StreamDecoder2 {
   std::unique_ptr<StreamDecoder2Impl> impl_;
 };
 }  // namespace ipc::NDqs
-}  // namespace arrow
+}  // namespace arrow20

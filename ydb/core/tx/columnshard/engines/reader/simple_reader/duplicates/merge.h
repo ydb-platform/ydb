@@ -54,9 +54,9 @@ private:
         }
 
         THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion(
-            const std::map<ui32, std::shared_ptr<arrow::Field>>& fieldByColumn) {
+            const std::map<ui32, std::shared_ptr<arrow20::Field>>& fieldByColumn) {
             THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
-            std::vector<std::shared_ptr<arrow::Field>> fields;
+            std::vector<std::shared_ptr<arrow20::Field>> fields;
             for (const auto& [_, field] : fieldByColumn) {
                 fields.emplace_back(field);
             }

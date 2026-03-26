@@ -17,7 +17,7 @@ class TApplyWrapper: public TMutableCodegeneratorPtrNode<TApplyWrapper> {
     typedef TMutableCodegeneratorPtrNode<TApplyWrapper> TBaseComputation;
 
 public:
-    struct TKernelState: public arrow::compute::KernelState {
+    struct TKernelState: public arrow20::compute::KernelState {
         TKernelState(ui32 argsCount)
             : Alloc(__LOCATION__)
             , MemInfo("Apply")
@@ -47,24 +47,24 @@ public:
             : Parent_(parent)
             , Callable_(callable)
             , ArgsValuesDescr_(ToValueDescr(argsTypes))
-            , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [this](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [this](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
                 Y_ENSURE(batch.values.size() == state.Args.size());
                 for (ui32 i = 0; i < batch.values.size(); ++i) {
-                    state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow::Datum(batch.values[i]));
+                    state.Args[i] = state.HolderFactory.CreateArrowBlock(arrow20::Datum(batch.values[i]));
                 }
 
                 const auto& ret = Callable_.Run(&state.ValueBuilder, state.Args.data());
                 *res = TArrowBlock::From(ret).GetDatum();
-                return arrow::Status::OK();
+                return arrow20::Status::OK();
             })
         {
-            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
-            Kernel_.init = [argsCount = argsTypes.size()](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+            Kernel_.null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+            Kernel_.mem_allocation = arrow20::compute::MemAllocation::NO_PREALLOCATE;
+            Kernel_.init = [argsCount = argsTypes.size()](arrow20::compute::KernelContext*, const arrow20::compute::KernelInitArgs&) {
                 auto state = std::make_unique<TKernelState>(argsCount);
-                return arrow::Result(std::move(state));
+                return arrow20::Result(std::move(state));
             };
         }
 
@@ -72,11 +72,11 @@ public:
             return "Apply";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow20::compute::ScalarKernel& GetArrowKernel() const {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
             return ArgsValuesDescr_;
         }
 
@@ -87,8 +87,8 @@ public:
     private:
         const TApplyWrapper* Parent_;
         const NUdf::TUnboxedValue Callable_;
-        const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
-        arrow::compute::ScalarKernel Kernel_;
+        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;
 
@@ -109,7 +109,7 @@ public:
             return {};
         }
 
-        std::shared_ptr<arrow::DataType> t;
+        std::shared_ptr<arrow20::DataType> t;
         if (!CallableType->GetReturnType()->IsBlock() ||
             !ConvertArrowType(AS_TYPE(TBlockType, CallableType->GetReturnType())->GetItemType(), t)) {
             return {};

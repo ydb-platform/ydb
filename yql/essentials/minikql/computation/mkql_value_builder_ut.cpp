@@ -264,7 +264,7 @@ private:
         auto atype = TypeInfoHelper_->MakeArrowType(type);
 
         {
-            arrow::Datum d1(std::make_shared<arrow::UInt64Scalar>(123));
+            arrow20::Datum d1(std::make_shared<arrow20::UInt64Scalar>(123));
             NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
             bool isScalar;
             ui64 length;
@@ -278,18 +278,18 @@ private:
             NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(&arr1, 1, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();
             UNIT_ASSERT(d2.is_scalar());
-            UNIT_ASSERT_VALUES_EQUAL(d2.scalar_as<arrow::UInt64Scalar>().value, 123);
+            UNIT_ASSERT_VALUES_EQUAL(d2.scalar_as<arrow20::UInt64Scalar>().value, 123);
         }
 
         {
-            arrow::UInt64Builder builder;
+            arrow20::UInt64Builder builder;
             UNIT_ASSERT(builder.Reserve(3).ok());
             builder.UnsafeAppend(ui64(10));
             builder.UnsafeAppend(ui64(20));
             builder.UnsafeAppend(ui64(30));
-            std::shared_ptr<arrow::ArrayData> builderResult;
+            std::shared_ptr<arrow20::ArrayData> builderResult;
             UNIT_ASSERT(builder.FinishInternal(&builderResult).ok());
-            arrow::Datum d1(builderResult);
+            arrow20::Datum d1(builderResult);
             NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
 
             bool isScalar;
@@ -313,23 +313,23 @@ private:
         }
 
         {
-            arrow::UInt64Builder builder1;
+            arrow20::UInt64Builder builder1;
             UNIT_ASSERT(builder1.Reserve(3).ok());
             builder1.UnsafeAppend(ui64(10));
             builder1.UnsafeAppend(ui64(20));
             builder1.UnsafeAppend(ui64(30));
-            std::shared_ptr<arrow::Array> builder1Result;
+            std::shared_ptr<arrow20::Array> builder1Result;
             UNIT_ASSERT(builder1.Finish(&builder1Result).ok());
 
-            arrow::UInt64Builder builder2;
+            arrow20::UInt64Builder builder2;
             UNIT_ASSERT(builder2.Reserve(2).ok());
             builder2.UnsafeAppend(ui64(40));
             builder2.UnsafeAppend(ui64(50));
-            std::shared_ptr<arrow::Array> builder2Result;
+            std::shared_ptr<arrow20::Array> builder2Result;
             UNIT_ASSERT(builder2.Finish(&builder2Result).ok());
 
-            auto chunked = arrow::ChunkedArray::Make({builder1Result, builder2Result}).ValueOrDie();
-            arrow::Datum d1(chunked);
+            auto chunked = arrow20::ChunkedArray::Make({builder1Result, builder2Result}).ValueOrDie();
+            arrow20::Datum d1(chunked);
             NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
 
             bool isScalar;

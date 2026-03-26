@@ -200,8 +200,8 @@ static const std::vector<NArrow::NTest::TTestColumn> testKey = { NArrow::NTest::
 template <typename TKeyDataType>
 class TBuilder {
 public:
-    using TTraits = typename arrow::TypeTraits<TKeyDataType>;
-    using TCType = std::conditional_t<arrow::has_c_type<TKeyDataType>::value, typename TTraits::CType, std::string>;
+    using TTraits = typename arrow20::TypeTraits<TKeyDataType>;
+    using TCType = std::conditional_t<arrow20::has_c_type<TKeyDataType>::value, typename TTraits::CType, std::string>;
 
     struct TRow {
         TCType Timestamp;
@@ -213,30 +213,30 @@ public:
 
     TBuilder()
         : Schema(NArrow::MakeArrowSchema(testColumns)) {
-        auto status = arrow::RecordBatchBuilder::Make(Schema, arrow::default_memory_pool(), &BatchBuilder);
+        auto status = arrow20::RecordBatchBuilder::Make(Schema, arrow20::default_memory_pool(), &BatchBuilder);
         Y_ABORT_UNLESS(status.ok());
     }
 
     bool AddRow(const TRow& row) {
         bool ok = true;
         ok = ok && BatchBuilder->GetFieldAs<typename TTraits::BuilderType>(0)->Append(row.Timestamp).ok();
-        ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append(row.ResourceType).ok();
-        ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(2)->Append(row.ResourceId).ok();
-        ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(3)->Append(row.Uid).ok();
-        ok = ok && BatchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(4)->Append(row.Message).ok();
+        ok = ok && BatchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append(row.ResourceType).ok();
+        ok = ok && BatchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(2)->Append(row.ResourceId).ok();
+        ok = ok && BatchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(3)->Append(row.Uid).ok();
+        ok = ok && BatchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(4)->Append(row.Message).ok();
         return ok;
     }
 
-    std::shared_ptr<arrow::RecordBatch> Finish() {
-        std::shared_ptr<arrow::RecordBatch> batch;
+    std::shared_ptr<arrow20::RecordBatch> Finish() {
+        std::shared_ptr<arrow20::RecordBatch> batch;
         auto status = BatchBuilder->Flush(&batch);
         Y_ABORT_UNLESS(status.ok());
         return batch;
     }
 
 private:
-    std::shared_ptr<arrow::Schema> Schema = NArrow::MakeArrowSchema(testColumns);
-    std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
+    std::shared_ptr<arrow20::Schema> Schema = NArrow::MakeArrowSchema(testColumns);
+    std::unique_ptr<arrow20::RecordBatchBuilder> BatchBuilder;
 };
 
 TUnifiedBlobId MakeUnifiedBlobId(ui32 step, ui32 blobSize) {
@@ -249,7 +249,7 @@ TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) {
 }
 
 TString MakeTestBlob(i64 start = 0, i64 end = 100, ui32 step = 1) {
-    TBuilder<arrow::TimestampType> builder;
+    TBuilder<arrow20::TimestampType> builder;
     for (i64 ts = start; ts < end; ts += step) {
         TString str = ToString(ts);
         TString sortedStr = Sprintf("%05ld", (long)ts);
@@ -458,19 +458,19 @@ bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<TInter
 }
 
 std::shared_ptr<TPredicate> MakePredicate(int64_t ts, NKikimr::NKernels::EOperation op) {
-    auto type = arrow::timestamp(arrow::TimeUnit::MICRO);
-    auto res = arrow::MakeArrayFromScalar(arrow::TimestampScalar(ts, type), 1);
+    auto type = arrow20::timestamp(arrow20::TimeUnit::MICRO);
+    auto res = arrow20::MakeArrayFromScalar(arrow20::TimestampScalar(ts, type), 1);
 
-    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("timestamp", type) };
-    return std::make_shared<TPredicate>(op, arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, { *res }));
+    std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>("timestamp", type) };
+    return std::make_shared<TPredicate>(op, arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(std::move(fields)), 1, { *res }));
 }
 
 std::shared_ptr<TPredicate> MakeStrPredicate(const std::string& key, NKikimr::NKernels::EOperation op) {
-    auto type = arrow::utf8();
-    auto res = arrow::MakeArrayFromScalar(arrow::StringScalar(key), 1);
+    auto type = arrow20::utf8();
+    auto res = arrow20::MakeArrayFromScalar(arrow20::StringScalar(key), 1);
 
-    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("resource_type", type) };
-    return std::make_shared<TPredicate>(op, arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), 1, { *res }));
+    std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>("resource_type", type) };
+    return std::make_shared<TPredicate>(op, arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(std::move(fields)), 1, { *res }));
 }
 
 }   // namespace
@@ -826,7 +826,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             }
 
             // TTL
-            std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
+            std::shared_ptr<arrow20::DataType> ttlColType = arrow20::timestamp(arrow20::TimeUnit::MICRO);
             THashMap<TInternalPathId, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));

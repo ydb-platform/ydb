@@ -36,10 +36,10 @@ struct TBlockLayoutConverterTestData {
     NMiniKQL::TTypeEnvironment Env;
     NMiniKQL::TProgramBuilder PgmBuilder;
     NMiniKQL::TMemoryUsageInfo MemInfo;
-    arrow::MemoryPool* const ArrowPool;
+    arrow20::MemoryPool* const ArrowPool;
 };
 
-arrow::Datum SliceIf(const arrow::Datum& d, bool slice) {
+arrow20::Datum SliceIf(const arrow20::Datum& d, bool slice) {
     UNIT_ASSERT(d.is_array());
     if (!slice) {
         return d;
@@ -47,7 +47,7 @@ arrow::Datum SliceIf(const arrow::Datum& d, bool slice) {
     auto a = d.array();
     UNIT_ASSERT(a);
     UNIT_ASSERT_C(a->length >= 4, "Slice mode needs length >= 4");
-    return arrow::Datum(a->Slice(1, a->length - 2));
+    return arrow20::Datum(a->Slice(1, a->length - 2));
 }
 
 template <class TFillFn, class TCheckFn>
@@ -74,7 +74,7 @@ void RunTest(TBlockLayoutConverterTestData& data,
     UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, d.array()->length,
                                "Pack returned unexpected tuple count");
 
-    TVector<arrow::Datum> out;
+    TVector<arrow20::Datum> out;
     converter->Unpack(packRes, out);
     UNIT_ASSERT_VALUES_EQUAL(out.size(), 1u);
     UNIT_ASSERT(out[0].is_array());
@@ -103,8 +103,8 @@ static auto FillFixed(bool optional) {
 }
 
 template <class T>
-static void CheckFixed(const std::shared_ptr<arrow::ArrayData>& before,
-                       const std::shared_ptr<arrow::ArrayData>& after,
+static void CheckFixed(const std::shared_ptr<arrow20::ArrayData>& before,
+                       const std::shared_ptr<arrow20::ArrayData>& after,
                        NKikimr::NMiniKQL::TType* type) {
     UNIT_ASSERT(before);
     UNIT_ASSERT(after);
@@ -159,8 +159,8 @@ auto FillStrings(bool optional, TStringArena& arena) {
     };
 }
 
-void CheckStrings(const std::shared_ptr<arrow::ArrayData>& before,
-                  const std::shared_ptr<arrow::ArrayData>& after,
+void CheckStrings(const std::shared_ptr<arrow20::ArrayData>& before,
+                  const std::shared_ptr<arrow20::ArrayData>& after,
                   NKikimr::NMiniKQL::TType* type) {
     UNIT_ASSERT(before);
     UNIT_ASSERT(after);
@@ -187,8 +187,8 @@ struct TFixedTag {
         return FillFixed<T>(isOpt);
     }
 
-    void Check(const std::shared_ptr<arrow::ArrayData>& a,
-               const std::shared_ptr<arrow::ArrayData>& b,
+    void Check(const std::shared_ptr<arrow20::ArrayData>& a,
+               const std::shared_ptr<arrow20::ArrayData>& b,
                NKikimr::NMiniKQL::TType* t) {
         CheckFixed<T>(a, b, t);
     }
@@ -201,8 +201,8 @@ struct TStringTag {
         return FillStrings(isOpt, Arena);
     }
 
-    void Check(const std::shared_ptr<arrow::ArrayData>& a,
-               const std::shared_ptr<arrow::ArrayData>& b,
+    void Check(const std::shared_ptr<arrow20::ArrayData>& a,
+               const std::shared_ptr<arrow20::ArrayData>& b,
                NKikimr::NMiniKQL::TType* t) {
         CheckStrings(a, b, t);
     }
@@ -222,8 +222,8 @@ static void RunCase(NUdf::EDataSlot slot) {
         for (bool doSlice : {false, true}) {
             RunTest(data, type, NPackedTuple::EColumnRole::Key, N, doSlice,
                     tag.MakeFill(isOpt),
-                    [&](const std::shared_ptr<arrow::ArrayData>& a,
-                        const std::shared_ptr<arrow::ArrayData>& b,
+                    [&](const std::shared_ptr<arrow20::ArrayData>& a,
+                        const std::shared_ptr<arrow20::ArrayData>& b,
                         NKikimr::NMiniKQL::TType* t) { tag.Check(a, b, t); });
         }
     }

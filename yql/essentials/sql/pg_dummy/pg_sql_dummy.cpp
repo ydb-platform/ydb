@@ -297,21 +297,21 @@ void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFacto
 
 namespace NYql {
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool) {
+arrow20::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, arrow20::MemoryPool& pool) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(pool);
-    return arrow::Datum();
+    return arrow20::Datum();
 }
 
-arrow::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool) {
+arrow20::Datum MakePgScalar(NKikimr::NMiniKQL::TPgType* type, const NUdf::TBlockItem& value, arrow20::MemoryPool& pool) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(pool);
-    return arrow::Datum();
+    return arrow20::Datum();
 }
 
-TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
+TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow20::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
     Y_UNUSED(originalType);
     Y_UNUSED(targetType);
     return {};

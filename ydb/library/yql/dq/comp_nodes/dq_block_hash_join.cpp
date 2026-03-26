@@ -67,15 +67,15 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             return Yield{};
         }
         const size_t cols = UserDataCols();
-        TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        TVector<arrow20::Datum> columns = ArrowFromUV({Buff_.data(), cols});
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
     }
 
   private:
-    TVector<arrow::Datum> ArrowFromUV(std::span<const NYql::NUdf::TUnboxedValue> UVs) {
-        TVector<arrow::Datum> arrow;
+    TVector<arrow20::Datum> ArrowFromUV(std::span<const NYql::NUdf::TUnboxedValue> UVs) {
+        TVector<arrow20::Datum> arrow;
         for (const auto& uv : UVs) {
             arrow.push_back(TArrowBlock::From(uv).GetDatum());
         }
@@ -93,13 +93,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
 template<EJoinKind Kind>
 struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
-                              const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
+                              const TVector<TType*>& userNullTypes, arrow20::MemoryPool& arrowPool)
         : Renames_(&meta->Renames)
         , Converters_(converters)
         , LeftIsBuild_(meta->Settings.LeftIsBuild())
     {
         if constexpr (!std::is_same_v<decltype(Nulls_), Empty>) {
-            TVector<arrow::Datum> nulls;
+            TVector<arrow20::Datum> nulls;
             for(auto* type:userNullTypes) {
                 auto strname = type->GetKindAsStr();
                 MKQL_ENSURE(type->IsOptional(), Sprintf("expected every type of right side to be optional when join type is Left, got type №%i: %s  ", nulls.size()+1, strname.data()));
@@ -155,24 +155,24 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return ConsumeFn{*this};
     }
 
-    TVector<arrow::Datum> FlushAndApplyRenames() {
+    TVector<arrow20::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
-            TVector<arrow::Datum> out;
+            TVector<arrow20::Datum> out;
             Converters_.Probe->Unpack(Output_.Probe, out);
             Output_.Probe.Clear();
-            TVector<arrow::Datum> renamed;
+            TVector<arrow20::Datum> renamed;
             for(auto rename: *Renames_){
                 MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
         } else {
-            TSides<TVector<arrow::Datum>> sides;
+            TSides<TVector<arrow20::Datum>> sides;
             for(ESide side: EachSide) {
                 Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), sides.SelectSide(side));
                 Output_.SelectSide(side).Clear();
             }
-            TVector<arrow::Datum> renamed;
+            TVector<arrow20::Datum> renamed;
             for (auto rename : *Renames_) {
                 renamed.push_back(sides.SelectSide(rename.Side)[rename.Index]);
             }
@@ -181,8 +181,8 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     }
 
   private:
-    TSides<TVector<arrow::Datum>> Flush() {
-        TSides<TVector<arrow::Datum>> out;
+    TSides<TVector<arrow20::Datum>> Flush() {
+        TSides<TVector<arrow20::Datum>> out;
         for(ESide side: EachSide) {
 
             Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), out.SelectSide(side));
@@ -259,11 +259,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(Output_.SizeTuples() != 0, "make sure we are flushing something, not empty set of tuples");
             i64 rows = Output_.SizeTuples();
-            TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
+            TVector<arrow20::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
             }
-            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow20::Datum(static_cast<uint64_t>(rows)));
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
             return NYql::NUdf::EFetchStatus::Ok;

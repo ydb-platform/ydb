@@ -9,7 +9,7 @@ namespace NKikimr::NOlap::NIndexes {
 
 void TDefaultDataExtractor::VisitSimple(
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const ui64 hashBase, const TChunkVisitor& visitor) const {
-    const auto visitorLocal = [&](const std::shared_ptr<arrow::Array>& arr) {
+    const auto visitorLocal = [&](const std::shared_ptr<arrow20::Array>& arr) {
         visitor(arr, hashBase);
     };
     dataArray->VisitValues(visitorLocal);

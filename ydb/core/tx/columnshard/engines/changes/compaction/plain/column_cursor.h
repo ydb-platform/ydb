@@ -13,10 +13,10 @@ class TPortionColumnCursor {
 private:
     std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunk;
     std::shared_ptr<NArrow::NAccessor::IChunkedArray> BlobChunks;
-    std::shared_ptr<arrow::Array> DefaultArray;
+    std::shared_ptr<arrow20::Array> DefaultArray;
     std::optional<ui32> RecordIndexStart;
-    std::shared_ptr<arrow::DataType> DataType;
-    std::shared_ptr<arrow::Scalar> DefaultValue;
+    std::shared_ptr<arrow20::DataType> DataType;
+    std::shared_ptr<arrow20::Scalar> DefaultValue;
     YDB_READONLY(ui32, RecordIndexFinish, 0);
 
 public:
@@ -33,7 +33,7 @@ public:
         AFL_VERIFY(BlobChunks);
     }
 
-    TPortionColumnCursor(const std::shared_ptr<arrow::DataType>& dataType, const std::shared_ptr<arrow::Scalar>& defaultValue)
+    TPortionColumnCursor(const std::shared_ptr<arrow20::DataType>& dataType, const std::shared_ptr<arrow20::Scalar>& defaultValue)
         : DataType(dataType)
         , DefaultValue(defaultValue) {
         AFL_VERIFY(DataType);

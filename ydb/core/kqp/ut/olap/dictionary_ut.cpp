@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         NArrow::NConstruction::TStringPoolFiller sPool(10, 512);
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
         builders.emplace_back(
-            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
+            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable(
                 "pk_int", 0));
         builders.emplace_back(
             std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("data", sPool));
@@ -850,8 +850,8 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             }
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
             builders.emplace_back(
-                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
-                    "pk", NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>(pkStart)));
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable(
+                    "pk", NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>(pkStart)));
             builders.emplace_back(
                 std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("field", sPool));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
@@ -896,11 +896,11 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         // Returns pkStart + totalRows for the next call.
         auto addBulk = [&](ui32 numRows, ui32 pkStart, bool addNull = false) -> ui32 {
             const ui32 totalRows = addNull ? numRows + 1 : numRows;
-            auto pkBuilder = NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable(
-                "pk", NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>(pkStart));
-            std::shared_ptr<arrow::Array> pkArray = pkBuilder->BuildArray(totalRows);
-            auto fieldBuilder = NArrow::MakeBuilder(std::make_shared<arrow::Field>("field", arrow::utf8(), true), totalRows, totalRows * 52);
-            auto* sb = static_cast<arrow::StringBuilder*>(fieldBuilder.get());
+            auto pkBuilder = NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable(
+                "pk", NArrow::NConstruction::TIntSeqFiller<arrow20::UInt64Type>(pkStart));
+            std::shared_ptr<arrow20::Array> pkArray = pkBuilder->BuildArray(totalRows);
+            auto fieldBuilder = NArrow::MakeBuilder(std::make_shared<arrow20::Field>("field", arrow20::utf8(), true), totalRows, totalRows * 52);
+            auto* sb = static_cast<arrow20::StringBuilder*>(fieldBuilder.get());
             for (ui32 i = 0; i < totalRows; ++i) {
                 if (addNull && i == numRows) {
                     Y_ABORT_UNLESS(sb->AppendNull().ok());
@@ -908,9 +908,9 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
                     Y_ABORT_UNLESS(sb->Append(sPool.GetValue(i)).ok());
                 }
             }
-            std::shared_ptr<arrow::Array> fieldArray = NArrow::FinishBuilder(std::move(fieldBuilder));
-            auto schema = arrow::schema({arrow::field("pk", arrow::uint64(), false), arrow::field("field", arrow::utf8(), true)});
-            auto batch = arrow::RecordBatch::Make(schema, totalRows, {pkArray, fieldArray});
+            std::shared_ptr<arrow20::Array> fieldArray = NArrow::FinishBuilder(std::move(fieldBuilder));
+            auto schema = arrow20::schema({arrow20::field("pk", arrow20::uint64(), false), arrow20::field("field", arrow20::utf8(), true)});
+            auto batch = arrow20::RecordBatch::Make(schema, totalRows, {pkArray, fieldArray});
             TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(batch));
             injection += "BULK_UPSERT:\n    /Root/ColumnTable\n    " + arrowString + "\nPARTS_COUNT:1\n" + delimiter;
             return pkStart + totalRows;

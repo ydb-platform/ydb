@@ -44,8 +44,8 @@ EOptionalityHandlerStrategy GetStrategyBasedOnTupleType(TType* tupleType, TType*
     }
 }
 
-std::shared_ptr<arrow::Buffer> CreateBitmapIntersection(arrow::compute::KernelContext* ctx,
-                                                        std::shared_ptr<arrow::ArrayData> tuple,
+std::shared_ptr<arrow20::Buffer> CreateBitmapIntersection(arrow20::compute::KernelContext* ctx,
+                                                        std::shared_ptr<arrow20::ArrayData> tuple,
                                                         size_t index,
                                                         bool preserveOffset) {
     auto child = tuple->child_data[index];
@@ -54,12 +54,12 @@ std::shared_ptr<arrow::Buffer> CreateBitmapIntersection(arrow::compute::KernelCo
         return child->buffers[0];
     } else if (!child->buffers[0]) {
         auto buffer = AllocateBitmapWithReserve(child->length + resultBitmapOffset, ctx->memory_pool());
-        arrow::internal::CopyBitmap(tuple->GetValues<uint8_t>(0, 0), tuple->offset,
+        arrow20::internal::CopyBitmap(tuple->GetValues<uint8_t>(0, 0), tuple->offset,
                                     child->length, buffer->mutable_data(), resultBitmapOffset);
         return buffer;
     } else {
         auto buffer = AllocateBitmapWithReserve(child->length + resultBitmapOffset, ctx->memory_pool());
-        arrow::internal::BitmapAnd(child->GetValues<uint8_t>(0, 0), child->offset,
+        arrow20::internal::BitmapAnd(child->GetValues<uint8_t>(0, 0), child->offset,
                                    tuple->GetValues<uint8_t>(0, 0), tuple->offset,
                                    child->length,
                                    resultBitmapOffset, buffer->mutable_data());
@@ -69,15 +69,15 @@ std::shared_ptr<arrow::Buffer> CreateBitmapIntersection(arrow::compute::KernelCo
 
 class TAddOptionalLevelHelper {
 public:
-    TAddOptionalLevelHelper(TType* returnType, std::shared_ptr<arrow::DataType> returnArrowType)
+    TAddOptionalLevelHelper(TType* returnType, std::shared_ptr<arrow20::DataType> returnArrowType)
         : IsReturnExternalOptional_(NeedWrapWithExternalOptional(returnType))
         , ReturnArrowType_(returnArrowType)
     {
     }
 
-    std::shared_ptr<arrow::ArrayData> AddOptionalToChild(std::shared_ptr<arrow::ArrayData> tuple, size_t index, arrow::compute::KernelContext* ctx) const {
+    std::shared_ptr<arrow20::ArrayData> AddOptionalToChild(std::shared_ptr<arrow20::ArrayData> tuple, size_t index, arrow20::compute::KernelContext* ctx) const {
         if (IsReturnExternalOptional_) {
-            return arrow::ArrayData::Make(ReturnArrowType_, tuple->length, {tuple->buffers[0]}, {tuple->child_data[index]}, arrow::kUnknownNullCount, tuple->offset);
+            return arrow20::ArrayData::Make(ReturnArrowType_, tuple->length, {tuple->buffers[0]}, {tuple->child_data[index]}, arrow20::kUnknownNullCount, tuple->offset);
         } else {
             auto child = tuple->child_data[index];
             auto bitmask = MakeDenseBitmapCopyIfOffsetDiffers(tuple->buffers[0], child->length, tuple->offset, child->offset, ctx->memory_pool());
@@ -85,20 +85,20 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::Scalar> AddOptionalToChildOfValidTuple(const arrow::StructScalar& tuple, size_t index) const {
+    std::shared_ptr<arrow20::Scalar> AddOptionalToChildOfValidTuple(const arrow20::StructScalar& tuple, size_t index) const {
         if (IsReturnExternalOptional_) {
-            return std::make_shared<arrow::StructScalar>(std::vector<std::shared_ptr<arrow::Scalar>>{tuple.value[index]}, ReturnArrowType_);
+            return std::make_shared<arrow20::StructScalar>(std::vector<std::shared_ptr<arrow20::Scalar>>{tuple.value[index]}, ReturnArrowType_);
         } else {
             return tuple.value[index];
         }
     }
 
-    std::shared_ptr<arrow::Scalar> IntersectOptionalsOfValidTuple(const arrow::StructScalar& tuple, size_t index) const {
+    std::shared_ptr<arrow20::Scalar> IntersectOptionalsOfValidTuple(const arrow20::StructScalar& tuple, size_t index) const {
         auto child = tuple.value[index];
         return child;
     }
 
-    std::shared_ptr<arrow::ArrayData> IntersectOptionals(std::shared_ptr<arrow::ArrayData> tuple, size_t index, arrow::compute::KernelContext* ctx) const {
+    std::shared_ptr<arrow20::ArrayData> IntersectOptionals(std::shared_ptr<arrow20::ArrayData> tuple, size_t index, arrow20::compute::KernelContext* ctx) const {
         auto child = tuple->child_data[index];
         if (IsReturnExternalOptional_) {
             auto intersection = CreateBitmapIntersection(ctx, tuple, index, /*preserveOffset=*/false);
@@ -109,11 +109,11 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::ArrayData> SetOptional(const arrow::ArrayData& input, std::shared_ptr<arrow::Buffer> bitmask, size_t offset) const {
+    std::shared_ptr<arrow20::ArrayData> SetOptional(const arrow20::ArrayData& input, std::shared_ptr<arrow20::Buffer> bitmask, size_t offset) const {
         auto result = input.Copy();
         result->buffers[0] = bitmask;
         result->offset = offset;
-        result->SetNullCount(arrow::kUnknownNullCount);
+        result->SetNullCount(arrow20::kUnknownNullCount);
         return result;
     }
 
@@ -123,12 +123,12 @@ public:
 
 private:
     const bool IsReturnExternalOptional_;
-    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
+    const std::shared_ptr<arrow20::DataType> ReturnArrowType_;
 };
 
 class TBlockGetElementExec {
 public:
-    TBlockGetElementExec(const std::shared_ptr<arrow::DataType>& returnArrowType, ui32 index, EOptionalityHandlerStrategy resultStrategy, TAddOptionalLevelHelper addOptionalHelper)
+    TBlockGetElementExec(const std::shared_ptr<arrow20::DataType>& returnArrowType, ui32 index, EOptionalityHandlerStrategy resultStrategy, TAddOptionalLevelHelper addOptionalHelper)
         : ReturnArrowType(returnArrowType)
         , Index(index)
         , ResultStrategy(resultStrategy)
@@ -136,65 +136,65 @@ public:
     {
     }
 
-    arrow::Status ExecArray(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum inputDatum = batch.values[0];
+    arrow20::Status ExecArray(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
+        arrow20::Datum inputDatum = batch.values[0];
         MKQL_ENSURE(inputDatum.is_array(), "Array expected.");
 
         const auto& tuple = inputDatum.array();
         auto child = tuple->child_data[Index];
         switch (ResultStrategy) {
             case EOptionalityHandlerStrategy::ReturnChildAsIs: {
-                *res = arrow::Datum(child);
-                return arrow::Status::OK();
+                *res = arrow20::Datum(child);
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::AddOptionalToChild: {
-                *res = arrow::Datum(AddOptionalHelper.AddOptionalToChild(tuple, Index, ctx));
-                return arrow::Status::OK();
+                *res = arrow20::Datum(AddOptionalHelper.AddOptionalToChild(tuple, Index, ctx));
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::IntersectOptionals: {
-                *res = arrow::Datum(AddOptionalHelper.IntersectOptionals(tuple, Index, ctx));
-                return arrow::Status::OK();
+                *res = arrow20::Datum(AddOptionalHelper.IntersectOptionals(tuple, Index, ctx));
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
                 *res = NYql::NUdf::MakeSingularArray(/*isNull=*/true, tuple->length);
-                return arrow::Status::OK();
+                return arrow20::Status::OK();
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ExecScalar(const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum inputDatum = batch.values[0];
+    arrow20::Status ExecScalar(const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
+        arrow20::Datum inputDatum = batch.values[0];
         MKQL_ENSURE(inputDatum.is_scalar(), "Scalar expected.");
 
         if (!inputDatum.scalar()->is_valid) {
-            *res = arrow::Datum(arrow::MakeNullScalar(ReturnArrowType));
-            return arrow::Status::OK();
+            *res = arrow20::Datum(arrow20::MakeNullScalar(ReturnArrowType));
+            return arrow20::Status::OK();
         }
-        const auto& tuple = arrow::internal::checked_cast<const arrow::StructScalar&>(*inputDatum.scalar());
+        const auto& tuple = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*inputDatum.scalar());
 
         switch (ResultStrategy) {
             case EOptionalityHandlerStrategy::ReturnChildAsIs: {
-                *res = arrow::Datum(tuple.value[Index]);
-                return arrow::Status::OK();
+                *res = arrow20::Datum(tuple.value[Index]);
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::AddOptionalToChild: {
-                *res = arrow::Datum(AddOptionalHelper.AddOptionalToChildOfValidTuple(tuple, Index));
-                return arrow::Status::OK();
+                *res = arrow20::Datum(AddOptionalHelper.AddOptionalToChildOfValidTuple(tuple, Index));
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::IntersectOptionals: {
-                *res = arrow::Datum(AddOptionalHelper.IntersectOptionalsOfValidTuple(tuple, Index));
-                return arrow::Status::OK();
+                *res = arrow20::Datum(AddOptionalHelper.IntersectOptionalsOfValidTuple(tuple, Index));
+                return arrow20::Status::OK();
             }
             case EOptionalityHandlerStrategy::ReturnNull:
                 *res = NYql::NUdf::MakeSingularScalar(/*IsNull=*/true);
-                return arrow::Status::OK();
+                return arrow20::Status::OK();
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         if (batch.values[0].is_array()) {
             return ExecArray(ctx, batch, res);
         } else {
@@ -203,23 +203,23 @@ public:
     }
 
 private:
-    const std::shared_ptr<arrow::DataType> ReturnArrowType;
+    const std::shared_ptr<arrow20::DataType> ReturnArrowType;
     const ui32 Index;
     EOptionalityHandlerStrategy ResultStrategy;
     TAddOptionalLevelHelper AddOptionalHelper;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockGetElementKernel(const TVector<TType*>& argTypes, TType* resultType,
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeBlockGetElementKernel(const TVector<TType*>& argTypes, TType* resultType,
                                                                         ui32 index, EOptionalityHandlerStrategy resultStrategy, TAddOptionalLevelHelper addOptionalHelper) {
-    std::shared_ptr<arrow::DataType> returnArrowType;
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TBlockGetElementExec>(returnArrowType, index, resultStrategy, std::move(addOptionalHelper));
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                 [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                      return exec->Exec(ctx, batch, res);
                                                                  });
 
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;
 }
 
@@ -245,7 +245,7 @@ IComputationNode* WrapBlockGetElement(TCallable& callable, const TComputationNod
     EOptionalityHandlerStrategy strategy = GetStrategyBasedOnTupleType(blockTupleType->GetItemType(), tupleElementType);
 
     auto* returnType = AS_TYPE(TBlockType, callable.GetType()->GetReturnType());
-    std::shared_ptr<arrow::DataType> returnArrowType;
+    std::shared_ptr<arrow20::DataType> returnArrowType;
 
     MKQL_ENSURE(ConvertArrowType(returnType->GetItemType(), returnArrowType), "Unsupported arrow type");
     TAddOptionalLevelHelper addOptionalHelper(returnType->GetItemType(), returnArrowType);

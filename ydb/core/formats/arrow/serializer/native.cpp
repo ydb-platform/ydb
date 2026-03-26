@@ -16,42 +16,42 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
-    arrow::ipc::DictionaryMemo dictMemo;
-    auto options = arrow::ipc::IpcReadOptions::Defaults();
+arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data) const {
+    arrow20::ipc::DictionaryMemo dictMemo;
+    auto options = arrow20::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
     options.memory_pool = Options.memory_pool;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader readerStream(buffer);
-    auto reader = TStatusValidator::GetValid(arrow::ipc::RecordBatchStreamReader::Open(&readerStream, options));
+    std::shared_ptr<arrow20::Buffer> buffer(std::make_shared<TBufferOverString>(data));
+    arrow20::io::BufferReader readerStream(buffer);
+    auto reader = TStatusValidator::GetValid(arrow20::ipc::RecordBatchStreamReader::Open(&readerStream, options));
 
-    std::shared_ptr<arrow::RecordBatch> batch;
+    std::shared_ptr<arrow20::RecordBatch> batch;
     auto readResult = reader->ReadNext(&batch);
     if (!readResult.ok()) {
         return readResult;
     }
     if (!batch) {
-        return arrow::Status(arrow::StatusCode::SerializationError, "null batch");
+        return arrow20::Status(arrow20::StatusCode::SerializationError, "null batch");
     }
     auto validation = batch->Validate();
     if (!validation.ok()) {
-        return arrow::Status(arrow::StatusCode::SerializationError, "validation error: " + validation.ToString());
+        return arrow20::Status(arrow20::StatusCode::SerializationError, "validation error: " + validation.ToString());
     }
     return batch;
 }
 
-TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     TString result;
     {
-        arrow::io::MockOutputStream mock;
-        auto writer = TStatusValidator::GetValid(arrow::ipc::MakeStreamWriter(&mock, batch->schema(), Options));
+        arrow20::io::MockOutputStream mock;
+        auto writer = TStatusValidator::GetValid(arrow20::ipc::MakeStreamWriter(&mock, batch->schema(), Options));
         TStatusValidator::Validate(writer->WriteRecordBatch(*batch));
         result.reserve(mock.GetExtentBytesWritten());
     }
     {
         TStringOutputStream stream(&result);
-        auto writer = TStatusValidator::GetValid(arrow::ipc::MakeStreamWriter(&stream, batch->schema(), Options));
+        auto writer = TStatusValidator::GetValid(arrow20::ipc::MakeStreamWriter(&stream, batch->schema(), Options));
         TStatusValidator::Validate(writer->WriteRecordBatch(*batch));
         TStatusValidator::Validate(writer->Close());
         Y_ABORT_UNLESS(stream.GetPosition() == result.size());
@@ -59,50 +59,50 @@ TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBa
     return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(
-    const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
-    arrow::ipc::DictionaryMemo dictMemo;
-    auto options = arrow::ipc::IpcReadOptions::Defaults();
+arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> TNativeSerializer::DoDeserialize(
+    const TString& data, const std::shared_ptr<arrow20::Schema>& schema) const {
+    arrow20::ipc::DictionaryMemo dictMemo;
+    auto options = arrow20::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
     options.memory_pool = Options.memory_pool;
 
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<TBufferOverString>(data));
-    arrow::io::BufferReader reader(buffer);
+    std::shared_ptr<arrow20::Buffer> buffer(std::make_shared<TBufferOverString>(data));
+    arrow20::io::BufferReader reader(buffer);
     AFL_TRACE(NKikimrServices::ARROW_HELPER)("event", "parsing")("size", data.size())("columns", schema->num_fields());
-    auto batchResult = arrow::ipc::ReadRecordBatch(schema, &dictMemo, options, &reader);
+    auto batchResult = arrow20::ipc::ReadRecordBatch(schema, &dictMemo, options, &reader);
     if (!batchResult.ok()) {
         return batchResult;
     }
-    std::shared_ptr<arrow::RecordBatch> batch = *batchResult;
+    std::shared_ptr<arrow20::RecordBatch> batch = *batchResult;
     if (!batch) {
-        return arrow::Status(arrow::StatusCode::SerializationError, "empty batch");
+        return arrow20::Status(arrow20::StatusCode::SerializationError, "empty batch");
     }
     auto validation = batch->Validate();
     if (!validation.ok()) {
-        return arrow::Status(arrow::StatusCode::SerializationError, "batch is not valid: " + validation.ToString());
+        return arrow20::Status(arrow20::StatusCode::SerializationError, "batch is not valid: " + validation.ToString());
     }
     return batch;
 }
 
-TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    arrow::ipc::IpcPayload payload;
+TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
+    arrow20::ipc::IpcPayload payload;
     // Build payload. Compression if set up performed here.
-    TStatusValidator::Validate(arrow::ipc::GetRecordBatchPayload(*batch, Options, &payload));
+    TStatusValidator::Validate(arrow20::ipc::GetRecordBatchPayload(*batch, Options, &payload));
 #ifndef NDEBUG
     TStatusValidator::Validate(batch->ValidateFull());
 #endif
 
     int32_t metadata_length = 0;
-    arrow::io::MockOutputStream mock;
+    arrow20::io::MockOutputStream mock;
     // Process prepared payload through mock stream. Fast and efficient.
-    TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &mock, &metadata_length));
+    TStatusValidator::Validate(arrow20::ipc::WriteIpcPayload(payload, Options, &mock, &metadata_length));
 
     TString str;
     str.resize(mock.GetExtentBytesWritten());
 
     TFixedStringOutputStream out(&str);
     // Write prepared payload into the resultant string. No extra allocation will be made.
-    TStatusValidator::Validate(arrow::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
+    TStatusValidator::Validate(arrow20::ipc::WriteIpcPayload(payload, Options, &out, &metadata_length));
     Y_ABORT_UNLESS(out.GetPosition() == str.size());
 #ifndef NDEBUG
     TStatusValidator::GetValid(Deserialize(str, batch->schema()));
@@ -111,34 +111,34 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     return str;
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(
-    const arrow::Compression::type& cType, const std::optional<ui32> level) const {
-    auto codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType));
+NKikimr::TConclusion<std::shared_ptr<arrow20::util::Codec>> TNativeSerializer::BuildCodec(
+    const arrow20::Compression::type& cType, const std::optional<ui32> level) const {
+    auto codec = NArrow::TStatusValidator::GetValid(arrow20::util::Codec::Create(cType));
     if (!codec) {
-        return std::shared_ptr<arrow::util::Codec>();
+        return std::shared_ptr<arrow20::util::Codec>();
     }
     const int levelDef = level.value_or(codec->default_compression_level());
     const int levelMin = codec->minimum_compression_level();
     const int levelMax = codec->maximum_compression_level();
     if (levelDef < levelMin || levelMax < levelDef) {
-        return TConclusionStatus::Fail(TStringBuilder() << "incorrect level for codec `" << arrow::util::Codec::GetCodecAsString(cType)
+        return TConclusionStatus::Fail(TStringBuilder() << "incorrect level for codec `" << arrow20::util::Codec::GetCodecAsString(cType)
                                                         << "`. have to be: [" << levelMin << ":" << levelMax << "]");
     }
-    std::shared_ptr<arrow::util::Codec> codecPtr = std::move(NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType, levelDef)));
+    std::shared_ptr<arrow20::util::Codec> codecPtr = std::move(NArrow::TStatusValidator::GetValid(arrow20::util::Codec::Create(cType, levelDef)));
     return codecPtr;
 }
 
 NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) {
-    std::optional<arrow::Compression::type> codec;
+    std::optional<arrow20::Compression::type> codec;
     std::optional<int> level;
     {
         auto fValue = features.Extract("COMPRESSION.TYPE");
         if (!fValue) {
-            return TConclusionStatus::Fail("not defined COMPRESSION.TYPE as arrow::Compression");
+            return TConclusionStatus::Fail("not defined COMPRESSION.TYPE as arrow20::Compression");
         }
         codec = NArrow::CompressionFromString(*fValue);
         if (!codec) {
-            return TConclusionStatus::Fail("cannot parse COMPRESSION.TYPE as arrow::Compression");
+            return TConclusionStatus::Fail("cannot parse COMPRESSION.TYPE as arrow20::Compression");
         }
     }
     {
@@ -168,7 +168,7 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKiki
         Options = GetDefaultOptions();
         return TConclusionStatus::Success();
     }
-    std::optional<arrow::Compression::type> codec = NArrow::CompressionFromProto(compression.GetCodec());
+    std::optional<arrow20::Compression::type> codec = NArrow::CompressionFromProto(compression.GetCodec());
     if (!codec) {
         return TConclusionStatus::Fail("cannot parse codec type from proto");
     }
@@ -189,11 +189,11 @@ NKikimr::TConclusionStatus TNativeSerializer::DoDeserializeFromProto(const NKiki
 void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const {
     if (Options.codec) {
         proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(Options.codec->compression_type()));
-        if (arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+        if (arrow20::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
             proto.MutableArrowCompression()->SetLevel(Options.codec->compression_level());
         }
     } else {
-        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(arrow::Compression::UNCOMPRESSED));
+        proto.MutableArrowCompression()->SetCodec(NArrow::CompressionToProto(arrow20::Compression::UNCOMPRESSED));
     }
 }
 

@@ -119,7 +119,7 @@ public:
         }
 
         ui32 rows = Packer.IsBlock() ?
-            NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value
+            NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value
             : 1;
 
         if (PushStats.CollectBasic()) {
@@ -154,7 +154,7 @@ public:
         TryPack();
     }
 
-    void DoPushBlock(std::vector<arrow::Datum>&& data) {
+    void DoPushBlock(std::vector<arrow20::Datum>&& data) {
         NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
         outputValues.reserve(data.size());
         for (auto& datum : data) {

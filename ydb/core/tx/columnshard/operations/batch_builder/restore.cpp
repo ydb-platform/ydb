@@ -22,7 +22,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     return request;
 }
 
-TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
+TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow20::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "merge_data_problems")("write_id", WriteData.GetWriteMeta().GetWriteId())(
@@ -61,7 +61,7 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     return TConclusionStatus::Success();
 }
 
-TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts)
+TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const NArrow::TContainerWithIndexes<arrow20::RecordBatch>& incomingData, const TWritingContext& context, const bool readOnlyConflicts)
     : TBase(context.GetTabletId(), context.GetTabletActorId(),
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))

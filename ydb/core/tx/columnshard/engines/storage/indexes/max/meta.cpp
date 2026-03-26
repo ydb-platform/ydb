@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NIndexes::NMax {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    std::shared_ptr<arrow::Scalar> result;
+    std::shared_ptr<arrow20::Scalar> result;
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     {
         TChunkedColumnReader cReader = *reader.begin();
@@ -29,12 +29,12 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-std::shared_ptr<arrow::Scalar> TIndexMeta::GetMaxScalarVerified(
-    const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& dataType) const {
+std::shared_ptr<arrow20::Scalar> TIndexMeta::GetMaxScalarVerified(
+    const std::vector<TString>& data, const std::shared_ptr<arrow20::DataType>& dataType) const {
     AFL_VERIFY(data.size());
-    std::shared_ptr<arrow::Scalar> result;
+    std::shared_ptr<arrow20::Scalar> result;
     for (auto&& d : data) {
-        std::shared_ptr<arrow::Scalar> current = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(d, dataType).DetachResult();
+        std::shared_ptr<arrow20::Scalar> current = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(d, dataType).DetachResult();
         if (!result || NArrow::ScalarCompare(*result, *current) == -1) {
             result = current;
         }

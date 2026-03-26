@@ -30,7 +30,7 @@ struct TBlockLayoutConverterTestData {
     NMiniKQL::TTypeEnvironment Env;
     NMiniKQL::TProgramBuilder PgmBuilder;
     NMiniKQL::TMemoryUsageInfo MemInfo;
-    arrow::MemoryPool* const ArrowPool;
+    arrow20::MemoryPool* const ArrowPool;
 };
 
 constexpr int TestSize = 128 * 3 * sizeof(i64);
@@ -57,13 +57,13 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = TestSize / 4;
 
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
-        TVector<arrow::Datum> columns;
+        TVector<arrow20::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
             auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected same columns count after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -159,13 +159,13 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = 128;
 
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
-        TVector<arrow::Datum> columns;
+        TVector<arrow20::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
             auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, nullptr);
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected same columns count after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         constexpr auto testSize = 128;
 
         auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
-        TVector<arrow::Datum> columns;
+        TVector<arrow20::Datum> columns;
 
         for (size_t i = 0; i < types.size(); ++i) {
             if (i % 2 == 0) {
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected same columns count after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -342,13 +342,13 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), 1, "Expected the one column after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -404,13 +404,13 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected the one column after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -460,13 +460,13 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);
         UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
 
-        TVector<arrow::Datum> columnsAfterConversion;
+        TVector<arrow20::Datum> columnsAfterConversion;
         converter->Unpack(packRes, columnsAfterConversion);
         UNIT_ASSERT_VALUES_EQUAL_C(columnsAfterConversion.size(), columns.size(), "Expected the one column after conversion");
         Y_ENSURE(columnsAfterConversion.front().is_array());
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             builder->Add(TBlockItem());                             // NULL
             auto datum = builder->Build(true);
 
-            TVector<arrow::Datum> columns{datum};
+            TVector<arrow20::Datum> columns{datum};
             converter->Pack(columns, packWithNulls);
         }
 
@@ -519,12 +519,12 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
             arrayData->buffers[0] = nullptr;
             arrayData->null_count = 0;
 
-            TVector<arrow::Datum> columns{arrow::Datum(arrayData)};
+            TVector<arrow20::Datum> columns{arrow20::Datum(arrayData)};
             TPackResult packRes;
             converter->Pack(columns, packRes);
         }
 
-        TVector<arrow::Datum> unpacked;
+        TVector<arrow20::Datum> unpacked;
         converter->Unpack(packWithNulls, unpacked);
         UNIT_ASSERT_VALUES_EQUAL(unpacked.size(), 1u);
 
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
         auto datum = builder->Build(true);
         Y_ENSURE(datum.is_array());
-        TVector<arrow::Datum> columns{datum};
+        TVector<arrow20::Datum> columns{datum};
 
         TPackResult packRes;
         converter->Pack(columns, packRes);

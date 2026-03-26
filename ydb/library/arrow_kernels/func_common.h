@@ -12,7 +12,7 @@
 
 #include "execs.h"
 
-namespace cp = arrow::compute;
+namespace cp = arrow20::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
 
@@ -34,7 +34,7 @@ using IsNumeric = std::integral_constant<bool, IsSignedInteger<T>::value ||
                                                 std::is_floating_point<T>::value>;
 
 template<typename TArr>
-using IsArrayNumeric = std::integral_constant<bool, arrow::is_number_type<typename TArr::TypeClass>::value>;
+using IsArrayNumeric = std::integral_constant<bool, arrow20::is_number_type<typename TArr::TypeClass>::value>;
 
 
 template <typename T, typename R = T>
@@ -55,11 +55,11 @@ using EnableIfFloatingPoint =
 
 template <typename T, typename R = T>
 using EnableIfFloat64 =
-    std::enable_if_t<std::is_same<T, arrow::TypeTraits<arrow::DoubleType>::CType>::value, R>;
+    std::enable_if_t<std::is_same<T, arrow20::TypeTraits<arrow20::DoubleType>::CType>::value, R>;
 
 template <typename T, typename R = T>
 using EnableIfFloat32 =
-    std::enable_if_t<std::is_same<T, arrow::TypeTraits<arrow::FloatType>::CType>::value, R>;
+    std::enable_if_t<std::is_same<T, arrow20::TypeTraits<arrow20::FloatType>::CType>::value, R>;
 
 template <typename T, typename R = T>
 using EnableIfNumeric =
@@ -67,10 +67,10 @@ using EnableIfNumeric =
 
 
 template <typename TType>
-using TArray = typename arrow::TypeTraits<TType>::ArrayType;
+using TArray = typename arrow20::TypeTraits<TType>::ArrayType;
 
 template <typename TType>
-using TBuilder = typename arrow::TypeTraits<TType>::BuilderType;
+using TBuilder = typename arrow20::TypeTraits<TType>::BuilderType;
 
 template <typename TSignedInt>
 TSignedInt SafeSignedNegate(TSignedInt u) {
@@ -81,25 +81,25 @@ TSignedInt SafeSignedNegate(TSignedInt u) {
 struct TArithmeticFunction : cp::ScalarFunction {
     using ScalarFunction::ScalarFunction;
 
-    arrow::Result<const arrow::compute::Kernel*> DispatchBest(std::vector<arrow::ValueDescr>* values) const override {
+    arrow20::Result<const arrow20::compute::Kernel*> DispatchBest(std::vector<arrow20::ValueDescr>* values) const override {
         RETURN_NOT_OK(CheckArity(*values));
 
-        using arrow::compute::detail::DispatchExactImpl;
+        using arrow20::compute::detail::DispatchExactImpl;
         if (auto* kernel = DispatchExactImpl(this, *values)) {
             return kernel;
         }
 
-        arrow::compute::internal::EnsureDictionaryDecoded(values);
+        arrow20::compute::internal::EnsureDictionaryDecoded(values);
 
         // Only promote types for binary functions
         if (values->size() == 2) {
-            arrow::compute::internal::ReplaceNullWithOtherType(values);
-            if (auto type = arrow::compute::internal::CommonNumeric(*values)) {
-                arrow::compute::internal::ReplaceTypes(type, values);
+            arrow20::compute::internal::ReplaceNullWithOtherType(values);
+            if (auto type = arrow20::compute::internal::CommonNumeric(*values)) {
+                arrow20::compute::internal::ReplaceTypes(type, values);
             }
             #if 0 // TODO: dates + ints
-            else if (auto type = arrow::compute::internal::CommonTimestamp(*values)) {
-                arrow::compute::internal::ReplaceTypes(type, values);
+            else if (auto type = arrow20::compute::internal::CommonTimestamp(*values)) {
+                arrow20::compute::internal::ReplaceTypes(type, values);
             }
             #endif
         }
@@ -107,7 +107,7 @@ struct TArithmeticFunction : cp::ScalarFunction {
         if (auto* kernel = DispatchExactImpl(this, *values)) {
             return kernel;
         }
-        return arrow::compute::detail::NoMatchingKernel(this, *values);
+        return arrow20::compute::detail::NoMatchingKernel(this, *values);
   }
 };
 
@@ -115,9 +115,9 @@ struct TArithmeticFunction : cp::ScalarFunction {
 
 template <typename Op>
 std::shared_ptr<cp::ScalarFunction> MakeConstNullary(const std::string& name) {
-    auto func = std::make_shared<arrow::compute::ScalarFunction>(name, cp::Arity::Nullary(), nullptr);
-    cp::ArrayKernelExec exec = SimpleNullaryExec<Op, arrow::DoubleType>;
-    Y_ABORT_UNLESS(func->AddKernel({}, arrow::float64(), exec).ok());
+    auto func = std::make_shared<arrow20::compute::ScalarFunction>(name, cp::Arity::Nullary(), nullptr);
+    cp::ArrayKernelExec exec = SimpleNullaryExec<Op, arrow20::DoubleType>;
+    Y_ABORT_UNLESS(func->AddKernel({}, arrow20::float64(), exec).ok());
     return func;
 }
 
@@ -158,7 +158,7 @@ std::shared_ptr<cp::ScalarFunction> MakeMathUnary(const std::string& name) {
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Unary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = MathUnaryExec<ScalarUnary, Op>(ty);
-        Y_ABORT_UNLESS(func->AddKernel({ty}, arrow::float64(), exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty}, arrow20::float64(), exec).ok());
     }
     return func;
 }
@@ -168,7 +168,7 @@ std::shared_ptr<cp::ScalarFunction> MakeMathBinary(const std::string& name) {
     auto func = std::make_shared<TArithmeticFunction>(name, cp::Arity::Binary(), nullptr);
     for (const auto& ty : cp::internal::NumericTypes()) {
         auto exec = MathBinaryExec<ScalarBinary, Op>(ty);
-        Y_ABORT_UNLESS(func->AddKernel({ty, ty}, arrow::float64(), exec).ok());
+        Y_ABORT_UNLESS(func->AddKernel({ty, ty}, arrow20::float64(), exec).ok());
     }
     return func;
 }

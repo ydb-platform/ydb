@@ -20,13 +20,13 @@ public:
         return "ARROW_SERIALIZER";
     }
 private:
-    arrow::ipc::IpcWriteOptions Options;
+    arrow20::ipc::IpcWriteOptions Options;
 
-    TConclusion<std::shared_ptr<arrow::util::Codec>> BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const;
+    TConclusion<std::shared_ptr<arrow20::util::Codec>> BuildCodec(const arrow20::Compression::type& cType, const std::optional<ui32> level) const;
     static const inline TFactory::TRegistrator<TNativeSerializer> Registrator = TFactory::TRegistrator<TNativeSerializer>(GetClassNameStatic());
 
-    static std::shared_ptr<arrow::util::Codec> GetDefaultCodec() {
-        return *arrow::util::Codec::Create(arrow::Compression::LZ4_FRAME);
+    static std::shared_ptr<arrow20::util::Codec> GetDefaultCodec() {
+        return *arrow20::util::Codec::Create(arrow20::Compression::LZ4_FRAME);
     }
 
 protected:
@@ -50,24 +50,24 @@ protected:
         }
         return true;
     }
-    virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
-    virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const override;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const override;
+    virtual TString DoSerializeFull(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
+    virtual TString DoSerializePayload(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
+    virtual arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> DoDeserialize(const TString& data) const override;
+    virtual arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> DoDeserialize(const TString& data, const std::shared_ptr<arrow20::Schema>& schema) const override;
 
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override;
 
-    static arrow::ipc::IpcOptions BuildDefaultOptions() {
-        arrow::ipc::IpcWriteOptions options;
+    static arrow20::ipc::IpcOptions BuildDefaultOptions() {
+        arrow20::ipc::IpcWriteOptions options;
         options.use_threads = false;
         if (HasAppData()) {
             if (AppData()->ColumnShardConfig.HasDefaultCompression()) {
-                arrow::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
+                arrow20::Compression::type codec = CompressionFromProto(AppData()->ColumnShardConfig.GetDefaultCompression()).value();
                 if (AppData()->ColumnShardConfig.HasDefaultCompressionLevel()) {
                     options.codec = NArrow::TStatusValidator::GetValid(
-                        arrow::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
+                        arrow20::util::Codec::Create(codec, AppData()->ColumnShardConfig.GetDefaultCompressionLevel()));
                 } else {
-                    options.codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(codec));
+                    options.codec = NArrow::TStatusValidator::GetValid(arrow20::util::Codec::Create(codec));
                 }
             } else {
                 options.codec = GetDefaultCodec();
@@ -85,13 +85,13 @@ protected:
 public:
     static std::shared_ptr<ISerializer> GetUncompressed() {
         static std::shared_ptr<ISerializer> result =
-            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow20::Compression::UNCOMPRESSED);
         return result;
     }
 
     static std::shared_ptr<ISerializer> GetFast() {
         static std::shared_ptr<ISerializer> result =
-            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::LZ4_FRAME);
+            std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow20::Compression::LZ4_FRAME);
         return result;
     }
 
@@ -100,40 +100,40 @@ public:
     }
 
     virtual bool IsHardPacker() const override {
-        return Options.codec && Options.codec->compression_type() == arrow::Compression::ZSTD && Options.codec->compression_level() > 3;
+        return Options.codec && Options.codec->compression_type() == arrow20::Compression::ZSTD && Options.codec->compression_level() > 3;
     }
 
-    static arrow::ipc::IpcOptions GetDefaultOptions() {
-        arrow::ipc::IpcWriteOptions options = BuildDefaultOptions();
+    static arrow20::ipc::IpcOptions GetDefaultOptions() {
+        arrow20::ipc::IpcWriteOptions options = BuildDefaultOptions();
         return options;
     }
 
-    TNativeSerializer(const arrow::Compression::type compressionType) {
+    TNativeSerializer(const arrow20::Compression::type compressionType) {
         Options.use_threads = false;
-        auto r = arrow::util::Codec::Create(compressionType);
+        auto r = arrow20::util::Codec::Create(compressionType);
         AFL_VERIFY(r.ok());
         Options.codec = std::move(*r);
     }
 
-    TNativeSerializer(const arrow::ipc::IpcWriteOptions& options = GetDefaultOptions())
+    TNativeSerializer(const arrow20::ipc::IpcWriteOptions& options = GetDefaultOptions())
         : Options(options) {
         Options.use_threads = false;
     }
 
-    TNativeSerializer(arrow::MemoryPool* pool) {
+    TNativeSerializer(arrow20::MemoryPool* pool) {
         Options.use_threads = false;
         Options.memory_pool = pool;
     }
 
-    arrow::Compression::type GetCodecType() const {
+    arrow20::Compression::type GetCodecType() const {
         if (Options.codec) {
             return Options.codec->compression_type();
         }
-        return arrow::Compression::type::UNCOMPRESSED;
+        return arrow20::Compression::type::UNCOMPRESSED;
     }
 
     std::optional<i32> GetCodecLevel() const {
-        if (Options.codec && arrow::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
+        if (Options.codec && arrow20::util::Codec::SupportsCompressionLevel(Options.codec->compression_type())) {
             return Options.codec->compression_level();
         }
         return {};

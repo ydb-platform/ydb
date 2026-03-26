@@ -149,7 +149,7 @@ public:
     virtual std::vector<TCSMetadataRequest> CollectMetadataRequests() const = 0;
     virtual const TVersionedIndex& GetVersionedIndex() const = 0;
     virtual const std::shared_ptr<const TVersionedIndex>& GetVersionedIndexReadonlyCopy() = 0;
-    virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
+    virtual const std::shared_ptr<arrow20::Schema>& GetReplaceKey() const;
 
     virtual bool HasDataInPathId(const TInternalPathId pathId) const = 0;
     virtual bool ErasePathId(const TInternalPathId pathId) = 0;

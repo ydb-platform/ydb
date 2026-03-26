@@ -125,7 +125,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             NKikimrProto::EReplyStatus::OK, nullptr, std::move(pack));
         NActors::TActivationContext::AsActorContext().Send(Context.GetTabletActorId(), result.release());
     } else {
-        std::shared_ptr<arrow::RecordBatch> pkBatch =
+        std::shared_ptr<arrow20::RecordBatch> pkBatch =
             NArrow::TColumnOperator().Extract(OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             OriginalBatch, Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), WriteData.GetData()->GetSeparationPoints());

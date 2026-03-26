@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap {
 
-const std::shared_ptr<arrow::Schema>& IColumnEngine::GetReplaceKey() const {
+const std::shared_ptr<arrow20::Schema>& IColumnEngine::GetReplaceKey() const {
     return GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetReplaceKey();
 }
 

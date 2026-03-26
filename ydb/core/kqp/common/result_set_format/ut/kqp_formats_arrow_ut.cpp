@@ -1365,7 +1365,7 @@ namespace NKikimr::NKqp::NFormats {
 namespace {
 
 template <typename TMiniKQLType, typename TPhysicalType, typename TArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
-void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
+void TestDataTypeConversion(arrow20::Type::type arrowTypeId) {
     TTestContext context;
 
     auto type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
@@ -1383,18 +1383,18 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
     std::shared_ptr<TArrowArrayType> typedArray;
-    std::shared_ptr<arrow::StringArray> timezoneArray;
+    std::shared_ptr<arrow20::StringArray> timezoneArray;
 
     if constexpr (IsTimezoneType) {
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
 
         UNIT_ASSERT(structArray->field(0)->type_id() == arrowTypeId);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::STRING);
 
         typedArray = static_pointer_cast<TArrowArrayType>(structArray->field(0));
-        timezoneArray = static_pointer_cast<arrow::StringArray>(structArray->field(1));
+        timezoneArray = static_pointer_cast<arrow20::StringArray>(structArray->field(1));
     } else {
         UNIT_ASSERT(array->type_id() == arrowTypeId);
         typedArray = static_pointer_cast<TArrowArrayType>(array);
@@ -1430,10 +1430,10 @@ void TestFixedSizeBinaryDataTypeConversion() {
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-    std::shared_ptr<arrow::FixedSizeBinaryArray> typedArray;
+    std::shared_ptr<arrow20::FixedSizeBinaryArray> typedArray;
 
-    UNIT_ASSERT(array->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-    typedArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(array);
+    UNIT_ASSERT(array->type_id() == arrow20::Type::FIXED_SIZE_BINARY);
+    typedArray = static_pointer_cast<arrow20::FixedSizeBinaryArray>(array);
     UNIT_ASSERT_VALUES_EQUAL(typedArray->byte_width(), NScheme::FSB_SIZE);
 
     for (size_t i = 0; i < TEST_ARRAY_DATATYPE_SIZE; ++i) {
@@ -1461,10 +1461,10 @@ void TestSingularTypeConversion() {
     UNIT_ASSERT_VALUES_EQUAL(array->length(), TEST_ARRAY_DATATYPE_SIZE);
 
     if (SingularKind == TType::EKind::Null) {
-        UNIT_ASSERT(array->type_id() == arrow::Type::NA);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::NA);
     } else {
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 0);
     }
 
@@ -1487,8 +1487,8 @@ void TestPgTypeConversion() {
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-    UNIT_ASSERT(array->type_id() == arrow::Type::STRING);
-    auto stringArray = static_pointer_cast<arrow::StringArray>(array);
+    UNIT_ASSERT(array->type_id() == arrow20::Type::STRING);
+    auto stringArray = static_pointer_cast<arrow20::StringArray>(array);
     UNIT_ASSERT_VALUES_EQUAL(stringArray->length(), values.size());
 
     if (stringArray->length() > 1) {
@@ -1522,39 +1522,39 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
 
     // Integral types
     Y_UNIT_TEST(DataType_Bool) {
-        TestDataTypeConversion<bool, bool, arrow::UInt8Array>(arrow::Type::UINT8);
+        TestDataTypeConversion<bool, bool, arrow20::UInt8Array>(arrow20::Type::UINT8);
     }
 
     Y_UNIT_TEST(DataType_Int8) {
-        TestDataTypeConversion<i8, i8, arrow::Int8Array>(arrow::Type::INT8);
+        TestDataTypeConversion<i8, i8, arrow20::Int8Array>(arrow20::Type::INT8);
     }
 
     Y_UNIT_TEST(DataType_UInt8) {
-        TestDataTypeConversion<ui8, ui8, arrow::UInt8Array>(arrow::Type::UINT8);
+        TestDataTypeConversion<ui8, ui8, arrow20::UInt8Array>(arrow20::Type::UINT8);
     }
 
     Y_UNIT_TEST(DataType_Int16) {
-        TestDataTypeConversion<i16, i16, arrow::Int16Array>(arrow::Type::INT16);
+        TestDataTypeConversion<i16, i16, arrow20::Int16Array>(arrow20::Type::INT16);
     }
 
     Y_UNIT_TEST(DataType_UInt16) {
-        TestDataTypeConversion<ui16, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+        TestDataTypeConversion<ui16, ui16, arrow20::UInt16Array>(arrow20::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_Int32) {
-        TestDataTypeConversion<i32, i32, arrow::Int32Array>(arrow::Type::INT32);
+        TestDataTypeConversion<i32, i32, arrow20::Int32Array>(arrow20::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_UInt32) {
-        TestDataTypeConversion<ui32, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+        TestDataTypeConversion<ui32, ui32, arrow20::UInt32Array>(arrow20::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_Int64) {
-        TestDataTypeConversion<i64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<i64, i64, arrow20::Int64Array>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_UInt64) {
-        TestDataTypeConversion<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+        TestDataTypeConversion<ui64, ui64, arrow20::UInt64Array>(arrow20::Type::UINT64);
     }
 
     // Binary number types
@@ -1563,94 +1563,94 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
     }
 
     Y_UNIT_TEST(DataType_DyNumber) {
-        TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow20::StringArray, /* IsStringType */ true>(arrow20::Type::STRING);
     }
 
     // Floating point types
     Y_UNIT_TEST(DataType_Float) {
-        TestDataTypeConversion<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
+        TestDataTypeConversion<float, float, arrow20::FloatArray>(arrow20::Type::FLOAT);
     }
 
     Y_UNIT_TEST(DataType_Double) {
-        TestDataTypeConversion<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
+        TestDataTypeConversion<double, double, arrow20::DoubleArray>(arrow20::Type::DOUBLE);
     }
 
     // Datetime types
     Y_UNIT_TEST(DataType_Date) {
-        TestDataTypeConversion<NUdf::TDate, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+        TestDataTypeConversion<NUdf::TDate, ui16, arrow20::UInt16Array>(arrow20::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_Datetime) {
-        TestDataTypeConversion<NUdf::TDatetime, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+        TestDataTypeConversion<NUdf::TDatetime, ui32, arrow20::UInt32Array>(arrow20::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_Timestamp) {
-        TestDataTypeConversion<NUdf::TTimestamp, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+        TestDataTypeConversion<NUdf::TTimestamp, ui64, arrow20::UInt64Array>(arrow20::Type::UINT64);
     }
 
     Y_UNIT_TEST(DataType_Interval) {
-        TestDataTypeConversion<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TInterval, i64, arrow20::Int64Array>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate) {
-        TestDataTypeConversion<NUdf::TTzDate, ui16, arrow::UInt16Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT16);
+        TestDataTypeConversion<NUdf::TTzDate, ui16, arrow20::UInt16Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::UINT16);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime) {
-        TestDataTypeConversion<NUdf::TTzDatetime, ui32, arrow::UInt32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT32);
+        TestDataTypeConversion<NUdf::TTzDatetime, ui32, arrow20::UInt32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::UINT32);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp) {
-        TestDataTypeConversion<NUdf::TTzTimestamp, ui64, arrow::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT64);
+        TestDataTypeConversion<NUdf::TTzTimestamp, ui64, arrow20::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::UINT64);
     }
 
     Y_UNIT_TEST(DataType_Date32) {
-        TestDataTypeConversion<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
+        TestDataTypeConversion<NUdf::TDate32, i32, arrow20::Int32Array>(arrow20::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_Datetime64) {
-        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow20::Int64Array>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_Timestamp64) {
-        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow20::Int64Array>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_Interval64) {
-        TestDataTypeConversion<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TInterval64, i64, arrow20::Int64Array>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzDate32) {
-        TestDataTypeConversion<NUdf::TTzDate32, i32, arrow::Int32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT32);
+        TestDataTypeConversion<NUdf::TTzDate32, i32, arrow20::Int32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::INT32);
     }
 
     Y_UNIT_TEST(DataType_TzDatetime64) {
-        TestDataTypeConversion<NUdf::TTzDatetime64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTzDatetime64, i64, arrow20::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::INT64);
     }
 
     Y_UNIT_TEST(DataType_TzTimestamp64) {
-        TestDataTypeConversion<NUdf::TTzTimestamp64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+        TestDataTypeConversion<NUdf::TTzTimestamp64, i64, arrow20::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow20::Type::INT64);
     }
 
     // String types
     Y_UNIT_TEST(DataType_String) {
-        TestDataTypeConversion<char*, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+        TestDataTypeConversion<char*, std::string, arrow20::BinaryArray, /* IsStringType */ true>(arrow20::Type::BINARY);
     }
 
     Y_UNIT_TEST(DataType_Utf8) {
-        TestDataTypeConversion<NUdf::TUtf8, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TUtf8, std::string, arrow20::StringArray, /* IsStringType */ true>(arrow20::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_Yson) {
-        TestDataTypeConversion<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+        TestDataTypeConversion<NUdf::TYson, std::string, arrow20::BinaryArray, /* IsStringType */ true>(arrow20::Type::BINARY);
     }
 
     Y_UNIT_TEST(DataType_Json) {
-        TestDataTypeConversion<NUdf::TJson, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TJson, std::string, arrow20::StringArray, /* IsStringType */ true>(arrow20::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_JsonDocument) {
-        TestDataTypeConversion<NUdf::TJsonDocument, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TJsonDocument, std::string, arrow20::StringArray, /* IsStringType */ true>(arrow20::Type::STRING);
     }
 
     Y_UNIT_TEST(DataType_Uuid) {
@@ -1687,10 +1687,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, listType, context.HolderFactory);
@@ -1710,16 +1710,16 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::UINT8);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT8);
 
             auto arrowValue = ExtractUnboxedValue(array, i, listType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], listType);
@@ -1738,10 +1738,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, listType, context.HolderFactory);
@@ -1760,23 +1760,23 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, listType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
 
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-            auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+            auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(structArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 4);
-            UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
-            UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
-            UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
-            UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::UINT8);
+            UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT16);
+            UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::UINT16);
+            UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::INT32);
 
             auto arrowValue = ExtractUnboxedValue(array, i, listType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], listType);
@@ -1795,10 +1795,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, listType, context.HolderFactory);
@@ -1818,13 +1818,13 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT8);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT8);
 
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(structArray->field(0)->length()), values.size());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(structArray->field(1)->length()), values.size());
@@ -1848,12 +1848,12 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::LIST);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::LIST);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, tupleType, context.HolderFactory);
@@ -1873,21 +1873,21 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRUCT);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::STRUCT);
 
-        auto secondStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(1));
+        auto secondStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(1));
         UNIT_ASSERT_VALUES_EQUAL(secondStructArray->num_fields(), 1);
-        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::NA);
+        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow20::Type::NA);
 
-        auto thirdStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(2));
+        auto thirdStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(2));
         UNIT_ASSERT_VALUES_EQUAL(thirdStructArray->num_fields(), 1);
-        UNIT_ASSERT(thirdStructArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(thirdStructArray->field(0)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, tupleType, context.HolderFactory);
@@ -1907,12 +1907,12 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, tupleType, context.HolderFactory);
@@ -1932,8 +1932,8 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
 
         UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC") == structArray->field(0));
@@ -1942,11 +1942,11 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL") == structArray->field(3));
         UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO") == structArray->field(4));
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
-        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow20::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow20::Type::STRING);
 
         for (int i = 0; i < structArray->num_fields(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(structArray->field(i)->length(), values.size());
@@ -1970,24 +1970,24 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
         UNIT_ASSERT(structArray->GetFieldByName("56") && structArray->GetFieldByName("56") == structArray->field(0));
         UNIT_ASSERT(structArray->GetFieldByName("78") && structArray->GetFieldByName("78") == structArray->field(1));
         UNIT_ASSERT(structArray->GetFieldByName("910") && structArray->GetFieldByName("910") == structArray->field(2));
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::LIST);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRUCT);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::LIST);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::INT32);
 
-        auto innerStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(1));
+        auto innerStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(1));
         UNIT_ASSERT_VALUES_EQUAL(innerStructArray->num_fields(), 2);
         UNIT_ASSERT(innerStructArray->GetFieldByName("12") && innerStructArray->GetFieldByName("12") == innerStructArray->field(0));
         UNIT_ASSERT(innerStructArray->GetFieldByName("34") && innerStructArray->GetFieldByName("34") == innerStructArray->field(1));
-        UNIT_ASSERT(innerStructArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(innerStructArray->field(1)->type_id() == arrow::Type::INT8);
+        UNIT_ASSERT(innerStructArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(innerStructArray->field(1)->type_id() == arrow20::Type::INT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);
@@ -2007,8 +2007,8 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 4);
 
         UNIT_ASSERT(structArray->GetFieldByName("opt1") && structArray->GetFieldByName("opt1") == structArray->field(0));
@@ -2016,18 +2016,18 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT(structArray->GetFieldByName("opt3") && structArray->GetFieldByName("opt3") == structArray->field(2));
         UNIT_ASSERT(structArray->GetFieldByName("optless") && structArray->GetFieldByName("optless") == structArray->field(3));
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRUCT);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::STRUCT);
-        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow20::Type::UINT64);
 
-        auto optNullStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(1));
+        auto optNullStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(1));
         UNIT_ASSERT_VALUES_EQUAL(optNullStructArray->num_fields(), 1);
-        UNIT_ASSERT(optNullStructArray->field(0)->type_id() == arrow::Type::NA);
+        UNIT_ASSERT(optNullStructArray->field(0)->type_id() == arrow20::Type::NA);
 
-        auto optOptStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(2));
+        auto optOptStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(2));
         UNIT_ASSERT_VALUES_EQUAL(optOptStructArray->num_fields(), 1);
-        UNIT_ASSERT(optOptStructArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(optOptStructArray->field(0)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);
@@ -2047,17 +2047,17 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
         UNIT_ASSERT(structArray->GetFieldByName("1") && structArray->GetFieldByName("1") == structArray->field(0));
         UNIT_ASSERT(structArray->GetFieldByName("2") && structArray->GetFieldByName("2") == structArray->field(1));
         UNIT_ASSERT(structArray->GetFieldByName("3") && structArray->GetFieldByName("3") == structArray->field(2));
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, structType, context.HolderFactory);
@@ -2077,16 +2077,16 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DOUBLE);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DOUBLE);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
             auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
@@ -2105,22 +2105,22 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRUCT);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::STRUCT);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
-            auto keyStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(0));
+            auto keyStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(keyStructArray->num_fields(), 2);
 
-            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow::Type::UINT8);
-            UNIT_ASSERT(keyStructArray->field(1)->type_id() == arrow::Type::INT8);
+            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow20::Type::UINT8);
+            UNIT_ASSERT(keyStructArray->field(1)->type_id() == arrow20::Type::INT8);
 
             auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
@@ -2139,20 +2139,20 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRUCT);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::STRUCT);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
-            auto keyStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(0));
+            auto keyStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(keyStructArray->num_fields(), 1);
-            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow20::Type::INT32);
 
             auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
@@ -2171,16 +2171,16 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
             auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
@@ -2199,29 +2199,29 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(listArray->num_fields(), 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
-            auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(i));
+            auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(i));
             UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-            UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRUCT);
-            UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+            UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::STRUCT);
+            UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
-            auto keyStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(0));
+            auto keyStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(keyStructArray->num_fields(), 1);
-            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+            UNIT_ASSERT(keyStructArray->field(0)->type_id() == arrow20::Type::STRUCT);
 
-            auto keyInnerStructArray = static_pointer_cast<arrow::StructArray>(keyStructArray->field(0));
+            auto keyInnerStructArray = static_pointer_cast<arrow20::StructArray>(keyStructArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(keyInnerStructArray->num_fields(), 1);
-            UNIT_ASSERT(keyInnerStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+            UNIT_ASSERT(keyInnerStructArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-            auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(keyInnerStructArray->field(0));
+            auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(keyInnerStructArray->field(0));
             UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 2);
-            UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::INT32);
-            UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::UINT8);
+            UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::INT32);
+            UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::UINT8);
 
             auto arrowValue = ExtractUnboxedValue(array, i, dictType, context.HolderFactory);
             AssertUnboxedValuesAreEqual(arrowValue, values[i], dictType);
@@ -2239,7 +2239,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, optionalType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2259,10 +2259,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::NA);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::NA);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2282,8 +2282,8 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
 
         UNIT_ASSERT(structArray->GetFieldByName("ABC") && structArray->GetFieldByName("ABC") == structArray->field(0));
@@ -2292,11 +2292,11 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT(structArray->GetFieldByName("JKL") && structArray->GetFieldByName("JKL") == structArray->field(3));
         UNIT_ASSERT(structArray->GetFieldByName("MNO") && structArray->GetFieldByName("MNO") == structArray->field(4));
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
-        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow20::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow20::Type::STRING);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2316,13 +2316,13 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
 
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT8);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2342,9 +2342,9 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2364,14 +2364,14 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(listArray->value_slice(0));
+        auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->value_slice(0));
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 2);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DOUBLE);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DOUBLE);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2390,18 +2390,18 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, variantType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(structArray->field(0));
         UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FLOAT);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, variantType, context.HolderFactory);
@@ -2420,7 +2420,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, optionalType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2439,11 +2439,11 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, optionalType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::STRING);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2463,10 +2463,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2486,21 +2486,21 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::STRUCT);
 
-        auto innerStructArray = static_pointer_cast<arrow::StructArray>(structArray->field(0));
+        auto innerStructArray = static_pointer_cast<arrow20::StructArray>(structArray->field(0));
         UNIT_ASSERT_VALUES_EQUAL(innerStructArray->num_fields(), 1);
-        UNIT_ASSERT(innerStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(innerStructArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(innerStructArray->field(0));
+        auto innerUnionArray = static_pointer_cast<arrow20::DenseUnionArray>(innerStructArray->field(0));
         UNIT_ASSERT_VALUES_EQUAL(innerUnionArray->num_fields(), 4);
-        UNIT_ASSERT(innerUnionArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(innerUnionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(innerUnionArray->field(2)->type_id() == arrow::Type::FLOAT);
-        UNIT_ASSERT(innerUnionArray->field(3)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(innerUnionArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(innerUnionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(innerUnionArray->field(2)->type_id() == arrow20::Type::FLOAT);
+        UNIT_ASSERT(innerUnionArray->field(3)->type_id() == arrow20::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, optionalType, context.HolderFactory);
@@ -2519,14 +2519,14 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, variantType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FLOAT);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, variantType, context.HolderFactory);
@@ -2545,14 +2545,14 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, variantType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, variantType, context.HolderFactory);
@@ -2571,14 +2571,14 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, variantType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), ((VARIANT_NESTED_SIZE - 1) / MAX_VARIANT_FLATTEN_SIZE) + 1);
 
         for (ui32 i = 0; i < static_cast<ui32>(unionArray->num_fields()); ++i) {
-            UNIT_ASSERT(unionArray->field(i)->type_id() == arrow::Type::DENSE_UNION);
-            auto innerUnionArray = static_pointer_cast<arrow::DenseUnionArray>(unionArray->field(i));
+            UNIT_ASSERT(unionArray->field(i)->type_id() == arrow20::Type::DENSE_UNION);
+            auto innerUnionArray = static_pointer_cast<arrow20::DenseUnionArray>(unionArray->field(i));
 
             auto remainingSize = static_cast<const TVariantType*>(variantType)->GetAlternativesCount() - i * MAX_VARIANT_FLATTEN_SIZE;
             UNIT_ASSERT_VALUES_EQUAL(innerUnionArray->num_fields(), std::min(MAX_VARIANT_FLATTEN_SIZE, remainingSize));
@@ -2586,11 +2586,11 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
             for (ui32 j = 0; j < static_cast<ui32>(innerUnionArray->num_fields()); ++j) {
                 auto idx = j + i * MAX_VARIANT_FLATTEN_SIZE;
                 if (idx % 3 == 0) {
-                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow::Type::INT32);
+                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow20::Type::INT32);
                 } else if (idx % 3 == 1) {
-                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow::Type::INT64);
+                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow20::Type::INT64);
                 } else {
-                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow::Type::UINT32);
+                    UNIT_ASSERT(innerUnionArray->field(j)->type_id() == arrow20::Type::UINT32);
                 }
             }
         }
@@ -2626,67 +2626,67 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, variantType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(unionArray->num_fields(), 10);
 
         // Field 0: Data (i32)
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::INT32);
 
         // Field 1: Optional<i32>
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT32);
 
         // Field 2: Optional<Optional<i32>>
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::STRUCT);
-        auto optOptStructArray = static_pointer_cast<arrow::StructArray>(unionArray->field(2));
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::STRUCT);
+        auto optOptStructArray = static_pointer_cast<arrow20::StructArray>(unionArray->field(2));
         UNIT_ASSERT_VALUES_EQUAL(optOptStructArray->num_fields(), 1);
-        UNIT_ASSERT(optOptStructArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(optOptStructArray->field(0)->type_id() == arrow20::Type::INT32);
 
         // Field 3: Void
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::STRUCT);
-        auto voidStructArray = static_pointer_cast<arrow::StructArray>(unionArray->field(3));
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::STRUCT);
+        auto voidStructArray = static_pointer_cast<arrow20::StructArray>(unionArray->field(3));
         UNIT_ASSERT_VALUES_EQUAL(voidStructArray->num_fields(), 0);
 
         // Field 4: Struct
-        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(unionArray->field(4));
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(unionArray->field(4));
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
-        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow20::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow20::Type::STRING);
 
         // Field 5: Tuple
-        UNIT_ASSERT(unionArray->field(5)->type_id() == arrow::Type::STRUCT);
-        auto tupleArray = static_pointer_cast<arrow::StructArray>(unionArray->field(5));
+        UNIT_ASSERT(unionArray->field(5)->type_id() == arrow20::Type::STRUCT);
+        auto tupleArray = static_pointer_cast<arrow20::StructArray>(unionArray->field(5));
         UNIT_ASSERT_VALUES_EQUAL(tupleArray->num_fields(), 3);
-        UNIT_ASSERT(tupleArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(tupleArray->field(1)->type_id() == arrow::Type::INT8);
-        UNIT_ASSERT(tupleArray->field(2)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(tupleArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(tupleArray->field(1)->type_id() == arrow20::Type::INT8);
+        UNIT_ASSERT(tupleArray->field(2)->type_id() == arrow20::Type::UINT8);
 
         // Field 6: List<i32>
-        UNIT_ASSERT(unionArray->field(6)->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(unionArray->field(6));
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(6)->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(unionArray->field(6));
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         // Field 7: Dict<double, i32>
-        UNIT_ASSERT(unionArray->field(7)->type_id() == arrow::Type::LIST);
-        auto dictListArray = static_pointer_cast<arrow::ListArray>(unionArray->field(7));
-        UNIT_ASSERT(dictListArray->value_type()->id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(unionArray->field(7)->type_id() == arrow20::Type::LIST);
+        auto dictListArray = static_pointer_cast<arrow20::ListArray>(unionArray->field(7));
+        UNIT_ASSERT(dictListArray->value_type()->id() == arrow20::Type::STRUCT);
 
         // Field 8: Variant<bool, i16, ui16, i32>
-        UNIT_ASSERT(unionArray->field(8)->type_id() == arrow::Type::DENSE_UNION);
-        auto nestedUnionArray = static_pointer_cast<arrow::DenseUnionArray>(unionArray->field(8));
+        UNIT_ASSERT(unionArray->field(8)->type_id() == arrow20::Type::DENSE_UNION);
+        auto nestedUnionArray = static_pointer_cast<arrow20::DenseUnionArray>(unionArray->field(8));
         UNIT_ASSERT_VALUES_EQUAL(nestedUnionArray->num_fields(), 4);
-        UNIT_ASSERT(nestedUnionArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(nestedUnionArray->field(1)->type_id() == arrow::Type::INT16);
-        UNIT_ASSERT(nestedUnionArray->field(2)->type_id() == arrow::Type::UINT16);
-        UNIT_ASSERT(nestedUnionArray->field(3)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(nestedUnionArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(nestedUnionArray->field(1)->type_id() == arrow20::Type::INT16);
+        UNIT_ASSERT(nestedUnionArray->field(2)->type_id() == arrow20::Type::UINT16);
+        UNIT_ASSERT(nestedUnionArray->field(3)->type_id() == arrow20::Type::INT32);
 
         // Field 9: Tagged<i32>
-        UNIT_ASSERT(unionArray->field(9)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(unionArray->field(9)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, variantType, context.HolderFactory);
@@ -2705,7 +2705,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2724,15 +2724,15 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 5);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
-        UNIT_ASSERT(structArray->field(3)->type_id() == arrow::Type::INT64);
-        UNIT_ASSERT(structArray->field(4)->type_id() == arrow::Type::STRING);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
+        UNIT_ASSERT(structArray->field(3)->type_id() == arrow20::Type::INT64);
+        UNIT_ASSERT(structArray->field(4)->type_id() == arrow20::Type::STRING);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2751,13 +2751,13 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 3);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT8);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT8);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2776,10 +2776,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
 
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2798,10 +2798,10 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
 
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRUCT);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRUCT);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2820,7 +2820,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2839,11 +2839,11 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(structArray->num_fields(), 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2862,7 +2862,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2881,7 +2881,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);
@@ -2900,7 +2900,7 @@ Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
         auto array = MakeArrowArray(values, taggedType);
         UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
         UNIT_ASSERT_VALUES_EQUAL(array->length(), values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::INT32);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::INT32);
 
         for (size_t i = 0; i < values.size(); ++i) {
             auto arrowValue = ExtractUnboxedValue(array, i, taggedType, context.HolderFactory);

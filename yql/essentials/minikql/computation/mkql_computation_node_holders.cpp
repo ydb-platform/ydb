@@ -3120,7 +3120,7 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::
     return res;
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) const {
+NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow20::Datum&& datum) const {
     return Create<TArrowBlock>(std::move(datum));
 }
 

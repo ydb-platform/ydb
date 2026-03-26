@@ -1496,17 +1496,17 @@ TString TCreateTableFormatter::ValueToString(const NKikimrColumnShardColumnDefau
         stream << TString(str.AsStringRef());
     } else if (scalar.HasTimestamp()) {
         ui64 value = scalar.GetTimestamp().GetValue();
-        arrow::TimeUnit::type unit = arrow::TimeUnit::type(scalar.GetTimestamp().GetUnit());
+        arrow20::TimeUnit::type unit = arrow20::TimeUnit::type(scalar.GetTimestamp().GetUnit());
         switch (unit) {
-            case arrow::TimeUnit::SECOND:
+            case arrow20::TimeUnit::SECOND:
                 value *= 1000000;
                 break;
-            case arrow::TimeUnit::MILLI:
+            case arrow20::TimeUnit::MILLI:
                 value *= 1000;
                 break;
-            case arrow::TimeUnit::MICRO:
+            case arrow20::TimeUnit::MICRO:
                 break;
-            case arrow::TimeUnit::NANO:
+            case arrow20::TimeUnit::NANO:
                 value /= 1000;
                 break;
         }

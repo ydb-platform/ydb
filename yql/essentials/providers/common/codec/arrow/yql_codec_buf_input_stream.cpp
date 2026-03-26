@@ -8,7 +8,7 @@
 
 namespace NYql::NCommon {
 
-arrow::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void* outBuffer) {
+arrow20::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void* outBuffer) {
     auto outBufferPtr = static_cast<char*>(outBuffer);
 
     YQL_ENSURE(bytesToRead > 0);
@@ -22,7 +22,7 @@ arrow::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void
     return bytesToRead;
 }
 
-arrow::Result<std::shared_ptr<arrow::Buffer>> TInputBufArrowInputStream::Read(int64_t nbytes) {
+arrow20::Result<std::shared_ptr<arrow20::Buffer>> TInputBufArrowInputStream::Read(int64_t nbytes) {
     auto outBuffer = ARROW_RESULT(AllocateResizableBuffer(nbytes, Pool_));
     auto bytesRead = ARROW_RESULT(Read(nbytes, outBuffer->mutable_data()));
     if (bytesRead == 0) {

@@ -30,7 +30,7 @@ public:
     }
 };
 
-class TStringType : public arrow::StringType {
+class TStringType : public arrow20::StringType {
 public:
     using c_type = TString;
 };
@@ -44,7 +44,7 @@ private:
     std::vector<CType> Data;
 
 public:
-    using TValue = std::conditional_t<std::is_same_v<TArrowType, TStringType>, arrow::StringType, TArrowType>;
+    using TValue = std::conditional_t<std::is_same_v<TArrowType, TStringType>, arrow20::StringType, TArrowType>;
     using ValueType = std::conditional_t<std::is_same_v<TArrowType, TStringType>, std::string_view, CType>;
 
     static CType GetRandomNumberNotEqDef(CType defaultValue) {
@@ -112,7 +112,7 @@ private:
     std::vector<TString> Data;
 
 public:
-    using TValue = arrow::StringType;
+    using TValue = arrow20::StringType;
     std::string_view GetValue(const ui32 idx) const;
 
     TStringPoolFiller(const ui32 poolSize, const ui32 strLen, const TString& defaultValue = "", const double defaultValueFrq = 0);
@@ -121,7 +121,7 @@ public:
 template <class TValueExt>
 class TLinearArrayAccessor {
 private:
-    using TArray = typename arrow::TypeTraits<TValueExt>::ArrayType;
+    using TArray = typename arrow20::TypeTraits<TValueExt>::ArrayType;
     const TArray& Data;
 
 public:
@@ -130,7 +130,7 @@ public:
         return Data.Value(idx);
     }
 
-    TLinearArrayAccessor(const arrow::Array& data)
+    TLinearArrayAccessor(const arrow20::Array& data)
         : Data(static_cast<const TArray&>(data)) {
     }
 };
@@ -138,7 +138,7 @@ public:
 template <class TValueExt>
 class TBinaryArrayAccessor {
 private:
-    using TArray = typename arrow::TypeTraits<TValueExt>::ArrayType;
+    using TArray = typename arrow20::TypeTraits<TValueExt>::ArrayType;
     const TArray& Data;
 
 public:
@@ -147,7 +147,7 @@ public:
         return Data.GetView(idx).data();
     }
 
-    TBinaryArrayAccessor(const arrow::Array& data)
+    TBinaryArrayAccessor(const arrow20::Array& data)
         : Data(static_cast<const TArray&>(data)) {
     }
 };
@@ -155,7 +155,7 @@ public:
 template <class TDictionaryValue, class TIndices>
 class TDictionaryArrayAccessor {
 private:
-    using TDictionary = typename arrow::TypeTraits<TDictionaryValue>::ArrayType;
+    using TDictionary = typename arrow20::TypeTraits<TDictionaryValue>::ArrayType;
     const TDictionary& Dictionary;
     const TIndices& Indices;
 
@@ -174,7 +174,7 @@ public:
 template <class TDictionaryValue, class TIndices>
 class TBinaryDictionaryArrayAccessor {
 private:
-    using TDictionary = typename arrow::TypeTraits<TDictionaryValue>::ArrayType;
+    using TDictionary = typename arrow20::TypeTraits<TDictionaryValue>::ArrayType;
     const TDictionary& Dictionary;
     const TIndices& Indices;
     std::vector<TString> DictionaryStrings;

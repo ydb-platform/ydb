@@ -79,7 +79,7 @@ public:
         return it->second;
     }
 
-    explicit TPortionSplitInfo(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& remapper)
+    explicit TPortionSplitInfo(const ui32 recordsCount, const std::shared_ptr<arrow20::RecordBatch>& remapper)
         : RecordsCount(recordsCount)
         , MergingContext(remapper) {
     }
@@ -117,7 +117,7 @@ private:
         RecordsCount
     };
 
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Remapper);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, Remapper);
     YDB_READONLY_DEF(std::vector<TPortionSplitInfo>, Portions);
     const std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
     const std::shared_ptr<TFilteredSnapshotSchema> ResultFiltered;
@@ -155,7 +155,7 @@ public:
         return result;
     }
 
-    TSplittedBatch(std::shared_ptr<arrow::RecordBatch>&& remapper, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
+    TSplittedBatch(std::shared_ptr<arrow20::RecordBatch>&& remapper, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
         const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const NSplitter::TSplitSettings& settings)
         : Remapper(std::move(remapper))
         , Stats(stats)
@@ -218,7 +218,7 @@ public:
         , ResultFiltered(resultFiltered) {
     }
 
-    void FillRemapping(std::vector<std::shared_ptr<arrow::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {
+    void FillRemapping(std::vector<std::shared_ptr<arrow20::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {
         AFL_VERIFY(SplittedBatches.empty());
         for (auto&& i : remapping) {
             SplittedBatches.emplace_back(std::move(i), Stats, ResultFiltered, settings);
@@ -232,14 +232,14 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     AFL_VERIFY(Batches.size() == Filters.size());
     TSplitTopology splitInfo(stats, resultFiltered);
     {
-        arrow::FieldVector indexFields;
+        arrow20::FieldVector indexFields;
         indexFields.emplace_back(IColumnMerger::PortionIdField);
         indexFields.emplace_back(IColumnMerger::PortionRecordIndexField);
         if (resultFiltered->HasColumnId((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
             IIndexInfo::AddDeleteFields(indexFields);
         }
         IIndexInfo::AddSnapshotFields(indexFields);
-        auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
+        auto dataSchema = std::make_shared<arrow20::Schema>(indexFields);
         NArrow::NMerger::TMergePartialStream mergeStream(
             resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
 
@@ -247,13 +247,13 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         for (auto&& batch : Batches) {
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
-                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow::UInt16Type>>>(
+                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntConstFiller<arrow20::UInt16Type>>>(
                         IColumnMerger::PortionIdFieldName, idx);
                 batch->AddField(IColumnMerger::PortionIdField, column->BuildArray(batch->num_rows())).Validate();
             }
             {
                 NArrow::NConstruction::IArrayBuilder::TPtr column =
-                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt32Type>>>(
+                    std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::UInt32Type>>>(
                         IColumnMerger::PortionRecordIndexFieldName);
                 batch->AddField(IColumnMerger::PortionRecordIndexField, column->BuildArray(batch->num_rows())).Validate();
             }
@@ -302,9 +302,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             columnId, resultFiltered, NSplitter::TSplitSettings().GetExpectedUnpackColumnChunkRawSize(), columnInfo);
         if (OptimizationWritingPackMode) {
             commonContext.MutableSaver().AddSerializerWithBorder(
-                100, std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::UNCOMPRESSED));
+                100, std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow20::Compression::type::UNCOMPRESSED));
             commonContext.MutableSaver().AddSerializerWithBorder(
-                Max<ui32>(), std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::type::LZ4_FRAME));
+                Max<ui32>(), std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow20::Compression::type::LZ4_FRAME));
         }
 
         THolder<IColumnMerger> merger =

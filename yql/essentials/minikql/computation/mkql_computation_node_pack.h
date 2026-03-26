@@ -83,22 +83,22 @@ public:
 
     explicit TValuePackerTransport(const TType* type, EValuePackerVersion valuePackerVersion,
                                    TMaybe<size_t> bufferPageAllocSize = Nothing(),
-                                   arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+                                   arrow20::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // Deprecated: For YDB sync only.
     explicit TValuePackerTransport(const TType* type,
                                    TMaybe<size_t> bufferPageAllocSize = Nothing(),
-                                   arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+                                   arrow20::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // for compatibility with TValuePackerGeneric - stable packing is not supported
     TValuePackerTransport(bool stable, const TType* type, EValuePackerVersion valuePackerVersion,
                           TMaybe<size_t> bufferPageAllocSize = Nothing(),
-                          arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+                          arrow20::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // Deprecated: For YDB sync only.
     TValuePackerTransport(bool stable, const TType* type,
                           TMaybe<size_t> bufferPageAllocSize = Nothing(),
-                          arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+                          arrow20::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
@@ -141,14 +141,14 @@ private:
     mutable NDetails::TPackerState State_;
     mutable NDetails::TPackerState IncrementalState_;
 
-    arrow::MemoryPool& ArrowPool_;
+    arrow20::MemoryPool& ArrowPool_;
     bool IsBlock_ = false;
     bool IsLegacyBlock_ = false;
     ui32 BlockLenIndex_ = 0;
     EValuePackerVersion ValuePackerVersion_;
     TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
     TVector<std::unique_ptr<IBlockReader>> BlockReaders_;
-    TVector<std::shared_ptr<arrow::ArrayData>> ConvertedScalars_;
+    TVector<std::shared_ptr<arrow20::ArrayData>> ConvertedScalars_;
     NYql::TChunkedBuffer BlockBuffer_;
 
     TVector<std::unique_ptr<IBlockDeserializer>> BlockDeserializers_;

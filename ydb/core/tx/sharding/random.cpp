@@ -2,7 +2,7 @@
 
 namespace NKikimr::NSharding {
 
-THashMap<ui64, std::vector<ui32>> TRandomSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> TRandomSharding::MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     std::vector<ui64> activeShardIds;
     for (auto&& i : GetOrderedShardIds()) {
         if (IsActiveForWrite(i)) {

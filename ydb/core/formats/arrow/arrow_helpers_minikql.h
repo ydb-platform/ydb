@@ -11,7 +11,7 @@ class TType;
 
 namespace NKikimr::NArrow {
 
-arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns = {});
-arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns = {});
+arrow20::Result<arrow20::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns = {});
+arrow20::Result<std::shared_ptr<arrow20::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns = {});
 
 } // namespace NKikimr::NArrow

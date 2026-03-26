@@ -26,9 +26,9 @@ TConclusionStatus TSimpleColumnInfo::DeserializeFromProto(const NKikimrSchemeOp:
     return TConclusionStatus::Success();
 }
 
-TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField,
+TSimpleColumnInfo::TSimpleColumnInfo(const ui32 columnId, const std::shared_ptr<arrow20::Field>& arrowField,
     const NArrow::NSerialization::TSerializerContainer& serializer, const bool needMinMax, const bool isSorted, const bool isNullable,
-    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
+    const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
     : ColumnId(columnId)
     , PKColumnIndex(pkColumnIndex)
     , ArrowField(arrowField)

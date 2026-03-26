@@ -14,8 +14,8 @@
 namespace NKikimr::NKqp::NTestArrow {
 
 template <class ArrowType, class CppType>
-inline std::shared_ptr<arrow::Array> MakeArrayNullable(const std::vector<std::optional<CppType>>& values) {
-    using BuilderT = typename arrow::TypeTraits<ArrowType>::BuilderType;
+inline std::shared_ptr<arrow20::Array> MakeArrayNullable(const std::vector<std::optional<CppType>>& values) {
+    using BuilderT = typename arrow20::TypeTraits<ArrowType>::BuilderType;
     BuilderT builder;
     for (auto&& v : values) {
         if (v.has_value()) {
@@ -25,49 +25,49 @@ inline std::shared_ptr<arrow::Array> MakeArrayNullable(const std::vector<std::op
         }
     }
 
-    std::shared_ptr<arrow::Array> out;
+    std::shared_ptr<arrow20::Array> out;
     Y_ABORT_UNLESS(builder.Finish(&out).ok());
     return out;
 }
 
 template <class ArrowType, class CppType>
-inline std::shared_ptr<arrow::Array> MakeArray(const std::vector<CppType>& values) {
-    using BuilderT = typename arrow::TypeTraits<ArrowType>::BuilderType;
+inline std::shared_ptr<arrow20::Array> MakeArray(const std::vector<CppType>& values) {
+    using BuilderT = typename arrow20::TypeTraits<ArrowType>::BuilderType;
     BuilderT builder;
     for (auto&& v : values) {
         Y_ABORT_UNLESS(builder.Append(static_cast<CppType>(v)).ok());
     }
 
-    std::shared_ptr<arrow::Array> out;
+    std::shared_ptr<arrow20::Array> out;
     Y_ABORT_UNLESS(builder.Finish(&out).ok());
     return out;
 }
 
-inline std::shared_ptr<arrow::Array> MakeInt32Array(const std::vector<int32_t>& v) {
-    return MakeArray<arrow::Int32Type, int32_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeInt32Array(const std::vector<int32_t>& v) {
+    return MakeArray<arrow20::Int32Type, int32_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeInt64Array(const std::vector<int64_t>& v) {
-    return MakeArray<arrow::Int64Type, int64_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeInt64Array(const std::vector<int64_t>& v) {
+    return MakeArray<arrow20::Int64Type, int64_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeUInt8Array(const std::vector<uint8_t>& v) {
-    return MakeArray<arrow::UInt8Type, uint8_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeUInt8Array(const std::vector<uint8_t>& v) {
+    return MakeArray<arrow20::UInt8Type, uint8_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeInt32ArrayNullable(const std::vector<std::optional<int32_t>>& v) {
-    return MakeArrayNullable<arrow::Int32Type, int32_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeInt32ArrayNullable(const std::vector<std::optional<int32_t>>& v) {
+    return MakeArrayNullable<arrow20::Int32Type, int32_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeInt64ArrayNullable(const std::vector<std::optional<int64_t>>& v) {
-    return MakeArrayNullable<arrow::Int64Type, int64_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeInt64ArrayNullable(const std::vector<std::optional<int64_t>>& v) {
+    return MakeArrayNullable<arrow20::Int64Type, int64_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeUInt8ArrayNullable(const std::vector<std::optional<uint8_t>>& v) {
-    return MakeArrayNullable<arrow::UInt8Type, uint8_t>(v);
+inline std::shared_ptr<arrow20::Array> MakeUInt8ArrayNullable(const std::vector<std::optional<uint8_t>>& v) {
+    return MakeArrayNullable<arrow20::UInt8Type, uint8_t>(v);
 }
 
-inline std::shared_ptr<arrow::Array> MakeBoolArrayAsUInt8(const std::vector<bool>& v) {
+inline std::shared_ptr<arrow20::Array> MakeBoolArrayAsUInt8(const std::vector<bool>& v) {
     std::vector<uint8_t> u8;
     u8.reserve(v.size());
     for (auto&& b : v) {
@@ -77,7 +77,7 @@ inline std::shared_ptr<arrow::Array> MakeBoolArrayAsUInt8(const std::vector<bool
     return MakeUInt8Array(u8);
 }
 
-inline std::shared_ptr<arrow::Array> MakeBoolArrayAsUInt8Nullable(const std::vector<std::optional<bool>>& v) {
+inline std::shared_ptr<arrow20::Array> MakeBoolArrayAsUInt8Nullable(const std::vector<std::optional<bool>>& v) {
     std::vector<std::optional<uint8_t>> u8;
     u8.reserve(v.size());
     for (auto&& b : v) {
@@ -87,11 +87,11 @@ inline std::shared_ptr<arrow::Array> MakeBoolArrayAsUInt8Nullable(const std::vec
     return MakeUInt8ArrayNullable(u8);
 }
 
-inline std::shared_ptr<arrow::RecordBatch> MakeBatch(
-    const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns) {
-    auto schema = arrow::schema(fields);
+inline std::shared_ptr<arrow20::RecordBatch> MakeBatch(
+    const std::vector<std::shared_ptr<arrow20::Field>>& fields, const std::vector<std::shared_ptr<arrow20::Array>>& columns) {
+    auto schema = arrow20::schema(fields);
     const int64_t length = columns.empty() ? 0 : columns.front()->length();
-    return arrow::RecordBatch::Make(schema, length, columns);
+    return arrow20::RecordBatch::Make(schema, length, columns);
 }
 
 }   // namespace NKikimr::NKqp::NTestArrow

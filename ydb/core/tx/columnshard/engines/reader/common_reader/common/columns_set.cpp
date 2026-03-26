@@ -19,13 +19,13 @@ TColumnsSet TColumnsSet::operator-(const TColumnsSet& external) const {
     for (auto&& i : external.ColumnIds) {
         result.ColumnIds.erase(i);
     }
-    arrow::FieldVector fields;
+    arrow20::FieldVector fields;
     for (auto&& i : Schema->fields()) {
         if (!external.Schema->GetFieldByName(i->name())) {
             fields.emplace_back(i);
         }
     }
-    result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Schema = std::make_shared<arrow20::Schema>(fields);
     result.Rebuild();
     return result;
 }
@@ -45,7 +45,7 @@ TColumnsSet TColumnsSet::operator+(const TColumnsSet& external) const {
             fields.emplace_back(i);
         }
     }
-    result.Schema = std::make_shared<arrow::Schema>(fields);
+    result.Schema = std::make_shared<arrow20::Schema>(fields);
     result.Rebuild();
     return result;
 }

@@ -9,7 +9,7 @@
 
 namespace NKikimr::NMiniKQL {
 
-void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode);
+void ValidateDatum(arrow20::Datum datum, TMaybe<arrow20::ValueDescr> expectedDescription, const TType* type, NYql::NUdf::EValidateDatumMode validateMode);
 
 } // namespace NKikimr::NMiniKQL
 

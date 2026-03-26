@@ -25,8 +25,8 @@ public:
         YQL_ENSURE(ArrayBuilder.Reserve(rowsCount).ok());
     }
 
-    std::shared_ptr<arrow::Array> BuildColumn() {
-        std::shared_ptr<arrow::StringArray> result;
+    std::shared_ptr<arrow20::Array> BuildColumn() {
+        std::shared_ptr<arrow20::StringArray> result;
         if (!ArrayBuilder.Finish(&result).ok()) {
             ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot build array for hash calculation";
             return nullptr;
@@ -35,9 +35,9 @@ public:
     }
 };
 
-class TStringArrayInserter: public TArrayInserter<arrow::StringBuilder> {
+class TStringArrayInserter: public TArrayInserter<arrow20::StringBuilder> {
 private:
-    using TBase = TArrayInserter<arrow::StringBuilder>;
+    using TBase = TArrayInserter<arrow20::StringBuilder>;
 public:
     using TBase::TBase;
     void OnFound(const TStringBuf& value) {
@@ -47,10 +47,10 @@ public:
 
 
 
-std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     auto schema = batch->schema();
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     std::vector<TString> fieldIds;
     for (ui32 i = 0; i < Fields.size(); ++i) {
         auto c = batch->GetColumnByName(Fields[i].GetFieldId());
@@ -63,11 +63,11 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
             fields.emplace_back(f);
             columns.emplace_back(c);
             fieldIds.emplace_back(f->name());
-        } else if (c->type()->id() == arrow::Type::STRING) {
+        } else if (c->type()->id() == arrow20::Type::STRING) {
             ALS_ERROR(NKikimrServices::EXT_INDEX) << "json have not been simple string. it must be JsonDocument for " << Fields[i].GetFieldId();
             return {};
-        } else if (c->type()->id() == arrow::Type::BINARY) {
-            auto typedColumn = std::static_pointer_cast<arrow::BinaryArray>(c);
+        } else if (c->type()->id() == arrow20::Type::BINARY) {
+            auto typedColumn = std::static_pointer_cast<arrow20::BinaryArray>(c);
 
             std::shared_ptr<TStringArrayInserter> fetcher = std::make_shared<TStringArrayInserter>(batch->num_rows());
             TVector<TString> values;
@@ -115,20 +115,20 @@ std::vector<ui64> THashByColumns::DoExtractIndex(const std::shared_ptr<arrow::Re
                 values.clear();
             }
             fieldIds.emplace_back(Fields[i].GetFullId());
-            fields.emplace_back(std::make_shared<arrow::Field>(Fields[i].GetFullId(), std::make_shared<arrow::StringType>()));
+            fields.emplace_back(std::make_shared<arrow20::Field>(Fields[i].GetFullId(), std::make_shared<arrow20::StringType>()));
             columns.emplace_back(fetcher->BuildColumn());
         } else {
             ALS_ERROR(NKikimrServices::EXT_INDEX) << "incorrect column type for json extraction: " << Fields[i].GetFieldId();
             return {};
         }
     }
-    auto sBuilder = std::make_shared<arrow::SchemaBuilder>(fields);
+    auto sBuilder = std::make_shared<arrow20::SchemaBuilder>(fields);
     auto newSchema = sBuilder->Finish();
     if (!newSchema.ok()) {
         ALS_ERROR(NKikimrServices::EXT_INDEX) << "cannot build new schema";
         return {};
     }
-    auto newBatch = arrow::RecordBatch::Make(*newSchema, batch->num_rows(), columns);
+    auto newBatch = arrow20::RecordBatch::Make(*newSchema, batch->num_rows(), columns);
     if (HashType == EHashType::XX64) {
         NArrow::NHash::TXX64 hash(fieldIds, NArrow::NHash::TXX64::ENoColumnPolicy::ReturnEmpty);
         auto result = hash.Execute(newBatch);

@@ -202,9 +202,9 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             .Result()
                 .AddResponse(
                     MakeRecordBatch(
-                        MakeArray<arrow::UInt64Builder, uint64_t>("id", {0, 1, 1, 2}, arrow::uint64()),
-                        MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 101, 103}, arrow::uint64()), // the last value is intentionally wrong
-                        MakeArray<arrow::StringBuilder, std::string>("string_value", {"a", "b", "ba", "c"}, arrow::utf8())
+                        MakeArray<arrow20::UInt64Builder, uint64_t>("id", {0, 1, 1, 2}, arrow20::uint64()),
+                        MakeArray<arrow20::UInt64Builder, uint64_t>("optional_id", {100, 101, 101, 103}, arrow20::uint64()), // the last value is intentionally wrong
+                        MakeArray<arrow20::StringBuilder, std::string>("string_value", {"a", "b", "ba", "c"}, arrow20::utf8())
                     ),
                     NewSuccess()
                 )
@@ -419,9 +419,9 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
                     .Result()
                         .AddResponse(
                             MakeRecordBatch(
-                                MakeArray<arrow::UInt64Builder, uint64_t>("id", {0, 1, 2}, arrow::uint64()),
-                                MakeArray<arrow::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow::uint64()), // the last value is intentionally wrong
-                                MakeArray<arrow::StringBuilder, std::string>("string_value", {"a", "b", "c"}, arrow::utf8())
+                                MakeArray<arrow20::UInt64Builder, uint64_t>("id", {0, 1, 2}, arrow20::uint64()),
+                                MakeArray<arrow20::UInt64Builder, uint64_t>("optional_id", {100, 101, 103}, arrow20::uint64()), // the last value is intentionally wrong
+                                MakeArray<arrow20::StringBuilder, std::string>("string_value", {"a", "b", "c"}, arrow20::utf8())
                             ),
                             NewSuccess()
                         )

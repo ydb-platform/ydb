@@ -12,7 +12,7 @@ namespace NYql {
 namespace NArrow {
 
 /**
- * @brief Convert TType to the arrow::DataType object
+ * @brief Convert TType to the arrow20::DataType object
  *
  * The logic of this conversion is from YQL-15332:
  *
@@ -55,7 +55,7 @@ namespace NArrow {
  *   DenseUnionArray does not have validity bitmap, so we wrap it in StructArray N times, where N is the number of Optional levels
  *
  * Dict<KeyType, ValueType> => StructArray<MapArray<KeyArray, ValueArray>, Uint64Array (on demand, default: 0)>
- * We do not use arrow::DictArray because it must be used for encoding not for mapping keys to values.
+ * We do not use arrow20::DictArray because it must be used for encoding not for mapping keys to values.
  * (https://arrow.apache.org/docs/cpp/api/array.html#classarrow_1_1_dictionary_array)
  * If the type of dict key is optional then we map
  * Dict<Optional<KeyType>, ValueType> => StructArray<ListArray<StructArray<KeyArray, ValueArray>, Uint64Array (on demand, default: 0)>
@@ -63,9 +63,9 @@ namespace NArrow {
  *
  *
  * @param type Yql type to parse
- * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as type
+ * @return std::shared_ptr<arrow20::DataType> arrow type of the same structure as type
  */
-std::shared_ptr<arrow::DataType> GetArrowType(const NKikimr::NMiniKQL::TType* type);
+std::shared_ptr<arrow20::DataType> GetArrowType(const NKikimr::NMiniKQL::TType* type);
 
 /**
  * @brief Check if type can be converted to arrow format using only native arrow classes.
@@ -77,27 +77,27 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NKikimr::NMiniKQL::TType* ty
  */
 bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type);
 
-std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NKikimr::NMiniKQL::TType* type);
+std::unique_ptr<arrow20::ArrayBuilder> MakeArrowBuilder(const NKikimr::NMiniKQL::TType* type);
 
 /**
  * @brief Convert UnboxedValue-s to arrow Array
  *
  * @param values elements of future array
  * @param itemType type of each element to parse it and to construct corresponding arrow type
- * @return std::shared_ptr<arrow::Array> data in arrow format
+ * @return std::shared_ptr<arrow20::Array> data in arrow format
  */
-std::shared_ptr<arrow::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values,
+std::shared_ptr<arrow20::Array> MakeArray(NKikimr::NMiniKQL::TUnboxedValueVector& values,
     const NKikimr::NMiniKQL::TType* itemType);
 
-NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array,
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow20::Array>& array,
     ui64 row, const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
-NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
+NKikimr::NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow20::Array>& array,
     const NKikimr::NMiniKQL::TType* itemType, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
-std::string SerializeArray(const std::shared_ptr<arrow::Array>& array);
+std::string SerializeArray(const std::shared_ptr<arrow20::Array>& array);
 
-std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::shared_ptr<arrow::DataType> type);
+std::shared_ptr<arrow20::Array> DeserializeArray(const std::string& blob, std::shared_ptr<arrow20::DataType> type);
 
 /**
  * @brief Append UnboxedValue to arrow Array via arrow Builder
@@ -105,9 +105,9 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
  * @param value unboxed value to append
  * @param builder arrow Builder with proper type used to append converted value array
  * @param type type of element to parse it and to construct corresponding arrow type
- * @return std::shared_ptr<arrow::Array> data in arrow format
+ * @return std::shared_ptr<arrow20::Array> data in arrow format
  */
-void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type);
+void AppendElement(NYql::NUdf::TUnboxedValue value, arrow20::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type);
 
 class IBlockSplitter : public TThrRefBase {
 public:
@@ -115,7 +115,7 @@ public:
 
     virtual bool ShouldSplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
 
-    virtual std::vector<std::vector<arrow::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
+    virtual std::vector<std::vector<arrow20::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
 };
 
 IBlockSplitter::TPtr CreateBlockSplitter(const NKikimr::NMiniKQL::TType* type, ui64 chunkSizeLimit);

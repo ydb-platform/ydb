@@ -44,14 +44,14 @@ namespace NYdb {
         parquet::WriterProperties::Builder builder;
         builder.compression(parquet::Compression::ZSTD);
         builder.disable_dictionary();
-        std::shared_ptr<arrow::io::OutputStream> outstream;
+        std::shared_ptr<arrow20::io::OutputStream> outstream;
         if (OutputPath.empty()) {
-            outstream = std::make_shared<arrow::io::StdoutStream>();
+            outstream = std::make_shared<arrow20::io::StdoutStream>();
         } else {
             if (auto parent = TFsPath(OutputPath.c_str()).Parent()) {
                 parent.MkDirs();
             }
-            outstream = *arrow::io::FileOutputStream::Open(OutputPath);
+            outstream = *arrow20::io::FileOutputStream::Open(OutputPath);
         }
         Stream = std::make_unique<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outstream, schema, builder.build()));
         Stream->SetMaxRowGroupSize(RowGroupSize);
@@ -181,22 +181,22 @@ namespace NYdb {
                     os << (std::int64_t)value.GetInterval();
                     break;
                 case EPrimitiveType::String:
-                    os << arrow::util::string_view(value.GetString().c_str(), value.GetString().length());
+                    os << arrow20::util::string_view(value.GetString().c_str(), value.GetString().length());
                     break;
                 case EPrimitiveType::Utf8:
-                    os << arrow::util::string_view(value.GetUtf8().c_str(), value.GetUtf8().length());
+                    os << arrow20::util::string_view(value.GetUtf8().c_str(), value.GetUtf8().length());
                     break;
                 case EPrimitiveType::Yson:
-                    os << arrow::util::string_view(value.GetYson().c_str(), value.GetYson().length());
+                    os << arrow20::util::string_view(value.GetYson().c_str(), value.GetYson().length());
                     break;
                 case EPrimitiveType::Json:
-                    os << arrow::util::string_view(value.GetJson().c_str(), value.GetJson().length());
+                    os << arrow20::util::string_view(value.GetJson().c_str(), value.GetJson().length());
                     break;
                 case EPrimitiveType::JsonDocument:
-                    os << arrow::util::string_view(value.GetJsonDocument().c_str(), value.GetJsonDocument().length());
+                    os << arrow20::util::string_view(value.GetJsonDocument().c_str(), value.GetJsonDocument().length());
                     break;
                 case EPrimitiveType::DyNumber:
-                    os << arrow::util::string_view(value.GetDyNumber().c_str(), value.GetDyNumber().length());
+                    os << arrow20::util::string_view(value.GetDyNumber().c_str(), value.GetDyNumber().length());
                     break;
                 default:
                     ythrow yexception() << "Cannot save type to parquet: " << value.GetPrimitiveType();

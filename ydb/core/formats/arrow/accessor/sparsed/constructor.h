@@ -15,7 +15,7 @@ public:
 
 private:
     static inline auto Registrator = TFactory::TRegistrator<TConstructor>(GetClassNameStatic());
-    std::shared_ptr<arrow::Schema> GetExpectedSchema(const std::shared_ptr<arrow::Field>& resultColumn) const;
+    std::shared_ptr<arrow20::Schema> GetExpectedSchema(const std::shared_ptr<arrow20::Field>& resultColumn) const;
 
     virtual TConclusion<std::shared_ptr<IChunkedArray>> DoConstruct(
         const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const override;

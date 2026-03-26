@@ -5,14 +5,14 @@
 
 namespace NKikimr::NArrow {
 
-arrow::Result<arrow::FieldVector> MakeArrowFields(
+arrow20::Result<arrow20::FieldVector> MakeArrowFields(
     const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     fields.reserve(yqlColumns.size());
     TVector<TString> errors;
     for (auto& [name, mkqlType] : yqlColumns) {
         std::string colName(name.data(), name.size());
-        std::shared_ptr<arrow::DataType> arrowType;
+        std::shared_ptr<arrow20::DataType> arrowType;
 
         try {
             arrowType = NKqp::NFormats::GetArrowType(mkqlType);
@@ -21,20 +21,20 @@ arrow::Result<arrow::FieldVector> MakeArrowFields(
         }
 
         if (arrowType) {
-            fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType, !notNullColumns.contains(colName)));
+            fields.emplace_back(std::make_shared<arrow20::Field>(colName, arrowType, !notNullColumns.contains(colName)));
         }
     }
     if (errors.empty()) {
         return fields;
     }
-    return arrow::Status::TypeError(JoinSeq(", ", errors));
+    return arrow20::Status::TypeError(JoinSeq(", ", errors));
 }
 
-arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(
+arrow20::Result<std::shared_ptr<arrow20::Schema>> MakeArrowSchema(
     const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& yqlColumns, const std::set<std::string>& notNullColumns) {
     const auto fields = MakeArrowFields(yqlColumns, notNullColumns);
     if (fields.ok()) {
-        return std::make_shared<arrow::Schema>(fields.ValueUnsafe());
+        return std::make_shared<arrow20::Schema>(fields.ValueUnsafe());
     }
     return fields.status();
 }

@@ -46,7 +46,7 @@ public:
 
     std::vector<TNameTypeInfo> GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const;
 
-    const std::shared_ptr<arrow::Schema>& GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const;
+    const std::shared_ptr<arrow20::Schema>& GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const;
 
     TString GetTableName() const;
     virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(

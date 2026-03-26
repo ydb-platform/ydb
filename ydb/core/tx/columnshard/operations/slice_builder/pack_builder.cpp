@@ -75,7 +75,7 @@ public:
 
 class TSliceToMerge {
 private:
-    YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow::RecordBatch>>, Batches);
+    YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow20::RecordBatch>>, Batches);
     std::vector<ui64> SequentialWriteId;
     const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
@@ -86,7 +86,7 @@ public:
         , ModificationType(modificationType) {
     }
 
-    void Add(const NArrow::TContainerWithIndexes<arrow::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
+    void Add(const NArrow::TContainerWithIndexes<arrow20::RecordBatch>& rb, const std::shared_ptr<NEvWrite::TWriteData>& data) {
         if (!rb) {
             return;
         }
@@ -112,7 +112,7 @@ public:
             std::vector<std::shared_ptr<NArrow::TGeneralContainer>> containers;
             ui32 recordsCountSum = 0;
             auto indexes = NArrow::TOrderedColumnIndexesImpl::MergeColumnIdxs(Batches);
-            std::shared_ptr<arrow::Schema> dataSchema;
+            std::shared_ptr<arrow20::Schema> dataSchema;
             const auto& indexInfo = context.GetActualSchema()->GetIndexInfo();
             for (auto&& i : Batches) {
                 std::shared_ptr<NArrow::TGeneralContainer> gContainer;
@@ -148,8 +148,8 @@ public:
                 //                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("data", NArrow::DebugJson(i, 5, 5))("write_id", SequentialWriteId[idx]);
                 recordsCountSum += i->num_rows();
                 gContainer
-                    ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
-                                                                  arrow::UInt64Scalar(SequentialWriteId[idx]), i->num_rows())))
+                    ->AddField(IIndexInfo::GetWriteIdField(), NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(
+                                                                  arrow20::UInt64Scalar(SequentialWriteId[idx]), i->num_rows())))
                     .Validate();
                 ++idx;
                 containers.emplace_back(gContainer);
@@ -195,7 +195,7 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
         }
         auto batches = NArrow::NMerger::TRWSortableBatchPosition::SplitByBordersInIntervalPositions(
             originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->field_names(), splitPositions);
-        std::shared_ptr<arrow::RecordBatch> pkBatch =
+        std::shared_ptr<arrow20::RecordBatch> pkBatch =
             NArrow::TColumnOperator().Extract(originalBatch.GetContainer(), Context.GetActualSchema()->GetIndexInfo().GetPrimaryKey()->fields());
         writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), pkBatch, false, originalBatch->num_rows());
         ui32 idx = 0;

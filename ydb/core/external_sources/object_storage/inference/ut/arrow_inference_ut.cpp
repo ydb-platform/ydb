@@ -263,6 +263,6 @@ TEST_F(ArrowInferenceTest, broken_json_list) {
     Cerr << response->Status.GetIssues().ToOneLineString() << Endl;
     // ASSERT_EQ(...)
 }
-// TODO: broken_compression, unrecognized_compression, broken_csv, broken_tsv (is there?), mock errors inside arrow::BufferBuilder,...
+// TODO: broken_compression, unrecognized_compression, broken_csv, broken_tsv (is there?), mock errors inside arrow20::BufferBuilder,...
 
 } // namespace

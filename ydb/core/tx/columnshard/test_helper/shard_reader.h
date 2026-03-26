@@ -32,7 +32,7 @@ private:
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
-    std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
 
     std::vector<Ydb::Issue::IssueMessage> Errors;
@@ -155,7 +155,7 @@ public:
         return !Finished;
     }
 
-    std::shared_ptr<arrow::RecordBatch> ReadAll() {
+    std::shared_ptr<arrow20::RecordBatch> ReadAll() {
         if (InitializeScanner()) {
             Ack();
             return ContinueReadAll();
@@ -163,14 +163,14 @@ public:
         return GetResult();
     }
 
-    std::shared_ptr<arrow::RecordBatch> ContinueReadAll() {
+    std::shared_ptr<arrow20::RecordBatch> ContinueReadAll() {
         while (Receive()) {
             Ack();
         }
         return GetResult();
     }
 
-    std::shared_ptr<arrow::RecordBatch> GetResult() const {
+    std::shared_ptr<arrow20::RecordBatch> GetResult() const {
         AFL_VERIFY(!!Finished);
         if (IsError()) {
             return nullptr;

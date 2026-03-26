@@ -17,10 +17,10 @@ namespace NKikimr::NArrow {
 
 class TRecordBatchReader {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, Batch);
 public:
     TRecordBatchReader() = default;
-    TRecordBatchReader(const std::shared_ptr<arrow::RecordBatch>& batch)
+    TRecordBatchReader(const std::shared_ptr<arrow20::RecordBatch>& batch)
         : Batch(batch)
     {
     }
@@ -48,7 +48,7 @@ public:
 
             }
         public:
-            std::shared_ptr<arrow::Scalar> operator*() const {
+            std::shared_ptr<arrow20::Scalar> operator*() const {
                 auto c = Reader.Batch->column(ColumnIdx);
                 if (c->IsNull(RecordIdx)) {
                     return nullptr;
@@ -104,16 +104,16 @@ class TRecordBatchConstructor {
 private:
     ui32 RecordsCount = 0;
     bool InConstruction = false;
-    static void AddValueToBuilder(arrow::ArrayBuilder& builder, const std::shared_ptr<arrow::Scalar>& value, const bool withCast);
+    static void AddValueToBuilder(arrow20::ArrayBuilder& builder, const std::shared_ptr<arrow20::Scalar>& value, const bool withCast);
 protected:
-    std::shared_ptr<arrow::Schema> Schema;
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
+    std::shared_ptr<arrow20::Schema> Schema;
+    std::vector<std::unique_ptr<arrow20::ArrayBuilder>> Builders;
 public:
     class TRecordConstructor {
     private:
         TRecordBatchConstructor& Owner;
         const bool WithCast = false;
-        std::vector<std::unique_ptr<arrow::ArrayBuilder>>::const_iterator CurrentBuilder;
+        std::vector<std::unique_ptr<arrow20::ArrayBuilder>>::const_iterator CurrentBuilder;
     public:
         TRecordConstructor(TRecordBatchConstructor& owner, const bool withCast)
             : Owner(owner)
@@ -130,17 +130,17 @@ public:
             Owner.InConstruction = false;
             ++Owner.RecordsCount;
         }
-        TRecordConstructor& AddRecordValue(const std::shared_ptr<arrow::Scalar>& value);
+        TRecordConstructor& AddRecordValue(const std::shared_ptr<arrow20::Scalar>& value);
     };
 
-    TRecordBatchConstructor& InitColumns(const std::shared_ptr<arrow::Schema>& schema);
+    TRecordBatchConstructor& InitColumns(const std::shared_ptr<arrow20::Schema>& schema);
 
     TRecordConstructor StartRecord(const bool withCast = false) {
         Y_ABORT_UNLESS(!InConstruction);
         return TRecordConstructor(*this, withCast);
     }
 
-    TRecordBatchConstructor& AddRecordsBatchSlow(const std::shared_ptr<arrow::RecordBatch>& value, const bool withCast = false, const bool withRemap = false);
+    TRecordBatchConstructor& AddRecordsBatchSlow(const std::shared_ptr<arrow20::RecordBatch>& value, const bool withCast = false, const bool withRemap = false);
 
     void Reserve(const ui32 recordsCount) {
         for (auto&& i : Builders) {
@@ -151,7 +151,7 @@ public:
     TRecordBatchReader Finish();
 };
 
-/// YDB rows to arrow::RecordBatch converter
+/// YDB rows to arrow20::RecordBatch converter
 class TArrowBatchBuilder : public NKikimr::IBlockBuilder {
 public:
     static constexpr const size_t DEFAULT_ROWS_TO_RESERVE = 1000;
@@ -159,9 +159,9 @@ public:
     /// @note compression is disabled by default KIKIMR-11690
     // Allowed codecs: UNCOMPRESSED, LZ4_FRAME, ZSTD
     TArrowBatchBuilder(
-        arrow::Compression::type codec = arrow::Compression::UNCOMPRESSED,
+        arrow20::Compression::type codec = arrow20::Compression::UNCOMPRESSED,
         const std::set<std::string>& notNullColumns = {},
-        arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
+        arrow20::MemoryPool* memoryPool = arrow20::default_memory_pool());
     ~TArrowBatchBuilder() = default;
 
     bool Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns,
@@ -195,13 +195,13 @@ public:
         return NumRows;
     }
 
-    arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
-    arrow::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);
+    arrow20::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+    arrow20::Status Start(const std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>>& columns);
     // TODO: deduplicate ydbColumns and schema
-    arrow::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema);
+    arrow20::Status Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow20::Schema>& schema);
 
-    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
-    std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
+    std::shared_ptr<arrow20::RecordBatch> FlushBatch(bool reinitialize, bool flushEmpty = false);
+    std::shared_ptr<arrow20::RecordBatch> GetBatch() const { return Batch; }
 
 protected:
     void AppendCell(const TCell& cell, ui32 colNum);
@@ -216,14 +216,14 @@ protected:
     }
 
 private:
-    arrow::ipc::IpcWriteOptions WriteOptions;
+    arrow20::ipc::IpcWriteOptions WriteOptions;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     std::vector<std::pair<TString, NKikimr::NMiniKQL::TType*>> YqlSchema;
-    std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::unique_ptr<arrow20::RecordBatchBuilder> BatchBuilder;
+    std::shared_ptr<arrow20::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};
     const std::set<std::string> NotNullColumns;
-    arrow::MemoryPool* MemoryPool;
+    arrow20::MemoryPool* MemoryPool;
 
 protected:
     size_t NumRows{0};
@@ -237,6 +237,6 @@ private:
 
 // Creates a batch with single column of type NullType and with num_rows equal rowsCount. All values are null. We need
 // this function, because batch can not have zero columns. And NullType conusumes the least place in memory.
-std::shared_ptr<arrow::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount);
+std::shared_ptr<arrow20::RecordBatch> CreateNoColumnsBatch(ui64 rowsCount);
 
 }

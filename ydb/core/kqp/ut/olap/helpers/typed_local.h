@@ -56,7 +56,7 @@ public:
         TKikimrRunner& KikimrRunner;
         const TString TablePath;
         mutable std::atomic<size_t> Responses = 0;
-        void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+        void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow20::RecordBatch> batch,
             const Ydb::StatusIds_StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) const;
 
     public:
@@ -70,14 +70,14 @@ public:
         void FillTable(const TString& fieldName, const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
             std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
             builders.emplace_back(
-                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::Int64Type>>::BuildNotNullable(
                     "pk_int", numRows * pkKff));
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>(fieldName, fillPolicy));
             builders.emplace_back(
-                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::TimestampType>>::BuildNotNullable(
                     "ts", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
-            std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+            std::shared_ptr<arrow20::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
             SendDataViaActorSystem(TablePath, batch, Ydb::StatusIds::SUCCESS);
         }
 
@@ -129,35 +129,35 @@ public:
     template <class TFiller>
     void FillTable(const TFiller& fillPolicy, const double pkKff = 0, const ui32 numRows = 800000) const {
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
         builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
-        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
         NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
-        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+        std::shared_ptr<arrow20::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
         TBase::SendDataViaActorSystem(TablePath, batch);
     }
 
     void FillMultiColumnTable(ui32 repCount, const double pkKff = 0, const ui32 numRows = 800000) const {
         const double frq = 0.9;
-        NArrow::NConstruction::TPoolFiller<arrow::Int64Type> int64Pool(1000, 0, frq);
-        NArrow::NConstruction::TPoolFiller<arrow::UInt8Type> uint8Pool(1000, 0, frq);
-        NArrow::NConstruction::TPoolFiller<arrow::FloatType> floatPool(1000, 0, frq);
-        NArrow::NConstruction::TPoolFiller<arrow::DoubleType> doublePool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow20::Int64Type> int64Pool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow20::UInt8Type> uint8Pool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow20::FloatType> floatPool(1000, 0, frq);
+        NArrow::NConstruction::TPoolFiller<arrow20::DoubleType> doublePool(1000, 0, frq);
         NArrow::NConstruction::TPoolFiller<NKikimr::NArrow::NConstruction::TStringType> utfPool(1000, 52, "abcde", frq);
 
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
-        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
-        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow20::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
         for (ui32 i = 0; i < repCount; i++) {
             TString repStr = ToString(i);
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<NKikimr::NArrow::NConstruction::TStringType>>>("field_utf" + repStr, utfPool, i));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::Int64Type>>>("field_int" + repStr, int64Pool, i));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::UInt8Type>>>("field_uint" + repStr, uint8Pool, i));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::FloatType>>>("field_float" + repStr, floatPool, i));
-            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow::DoubleType>>>("field_double" + repStr, doublePool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow20::Int64Type>>>("field_int" + repStr, int64Pool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow20::UInt8Type>>>("field_uint" + repStr, uint8Pool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow20::FloatType>>>("field_float" + repStr, floatPool, i));
+            builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<arrow20::DoubleType>>>("field_double" + repStr, doublePool, i));
         }
         NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
-        std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
+        std::shared_ptr<arrow20::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
         TBase::SendDataViaActorSystem(TablePath, batch);
     }
 

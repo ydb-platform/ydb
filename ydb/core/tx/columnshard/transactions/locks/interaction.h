@@ -216,16 +216,16 @@ private:
         , PrimaryKey(primaryKey) {
     }
 
-    TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
+    TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow20::Schema>& schema, const int includeState)
         : IncludeState(includeState)
     {
         if (!point.IsAll()) {
             auto fields = schema->fields();
             fields.resize(point.NumColumns());
-            auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
+            auto schemaTrimmed = std::make_shared<arrow20::Schema>(fields);
             auto builders = NArrow::MakeBuilders(schemaTrimmed);
             point.AppendPointTo(builders);
-            PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
+            PrimaryKey = NArrow::TSimpleRow(arrow20::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
         }
     }
 
@@ -233,8 +233,8 @@ public:
     static TIntervalPoint Equal(const NArrow::TSimpleRow& replaceKey) {
         return TIntervalPoint(replaceKey, 0);
     }
-    static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
-    static TIntervalPoint To(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow20::Schema>& pkSchema);
+    static TIntervalPoint To(const TPredicateContainer& container, const std::shared_ptr<arrow20::Schema>& pkSchema);
 
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -351,7 +351,7 @@ public:
         }
     }
 
-    THashSet<ui64> GetAffectedTxIds(const std::shared_ptr<arrow::RecordBatch>& writtenPrimaryKeys) const {
+    THashSet<ui64> GetAffectedTxIds(const std::shared_ptr<arrow20::RecordBatch>& writtenPrimaryKeys) const {
         AFL_VERIFY(writtenPrimaryKeys);
         auto it = IntervalsInfo.begin();
         THashSet<ui64> affectedTxIds;
@@ -417,7 +417,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};

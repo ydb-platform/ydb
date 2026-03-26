@@ -17,9 +17,9 @@
 
 namespace CH {
 
-void RegisterAggregates(arrow::compute::FunctionRegistry * registry = nullptr) {
+void RegisterAggregates(arrow20::compute::FunctionRegistry * registry = nullptr) {
     if (!registry)
-        registry = arrow::compute::GetFunctionRegistry();
+        registry = arrow20::compute::GetFunctionRegistry();
 
     registry->AddFunction(std::make_shared<CH::WrappedCount>("ch.count")).ok();
     registry->AddFunction(std::make_shared<CH::WrappedMin>("ch.min")).ok();
@@ -33,12 +33,12 @@ void RegisterAggregates(arrow::compute::FunctionRegistry * registry = nullptr) {
 Block makeTestBlock(size_t num_rows) {
     std::vector<std::string> strings = {"abc", "def", "abcd", "defg", "ac"};
 
-    arrow::FieldVector fields;
-    arrow::ArrayVector columns;
+    arrow20::FieldVector fields;
+    arrow20::ArrayVector columns;
 
     {
-        auto field = std::make_shared<arrow::Field>("i16", arrow::int16());
-        arrow::Int16Builder col;
+        auto field = std::make_shared<arrow20::Field>("i16", arrow20::int16());
+        arrow20::Int16Builder col;
         col.Reserve(num_rows).ok();
 
         for (size_t i = 0; i < num_rows; ++i)
@@ -49,8 +49,8 @@ Block makeTestBlock(size_t num_rows) {
     }
 
     {
-        auto field = std::make_shared<arrow::Field>("ui32", arrow::uint32());
-        arrow::UInt32Builder col;
+        auto field = std::make_shared<arrow20::Field>("ui32", arrow20::uint32());
+        arrow20::UInt32Builder col;
         col.Reserve(num_rows).ok();
 
         for (size_t i = 0; i < num_rows; ++i)
@@ -61,8 +61,8 @@ Block makeTestBlock(size_t num_rows) {
     }
 
     {
-        auto field = std::make_shared<arrow::Field>("s1", arrow::binary());
-        arrow::BinaryBuilder col;
+        auto field = std::make_shared<arrow20::Field>("s1", arrow20::binary());
+        arrow20::BinaryBuilder col;
         col.Reserve(num_rows).ok();
 
         for (size_t i = 0; i < num_rows; ++i)
@@ -73,8 +73,8 @@ Block makeTestBlock(size_t num_rows) {
     }
 
     {
-        auto field = std::make_shared<arrow::Field>("s2", arrow::binary());
-        arrow::BinaryBuilder col;
+        auto field = std::make_shared<arrow20::Field>("s2", arrow20::binary());
+        arrow20::BinaryBuilder col;
         col.Reserve(num_rows).ok();
 
         for (size_t i = 0; i < num_rows; ++i)
@@ -84,12 +84,12 @@ Block makeTestBlock(size_t num_rows) {
         columns.emplace_back(std::move(*col.Finish()));
     }
 
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), num_rows, columns);
+    return arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(fields), num_rows, columns);
 }
 
 AggregateDescription MakeCountDescription(const std::string & column_name = "cnt")
 {
-    auto * registry = arrow::compute::GetFunctionRegistry();
+    auto * registry = arrow20::compute::GetFunctionRegistry();
     auto func = registry->GetFunction("ch.count");
     auto wrapped = std::static_pointer_cast<ArrowAggregateFunctionWrapper>(*func);
 
@@ -103,7 +103,7 @@ AggregateDescription MakeCountDescription(const std::string & column_name = "cnt
 AggregateDescription MakeMinMaxAnyDescription(const std::string & agg_name, DataTypePtr data_type,
                                                  uint32_t column_id)
 {
-    auto * registry = arrow::compute::GetFunctionRegistry();
+    auto * registry = arrow20::compute::GetFunctionRegistry();
     auto func = registry->GetFunction(agg_name);
     auto wrapped = std::static_pointer_cast<ArrowAggregateFunctionWrapper>(*func);
 
@@ -118,7 +118,7 @@ AggregateDescription MakeMinMaxAnyDescription(const std::string & agg_name, Data
 AggregateDescription MakeSumDescription(DataTypePtr data_type, uint32_t column_id,
                                         const std::string & column_name = "res_sum")
 {
-    auto * registry = arrow::compute::GetFunctionRegistry();
+    auto * registry = arrow20::compute::GetFunctionRegistry();
     auto func = registry->GetFunction("ch.sum");
     auto wrapped = std::static_pointer_cast<ArrowAggregateFunctionWrapper>(*func);
 
@@ -133,7 +133,7 @@ AggregateDescription MakeSumDescription(DataTypePtr data_type, uint32_t column_i
 AggregateDescription MakeAvgDescription(DataTypePtr data_type, uint32_t column_id,
                                         const std::string & column_name = "res_avg")
 {
-    auto * registry = arrow::compute::GetFunctionRegistry();
+    auto * registry = arrow20::compute::GetFunctionRegistry();
     auto func = registry->GetFunction("ch.avg");
     auto wrapped = std::static_pointer_cast<ArrowAggregateFunctionWrapper>(*func);
 

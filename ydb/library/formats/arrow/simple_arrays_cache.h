@@ -15,12 +15,12 @@ class TThreadSimpleArraysCache {
 private:
     class TCachedArrayData {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_READONLY_DEF(std::shared_ptr<arrow20::Array>, Array);
         YDB_READONLY(ui64, Size, 0);
 
     public:
         TCachedArrayData() = default;
-        TCachedArrayData(const std::shared_ptr<arrow::Array>& array)
+        TCachedArrayData(const std::shared_ptr<arrow20::Array>& array)
             : Array(array)
             , Size(NArrow::GetArrayDataSize(array)) {
         }
@@ -37,9 +37,9 @@ private:
     static const ui64 MaxSumMemorySize = 50 * 1024 * 1024;
 
     template <class TInitializeActor>
-    std::shared_ptr<arrow::Array> InitializePosition(const TString& key, const ui32 recordsCountExt, const TInitializeActor actor) {
+    std::shared_ptr<arrow20::Array> InitializePosition(const TString& key, const ui32 recordsCountExt, const TInitializeActor actor) {
         TCachedArrayData currentValue;
-        std::shared_ptr<arrow::Array> result;
+        std::shared_ptr<arrow20::Array> result;
         {
             auto it = Arrays.Find(key);
             if (it == Arrays.End() || it->GetArray()->length() < recordsCountExt) {
@@ -66,19 +66,19 @@ private:
         return result->Slice(0, recordsCountExt);
     }
 
-    std::shared_ptr<arrow::Array> GetNullImpl(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
-    std::shared_ptr<arrow::Array> GetConstImpl(
-        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount);
+    std::shared_ptr<arrow20::Array> GetNullImpl(const std::shared_ptr<arrow20::DataType>& type, const ui32 recordsCount);
+    std::shared_ptr<arrow20::Array> GetConstImpl(
+        const std::shared_ptr<arrow20::DataType>& type, const std::shared_ptr<arrow20::Scalar>& scalar, const ui32 recordsCount);
 
 public:
     TThreadSimpleArraysCache()
         : Arrays(MaxSumMemorySize) {
     }
 
-    static std::shared_ptr<arrow::Array> GetNull(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
-    static std::shared_ptr<arrow::Array> GetConst(
-        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount);
-    static std::shared_ptr<arrow::Array> Get(
-        const std::shared_ptr<arrow::DataType>& type, const std::shared_ptr<arrow::Scalar>& scalar, const ui32 recordsCount);
+    static std::shared_ptr<arrow20::Array> GetNull(const std::shared_ptr<arrow20::DataType>& type, const ui32 recordsCount);
+    static std::shared_ptr<arrow20::Array> GetConst(
+        const std::shared_ptr<arrow20::DataType>& type, const std::shared_ptr<arrow20::Scalar>& scalar, const ui32 recordsCount);
+    static std::shared_ptr<arrow20::Array> Get(
+        const std::shared_ptr<arrow20::DataType>& type, const std::shared_ptr<arrow20::Scalar>& scalar, const ui32 recordsCount);
 };
 }   // namespace NKikimr::NArrow

@@ -629,10 +629,10 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         testHelper.CreateTable(col);
 
         {
-            arrow::Int64Builder id;
-            auto tsType = arrow::timestamp(arrow::TimeUnit::MICRO);
-            arrow::TimestampBuilder ts(tsType, arrow::default_memory_pool());
-            arrow::UInt8Builder flag;
+            arrow20::Int64Builder id;
+            auto tsType = arrow20::timestamp(arrow20::TimeUnit::MICRO);
+            arrow20::TimestampBuilder ts(tsType, arrow20::default_memory_pool());
+            arrow20::UInt8Builder flag;
 
             const i64 tsMicros = (TInstant::Now() - TDuration::Days(365)).MicroSeconds();
             Y_ABORT_UNLESS(id.Append(1).ok());
@@ -651,22 +651,22 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
             Y_ABORT_UNLESS(flag.Append(0).ok());
 
-            std::shared_ptr<arrow::Array> idArr;
+            std::shared_ptr<arrow20::Array> idArr;
             Y_ABORT_UNLESS(id.Finish(&idArr).ok());
 
-            std::shared_ptr<arrow::Array> tsArr;
+            std::shared_ptr<arrow20::Array> tsArr;
             Y_ABORT_UNLESS(ts.Finish(&tsArr).ok());
 
-            std::shared_ptr<arrow::Array> fArr;
+            std::shared_ptr<arrow20::Array> fArr;
             Y_ABORT_UNLESS(flag.Finish(&fArr).ok());
 
-            auto aSchema = arrow::schema({
-                arrow::field("id", arrow::int64(), /*nullable=*/ false),
-                arrow::field("ts", tsType, /*nullable*/ false),
-                arrow::field("flag", arrow::uint8())
+            auto aSchema = arrow20::schema({
+                arrow20::field("id", arrow20::int64(), /*nullable=*/ false),
+                arrow20::field("ts", tsType, /*nullable*/ false),
+                arrow20::field("flag", arrow20::uint8())
             });
 
-            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, tsArr, fArr });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 4, { idArr, tsArr, fArr });
             testHelper.BulkUpsert(col, batch);
         }
 

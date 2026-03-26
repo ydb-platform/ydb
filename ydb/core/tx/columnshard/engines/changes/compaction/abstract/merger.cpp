@@ -15,14 +15,14 @@ void IColumnMerger::Start(const std::vector<std::shared_ptr<NArrow::NAccessor::I
     return DoStart(input, mergeContext);
 }
 
- TMergingChunkContext::TMergingChunkContext(const std::shared_ptr<arrow::RecordBatch>& pkAndAddresses) {
+ TMergingChunkContext::TMergingChunkContext(const std::shared_ptr<arrow20::RecordBatch>& pkAndAddresses) {
     auto columnPortionIdx = pkAndAddresses->GetColumnByName(IColumnMerger::PortionIdFieldName);
     auto columnPortionRecordIdx = pkAndAddresses->GetColumnByName(IColumnMerger::PortionRecordIndexFieldName);
     Y_ABORT_UNLESS(columnPortionIdx && columnPortionRecordIdx);
-    Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow::UInt16Type::type_id);
-    Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow::UInt32Type::type_id);
-    IdxArray = static_pointer_cast<arrow::UInt16Array>(columnPortionIdx);
-    RecordIdxArray = static_pointer_cast<arrow::UInt32Array>(columnPortionRecordIdx);
+    Y_ABORT_UNLESS(columnPortionIdx->type_id() == arrow20::UInt16Type::type_id);
+    Y_ABORT_UNLESS(columnPortionRecordIdx->type_id() == arrow20::UInt32Type::type_id);
+    IdxArray = static_pointer_cast<arrow20::UInt16Array>(columnPortionIdx);
+    RecordIdxArray = static_pointer_cast<arrow20::UInt32Array>(columnPortionRecordIdx);
 
     AFL_VERIFY(pkAndAddresses->num_rows() == IdxArray->length());
     AFL_VERIFY(pkAndAddresses->num_rows() == RecordIdxArray->length());

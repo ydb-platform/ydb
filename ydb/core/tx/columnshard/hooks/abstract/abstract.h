@@ -37,7 +37,7 @@ namespace NDataLocks {
 class ILock;
 }
 }   // namespace NKikimr::NOlap
-namespace arrow {
+namespace arrow20 {
 class RecordBatch;
 }
 
@@ -84,7 +84,7 @@ protected:
     virtual void DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
         return;
     }
-    virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& /*batch*/) {
+    virtual bool DoOnAfterFilterAssembling(const std::shared_ptr<arrow20::RecordBatch>& /*batch*/) {
         return true;
     }
     virtual bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& /*changes*/, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
@@ -295,7 +295,7 @@ public:
         DoOnCollectGarbageResult(result);
     }
 
-    bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    bool OnAfterFilterAssembling(const std::shared_ptr<arrow20::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
     bool OnWriteIndexComplete(const NOlap::TColumnEngineChanges& changes, const NColumnShard::TColumnShard& shard) {

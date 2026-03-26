@@ -22,7 +22,7 @@ namespace NKikimr::NKqp::NFormats {
  * @param type type to make builder for
  * @return unique pointer to arrow array builder
  */
-std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type);
+std::unique_ptr<arrow20::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type);
 
 /**
  * @brief Make arrow array for given values and type.
@@ -32,7 +32,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* typ
  * @param itemType type of each element to parse it and to construct corresponding arrow type
  * @return shared pointer to arrow array
  */
-std::shared_ptr<arrow::Array> MakeArrowArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType);
+std::shared_ptr<arrow20::Array> MakeArrowArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType);
 
 /**
  * @brief Extract unboxed value from arrow array for given row and type.
@@ -44,7 +44,7 @@ std::shared_ptr<arrow::Array> MakeArrowArray(NMiniKQL::TUnboxedValueVector& valu
  * @param holderFactory holder factory to use
  * @return unboxed value
  */
-NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array, ui64 row,
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow20::Array>& array, ui64 row,
     const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
 
 /**
@@ -56,7 +56,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
  * @param holderFactory holder factory to use
  * @return vector of unboxed values
  */
-NMiniKQL::TUnboxedValueVector ExtractUnboxedVector(const std::shared_ptr<arrow::Array>& array,
+NMiniKQL::TUnboxedValueVector ExtractUnboxedVector(const std::shared_ptr<arrow20::Array>& array,
     const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
 
 } // namespace NKikimr::NKqp::NFormats

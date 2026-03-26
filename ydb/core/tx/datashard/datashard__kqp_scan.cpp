@@ -502,7 +502,7 @@ private:
         // send a batch and try to send an empty batch again without adding rows, then a copy of the batch will be send
         // instead. So we check Rows here.
         if (Rows != 0) {
-            Result->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true)}));
+            Result->ArrowBatch = NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true)}));
         }
     }
 

@@ -5,7 +5,7 @@
 
 namespace NYql::NUdf {
 
-TArgsDechunker::TArgsDechunker(std::vector<arrow::Datum>&& args)
+TArgsDechunker::TArgsDechunker(std::vector<arrow20::Datum>&& args)
     : Args_(std::move(args))
     , Arrays_(Args_.size())
 {
@@ -18,12 +18,12 @@ TArgsDechunker::TArgsDechunker(std::vector<arrow::Datum>&& args)
     }
 }
 
-bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk) {
+bool TArgsDechunker::Next(std::vector<arrow20::Datum>& chunk) {
     ui64 chunkLen;
     return Next(chunk, chunkLen);
 }
 
-bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
+bool TArgsDechunker::Next(std::vector<arrow20::Datum>& chunk, ui64& chunkLen) {
     chunkLen = 0;
     if (Finish_) {
         return false;
@@ -57,7 +57,7 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
     for (size_t i = 0; i < Args_.size(); ++i) {
         if (!Args_[i].is_scalar()) {
             Y_ENSURE(!Arrays_[i].empty(), "Block length mismatch");
-            chunk[i] = arrow::Datum(Chop(Arrays_[i].front(), minSize));
+            chunk[i] = arrow20::Datum(Chop(Arrays_[i].front(), minSize));
         }
     }
     chunkLen = minSize;

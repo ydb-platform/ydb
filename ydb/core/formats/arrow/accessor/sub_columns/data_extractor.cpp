@@ -10,14 +10,14 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
-    AFL_VERIFY(sourceArray->type()->id() == arrow::binary()->id())
+TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<arrow20::Array>& sourceArray, TDataBuilder& dataBuilder) const {
+    AFL_VERIFY(sourceArray->type()->id() == arrow20::binary()->id())
               ("sourceArray->type()->id()", (int)sourceArray->type()->id());
     if (!sourceArray->length()) {
         return TConclusionStatus::Success();
     }
 
-    auto arr = std::static_pointer_cast<arrow::BinaryArray>(sourceArray);
+    auto arr = std::static_pointer_cast<arrow20::BinaryArray>(sourceArray);
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.empty() || arr->IsNull(i)) {
@@ -50,7 +50,7 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
+TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow20::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
     try {
         return DoAddDataToBuilders(sourceArray, dataBuilder);
     } catch (...) {

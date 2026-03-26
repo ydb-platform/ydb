@@ -12,45 +12,45 @@ namespace NYql {
 
 class TBasicOutputConverter : public IYtOutputColumnConverter {
 public:
-    TBasicOutputConverter(std::shared_ptr<arrow::DataType> arrowType, bool optional)
+    TBasicOutputConverter(std::shared_ptr<arrow20::DataType> arrowType, bool optional)
         : ArrowType_(arrowType)
         , Optional_(optional)
     {}
 
-    std::shared_ptr<arrow::Field> BuildSchemaField(std::string name) override {
-        return arrow::field(std::move(name), ArrowType_, Optional_);
+    std::shared_ptr<arrow20::Field> BuildSchemaField(std::string name) override {
+        return arrow20::field(std::move(name), ArrowType_, Optional_);
     }
 
-    std::shared_ptr<arrow::ArrayData> Convert(std::shared_ptr<arrow::ArrayData> block) override {
+    std::shared_ptr<arrow20::ArrayData> Convert(std::shared_ptr<arrow20::ArrayData> block) override {
         YQL_ENSURE(ArrowType_->Equals(block->type), "block type differs from expected arrow output type");
         return block;
     }
 
 private:
-    std::shared_ptr<arrow::DataType> ArrowType_;
+    std::shared_ptr<arrow20::DataType> ArrowType_;
     bool Optional_;
 };
 
 class TBoolOutputConverter : public IYtOutputColumnConverter {
 public:
-    TBoolOutputConverter(bool optional, arrow::MemoryPool* pool)
+    TBoolOutputConverter(bool optional, arrow20::MemoryPool* pool)
         : Optional_(optional)
         , ExecContext_(pool)
     {}
 
-    std::shared_ptr<arrow::Field> BuildSchemaField(std::string name) override {
-        return arrow::field(std::move(name), arrow::boolean(), Optional_);
+    std::shared_ptr<arrow20::Field> BuildSchemaField(std::string name) override {
+        return arrow20::field(std::move(name), arrow20::boolean(), Optional_);
     }
 
-    std::shared_ptr<arrow::ArrayData> Convert(std::shared_ptr<arrow::ArrayData> block) override {
-        YQL_ENSURE(block->type->Equals(arrow::uint8()));
-        auto convertedDatum = ARROW_RESULT(arrow::compute::Cast(block, arrow::boolean(), arrow::compute::CastOptions::Safe(), &ExecContext_));
+    std::shared_ptr<arrow20::ArrayData> Convert(std::shared_ptr<arrow20::ArrayData> block) override {
+        YQL_ENSURE(block->type->Equals(arrow20::uint8()));
+        auto convertedDatum = ARROW_RESULT(arrow20::compute::Cast(block, arrow20::boolean(), arrow20::compute::CastOptions::Safe(), &ExecContext_));
         return convertedDatum.array();
     }
 
 private:
     bool Optional_;
-    arrow::compute::ExecContext ExecContext_;
+    arrow20::compute::ExecContext ExecContext_;
 };
 
 class TYsonOutputConverter : public IYtOutputColumnConverter {
@@ -59,13 +59,13 @@ public:
         : Optional_(optional)
     {}
 
-    std::shared_ptr<arrow::Field> BuildSchemaField(std::string name) override {
-        auto metadata = arrow::KeyValueMetadata::Make({"YtType"}, {"yson"});
-        return arrow::field(std::move(name), arrow::binary(), Optional_, std::move(metadata));
+    std::shared_ptr<arrow20::Field> BuildSchemaField(std::string name) override {
+        auto metadata = arrow20::KeyValueMetadata::Make({"YtType"}, {"yson"});
+        return arrow20::field(std::move(name), arrow20::binary(), Optional_, std::move(metadata));
     }
 
-    std::shared_ptr<arrow::ArrayData> Convert(std::shared_ptr<arrow::ArrayData> block) override {
-        YQL_ENSURE(block->type->Equals(arrow::binary()));
+    std::shared_ptr<arrow20::ArrayData> Convert(std::shared_ptr<arrow20::ArrayData> block) override {
+        YQL_ENSURE(block->type->Equals(arrow20::binary()));
         return block;
     }
 
@@ -73,8 +73,8 @@ private:
     bool Optional_;
 };
 
-IYtOutputColumnConverter::TPtr MakeYtOutputColumnConverter(NKikimr::NMiniKQL::TType* type, arrow::MemoryPool* pool) {
-    std::shared_ptr<arrow::DataType> arrowType;
+IYtOutputColumnConverter::TPtr MakeYtOutputColumnConverter(NKikimr::NMiniKQL::TType* type, arrow20::MemoryPool* pool) {
+    std::shared_ptr<arrow20::DataType> arrowType;
     YQL_ENSURE(ConvertArrowOutputType(type, arrowType), "unsupported arrow output type");
 
     // only data and optional data types are supported at the moment

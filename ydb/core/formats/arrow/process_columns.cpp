@@ -23,12 +23,12 @@ public:
 };
 
 template <>
-class TColumnNameAccessor<std::shared_ptr<arrow::Field>> {
+class TColumnNameAccessor<std::shared_ptr<arrow20::Field>> {
 public:
-    static const std::string& GetFieldName(const std::shared_ptr<arrow::Field>& val) {
+    static const std::string& GetFieldName(const std::shared_ptr<arrow20::Field>& val) {
         return val->name();
     }
-    static TString DebugString(const std::vector<std::shared_ptr<arrow::Field>>& items) {
+    static TString DebugString(const std::vector<std::shared_ptr<arrow20::Field>>& items) {
         TStringBuilder sb;
         for (auto&& i : items) {
             sb << i->name() << ",";
@@ -40,7 +40,7 @@ public:
 template <class TDataContainer, class TStringContainer>
 std::shared_ptr<TDataContainer> ExtractColumnsValidateImpl(
     const std::shared_ptr<TDataContainer>& srcBatch, const std::vector<TStringContainer>& columnNames) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     fields.reserve(columnNames.size());
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(columnNames.size());
@@ -64,7 +64,7 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
     AFL_VERIFY(dstSchema);
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(dstSchema->num_fields());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     fields.reserve(dstSchema->num_fields());
     std::set<ui32> fieldIdx;
     ui32 idx = 0;
@@ -92,7 +92,7 @@ TConclusion<std::shared_ptr<TDataContainer>> AdaptColumnsImpl(
     if (subset) {
         *subset = TSchemaSubset(fieldIdx, dstSchema->num_fields());
     }
-    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), srcBatch->num_rows());
+    return NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow20::Schema>(fields), std::move(columns), srcBatch->num_rows());
 }
 
 template <class TDataContainer, class TStringContainer>
@@ -159,72 +159,72 @@ TOrderedColumnIndexesImpl::TOrderedColumnIndexesImpl(const ui32 columnsCount) {
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {
+std::shared_ptr<arrow20::RecordBatch> TColumnOperator::Extract(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-std::shared_ptr<arrow::Table> TColumnOperator::Extract(
-    const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames) {
+std::shared_ptr<arrow20::Table> TColumnOperator::Extract(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::string>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-std::shared_ptr<arrow::Table> TColumnOperator::Extract(
-    const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns) {
+std::shared_ptr<arrow20::Table> TColumnOperator::Extract(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::shared_ptr<arrow20::Field>>& columns) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columns);
 }
 
-std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns) {
+std::shared_ptr<arrow20::RecordBatch> TColumnOperator::Extract(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow20::Field>>& columns) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columns);
 }
 
-std::shared_ptr<arrow::RecordBatch> TColumnOperator::Extract(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames) {
+std::shared_ptr<arrow20::RecordBatch> TColumnOperator::Extract(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<TString>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-std::shared_ptr<arrow::Table> TColumnOperator::Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames) {
+std::shared_ptr<arrow20::Table> TColumnOperator::Extract(const std::shared_ptr<arrow20::Table>& incoming, const std::vector<TString>& columnNames) {
     return ExtractImpl(AbsentColumnPolicy, incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::RecordBatch>> TColumnOperator::Adapt(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::shared_ptr<arrow20::Schema>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(
-    const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::Table>> TColumnOperator::Adapt(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::shared_ptr<arrow20::Schema>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Adapt(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::RecordBatch>> TColumnOperator::Adapt(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Adapt(
-    const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::Table>> TColumnOperator::Adapt(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset) {
     return AdaptColumnsImpl(incoming, dstSchema, subset);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Reorder(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::RecordBatch>> TColumnOperator::Reorder(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::string>& columnNames) {
     return ReorderImpl(incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Reorder(
-    const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::Table>> TColumnOperator::Reorder(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::string>& columnNames) {
     return ReorderImpl(incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::RecordBatch>> TColumnOperator::Reorder(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::RecordBatch>> TColumnOperator::Reorder(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<TString>& columnNames) {
     return ReorderImpl(incoming, columnNames);
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::Table>> TColumnOperator::Reorder(
-    const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames) {
+NKikimr::TConclusion<std::shared_ptr<arrow20::Table>> TColumnOperator::Reorder(
+    const std::shared_ptr<arrow20::Table>& incoming, const std::vector<TString>& columnNames) {
     return ReorderImpl(incoming, columnNames);
 }
 namespace {
@@ -275,7 +275,7 @@ TConclusion<TSchemaSubset> BuildSequentialSubsetImpl(const std::shared_ptr<TData
 }   // namespace
 
 TConclusion<TSchemaSubset> TColumnOperator::BuildSequentialSubset(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const NArrow::TSchemaLiteView& dstSchema) {
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const NArrow::TSchemaLiteView& dstSchema) {
     return BuildSequentialSubsetImpl(incoming, dstSchema, DifferentColumnTypesPolicy);
 }
 namespace {
@@ -335,7 +335,7 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
         return TConclusionStatus::Fail("not found any column");
     }
     std::sort(resultColumns.begin(), resultColumns.end());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     std::vector<std::shared_ptr<typename NAdapter::TDataBuilderPolicy<TDataContainer>::TColumn>> columns;
     columns.reserve(resultColumns.size());
     fields.reserve(resultColumns.size());
@@ -346,11 +346,11 @@ TConclusion<TContainerWithIndexes<TDataContainer>> AdaptIncomingToDestinationExt
         indexes.emplace_back(i.Index);
     }
     return TContainerWithIndexes<TDataContainer>(indexes,
-        NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow::Schema>(fields), std::move(columns), incoming->num_rows()));
+        NAdapter::TDataBuilderPolicy<TDataContainer>::Build(std::make_shared<arrow20::Schema>(fields), std::move(columns), incoming->num_rows()));
 }
 }   // namespace
-TConclusion<TContainerWithIndexes<arrow::RecordBatch>> TColumnOperator::AdaptIncomingToDestinationExt(
-    const std::shared_ptr<arrow::RecordBatch>& incoming, const TSchemaLiteView& dstSchema,
+TConclusion<TContainerWithIndexes<arrow20::RecordBatch>> TColumnOperator::AdaptIncomingToDestinationExt(
+    const std::shared_ptr<arrow20::RecordBatch>& incoming, const TSchemaLiteView& dstSchema,
     const std::function<TConclusionStatus(const ui32, const i32)>& checker, const std::function<i32(const std::string&)>& nameResolver) const {
     return AdaptIncomingToDestinationExtImpl(incoming, dstSchema, checker, nameResolver, DifferentColumnTypesPolicy, AbsentColumnPolicy);
 }

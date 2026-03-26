@@ -41,8 +41,8 @@ public:
 };
 
 struct TMinMax {
-    std::shared_ptr<arrow::Scalar> Min;
-    std::shared_ptr<arrow::Scalar> Max;
+    std::shared_ptr<arrow20::Scalar> Min;
+    std::shared_ptr<arrow20::Scalar> Max;
 };
 
 class IChunkedArray {
@@ -60,7 +60,7 @@ public:
         Dictionary = 8
     };
 
-    using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
+    using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow20::Array>)>;
 
     class TCommonChunkAddress {
     private:
@@ -191,17 +191,17 @@ public:
 
     class TFullDataAddress {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_READONLY_DEF(std::shared_ptr<arrow20::Array>, Array);
         YDB_ACCESSOR_DEF(TAddressChain, Address);
 
     public:
         TString DebugString(const ui64 position, const NKikimr::NScheme::TTypeInfo* logicalType = nullptr) const;
 
-        std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
+        std::shared_ptr<arrow20::Array> CopyRecord(const ui64 recordIndex) const;
 
         std::partial_ordering Compare(const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const;
 
-        TFullDataAddress(const std::shared_ptr<arrow::Array>& arr, TAddressChain&& address)
+        TFullDataAddress(const std::shared_ptr<arrow20::Array>& arr, TAddressChain&& address)
             : Array(arr)
             , Address(std::move(address))
         {
@@ -212,7 +212,7 @@ public:
 
     class TLocalDataAddress {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_READONLY_DEF(std::shared_ptr<arrow20::Array>, Array);
         TCommonChunkAddress Address;
 
     public:
@@ -222,13 +222,13 @@ public:
             return Address;
         }
 
-        TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const ui32 start, const ui32 chunkIdx)
+        TLocalDataAddress(const std::shared_ptr<arrow20::Array>& arr, const ui32 start, const ui32 chunkIdx)
             : Array(arr)
             , Address(start, start + TValidator::CheckNotNull(arr)->length(), chunkIdx)
         {
         }
 
-        TLocalDataAddress(const std::shared_ptr<arrow::Array>& arr, const TCommonChunkAddress& address)
+        TLocalDataAddress(const std::shared_ptr<arrow20::Array>& arr, const TCommonChunkAddress& address)
             : Array(arr)
             , Address(address)
         {
@@ -238,7 +238,7 @@ public:
 
     class TAddress {
     private:
-        YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, Array);
+        YDB_READONLY_DEF(std::shared_ptr<arrow20::Array>, Array);
         YDB_READONLY(ui64, Position, 0);
 
     public:
@@ -250,7 +250,7 @@ public:
             return false;
         }
 
-        TAddress(const std::shared_ptr<arrow::Array>& arr, const ui64 position)
+        TAddress(const std::shared_ptr<arrow20::Array>& arr, const ui64 position)
             : Array(arr)
             , Position(position)
         {
@@ -262,7 +262,7 @@ public:
     };
 
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::DataType>, DataType);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::DataType>, DataType);
     YDB_READONLY(ui64, RecordsCount, 0);
     YDB_READONLY(EType, Type, EType::Undefined);
     virtual NJson::TJsonValue DoDebugJson() const {
@@ -271,8 +271,8 @@ private:
         return result;
     }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
-    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetScalar(const ui32 index) const = 0;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& /*value*/) const {
         return std::nullopt;
     }
 
@@ -289,17 +289,17 @@ private:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+    virtual std::shared_ptr<arrow20::ChunkedArray> GetChunkedArrayTrivial() const;
 
-    std::shared_ptr<arrow::Schema> GetArraySchema() const {
-        const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
-        return std::make_shared<arrow::Schema>(fields);
+    std::shared_ptr<arrow20::Schema> GetArraySchema() const {
+        const arrow20::FieldVector fields = { std::make_shared<arrow20::Field>("val", GetDataType()) };
+        return std::make_shared<arrow20::Schema>(fields);
     }
 
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetMaxScalar() const = 0;
     virtual TMinMax DoGetMinMaxScalars() const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
@@ -356,7 +356,7 @@ protected:
         AFL_VERIFY(false)("pos", position)("count", GetRecordsCount())("chunks_map", sb)("chunk_current", chunkCurrentInfo);
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
+    virtual std::shared_ptr<arrow20::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const;
 
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
@@ -365,7 +365,7 @@ public:
         return true;
     }
 
-    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const {
         return DoCheckOneValueAccessor(value);
     }
 
@@ -435,12 +435,12 @@ public:
         TAddress GetReadChunk(const ui64 position) const;
         static std::partial_ordering CompareColumns(
             const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition);
-        void AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
-        std::shared_ptr<arrow::Array> CopyRecord(const ui64 recordIndex) const;
+        void AppendPositionTo(arrow20::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const;
+        std::shared_ptr<arrow20::Array> CopyRecord(const ui64 recordIndex) const;
         TString DebugString(const ui32 position) const;
     };
 
-    std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const {
+    std::shared_ptr<arrow20::Scalar> GetScalar(const ui32 index) const {
         AFL_VERIFY(index < GetRecordsCount());
         return DoGetScalar(index);
     }
@@ -459,7 +459,7 @@ public:
         return result;
     }
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
+    std::shared_ptr<arrow20::Scalar> GetMaxScalar() const {
         AFL_VERIFY(GetRecordsCount());
         return DoGetMaxScalar();
     }
@@ -479,11 +479,11 @@ public:
         return *result;
     }
 
-    std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+    std::shared_ptr<arrow20::ChunkedArray> GetChunkedArray(
         const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
-    std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
+    std::shared_ptr<arrow20::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
     std::shared_ptr<IChunkedArray> ISlice(const ui32 offset, const ui32 count) const {
         AFL_VERIFY(offset + count <= GetRecordsCount())("offset", offset)("count", count)("records", GetRecordsCount());
         auto result = DoISlice(offset, count);
@@ -539,7 +539,7 @@ public:
 
     TFullDataAddress GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const;
 
-    IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow::DataType>& dataType)
+    IChunkedArray(const ui64 recordsCount, const EType type, const std::shared_ptr<arrow20::DataType>& dataType)
         : DataType(dataType)
         , RecordsCount(recordsCount)
         , Type(type)

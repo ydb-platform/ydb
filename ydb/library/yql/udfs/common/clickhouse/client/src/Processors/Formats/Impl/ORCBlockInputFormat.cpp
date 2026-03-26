@@ -23,7 +23,7 @@ namespace ErrorCodes
 #define THROW_ARROW_NOT_OK(status)                                     \
     do                                                                 \
     {                                                                  \
-        if (::arrow::Status _s = (status); !_s.ok())                   \
+        if (::arrow20::Status _s = (status); !_s.ok())                   \
             throw Exception(_s.ToString(), ErrorCodes::BAD_ARGUMENTS); \
     } while (false)
 
@@ -42,13 +42,13 @@ Chunk ORCBlockInputFormat::generate()
     if (stripe_current >= stripe_total)
         return res;
 
-    std::shared_ptr<arrow::RecordBatch> batch_result;
-    arrow::Status batch_status = file_reader->ReadStripe(stripe_current, include_indices, &batch_result);
+    std::shared_ptr<arrow20::RecordBatch> batch_result;
+    arrow20::Status batch_status = file_reader->ReadStripe(stripe_current, include_indices, &batch_result);
     if (!batch_status.ok())
         throw ParsingException(ErrorCodes::CANNOT_READ_ALL_DATA,
                                "Error while reading batch of ORC data: {}", batch_status.ToString());
 
-    auto table_result = arrow::Table::FromRecordBatches({batch_result});
+    auto table_result = arrow20::Table::FromRecordBatches({batch_result});
     if (!table_result.ok())
         throw ParsingException(ErrorCodes::CANNOT_READ_ALL_DATA,
                                "Error while reading batch of ORC data: {}", table_result.status().ToString());
@@ -68,23 +68,23 @@ void ORCBlockInputFormat::resetParser()
     stripe_current = 0;
 }
 
-static size_t countIndicesForType(std::shared_ptr<arrow::DataType> type)
+static size_t countIndicesForType(std::shared_ptr<arrow20::DataType> type)
 {
-    if (type->id() == arrow::Type::LIST)
-        return countIndicesForType(static_cast<arrow::ListType *>(type.get())->value_type()) + 1;
+    if (type->id() == arrow20::Type::LIST)
+        return countIndicesForType(static_cast<arrow20::ListType *>(type.get())->value_type()) + 1;
 
-    if (type->id() == arrow::Type::STRUCT)
+    if (type->id() == arrow20::Type::STRUCT)
     {
         int indices = 1;
-        auto * struct_type = static_cast<arrow::StructType *>(type.get());
+        auto * struct_type = static_cast<arrow20::StructType *>(type.get());
         for (int i = 0; i != struct_type->num_fields(); ++i)
             indices += countIndicesForType(struct_type->field(i)->type());
         return indices;
     }
 
-    if (type->id() == arrow::Type::MAP)
+    if (type->id() == arrow20::Type::MAP)
     {
-        auto * map_type = static_cast<arrow::MapType *>(type.get());
+        auto * map_type = static_cast<arrow20::MapType *>(type.get());
         return countIndicesForType(map_type->key_type()) + countIndicesForType(map_type->item_type());
     }
 
@@ -93,11 +93,11 @@ static size_t countIndicesForType(std::shared_ptr<arrow::DataType> type)
 
 void ORCBlockInputFormat::prepareReader()
 {
-    THROW_ARROW_NOT_OK(arrow::adapters::orc::ORCFileReader::Open(asArrowFile(in), arrow::default_memory_pool(), &file_reader));
+    THROW_ARROW_NOT_OK(arrow20::adapters::orc::ORCFileReader::Open(asArrowFile(in), arrow20::default_memory_pool(), &file_reader));
     stripe_total = file_reader->NumberOfStripes();
     stripe_current = 0;
 
-    std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<arrow20::Schema> schema;
     THROW_ARROW_NOT_OK(file_reader->ReadSchema(&schema));
 
     arrow_column_to_ch_column = std::make_unique<ArrowColumnToCHColumn>(getPort().getHeader(), "ORC", format_settings.orc.import_nested);

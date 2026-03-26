@@ -48,7 +48,7 @@ PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false, true>* setup, TVector<KeyT
 
 int LineSize(NKikimr::NMiniKQL::ETestedJoinAlgo algo, std::span<const NYql::NUdf::TUnboxedValue> line) {
     if (NKikimr::NMiniKQL::IsBlockJoin(algo)) {
-        return NKikimr::NMiniKQL::TArrowBlock::From(line.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        return NKikimr::NMiniKQL::TArrowBlock::From(line.back()).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
     } else {
         return 1;
     }

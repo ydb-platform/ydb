@@ -13,7 +13,7 @@
 namespace CH
 {
 
-std::shared_ptr<arrow::Array> DataTypeAggregateFunction::MakeArray(std::shared_ptr<arrow::ArrayData> data) const
+std::shared_ptr<arrow20::Array> DataTypeAggregateFunction::MakeArray(std::shared_ptr<arrow20::ArrayData> data) const
 {
     return std::make_shared<ColumnAggregateFunction>(data);
 }

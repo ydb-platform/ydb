@@ -39,25 +39,25 @@ private:
     const TString EmbeddingColumnName;
 
 private:
-    static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
-        arrow::ipc::DictionaryMemo dictionary;
+    static std::pair<std::shared_ptr<arrow20::Schema>, std::shared_ptr<arrow20::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
+        arrow20::ipc::DictionaryMemo dictionary;
 
-        arrow::io::BufferReader schemaBuffer(arrow::util::string_view(data->Schema.data(), data->Schema.size()));
-        const std::shared_ptr<arrow::Schema> schema = arrow::ipc::ReadSchema(&schemaBuffer, &dictionary).ValueOrDie();
+        arrow20::io::BufferReader schemaBuffer(arrow20::util::string_view(data->Schema.data(), data->Schema.size()));
+        const std::shared_ptr<arrow20::Schema> schema = arrow20::ipc::ReadSchema(&schemaBuffer, &dictionary).ValueOrDie();
 
-        arrow::io::BufferReader recordBatchBuffer(arrow::util::string_view(data->Data.data(), data->Data.size()));
-        const std::shared_ptr<arrow::RecordBatch> recordBatch = arrow::ipc::ReadRecordBatch(schema, &dictionary, {}, &recordBatchBuffer).ValueOrDie();
+        arrow20::io::BufferReader recordBatchBuffer(arrow20::util::string_view(data->Data.data(), data->Data.size()));
+        const std::shared_ptr<arrow20::RecordBatch> recordBatch = arrow20::ipc::ReadRecordBatch(schema, &dictionary, {}, &recordBatchBuffer).ValueOrDie();
 
         return std::make_pair(schema, recordBatch);
     }
 
-    static std::shared_ptr<arrow::Table> DeserializeCsv(TDataPortion::TCsv* data) {
+    static std::shared_ptr<arrow20::Table> DeserializeCsv(TDataPortion::TCsv* data) {
         Ydb::Formats::CsvSettings csvSettings;
         if (Y_UNLIKELY(!csvSettings.ParseFromString(data->FormatString))) {
             ythrow yexception() << "Unable to parse CsvSettings";
         }
 
-        arrow::csv::ReadOptions readOptions = arrow::csv::ReadOptions::Defaults();
+        arrow20::csv::ReadOptions readOptions = arrow20::csv::ReadOptions::Defaults();
         readOptions.skip_rows = csvSettings.skip_rows();
         if (data->Data.size() > NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE) {
             ui32 blockSize = NKikimr::NFormats::TArrowCSV::DEFAULT_BLOCK_SIZE;
@@ -65,7 +65,7 @@ private:
             readOptions.block_size = blockSize;
         }
 
-        arrow::csv::ParseOptions parseOptions = arrow::csv::ParseOptions::Defaults();
+        arrow20::csv::ParseOptions parseOptions = arrow20::csv::ParseOptions::Defaults();
         const auto& quoting = csvSettings.quoting();
         if (Y_UNLIKELY(quoting.quote_char().length() > 1)) {
             ythrow yexception() << "Cannot read CSV: Wrong quote char '" << quoting.quote_char() << "'";
@@ -81,16 +81,16 @@ private:
             parseOptions.delimiter = csvSettings.delimiter().front();
         }
 
-        arrow::csv::ConvertOptions convertOptions = arrow::csv::ConvertOptions::Defaults();
+        arrow20::csv::ConvertOptions convertOptions = arrow20::csv::ConvertOptions::Defaults();
         if (csvSettings.null_value()) {
             convertOptions.null_values = { std::string(csvSettings.null_value().data(), csvSettings.null_value().size()) };
             convertOptions.strings_can_be_null = true;
             convertOptions.quoted_strings_can_be_null = false;
         }
 
-        auto bufferReader = std::make_shared<arrow::io::BufferReader>(arrow::util::string_view(data->Data.data(), data->Data.size()));
-        auto csvReader = arrow::csv::TableReader::Make(
-            arrow::io::default_io_context(),
+        auto bufferReader = std::make_shared<arrow20::io::BufferReader>(arrow20::util::string_view(data->Data.data(), data->Data.size()));
+        auto csvReader = arrow20::csv::TableReader::Make(
+            arrow20::io::default_io_context(),
             bufferReader,
             readOptions,
             parseOptions,
@@ -103,27 +103,27 @@ private:
     void CanonizeArrow(TDataPortion::TArrow* data) {
         const auto [schema, batch] = DeserializeArrow(data);
 
-        std::vector<std::shared_ptr<arrow::Array>> resultColumns;
+        std::vector<std::shared_ptr<arrow20::Array>> resultColumns;
 
         // id
         const auto idColumn = batch->GetColumnByName("id");
         if (idColumn == nullptr) {
             ythrow yexception() << "Cannot find id column";
         }
-        resultColumns.push_back(arrow::compute::Cast(idColumn, arrow::uint64()).ValueOrDie().make_array());
+        resultColumns.push_back(arrow20::compute::Cast(idColumn, arrow20::uint64()).ValueOrDie().make_array());
 
         // embedding
         const auto embeddingColumn = batch->GetColumnByName(EmbeddingColumnName);
         if (embeddingColumn == nullptr) {
             ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
         }
-        if (embeddingColumn->type()->Equals(arrow::binary())) {
+        if (embeddingColumn->type()->Equals(arrow20::binary())) {
             resultColumns.push_back(embeddingColumn);
-        } else if (embeddingColumn->type_id() == arrow::Type::LIST && std::static_pointer_cast<arrow::ListType>(embeddingColumn->type())->value_type()->Equals(arrow::float32())) {
-            const std::shared_ptr<arrow::ListArray> embeddingListColumn = std::static_pointer_cast<arrow::ListArray>(embeddingColumn);
-            arrow::StringBuilder newEmbeddingsBuilder;
+        } else if (embeddingColumn->type_id() == arrow20::Type::LIST && std::static_pointer_cast<arrow20::ListType>(embeddingColumn->type())->value_type()->Equals(arrow20::float32())) {
+            const std::shared_ptr<arrow20::ListArray> embeddingListColumn = std::static_pointer_cast<arrow20::ListArray>(embeddingColumn);
+            arrow20::StringBuilder newEmbeddingsBuilder;
             for (int64_t row = 0; row < batch->num_rows(); ++row) {
-                const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingListColumn->value_slice(row));
+                const auto embeddingFloatList = std::static_pointer_cast<arrow20::FloatArray>(embeddingListColumn->value_slice(row));
 
                 TStringBuilder buffer;
                 NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
@@ -136,7 +136,7 @@ private:
                     ythrow yexception() << status.ToString();
                 }
             }
-            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+            std::shared_ptr<arrow20::StringArray> newEmbeddingColumn;
             if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
@@ -145,23 +145,23 @@ private:
             ythrow yexception() << "Only binary and list[float32] arrow types are supported for embedding column";
         }
 
-        const auto newSchema = arrow::schema({
-            arrow::field("id", arrow::uint64()),
-            arrow::field("embedding", arrow::binary()),
+        const auto newSchema = arrow20::schema({
+            arrow20::field("id", arrow20::uint64()),
+            arrow20::field("embedding", arrow20::binary()),
         });
-        const auto newRecordBatch = arrow::RecordBatch::Make(
+        const auto newRecordBatch = arrow20::RecordBatch::Make(
             newSchema,
             batch->num_rows(),
             resultColumns
         );
-        data->Schema = arrow::ipc::SerializeSchema(*newSchema).ValueOrDie()->ToString();
-        data->Data = arrow::ipc::SerializeRecordBatch(*newRecordBatch, arrow::ipc::IpcWriteOptions{}).ValueOrDie()->ToString();
+        data->Schema = arrow20::ipc::SerializeSchema(*newSchema).ValueOrDie()->ToString();
+        data->Data = arrow20::ipc::SerializeRecordBatch(*newRecordBatch, arrow20::ipc::IpcWriteOptions{}).ValueOrDie()->ToString();
     }
 
     void CanonizeCsv(TDataPortion::TCsv* data) {
         const auto table = DeserializeCsv(data);
 
-        std::vector<std::shared_ptr<arrow::ChunkedArray>> resultColumns;
+        std::vector<std::shared_ptr<arrow20::ChunkedArray>> resultColumns;
 
         // id
         const auto idColumn = table->GetColumnByName("id");
@@ -176,13 +176,13 @@ private:
             ythrow yexception() << "Cannot find embedding column '" << EmbeddingColumnName << "'";
         }
 
-        if (Y_UNLIKELY(embeddingColumn->type()->id() != arrow::Type::STRING)) {
+        if (Y_UNLIKELY(embeddingColumn->type()->id() != arrow20::Type::STRING)) {
             ythrow yexception() << "For CSV/TSV embedding column must be string";
         }
 
-        arrow::StringBuilder newEmbeddingsBuilder;
+        arrow20::StringBuilder newEmbeddingsBuilder;
         for (int64_t row = 0; row < table->num_rows(); ++row) {
-            const auto embeddingListString = std::static_pointer_cast<arrow::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
+            const auto embeddingListString = std::static_pointer_cast<arrow20::StringArray>(embeddingColumn->Slice(row, 1)->chunk(0))->Value(0);
             
             TStringBuf buffer(embeddingListString.data(), embeddingListString.size());
             buffer.SkipPrefix("\"");
@@ -208,18 +208,18 @@ private:
                 ythrow yexception() << status.ToString();
             }
         }
-        std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+        std::shared_ptr<arrow20::StringArray> newEmbeddingColumn;
         if (const auto status = newEmbeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
             ythrow yexception() << status.ToString();
         }
-        resultColumns.push_back(arrow::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
+        resultColumns.push_back(arrow20::ChunkedArray::Make({newEmbeddingColumn}).ValueOrDie());
 
-        const auto newTable = arrow::Table::Make(arrow::schema({
-            arrow::field("id", arrow::uint64()),
-            arrow::field("embedding", arrow::binary()),
+        const auto newTable = arrow20::Table::Make(arrow20::schema({
+            arrow20::field("id", arrow20::uint64()),
+            arrow20::field("embedding", arrow20::binary()),
         }), resultColumns);
-        auto outputStream = arrow::io::BufferOutputStream::Create().ValueOrDie();
-        if (const auto status = arrow::csv::WriteCSV(*newTable, arrow::csv::WriteOptions::Defaults(), outputStream.get()); !status.ok()) {
+        auto outputStream = arrow20::io::BufferOutputStream::Create().ValueOrDie();
+        if (const auto status = arrow20::csv::WriteCSV(*newTable, arrow20::csv::WriteOptions::Defaults(), outputStream.get()); !status.ok()) {
             ythrow yexception() << status.ToString();
         }
         data->FormatString = "";
@@ -300,10 +300,10 @@ public:
     virtual TDataPortions GenerateDataPortion() override {
         // Sequential generation is required to ensure reproducibility for fixed seed value.
         with_lock(Lock) {
-            std::vector<std::shared_ptr<arrow::Array>> resultColumns;
+            std::vector<std::shared_ptr<arrow20::Array>> resultColumns;
 
-            arrow::UInt64Builder idsBuilder;
-            arrow::StringBuilder embeddingsBuilder;
+            arrow20::UInt64Builder idsBuilder;
+            arrow20::StringBuilder embeddingsBuilder;
 
             std::function<TStringBuilder()> generateEmbedding;
             if (VectorOpts.VectorType == "float") {
@@ -333,31 +333,31 @@ public:
                 return {};
             }
 
-            std::shared_ptr<arrow::UInt64Array> newIdColumn;
+            std::shared_ptr<arrow20::UInt64Array> newIdColumn;
             if (const auto status = idsBuilder.Finish(&newIdColumn); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
             resultColumns.push_back(std::move(newIdColumn));
 
-            std::shared_ptr<arrow::StringArray> newEmbeddingColumn;
+            std::shared_ptr<arrow20::StringArray> newEmbeddingColumn;
             if (const auto status = embeddingsBuilder.Finish(&newEmbeddingColumn); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
             resultColumns.push_back(std::move(newEmbeddingColumn));
 
-            const auto schema = arrow::schema({
-                arrow::field("id", arrow::uint64()),
-                arrow::field("embedding", arrow::binary()),
+            const auto schema = arrow20::schema({
+                arrow20::field("id", arrow20::uint64()),
+                arrow20::field("embedding", arrow20::binary()),
             });
-            const auto recordBatch = arrow::RecordBatch::Make(
+            const auto recordBatch = arrow20::RecordBatch::Make(
                 schema,
                 currentBatchSize,
                 resultColumns
             );
 
             TDataPortion::TArrow arrowData(
-                arrow::ipc::SerializeRecordBatch(*recordBatch, arrow::ipc::IpcWriteOptions{}).ValueOrDie()->ToString(),
-                arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
+                arrow20::ipc::SerializeRecordBatch(*recordBatch, arrow20::ipc::IpcWriteOptions{}).ValueOrDie()->ToString(),
+                arrow20::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
             );
 
             return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableOpts.Name.c_str()), std::move(arrowData), currentBatchSize)};

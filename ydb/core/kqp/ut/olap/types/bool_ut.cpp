@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
+    std::shared_ptr<arrow20::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
         using namespace NKikimr::NKqp::NTestArrow;
         std::vector<int32_t> ids;
         std::vector<int64_t> vals;
@@ -233,20 +233,20 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         auto idArr = MakeInt32Array(ids);
         auto intArr = MakeInt64Array(vals);
         auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
-        auto schema = arrow::schema({
-            arrow::field("id", arrow::int32(), /*nullable*/ false),
-            arrow::field(columnName, arrow::int64()),
-            arrow::field("b", arrow::uint8())
+        auto schema = arrow20::schema({
+            arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+            arrow20::field(columnName, arrow20::int64()),
+            arrow20::field("b", arrow20::uint8())
         });
 
         return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, intArr, boolArr });
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
+    std::shared_ptr<arrow20::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
         return MakeArrowBatchWithColumnName(rows, "int");
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
+    std::shared_ptr<arrow20::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
         using namespace NKikimr::NKqp::NTestArrow;
         std::vector<int32_t> ids;
         std::vector<int64_t> seconds;
@@ -263,10 +263,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         auto idArr = MakeInt32Array(ids);
         auto secondArr = MakeInt64Array(seconds);
         auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
-        auto schema = arrow::schema({
-            arrow::field("id", arrow::int32(), /*nullable*/ false),
-            arrow::field(secondName, arrow::int64()),
-            arrow::field("b", arrow::uint8())
+        auto schema = arrow20::schema({
+            arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+            arrow20::field(secondName, arrow20::int64()),
+            arrow20::field("b", arrow20::uint8())
         });
 
         return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, secondArr, boolArr });
@@ -784,7 +784,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     std::vector<bool> bs; bs.reserve(rows.size());
                     for (auto&& r : rows) bs.push_back(r.B.value());
                     auto bArr = MakeBoolArrayAsUInt8(bs);
-                    auto batch = MakeBatch({ arrow::field("b", arrow::uint8(), /*nullable*/ false) }, { bArr });
+                    auto batch = MakeBatch({ arrow20::field("b", arrow20::uint8(), /*nullable*/ false) }, { bArr });
                     helper.BulkUpsert(col, batch);
                 } else if (Load == ELoadKind::YDB_VALUE) {
                     TValueBuilder builder;
@@ -817,7 +817,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     auto idArr = MakeInt32Array(ids);
                     auto bArr  = MakeUInt8Array(bools);
                     auto iArr  = MakeInt64Array(ints);
-                    auto batch = MakeBatch({ arrow::field("id", arrow::int32()), arrow::field("b", arrow::uint8(), /*nullable*/ false), arrow::field("int", arrow::int64()) }, { idArr, bArr, iArr });
+                    auto batch = MakeBatch({ arrow20::field("id", arrow20::int32()), arrow20::field("b", arrow20::uint8(), /*nullable*/ false), arrow20::field("int", arrow20::int64()) }, { idArr, bArr, iArr });
                     helper.BulkUpsert(col, batch);
                 } else if (Load == ELoadKind::YDB_VALUE) {
                     TValueBuilder builder;
@@ -896,21 +896,21 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
         helper.ExecuteQuery("UPSERT INTO `" + ds + "` (id, int, b) VALUES (1, 100, true), (2, 200, false)");
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::Int64Builder i64;
-            arrow::UInt8Builder b;
+            arrow20::Int32Builder id;
+            arrow20::Int64Builder i64;
+            arrow20::UInt8Builder b;
             Y_ABORT_UNLESS(id.Append(1).ok());
             Y_ABORT_UNLESS(i64.Append(100).ok());
             Y_ABORT_UNLESS(b.Append(1).ok());
             Y_ABORT_UNLESS(id.Append(2).ok());
             Y_ABORT_UNLESS(i64.Append(200).ok());
             Y_ABORT_UNLESS(b.Append(0).ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            std::shared_ptr<arrow::Array> iArr; Y_ABORT_UNLESS(i64.Finish(&iArr).ok());
-            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("int", arrow::int64(), /*nullable*/ false), arrow::field("b", arrow::uint8(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 2, { idArr, iArr, bArr });
+            std::shared_ptr<arrow20::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+            std::shared_ptr<arrow20::Array> iArr; Y_ABORT_UNLESS(i64.Finish(&iArr).ok());
+            std::shared_ptr<arrow20::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
+            auto aSchema = arrow20::schema({ arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                arrow20::field("int", arrow20::int64(), /*nullable*/ false), arrow20::field("b", arrow20::uint8(), /*nullable*/ false) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 2, { idArr, iArr, bArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -990,8 +990,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             auto idArr = MakeInt32Array({1,2,3});
             auto bArr  = MakeBoolArrayAsUInt8Nullable({true, false, std::nullopt});
             auto batch = MakeBatch(
-                { arrow::field("id", arrow::int32(), /*nullable*/ false),
-                  arrow::field("b", arrow::uint8()) },
+                { arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                  arrow20::field("b", arrow20::uint8()) },
                 { idArr, bArr }
             );
 
@@ -1044,17 +1044,17 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::UInt8Builder b;
+            arrow20::Int32Builder id;
+            arrow20::UInt8Builder b;
             Y_ABORT_UNLESS(id.Append(1).ok()); Y_ABORT_UNLESS(b.Append(1).ok());
             Y_ABORT_UNLESS(id.Append(2).ok()); Y_ABORT_UNLESS(b.Append(0).ok());
             Y_ABORT_UNLESS(id.Append(3).ok()); Y_ABORT_UNLESS(b.Append(1).ok());
             Y_ABORT_UNLESS(id.Append(4).ok()); Y_ABORT_UNLESS(b.Append(0).ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("b", arrow::uint8(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, bArr });
+            std::shared_ptr<arrow20::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+            std::shared_ptr<arrow20::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
+            auto aSchema = arrow20::schema({ arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                arrow20::field("b", arrow20::uint8(), /*nullable*/ false) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 4, { idArr, bArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1090,17 +1090,17 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(colPk);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::UInt8Builder b;
-            arrow::Int32Builder id;
+            arrow20::UInt8Builder b;
+            arrow20::Int32Builder id;
             Y_ABORT_UNLESS(b.Append(1).ok()); Y_ABORT_UNLESS(id.Append(1).ok());
             Y_ABORT_UNLESS(b.Append(0).ok()); Y_ABORT_UNLESS(id.Append(2).ok());
             Y_ABORT_UNLESS(b.Append(1).ok()); Y_ABORT_UNLESS(id.Append(3).ok());
             Y_ABORT_UNLESS(b.Append(0).ok()); Y_ABORT_UNLESS(id.Append(4).ok());
-            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("b", arrow::uint8(), /*nullable*/ false),
-                arrow::field("id", arrow::int32(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 4, { bArr, idArr });
+            std::shared_ptr<arrow20::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
+            std::shared_ptr<arrow20::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+            auto aSchema = arrow20::schema({ arrow20::field("b", arrow20::uint8(), /*nullable*/ false),
+                arrow20::field("id", arrow20::int32(), /*nullable*/ false) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 4, { bArr, idArr });
             helper.BulkUpsert(colPk, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1143,9 +1143,9 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::Int64Builder i64;
-            arrow::UInt8Builder b;
+            arrow20::Int32Builder id;
+            arrow20::Int64Builder i64;
+            arrow20::UInt8Builder b;
             Y_ABORT_UNLESS(id.Append(1).ok());
             Y_ABORT_UNLESS(i64.Append(100).ok());
             Y_ABORT_UNLESS(b.Append(1).ok());
@@ -1159,18 +1159,18 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             Y_ABORT_UNLESS(i64.Append(400).ok());
             Y_ABORT_UNLESS(b.Append(0).ok());
             
-            std::shared_ptr<arrow::Array> idArr;
+            std::shared_ptr<arrow20::Array> idArr;
             Y_ABORT_UNLESS(id.Finish(&idArr).ok());
             
-            std::shared_ptr<arrow::Array> iArr;
+            std::shared_ptr<arrow20::Array> iArr;
             Y_ABORT_UNLESS(i64.Finish(&iArr).ok());
 
-            std::shared_ptr<arrow::Array> bArr;
+            std::shared_ptr<arrow20::Array> bArr;
             Y_ABORT_UNLESS(b.Finish(&bArr).ok());
 
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("int", arrow::int64(), /*nullable*/ false), arrow::field("b", arrow::uint8(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, iArr, bArr });
+            auto aSchema = arrow20::schema({ arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                arrow20::field("int", arrow20::int64(), /*nullable*/ false), arrow20::field("b", arrow20::uint8(), /*nullable*/ false) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 4, { idArr, iArr, bArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1224,10 +1224,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::Int64Builder v1;
-            arrow::Int64Builder v2;
-            arrow::UInt8Builder f;
+            arrow20::Int32Builder id;
+            arrow20::Int64Builder v1;
+            arrow20::Int64Builder v2;
+            arrow20::UInt8Builder f;
             auto add = [&](int i, i64 a, i64 b, bool fl) -> decltype(auto) {
                 Y_ABORT_UNLESS(id.Append(i).ok());
                 Y_ABORT_UNLESS(v1.Append(a).ok());
@@ -1240,22 +1240,22 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             add(3, 50, 60, true);
             add(4, 70, 40, true);
 
-            std::shared_ptr<arrow::Array> idArr;
+            std::shared_ptr<arrow20::Array> idArr;
             Y_ABORT_UNLESS(id.Finish(&idArr).ok());
 
-            std::shared_ptr<arrow::Array> v1Arr;
+            std::shared_ptr<arrow20::Array> v1Arr;
             Y_ABORT_UNLESS(v1.Finish(&v1Arr).ok());
 
-            std::shared_ptr<arrow::Array> v2Arr;
+            std::shared_ptr<arrow20::Array> v2Arr;
             Y_ABORT_UNLESS(v2.Finish(&v2Arr).ok());
 
-            std::shared_ptr<arrow::Array> fArr;
+            std::shared_ptr<arrow20::Array> fArr;
             Y_ABORT_UNLESS(f.Finish(&fArr).ok());
 
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("v1", arrow::int64(), /*nullable*/ false), arrow::field("v2", arrow::int64(), /*nullable*/ false),
-                arrow::field("flag", arrow::uint8(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, v1Arr, v2Arr, fArr });
+            auto aSchema = arrow20::schema({ arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                arrow20::field("v1", arrow20::int64(), /*nullable*/ false), arrow20::field("v2", arrow20::int64(), /*nullable*/ false),
+                arrow20::field("flag", arrow20::uint8(), /*nullable*/ false) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 4, { idArr, v1Arr, v2Arr, fArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1313,10 +1313,10 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             auto bArr  = MakeInt64Array({20, 5});
             auto cArr  = MakeUInt8ArrayNullable({std::nullopt, std::nullopt});
             auto batch = MakeBatch(
-                { arrow::field("id", arrow::int32(), /*nullable*/ false),
-                  arrow::field("a", arrow::int64(), /*nullable*/ false),
-                  arrow::field("b", arrow::int64(), /*nullable*/ false),
-                  arrow::field("cmp", arrow::uint8()) },
+                { arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                  arrow20::field("a", arrow20::int64(), /*nullable*/ false),
+                  arrow20::field("b", arrow20::int64(), /*nullable*/ false),
+                  arrow20::field("cmp", arrow20::uint8()) },
                 { idArr, aArr, bArr, cArr }
             );
 
@@ -1364,8 +1364,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             auto idArr = MakeInt32Array({1, 2});
             auto fArr  = MakeBoolArrayAsUInt8({true, false});
             auto batch = MakeBatch(
-                { arrow::field("id", arrow::int32(), /*nullable*/ false),
-                  arrow::field("flag", arrow::uint8(), /*nullable*/ false) },
+                { arrow20::field("id", arrow20::int32(), /*nullable*/ false),
+                  arrow20::field("flag", arrow20::uint8(), /*nullable*/ false) },
                 { idArr, fArr }
             );
 
@@ -1406,15 +1406,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::UInt8Builder b;
+            arrow20::Int32Builder id;
+            arrow20::UInt8Builder b;
             Y_ABORT_UNLESS(id.Append(1).ok()); Y_ABORT_UNLESS(b.Append(1).ok());
             Y_ABORT_UNLESS(id.Append(2).ok()); Y_ABORT_UNLESS(b.Append(0).ok());
             Y_ABORT_UNLESS(id.Append(3).ok()); Y_ABORT_UNLESS(b.AppendNull().ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field("b", arrow::uint8()) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 3, { idArr, bArr });
+            std::shared_ptr<arrow20::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+            std::shared_ptr<arrow20::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
+            auto aSchema = arrow20::schema({ arrow20::field("id", arrow20::int32(), /*nullable*/ false), arrow20::field("b", arrow20::uint8()) });
+            auto batch = arrow20::RecordBatch::Make(aSchema, 3, { idArr, bArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;

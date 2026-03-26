@@ -125,7 +125,7 @@ public:
         return GetTable().GetFilteredCount(recordsCount, defLimit);
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow20::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
     const std::shared_ptr<NArrow::TColumnFilter>& GetAppliedFilter() const {
         return GetTable().GetAppliedFilter();
@@ -193,15 +193,15 @@ class TSourceChunkToReply {
 private:
     YDB_READONLY(ui32, StartIndex, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
-    std::shared_ptr<arrow::Table> Table;
+    std::shared_ptr<arrow20::Table> Table;
 
 public:
-    const std::shared_ptr<arrow::Table>& GetTable() const {
+    const std::shared_ptr<arrow20::Table>& GetTable() const {
         AFL_VERIFY(Table);
         return Table;
     }
 
-    std::shared_ptr<arrow::Table>&& ExtractTable() {
+    std::shared_ptr<arrow20::Table>&& ExtractTable() {
         AFL_VERIFY(Table);
         return std::move(Table);
     }
@@ -210,7 +210,7 @@ public:
         return !!Table && Table->num_rows();
     }
 
-    TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
+    TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow20::Table>& table)
         : StartIndex(startIndex)
         , RecordsCount(recordsCount)
         , Table(table) {
@@ -260,7 +260,7 @@ public:
         PagesToResult = std::deque<TPortionDataAccessor::TReadPage>(pages.begin(), pages.end());
     }
 
-    void SetResultChunk(std::shared_ptr<arrow::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
+    void SetResultChunk(std::shared_ptr<arrow20::Table>&& table, const ui32 indexStart, const ui32 recordsCount) {
         auto page = ExtractPageForResult();
         AFL_VERIFY(page.GetIndexStart() == indexStart)("real", page.GetIndexStart())("expected", indexStart);
         AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);

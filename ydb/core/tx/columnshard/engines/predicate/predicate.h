@@ -18,10 +18,10 @@ private:
 
 public:
     static NArrow::NMerger::TSortableBatchPosition CutNulls(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema);
+        const std::shared_ptr<arrow20::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow20::Schema>& pkSchema);
 
     NArrow::NMerger::TSortableBatchPosition Batch;
-    bool IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const;
+    bool IsEqualSchema(const std::shared_ptr<arrow20::Schema>& schema) const;
     bool IsEqualPointTo(const TPredicate& item) const;
 
     NArrow::ECompareType GetCompareType() const {

@@ -22,7 +22,7 @@ namespace NYql::NUdf {
 class IArrayBuilder {
 public:
     struct TArrayDataItem {
-        const arrow::ArrayData* Data = nullptr;
+        const arrow20::ArrayData* Data = nullptr;
         ui64 StartOffset;
     };
     virtual ~IArrayBuilder() = default;
@@ -31,10 +31,10 @@ public:
     virtual void Add(TBlockItem value) = 0;
     virtual void Add(TBlockItem value, size_t count) = 0;
     virtual void Add(TInputBuffer& input) = 0;
-    virtual void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) = 0;
+    virtual void AddMany(const arrow20::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) = 0;
     virtual void AddMany(const TArrayDataItem* arrays, size_t arrayCount, ui64 beginIndex, size_t count) = 0;
     virtual void AddMany(const TArrayDataItem* arrays, size_t arrayCount, const ui64* indexes, size_t count) = 0;
-    virtual arrow::Datum Build(bool finish) = 0;
+    virtual arrow20::Datum Build(bool finish) = 0;
 };
 
 inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuilder::TArrayDataItem* arrays, size_t arrayCount, ui64& idx) {
@@ -56,16 +56,16 @@ inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuil
 class IScalarBuilder {
 public:
     virtual ~IScalarBuilder() = default;
-    virtual arrow::Datum Build(TBlockItem value) const = 0;
-    virtual arrow::Datum Build(NUdf::TUnboxedValuePod value) const = 0;
+    virtual arrow20::Datum Build(TBlockItem value) const = 0;
+    virtual arrow20::Datum Build(NUdf::TUnboxedValuePod value) const = 0;
 };
 
-inline std::shared_ptr<arrow::DataType> GetArrowType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+inline std::shared_ptr<arrow20::DataType> GetArrowType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
     auto arrowTypeHandle = typeInfoHelper.MakeArrowType(type);
     Y_ENSURE(arrowTypeHandle);
     ArrowSchema s;
     arrowTypeHandle->Export(&s);
-    return ARROW_RESULT(arrow::ImportType(&s));
+    return ARROW_RESULT(arrow20::ImportType(&s));
 }
 
 class TArrayBuilderBase: public IArrayBuilder {
@@ -76,7 +76,7 @@ public:
 
     struct TBlockArrayTree {
         using Ptr = std::shared_ptr<TBlockArrayTree>;
-        std::deque<std::shared_ptr<arrow::ArrayData>> Payload;
+        std::deque<std::shared_ptr<arrow20::ArrayData>> Payload;
         std::vector<TBlockArrayTree::Ptr> Children;
     };
 
@@ -85,7 +85,7 @@ public:
         TMaybe<ui8> MinFillPercentage; // if an internal buffer size is smaller than % of capacity, then shrink the buffer.
     };
 
-    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params)
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params)
         : ArrowType_(std::move(arrowType))
         , Pool_(&pool)
         , MaxLen_(maxLen)
@@ -97,7 +97,7 @@ public:
         Y_ABORT_UNLESS(maxLen > 0);
     }
 
-    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, const TParams& params)
+    TArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params)
         : TArrayBuilderBase(typeInfoHelper, GetArrowType(typeInfoHelper, type), pool, maxLen, params)
     {
     }
@@ -136,17 +136,17 @@ public:
         CurrLen_++;
     }
 
-    inline void AddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
+    inline void AddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) {
         TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, beginIndex, count);
     }
 
-    inline void AddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
+    inline void AddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) {
         TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, indexes, count);
     }
 
-    void AddMany(const arrow::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) final {
+    void AddMany(const arrow20::ArrayData& array, size_t popCount, const ui8* sparseBitmap, size_t bitmapSize) final {
         Y_ABORT_UNLESS(size_t(array.length) == bitmapSize);
         Y_ABORT_UNLESS(popCount <= bitmapSize);
         Y_ABORT_UNLESS(CurrLen_ + popCount <= MaxLen_);
@@ -222,9 +222,9 @@ public:
         }
     }
 
-    arrow::Datum Build(bool finish) final {
+    arrow20::Datum Build(bool finish) final {
         auto tree = BuildTree(finish);
-        TVector<std::shared_ptr<arrow::ArrayData>> chunks;
+        TVector<std::shared_ptr<arrow20::ArrayData>> chunks;
         while (size_t size = CalcSliceSize(*tree)) {
             chunks.push_back(Slice(*tree, size));
         }
@@ -248,9 +248,9 @@ protected:
     }
     virtual void DoAdd(TInputBuffer& input) = 0;
     virtual void DoAddDefault() = 0;
-    virtual void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) = 0;
-    virtual void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) = 0;
-    virtual void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) = 0;
+    virtual void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) = 0;
+    virtual void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) = 0;
+    virtual void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) = 0;
     virtual TBlockArrayTree::Ptr DoBuildTree(bool finish) = 0;
 
     // returns the newly allocated size in bytes
@@ -278,12 +278,12 @@ private:
         return static_cast<size_t>(result);
     }
 
-    static std::shared_ptr<arrow::ArrayData> Slice(TBlockArrayTree& tree, size_t size) {
+    static std::shared_ptr<arrow20::ArrayData> Slice(TBlockArrayTree& tree, size_t size) {
         Y_ABORT_UNLESS(size > 0);
 
         Y_ABORT_UNLESS(!tree.Payload.empty());
         auto& main = tree.Payload.front();
-        std::shared_ptr<arrow::ArrayData> sliced;
+        std::shared_ptr<arrow20::ArrayData> sliced;
         if (size == size_t(main->length)) {
             sliced = main;
             tree.Payload.pop_front();
@@ -293,7 +293,7 @@ private:
         }
 
         if (!tree.Children.empty()) {
-            std::vector<std::shared_ptr<arrow::ArrayData>> children;
+            std::vector<std::shared_ptr<arrow20::ArrayData>> children;
             for (auto& child : tree.Children) {
                 children.push_back(Slice(*child, size));
             }
@@ -329,8 +329,8 @@ protected:
         }
     }
 
-    const std::shared_ptr<arrow::DataType> ArrowType_;
-    arrow::MemoryPool* const Pool_;
+    const std::shared_ptr<arrow20::DataType> ArrowType_;
+    arrow20::MemoryPool* const Pool_;
     const size_t MaxLen_;
     const size_t MaxBlockSizeInBytes_;
     const TMaybe<ui8> MinFillPercentage_;
@@ -343,13 +343,13 @@ private:
 template <typename TLayout, bool Nullable, typename TDerived>
 class TFixedSizeArrayBuilderBase: public TArrayBuilderBase {
 public:
-    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params)
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
     {
         Reserve();
     }
 
-    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, const TParams& params)
+    TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params)
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
     {
         Reserve();
@@ -426,7 +426,7 @@ public:
         PlaceItem(TLayout{});
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             if (array.buffers.front()) {
@@ -443,7 +443,7 @@ public:
         CompressArray(src, sparseBitmap, dst, array.length);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             for (size_t i = beginIndex; i < beginIndex + count; ++i) {
@@ -457,7 +457,7 @@ public:
         }
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_ABORT_UNLESS(array.buffers.size() > 1);
         if constexpr (Nullable) {
             for (size_t i = 0; i < count; ++i) {
@@ -473,17 +473,17 @@ public:
 
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         const size_t len = GetCurrLen();
-        std::shared_ptr<arrow::Buffer> nulls;
+        std::shared_ptr<arrow20::Buffer> nulls;
         if constexpr (Nullable) {
             NullBuilder_->UnsafeAdvance(len);
             nulls = NullBuilder_->Finish();
             nulls = MakeDenseBitmap(nulls->data(), len, Pool_);
         }
         DataBuilder_->UnsafeAdvance(len);
-        std::shared_ptr<arrow::Buffer> data = DataBuilder_->Finish();
+        std::shared_ptr<arrow20::Buffer> data = DataBuilder_->Finish();
 
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
-        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, len, {nulls, data}));
+        result->Payload.push_back(arrow20::ArrayData::Make(ArrowType_, len, {nulls, data}));
 
         NullBuilder_.reset();
         DataBuilder_.reset();
@@ -527,12 +527,12 @@ class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, N
     using TParams = TArrayBuilderBase::TParams;
 
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
     {
     }
 
-    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
     {
     }
@@ -561,12 +561,12 @@ class TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable> final: public TF
     using TParams = TArrayBuilderBase::TParams;
 
 public:
-    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
     {
     }
 
-    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
     {
     }
@@ -594,12 +594,12 @@ class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedVal
     using TParams = TArrayBuilderBase::TParams;
 
 public:
-    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
     {
     }
 
-    TResourceArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TResourceArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
     {
     }
@@ -635,13 +635,13 @@ class TStringArrayBuilder final: public TArrayBuilderBase {
     using TOffset = typename TStringType::offset_type;
 
 public:
-    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TStringArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow20::DataType> arrowType, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
     {
         Reserve();
     }
 
-    TStringArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TStringArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
     {
         Reserve();
@@ -752,7 +752,7 @@ public:
         AppendCurrentOffset();
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_UNUSED(popCount);
         Y_ABORT_UNLESS(array.buffers.size() > 2);
         Y_ABORT_UNLESS(!Nullable || NullBuilder_->Length() == OffsetsBuilder_->Length());
@@ -836,7 +836,7 @@ public:
         }
     }
 
-    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_ABORT_UNLESS(array.buffers.size() > 2);
         Y_ABORT_UNLESS(!Nullable || NullBuilder_->Length() == OffsetsBuilder_->Length());
 
@@ -880,7 +880,7 @@ public:
         }
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_ABORT_UNLESS(array.buffers.size() > 2);
         Y_ABORT_UNLESS(!Nullable || NullBuilder_->Length() == OffsetsBuilder_->Length());
 
@@ -955,15 +955,15 @@ private:
         Y_ABORT_UNLESS(length > 0);
 
         AppendCurrentOffset();
-        std::shared_ptr<arrow::Buffer> nullBitmap;
+        std::shared_ptr<arrow20::Buffer> nullBitmap;
         if constexpr (Nullable) {
             nullBitmap = NullBuilder_->Finish();
             nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool_);
         }
-        std::shared_ptr<arrow::Buffer> offsets = OffsetsBuilder_->Finish();
-        std::shared_ptr<arrow::Buffer> data = DataBuilder_->Finish();
+        std::shared_ptr<arrow20::Buffer> offsets = OffsetsBuilder_->Finish();
+        std::shared_ptr<arrow20::Buffer> data = DataBuilder_->Finish();
 
-        Chunks_.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap, offsets, data}));
+        Chunks_.push_back(arrow20::ArrayData::Make(ArrowType_, length, {nullBitmap, offsets, data}));
         if (!finish) {
             Reserve();
         }
@@ -973,7 +973,7 @@ private:
     std::unique_ptr<TTypedBufferBuilder<TOffset>> OffsetsBuilder_;
     std::unique_ptr<TTypedBufferBuilder<ui8>> DataBuilder_;
 
-    std::deque<std::shared_ptr<arrow::ArrayData>> Chunks_;
+    std::deque<std::shared_ptr<arrow20::ArrayData>> Chunks_;
 
     const IPgBuilder* PgBuilder_ = nullptr;
     i32 TypeLen_ = 0;
@@ -982,7 +982,7 @@ private:
 template <bool Nullable, typename TDerived>
 class TTupleArrayBuilderBase: public TArrayBuilderBase {
 public:
-    TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
     {
         Reserve();
@@ -1034,7 +1034,7 @@ public:
         static_cast<TDerived*>(this)->AddToChildrenDefault();
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
 
         if constexpr (Nullable) {
@@ -1050,7 +1050,7 @@ public:
         static_cast<TDerived*>(this)->AddManyToChildren(array, sparseBitmap, popCount);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
 
         if constexpr (Nullable) {
@@ -1062,7 +1062,7 @@ public:
         static_cast<TDerived*>(this)->AddManyToChildren(array, beginIndex, count);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
 
         if constexpr (Nullable) {
@@ -1077,7 +1077,7 @@ public:
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
 
-        std::shared_ptr<arrow::Buffer> nullBitmap;
+        std::shared_ptr<arrow20::Buffer> nullBitmap;
         const size_t length = GetCurrLen();
         if constexpr (Nullable) {
             Y_ENSURE(length == NullBuilder_->Length(), "Unexpected NullBuilder length");
@@ -1086,7 +1086,7 @@ public:
         }
 
         Y_ABORT_UNLESS(length);
-        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
+        result->Payload.push_back(arrow20::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         static_cast<TDerived*>(this)->BuildChildrenTree(finish, result->Children);
 
         if (!finish) {
@@ -1116,7 +1116,7 @@ class TTupleArrayBuilder final: public TTupleArrayBuilderBase<Nullable, TTupleAr
     using TParams = TArrayBuilderBase::TParams;
 
 public:
-    TTupleArrayBuilder(TVector<TArrayBuilderBase::Ptr>&& children, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
+    TTupleArrayBuilder(TVector<TArrayBuilderBase::Ptr>&& children, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool,
                        size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
         , Children_(std::move(children))
@@ -1156,21 +1156,21 @@ public:
         }
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
+    void AddManyToChildren(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
         Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
         for (size_t i = 0; i < Children_.size(); ++i) {
             Children_[i]->AddMany(*array.child_data[i], popCount, sparseBitmap, array.length);
         }
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
+    void AddManyToChildren(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) {
         Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
         for (size_t i = 0; i < Children_.size(); ++i) {
             Children_[i]->AddMany(*array.child_data[i], beginIndex, count);
         }
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
+    void AddManyToChildren(const arrow20::ArrayData& array, const ui64* indexes, size_t count) {
         Y_ABORT_UNLESS(array.child_data.size() == Children_.size());
         for (size_t i = 0; i < Children_.size(); ++i) {
             Children_[i]->AddMany(*array.child_data[i], indexes, count);
@@ -1196,10 +1196,10 @@ class TTzDateArrayBuilder final: public TTupleArrayBuilderBase<Nullable, TTzDate
     static constexpr auto DataSlot = TDataType<TDate>::Slot;
 
 public:
-    TTzDateArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+    TTzDateArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
         , DateBuilder_(typeInfoHelper, MakeTzLayoutArrowType<DataSlot>(), pool, maxLen, params)
-        , TimezoneBuilder_(typeInfoHelper, arrow::uint16(), pool, maxLen, params)
+        , TimezoneBuilder_(typeInfoHelper, arrow20::uint16(), pool, maxLen, params)
     {
     }
 
@@ -1223,19 +1223,19 @@ public:
         TimezoneBuilder_.Add(input);
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
+    void AddManyToChildren(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) {
         Y_ABORT_UNLESS(array.child_data.size() == 2);
         DateBuilder_.AddMany(*array.child_data[0], popCount, sparseBitmap, array.length);
         TimezoneBuilder_.AddMany(*array.child_data[1], popCount, sparseBitmap, array.length);
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
+    void AddManyToChildren(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) {
         Y_ABORT_UNLESS(array.child_data.size() == 2);
         DateBuilder_.AddMany(*array.child_data[0], beginIndex, count);
         TimezoneBuilder_.AddMany(*array.child_data[1], beginIndex, count);
     }
 
-    void AddManyToChildren(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
+    void AddManyToChildren(const arrow20::ArrayData& array, const ui64* indexes, size_t count) {
         Y_ABORT_UNLESS(array.child_data.size() == 2);
         DateBuilder_.AddMany(*array.child_data[0], indexes, count);
         TimezoneBuilder_.AddMany(*array.child_data[1], indexes, count);
@@ -1253,7 +1253,7 @@ private:
 
 class TExternalOptionalArrayBuilder final: public TArrayBuilderBase {
 public:
-    TExternalOptionalArrayBuilder(std::unique_ptr<TArrayBuilderBase>&& inner, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
+    TExternalOptionalArrayBuilder(std::unique_ptr<TArrayBuilderBase>&& inner, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool,
                                   size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
         , Inner_(std::move(inner))
@@ -1299,7 +1299,7 @@ public:
         Inner_->AddDefault();
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
         Y_ABORT_UNLESS(array.child_data.size() == 1);
 
@@ -1314,7 +1314,7 @@ public:
         Inner_->AddMany(*array.child_data[0], popCount, sparseBitmap, array.length);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
         Y_ABORT_UNLESS(array.child_data.size() == 1);
 
@@ -1325,7 +1325,7 @@ public:
         Inner_->AddMany(*array.child_data[0], beginIndex, count);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_ABORT_UNLESS(!array.buffers.empty());
         Y_ABORT_UNLESS(array.child_data.size() == 1);
 
@@ -1339,14 +1339,14 @@ public:
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
 
-        std::shared_ptr<arrow::Buffer> nullBitmap;
+        std::shared_ptr<arrow20::Buffer> nullBitmap;
         const size_t length = GetCurrLen();
         Y_ENSURE(length == NullBuilder_->Length(), "Unexpected NullBuilder length");
         nullBitmap = NullBuilder_->Finish();
         nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool_);
 
         Y_ABORT_UNLESS(length);
-        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
+        result->Payload.push_back(arrow20::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         result->Children.emplace_back(Inner_->BuildTree(finish));
 
         if (!finish) {
@@ -1371,7 +1371,7 @@ private:
 template <bool IsNull>
 class TSingularBlockBuilder final: public TArrayBuilderBase {
 public:
-    TSingularBlockBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
+    TSingularBlockBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool,
                           size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
     {
@@ -1393,15 +1393,15 @@ public:
     void DoAddDefault() final {
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_UNUSED(array, sparseBitmap, popCount);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, ui64 beginIndex, size_t count) final {
         Y_UNUSED(array, beginIndex, count);
     }
 
-    void DoAddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) final {
+    void DoAddMany(const arrow20::ArrayData& array, const ui64* indexes, size_t count) final {
         Y_UNUSED(array, indexes, count);
     }
 
@@ -1438,27 +1438,27 @@ struct TBuilderTraits {
 
     constexpr static bool PassType = true;
 
-    static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
+    static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>(type, typeInfoHelper, pool, maxLen, params);
         } else {
             if (desc.Typelen == -1) {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Text>>(type, typeInfoHelper, pool, maxLen, params);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow20::BinaryType, true, EPgStringType::Text>>(type, typeInfoHelper, pool, maxLen, params);
                 ret->SetPgBuilder(pgBuilder, desc.Typelen);
                 return ret;
             } else if (desc.Typelen == -2) {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::CString>>(type, typeInfoHelper, pool, maxLen, params);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow20::BinaryType, true, EPgStringType::CString>>(type, typeInfoHelper, pool, maxLen, params);
                 ret->SetPgBuilder(pgBuilder, desc.Typelen);
                 return ret;
             } else {
-                auto ret = std::make_unique<TStringArrayBuilder<arrow::BinaryType, true, EPgStringType::Fixed>>(type, typeInfoHelper, pool, maxLen, params);
+                auto ret = std::make_unique<TStringArrayBuilder<arrow20::BinaryType, true, EPgStringType::Fixed>>(type, typeInfoHelper, pool, maxLen, params);
                 ret->SetPgBuilder(pgBuilder, desc.Typelen);
                 return ret;
             }
         }
     }
 
-    static std::unique_ptr<TResult> MakeResource(bool isOptional, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
+    static std::unique_ptr<TResult> MakeResource(bool isOptional, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
         if (isOptional) {
             return std::make_unique<TResource<true>>(type, typeInfoHelper, pool, maxLen, params);
         } else {
@@ -1467,7 +1467,7 @@ struct TBuilderTraits {
     }
 
     template <typename TTzDate>
-    static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
         if (isOptional) {
             return std::make_unique<TTzDateReader<TTzDate, true>>(type, typeInfoHelper, pool, maxLen, params);
         } else {
@@ -1476,27 +1476,27 @@ struct TBuilderTraits {
     }
 
     template <bool IsNull>
-    static std::unique_ptr<TResult> MakeSingular(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
+    static std::unique_ptr<TResult> MakeSingular(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow20::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
         return std::make_unique<TSingular<IsNull>>(type, typeInfoHelper, pool, maxLen, params);
     }
 };
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
-    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool,
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool,
     size_t maxBlockLength, const IPgBuilder* pgBuilder)
 {
     return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams{});
 }
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
-    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool,
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool,
     size_t maxBlockLength, const IPgBuilder* pgBuilder, size_t* totalAllocated)
 {
     return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams{.TotalAllocated = totalAllocated});
 }
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
-    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool,
+    const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow20::MemoryPool& pool,
     size_t maxBlockLength, const IPgBuilder* pgBuilder, const TArrayBuilderParams& params)
 {
     return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, params);

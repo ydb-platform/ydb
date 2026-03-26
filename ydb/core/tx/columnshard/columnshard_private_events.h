@@ -396,12 +396,12 @@ struct TEvPrivate {
     3. TEvBackupExportState - internal message for iscan iface
     */
     struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
-        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& data, bool isLast)
             : Data(data)
             , IsLast(isLast) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> Data;
+        std::shared_ptr<arrow20::RecordBatch> Data;
         bool IsLast;
     };
 
@@ -436,12 +436,12 @@ struct TEvPrivate {
     */
     
     struct TEvBackupImportRecordBatch: public TEventLocal<TEvBackupImportRecordBatch, EvBackupImportRecordBatch> {
-        explicit TEvBackupImportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupImportRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& data, bool isLast)
             : Data(data)
             , IsLast(isLast) {
         }
 
-        std::shared_ptr<arrow::RecordBatch> Data;
+        std::shared_ptr<arrow20::RecordBatch> Data;
         bool IsLast;
         TString Error;
     };

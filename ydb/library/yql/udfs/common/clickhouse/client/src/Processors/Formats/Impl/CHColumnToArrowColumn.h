@@ -19,17 +19,17 @@ class CHColumnToArrowColumn
 public:
     CHColumnToArrowColumn(const Block & header, const std::string & format_name_, bool low_cardinality_as_dictionary_);
 
-    void chChunkToArrowTable(std::shared_ptr<arrow::Table> & res, const Chunk & chunk, size_t columns_num);
+    void chChunkToArrowTable(std::shared_ptr<arrow20::Table> & res, const Chunk & chunk, size_t columns_num);
 
 private:
     ColumnsWithTypeAndName header_columns;
-    std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
+    std::vector<std::shared_ptr<arrow20::Field>> arrow_fields;
     const std::string format_name;
     bool low_cardinality_as_dictionary;
     /// Map {column name : arrow dictionary}.
     /// To avoid converting dictionary from LowCardinality to Arrow
     /// Dictionary every chunk we save it and reuse.
-    std::unordered_map<std::string, std::shared_ptr<arrow::Array>> dictionary_values;
+    std::unordered_map<std::string, std::shared_ptr<arrow20::Array>> dictionary_values;
 };
 
 }

@@ -200,7 +200,7 @@ void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorCont
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow20::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(OptimizerPlanner)) {
         AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "applied_optimizer")("constructor", constructor->GetClassName());
         return;
@@ -221,7 +221,7 @@ void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOpti
 /*
 
 void TGranuleMeta::ResetMetadataManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
-    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow20::Schema>& pkSchema) {
     if (constructor->ApplyToCurrentObject(MetadataMemoryManager)) {
         return;
     }

@@ -12,7 +12,7 @@ class TRowsCollection {
 private:
     std::vector<TString> RawData;
 
-    void Initialize(const std::shared_ptr<arrow::RecordBatch>& data);
+    void Initialize(const std::shared_ptr<arrow20::RecordBatch>& data);
 
 public:
     void Reallocate() {
@@ -43,7 +43,7 @@ public:
         return RawData.size();
     }
 
-    TSimpleRow GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema) const;
+    TSimpleRow GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow20::Schema>& schema) const;
 
     TRowsCollection() = default;
 
@@ -51,17 +51,17 @@ public:
         : RawData(strings) {
     }
 
-    TRowsCollection(const std::shared_ptr<arrow::RecordBatch>& data) {
+    TRowsCollection(const std::shared_ptr<arrow20::RecordBatch>& data) {
         Initialize(data);
     }
 
-    TSimpleRow GetFirst(const std::shared_ptr<arrow::Schema>& schema) const;
+    TSimpleRow GetFirst(const std::shared_ptr<arrow20::Schema>& schema) const;
 
-    TSimpleRow GetLast(const std::shared_ptr<arrow::Schema>& schema) const;
+    TSimpleRow GetLast(const std::shared_ptr<arrow20::Schema>& schema) const;
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> BuildBatch(const std::shared_ptr<arrow::Schema>& schema) const;
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> BuildBatch(const std::shared_ptr<arrow20::Schema>& schema) const;
 
-    TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
+    TConclusion<TString> DebugString(const std::shared_ptr<arrow20::Schema>& schema) const;
 };
 
 }   // namespace NKikimr::NArrow

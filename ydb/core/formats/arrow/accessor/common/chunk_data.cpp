@@ -4,8 +4,8 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const std::shared_ptr<arrow::Scalar>& defaultValue,
-    const std::shared_ptr<arrow::DataType>& columnType, const std::shared_ptr<NSerialization::ISerializer>& defaultSerializer,
+TChunkConstructionData::TChunkConstructionData(const ui32 recordsCount, const std::shared_ptr<arrow20::Scalar>& defaultValue,
+    const std::shared_ptr<arrow20::DataType>& columnType, const std::shared_ptr<NSerialization::ISerializer>& defaultSerializer,
     const std::optional<ui32>& notNullRecordsCount, std::shared_ptr<IAdditionalAccessorData> additionalAccessorData)
     : RecordsCount(recordsCount)
     , NotNullRecordsCount(notNullRecordsCount)

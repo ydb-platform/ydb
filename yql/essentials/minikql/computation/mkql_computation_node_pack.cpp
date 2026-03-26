@@ -960,7 +960,7 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
     }
 }
 
-bool HasOffset(const arrow::ArrayData& array, i64 expectedOffset) {
+bool HasOffset(const arrow20::ArrayData& array, i64 expectedOffset) {
     return array.offset == expectedOffset &&
            AllOf(array.child_data, [&](const auto& child) { return HasOffset(*child, expectedOffset); });
 }
@@ -1130,7 +1130,7 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type,
                                                    EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
+                                                   arrow20::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
@@ -1145,7 +1145,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
 template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
                                                    TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* pool,
+                                                   arrow20::MemoryPool* pool,
                                                    TMaybe<ui8> minFillPercentage)
     : TValuePackerTransport(type, EValuePackerVersion::V0, bufferPageAllocSize, pool, minFillPercentage)
 {
@@ -1154,7 +1154,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
 template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
                                                    EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
+                                                   arrow20::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
     , State_(ScanTypeProperties(Type_, false))
@@ -1169,7 +1169,7 @@ template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable,
                                                    const TType* type,
                                                    TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* ppol,
+                                                   arrow20::MemoryPool* ppol,
                                                    TMaybe<ui8> minFillPercentage)
     : TValuePackerTransport(stable,
                             type,
@@ -1306,7 +1306,7 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItem(const NUdf
 template <bool Fast>
 TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 width) {
     MKQL_ENSURE(width == BlockSerializers_.size(), "Invalid width");
-    const ui64 len = TArrowBlock::From(values[BlockLenIndex_]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+    const ui64 len = TArrowBlock::From(values[BlockLenIndex_]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
 
     auto metadataBuffer = std::make_shared<TBuffer>();
 
@@ -1344,13 +1344,13 @@ TValuePackerTransport<Fast>& TValuePackerTransport<Fast>::AddWideItemBlocks(cons
 
     PackData<false>(flags.Data(), *metadataBuffer);
 
-    TVector<std::shared_ptr<arrow::ArrayData>> arrays(width);
+    TVector<std::shared_ptr<arrow20::ArrayData>> arrays(width);
     // save reminder of original offset for each column - it is needed to properly handle offset in bitmaps
     for (size_t i = 0; i < width; ++i) {
         if (i == BlockLenIndex_) {
             continue;
         }
-        arrow::Datum datum = TArrowBlock::From(values[i]).GetDatum();
+        arrow20::Datum datum = TArrowBlock::From(values[i]).GetDatum();
         ui8 reminder = 0;
         if (datum.is_array()) {
             i64 offset = datum.array()->offset;
@@ -1471,7 +1471,7 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const 
                 }
                 return holderFactory.CreateArrowBlock(array);
             }
-            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)));
+            return holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(len)));
         };
 
         if (IsLegacyBlock_) {

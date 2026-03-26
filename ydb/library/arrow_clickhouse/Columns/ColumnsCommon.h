@@ -118,23 +118,23 @@ inline bool insertDuration(MutableColumn & column, Int64 value)
 
 inline bool insertString(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnBinary &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnBinary &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
 }
 
 inline bool insertFixedString(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnFixedString &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnFixedString &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
 }
 
 inline bool insertDecimal(MutableColumn & column, const StringRef & value)
 {
-    return assert_cast<MutableColumnDecimal &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();
+    return assert_cast<MutableColumnDecimal &>(column).Append(arrow20::util::string_view{value.data, value.size}).ok();
 }
 
 template <typename DataType>
-inline const char * deserializeNumberFromArena(arrow::NumericBuilder<DataType> & column, const char * pos)
+inline const char * deserializeNumberFromArena(arrow20::NumericBuilder<DataType> & column, const char * pos)
 {
-    using T = typename arrow::TypeTraits<DataType>::CType;
+    using T = typename arrow20::TypeTraits<DataType>::CType;
 
     T value = unalignedLoad<T>(pos);
     column.Append(value).ok();
@@ -162,9 +162,9 @@ inline const char * deserializeDecimalFromArena(MutableColumnDecimal & column, c
     return pos + column.byte_width();
 }
 
-bool insertData(MutableColumn & column, const StringRef & value, const arrow::Type::type typeId);
+bool insertData(MutableColumn & column, const StringRef & value, const arrow20::Type::type typeId);
 StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & pool, char const *& begin);
-const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow::Type::type typeId);
+const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow20::Type::type typeId);
 void updateHashWithValue(const IColumn& column, size_t row, SipHash & hash);
 MutableColumnPtr createMutableColumn(const DataTypePtr & type);
 uint32_t fixedContiguousSize(const DataTypePtr & type);

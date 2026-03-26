@@ -14,15 +14,15 @@ private:
     class TWriter: public TColumnPortionResult {
     private:
         using TBase = TColumnPortionResult;
-        const std::shared_ptr<arrow::DataType> DataType;
-        std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
-        std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
-        arrow::UInt32Builder* IndexBuilderImpl = nullptr;
+        const std::shared_ptr<arrow20::DataType> DataType;
+        std::unique_ptr<arrow20::ArrayBuilder> IndexBuilder;
+        std::unique_ptr<arrow20::ArrayBuilder> ValueBuilder;
+        arrow20::UInt32Builder* IndexBuilderImpl = nullptr;
         const TColumnMergeContext& Context;
         ui32 UsefulRecordsCount = 0;
         std::optional<ui32> LastRecordIdx;
     public:
-        bool AddRecord(const arrow::Array& colValue, const ui32 idx, const ui32 globalRecordIdx) {
+        bool AddRecord(const arrow20::Array& colValue, const ui32 idx, const ui32 globalRecordIdx) {
             AFL_VERIFY(NArrow::Append(*ValueBuilder, colValue, idx));
             if (LastRecordIdx) {
                 AFL_VERIFY(*LastRecordIdx < globalRecordIdx);

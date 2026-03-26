@@ -76,11 +76,11 @@ private:
     THashMap<TStorageAddress, std::string> StorageHash;
     std::deque<std::string> Storage;
     std::deque<TString> StorageStrings;
-    const std::shared_ptr<arrow::DataType> Type;
+    const std::shared_ptr<arrow20::DataType> Type;
     const TSettings Settings;
 
 public:
-    TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings);
+    TDataBuilder(const std::shared_ptr<arrow20::DataType>& type, const TSettings& settings);
 
     void StartNextRecord() {
         ++CurrentRecordIndex;

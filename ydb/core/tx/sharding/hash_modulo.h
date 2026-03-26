@@ -328,7 +328,7 @@ public:
         return GetClassNameStatic();
     }
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
 };
 
 class TGranuleSharding: public THashGranuleSharding {
@@ -343,7 +343,7 @@ private:
     static const inline TFactory::TRegistrator<TGranuleSharding> Registrator = TFactory::TRegistrator<TGranuleSharding>(GetClassNameStatic());
 
 protected:
-    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const override {
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow20::Table>& table) const override {
         const std::vector<ui64> hashes = CalcHashes(table);
         auto result = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
         const auto getter = [&](const ui32 index) {

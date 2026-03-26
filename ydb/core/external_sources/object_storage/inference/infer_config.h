@@ -15,15 +15,15 @@ struct FormatConfig {
 };
 
 struct CsvConfig : public FormatConfig {
-    arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
-    arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
+    arrow20::csv::ParseOptions ParseOpts = arrow20::csv::ParseOptions::Defaults();
+    arrow20::csv::ConvertOptions ConvOpts = arrow20::csv::ConvertOptions::Defaults();
 };
 
 using TsvConfig = CsvConfig;
 using ParquetConfig = FormatConfig;
 
 struct JsonConfig : public FormatConfig {
-    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
+    arrow20::json::ParseOptions ParseOpts = arrow20::json::ParseOptions::Defaults();
 };
 
 std::shared_ptr<FormatConfig> MakeFormatConfig(const THashMap<TString, TString>& params = {});

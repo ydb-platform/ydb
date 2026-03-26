@@ -9,10 +9,10 @@ constexpr size_t ArrowMemoryAlignment = 64;
 static_assert((ArrowMemoryAlignment & (ArrowMemoryAlignment - 1)) == 0, "ArrowMemoryAlignment should be power of 2");
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
-arrow::MemoryPool* GetYqlMemoryPool();
+arrow20::MemoryPool* GetYqlMemoryPool();
 #else
-inline arrow::MemoryPool* GetYqlMemoryPool() {
-    return arrow::default_memory_pool();
+inline arrow20::MemoryPool* GetYqlMemoryPool() {
+    return arrow20::default_memory_pool();
 }
 #endif
 

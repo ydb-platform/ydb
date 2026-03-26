@@ -114,7 +114,7 @@ using TNullableAllocGuard = TGuard<NKikimr::NMiniKQL::TScopedAlloc, TNullableAll
 
 class TColumnBatch : public IDataBatch {
 public:
-    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+    using TRecordBatchPtr = std::shared_ptr<arrow20::RecordBatch>;
 
     TString SerializeToString() const override {
         AFL_ENSURE(!Extracted);
@@ -369,7 +369,7 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
 
 class TColumnDataBatcher : public IDataBatcher {
 public:
-    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+    using TRecordBatchPtr = std::shared_ptr<arrow20::RecordBatch>;
 
     TColumnDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
@@ -380,9 +380,9 @@ public:
             , WriteIndex(std::move(writeIndex))
             , ReadIndex(std::move(readIndex))
             , BatchBuilder(std::make_unique<NArrow::TArrowBatchBuilder>(
-                arrow::Compression::UNCOMPRESSED,
+                arrow20::Compression::UNCOMPRESSED,
                 BuildNotNullColumns(inputColumns),
-                alloc ? NKikimr::NMiniKQL::GetArrowMemoryPool() : arrow::default_memory_pool()))
+                alloc ? NKikimr::NMiniKQL::GetArrowMemoryPool() : arrow20::default_memory_pool()))
             , Alloc(std::move(alloc)) {
         TString err;
         if (!BatchBuilder->Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
@@ -431,7 +431,7 @@ private:
 };
 
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
-    using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
+    using TRecordBatchPtr = std::shared_ptr<arrow20::RecordBatch>;
 
     struct TUnpreparedBatch {
         ui64 TotalDataSize = 0;

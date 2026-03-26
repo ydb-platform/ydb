@@ -41,7 +41,7 @@ protected:
 public:
     using TBase::TBase;
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();

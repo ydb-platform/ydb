@@ -29,7 +29,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         ReplyError(TStringBuilder{} << "writing aborted, reason: " << Context.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> batchConclusion = WriteData.GetData()->ExtractBatch();
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> batchConclusion = WriteData.GetData()->ExtractBatch();
     if (batchConclusion.IsFail()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_on_extract")("reason", batchConclusion.GetErrorMessage());
         ReplyError("cannot extract incoming batch: " + batchConclusion.GetErrorMessage(),
@@ -69,7 +69,7 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     };
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
-            const std::vector<std::shared_ptr<arrow::Field>> defaultFields =
+            const std::vector<std::shared_ptr<arrow20::Field>> defaultFields =
                 Context.GetActualSchema()->GetAbsentFields(batch.GetContainer()->schema());
             if (defaultFields.empty()) {
                 auto proceed = handleReplace();

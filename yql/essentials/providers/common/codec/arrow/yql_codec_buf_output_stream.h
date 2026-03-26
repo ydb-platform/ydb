@@ -7,22 +7,22 @@
 
 namespace NYql::NCommon {
 
-class TOutputBufArrowOutputStream: public arrow::io::OutputStream {
+class TOutputBufArrowOutputStream: public arrow20::io::OutputStream {
 public:
     explicit TOutputBufArrowOutputStream(TOutputBuf& buffer)
         : Buffer_(buffer)
     {
-        set_mode(arrow::io::FileMode::type::WRITE);
+        set_mode(arrow20::io::FileMode::type::WRITE);
     }
 
-    arrow::Status Write(const void* data, int64_t nbytes) override;
-    arrow::Status Flush() override;
+    arrow20::Status Write(const void* data, int64_t nbytes) override;
+    arrow20::Status Flush() override;
 
-    arrow::Status Close() override {
-        return arrow::Status::OK();
+    arrow20::Status Close() override {
+        return arrow20::Status::OK();
     }
 
-    arrow::Result<int64_t> Tell() const override {
+    arrow20::Result<int64_t> Tell() const override {
         return BytesWritten_;
     }
 

@@ -9,7 +9,7 @@
 
 namespace NKikimr::NArrow::NMerger {
 
-void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const  {
+void TRecordBatchBuilder::ValidateDataSchema(const std::shared_ptr<arrow20::Schema>& schema) const  {
     AFL_VERIFY(IsSameFieldsSequence(schema->fields(), Fields));
 }
 
@@ -36,7 +36,7 @@ void TRecordBatchBuilder::AddRecord(const TRWSortableBatchPosition& position) {
 }
 
 bool TRecordBatchBuilder::IsSameFieldsSequence(
-    const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2) {
+    const std::vector<std::shared_ptr<arrow20::Field>>& f1, const std::vector<std::shared_ptr<arrow20::Field>>& f2) {
     if (f1.size() != f2.size()) {
         return false;
     }
@@ -51,7 +51,7 @@ bool TRecordBatchBuilder::IsSameFieldsSequence(
     return true;
 }
 
-TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields,
+TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow20::Field>>& fields,
     const std::optional<ui32> rowsCountExpectation /*= {}*/, const THashMap<std::string, ui64>& fieldDataSizePreallocated /*= {}*/)
     : Fields(fields) {
     AFL_VERIFY(Fields.size());
@@ -68,13 +68,13 @@ TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow
     AFL_VERIFY(Fields.size() == Builders.size());
 }
 
-std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {
-    auto schema = std::make_shared<arrow::Schema>(Fields);
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+std::shared_ptr<arrow20::RecordBatch> TRecordBatchBuilder::Finalize() {
+    auto schema = std::make_shared<arrow20::Schema>(Fields);
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     for (auto&& i : Builders) {
         columns.emplace_back(NArrow::TStatusValidator::GetValid(i->Finish()));
     }
-    auto result = arrow::RecordBatch::Make(schema, columns.front()->length(), std::move(columns));
+    auto result = arrow20::RecordBatch::Make(schema, columns.front()->length(), std::move(columns));
 #ifndef NDEBUG
     NArrow::TStatusValidator::Validate(result->ValidateFull());
 #endif

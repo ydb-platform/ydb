@@ -103,7 +103,7 @@ namespace NKqp {
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus, expectedIssuePrefix);
     }
 
-    void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
+    void TTestHelper::BulkUpsert(const TColumnTable& table, std::shared_ptr<arrow20::RecordBatch> batch, const Ydb::StatusIds_StatusCode& opStatus /*= Ydb::StatusIds::SUCCESS*/) {
         NKikimr::Tests::NCS::THelper helper(GetKikimr().GetTestServer());
         helper.SendDataViaActorSystem(table.GetName(), batch, opStatus);
     }
@@ -223,12 +223,12 @@ namespace NKqp {
         return str;
     }
 
-    std::shared_ptr<arrow::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
-        std::vector<std::shared_ptr<arrow::Field>> result;
+    std::shared_ptr<arrow20::Schema> TTestHelper::TColumnTableBase::GetArrowSchema(const TVector<TColumnSchema>& columns) {
+        std::vector<std::shared_ptr<arrow20::Field>> result;
         for (auto&& col : columns) {
             result.push_back(BuildField(col.GetName(), col.GetTypeInfo(), col.IsNullable()));
         }
-        return std::make_shared<arrow::Schema>(result);
+        return std::make_shared<arrow20::Schema>(result);
     }
 
     TString TTestHelper::TColumnTableBase::BuildColumnsStr(const TVector<TColumnSchema>& clumns) const {
@@ -239,72 +239,72 @@ namespace NKqp {
         return JoinStrings(columnStr, ", ");
     }
 
-    std::shared_ptr<arrow::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
+    std::shared_ptr<arrow20::Field> TTestHelper::TColumnTableBase::BuildField(const TString name, const NScheme::TTypeInfo& typeInfo, bool nullable) const {
         switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return arrow::field(name, arrow::uint8(), nullable);
+            return arrow20::field(name, arrow20::uint8(), nullable);
         case NScheme::NTypeIds::Int8:
-            return arrow::field(name, arrow::int8(), nullable);
+            return arrow20::field(name, arrow20::int8(), nullable);
         case NScheme::NTypeIds::Int16:
-            return arrow::field(name, arrow::int16(), nullable);
+            return arrow20::field(name, arrow20::int16(), nullable);
         case NScheme::NTypeIds::Int32:
-            return arrow::field(name, arrow::int32(), nullable);
+            return arrow20::field(name, arrow20::int32(), nullable);
         case NScheme::NTypeIds::Int64:
-            return arrow::field(name, arrow::int64(), nullable);
+            return arrow20::field(name, arrow20::int64(), nullable);
         case NScheme::NTypeIds::Uint8:
-            return arrow::field(name, arrow::uint8(), nullable);
+            return arrow20::field(name, arrow20::uint8(), nullable);
         case NScheme::NTypeIds::Uint16:
-            return arrow::field(name, arrow::uint16(), nullable);
+            return arrow20::field(name, arrow20::uint16(), nullable);
         case NScheme::NTypeIds::Uint32:
-            return arrow::field(name, arrow::uint32(), nullable);
+            return arrow20::field(name, arrow20::uint32(), nullable);
         case NScheme::NTypeIds::Uint64:
-            return arrow::field(name, arrow::uint64(), nullable);
+            return arrow20::field(name, arrow20::uint64(), nullable);
         case NScheme::NTypeIds::Float:
-            return arrow::field(name, arrow::float32(), nullable);
+            return arrow20::field(name, arrow20::float32(), nullable);
         case NScheme::NTypeIds::Double:
-            return arrow::field(name, arrow::float64(), nullable);
+            return arrow20::field(name, arrow20::float64(), nullable);
         case NScheme::NTypeIds::String:
-            return arrow::field(name, arrow::binary(), nullable);
+            return arrow20::field(name, arrow20::binary(), nullable);
         case NScheme::NTypeIds::Utf8:
-            return arrow::field(name, arrow::utf8(), nullable);
+            return arrow20::field(name, arrow20::utf8(), nullable);
         case NScheme::NTypeIds::Json:
-            return arrow::field(name, arrow::utf8(), nullable);
+            return arrow20::field(name, arrow20::utf8(), nullable);
         case NScheme::NTypeIds::Yson:
-            return arrow::field(name, arrow::binary(), nullable);
+            return arrow20::field(name, arrow20::binary(), nullable);
         case NScheme::NTypeIds::Date:
-            return arrow::field(name, arrow::uint16(), nullable);
+            return arrow20::field(name, arrow20::uint16(), nullable);
         case NScheme::NTypeIds::Datetime:
-            return arrow::field(name, arrow::uint32(), nullable);
+            return arrow20::field(name, arrow20::uint32(), nullable);
         case NScheme::NTypeIds::Timestamp:
-            return arrow::field(name, arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+            return arrow20::field(name, arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Interval:
-            return arrow::field(name, arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), nullable);
+            return arrow20::field(name, arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO), nullable);
         case NScheme::NTypeIds::Date32:
-            return arrow::field(name, arrow::int32(), nullable);
+            return arrow20::field(name, arrow20::int32(), nullable);
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
-            return arrow::field(name, arrow::int64(), nullable);
+            return arrow20::field(name, arrow20::int64(), nullable);
         case NScheme::NTypeIds::JsonDocument:
-            return arrow::field(name, arrow::binary(), nullable);
+            return arrow20::field(name, arrow20::binary(), nullable);
         case NScheme::NTypeIds::Decimal:
-            return arrow::field(name, std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
+            return arrow20::field(name, std::make_shared<arrow20::FixedSizeBinaryType>(NScheme::FSB_SIZE), nullable);
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
-                    return arrow::field(name, arrow::int16(), true);
+                    return arrow20::field(name, arrow20::int16(), true);
                 case INT4OID:
-                    return arrow::field(name, arrow::int32(), true);
+                    return arrow20::field(name, arrow20::int32(), true);
                 case INT8OID:
-                    return arrow::field(name, arrow::int64(), true);
+                    return arrow20::field(name, arrow20::int64(), true);
                 case FLOAT4OID:
-                    return arrow::field(name, arrow::float32(), true);
+                    return arrow20::field(name, arrow20::float32(), true);
                 case FLOAT8OID:
-                    return arrow::field(name, arrow::float64(), true);
+                    return arrow20::field(name, arrow20::float64(), true);
                 case BYTEAOID:
-                    return arrow::field(name, arrow::binary(), true);
+                    return arrow20::field(name, arrow20::binary(), true);
                 case TEXTOID:
-                    return arrow::field(name, arrow::utf8(), true);
+                    return arrow20::field(name, arrow20::utf8(), true);
                 default:
                     Y_FAIL("TODO: support pg");
             }

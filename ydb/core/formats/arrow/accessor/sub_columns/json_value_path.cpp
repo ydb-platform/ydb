@@ -128,10 +128,10 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
         return;
     }
 
-    ChunkedArrayAccessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
+    ChunkedArrayAccessor->VisitValues([&](std::shared_ptr<arrow20::Array> arr) {
         AFL_VERIFY(arr);
-        AFL_VERIFY(arr->type_id() == arrow::binary()->id());
-        const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
+        AFL_VERIFY(arr->type_id() == arrow20::binary()->id());
+        const auto& binaryArray = static_cast<const arrow20::BinaryArray&>(*arr);
         for (int64_t i = 0; i < binaryArray.length(); ++i) {
             auto value = binaryArray.Value(i);
             if (value.empty()) {

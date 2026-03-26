@@ -30,7 +30,7 @@ public:
     {
         AFL_VERIFY(Stats);
     }
-    virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
+    virtual std::shared_ptr<arrow20::Field> GetField(const ui32 columnId) const override {
         return Schema->GetFieldByColumnIdOptional(columnId);
     }
 
@@ -42,7 +42,7 @@ public:
         return std::nullopt;
     }
     virtual std::optional<NArrow::NSplitter::TBatchSerializationStat> GetBatchSerializationStats(
-        const std::shared_ptr<arrow::RecordBatch>& rb) const override {
+        const std::shared_ptr<arrow20::RecordBatch>& rb) const override {
         return Stats->GetStatsForRecordBatch(rb);
     }
     virtual ui32 GetColumnId(const std::string& fieldName) const override {
@@ -91,8 +91,8 @@ public:
         return result;
     }
 
-    std::shared_ptr<arrow::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
-        std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+    std::shared_ptr<arrow20::RecordBatch> GetFirstLastPKBatch(const std::shared_ptr<arrow20::Schema>& pkSchema) const {
+        std::vector<std::shared_ptr<arrow20::Array>> pkColumns;
         for (auto&& i : pkSchema->fields()) {
             auto aBuilder = NArrow::MakeBuilder(i);
             const TSplittedEntity& splittedEntity = GetEntityDataVerified(Schema->GetColumnId(i->name()));
@@ -100,7 +100,7 @@ public:
             NArrow::TStatusValidator::Validate(aBuilder->AppendScalar(*splittedEntity.GetLastScalar()));
             pkColumns.emplace_back(NArrow::TStatusValidator::GetValid(aBuilder->Finish()));
         }
-        return arrow::RecordBatch::Make(pkSchema, 2, pkColumns);
+        return arrow20::RecordBatch::Make(pkSchema, 2, pkColumns);
     }
 
     ui64 GetPackedSize() const {

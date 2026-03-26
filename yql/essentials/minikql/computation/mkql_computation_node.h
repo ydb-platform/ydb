@@ -118,7 +118,7 @@ struct TComputationContext: public TComputationContextLLVM {
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     bool ExecuteLLVM = false;
-    arrow::MemoryPool& ArrowMemoryPool;
+    arrow20::MemoryPool& ArrowMemoryPool;
     std::vector<NUdf::TUnboxedValue*> WideFields;
     const TTypeEnvironment& TypeEnv;
     const TComputationMutables Mutables;
@@ -134,7 +134,7 @@ struct TComputationContext: public TComputationContextLLVM {
                         const NUdf::IValueBuilder* builder,
                         const TComputationOptsFull& opts,
                         const TComputationMutables& mutables,
-                        arrow::MemoryPool& arrowMemoryPool,
+                        arrow20::MemoryPool& arrowMemoryPool,
                         TMaybe<NUdf::TSourcePosition>& notConsumedLinear);
 
     ~TComputationContext();
@@ -292,9 +292,9 @@ private:
     mutable TUnboxedValueVector PreservedUpvalues_;
 };
 
-using TDatumProvider = std::function<arrow::Datum()>;
+using TDatumProvider = std::function<arrow20::Datum()>;
 
-TDatumProvider MakeDatumProvider(const arrow::Datum& datum);
+TDatumProvider MakeDatumProvider(const arrow20::Datum& datum);
 TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationContext& ctx);
 
 class IArrowKernelComputationNode {
@@ -302,8 +302,8 @@ public:
     virtual ~IArrowKernelComputationNode() = default;
 
     virtual TStringBuf GetKernelName() const = 0;
-    virtual const arrow::compute::ScalarKernel& GetArrowKernel() const = 0;
-    virtual const std::vector<arrow::ValueDescr>& GetArgsDesc() const = 0;
+    virtual const arrow20::compute::ScalarKernel& GetArrowKernel() const = 0;
+    virtual const std::vector<arrow20::ValueDescr>& GetArgsDesc() const = 0;
     virtual const IComputationNode* GetArgument(ui32 index) const = 0;
 };
 

@@ -251,7 +251,7 @@ private:
         if (!IsBlock) {
             return 1;
         }
-        return NKikimr::NMiniKQL::TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        return NKikimr::NMiniKQL::TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
     }
 
     void ReestimateRowBytes(const NUdf::TUnboxedValue& value) {

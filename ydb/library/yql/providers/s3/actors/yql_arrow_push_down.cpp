@@ -9,7 +9,7 @@ namespace {
 TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
     switch (physicalType) {
         case parquet::Type::type::INT32: {
-            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow20::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow20::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -18,7 +18,7 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parq
             return stats;
         }
         case parquet::Type::type::INT64: {
-            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow20::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow20::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -51,7 +51,7 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics
     }
     switch (physicalType) {
         case parquet::Type::type::INT32: {
-            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow20::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow20::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -60,7 +60,7 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics
             return stats;
         }
         case parquet::Type::type::INT64: {
-            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow20::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow20::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;

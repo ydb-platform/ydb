@@ -18,8 +18,8 @@ Y_UNIT_TEST_SUITE(StorageOptimizer) {
     public:
 
         static TReplaceKey MakeKey(const i64 value) {
-            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int64Type>>>(
-                "pk", NConstruction::TIntSeqFiller<arrow::Int64Type>(value));
+            NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int64Type>>>(
+                "pk", NConstruction::TIntSeqFiller<arrow20::Int64Type>(value));
             return TReplaceKey({column->BuildArray(1)}, 0);
         }
 

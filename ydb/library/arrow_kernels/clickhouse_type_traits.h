@@ -19,22 +19,22 @@ struct TConstruct {
     using Type = TError;
 };
 
-template <> struct TConstruct<false, false, 1> { using Type = arrow::UInt8Type; };
-template <> struct TConstruct<false, false, 2> { using Type = arrow::UInt16Type; };
-template <> struct TConstruct<false, false, 4> { using Type = arrow::UInt32Type; };
-template <> struct TConstruct<false, false, 8> { using Type = arrow::UInt64Type; };
-template <> struct TConstruct<false, true, 1> { using Type = arrow::FloatType; };
-template <> struct TConstruct<false, true, 2> { using Type = arrow::FloatType; };
-template <> struct TConstruct<false, true, 4> { using Type = arrow::FloatType; };
-template <> struct TConstruct<false, true, 8> { using Type = arrow::DoubleType; };
-template <> struct TConstruct<true, false, 1> { using Type = arrow::Int8Type; };
-template <> struct TConstruct<true, false, 2> { using Type = arrow::Int16Type; };
-template <> struct TConstruct<true, false, 4> { using Type = arrow::Int32Type; };
-template <> struct TConstruct<true, false, 8> { using Type = arrow::Int64Type; };
-template <> struct TConstruct<true, true, 1> { using Type = arrow::FloatType; };
-template <> struct TConstruct<true, true, 2> { using Type = arrow::FloatType; };
-template <> struct TConstruct<true, true, 4> { using Type = arrow::FloatType; };
-template <> struct TConstruct<true, true, 8> { using Type = arrow::DoubleType; };
+template <> struct TConstruct<false, false, 1> { using Type = arrow20::UInt8Type; };
+template <> struct TConstruct<false, false, 2> { using Type = arrow20::UInt16Type; };
+template <> struct TConstruct<false, false, 4> { using Type = arrow20::UInt32Type; };
+template <> struct TConstruct<false, false, 8> { using Type = arrow20::UInt64Type; };
+template <> struct TConstruct<false, true, 1> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<false, true, 2> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<false, true, 4> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<false, true, 8> { using Type = arrow20::DoubleType; };
+template <> struct TConstruct<true, false, 1> { using Type = arrow20::Int8Type; };
+template <> struct TConstruct<true, false, 2> { using Type = arrow20::Int16Type; };
+template <> struct TConstruct<true, false, 4> { using Type = arrow20::Int32Type; };
+template <> struct TConstruct<true, false, 8> { using Type = arrow20::Int64Type; };
+template <> struct TConstruct<true, true, 1> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<true, true, 2> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<true, true, 4> { using Type = arrow20::FloatType; };
+template <> struct TConstruct<true, true, 8> { using Type = arrow20::DoubleType; };
 
 template <typename A, typename B>
 struct TResultOfAdditionMultiplication {
@@ -54,7 +54,7 @@ struct TResultOfSubtraction {
 
 template <typename A, typename B>
 struct TResultOfFloatingPointDivision {
-    using Type = arrow::DoubleType;
+    using Type = arrow20::DoubleType;
 };
 
 template <typename A, typename B>
@@ -72,7 +72,7 @@ struct TResultOfModulo {
     /// Example: toInt32(-199) % toUInt8(200) will return -199 that does not fit in Int8, only in Int16.
     static constexpr size_t size_of_result = result_is_signed ? NextSize(sizeof(B)) : sizeof(B);
     using Type0 = typename TConstruct<result_is_signed, false, size_of_result>::Type;
-    using Type = std::conditional_t<std::is_floating_point_v<A> || std::is_floating_point_v<B>, arrow::DoubleType, Type0>;
+    using Type = std::conditional_t<std::is_floating_point_v<A> || std::is_floating_point_v<B>, arrow20::DoubleType, Type0>;
 };
 
 template <typename A>

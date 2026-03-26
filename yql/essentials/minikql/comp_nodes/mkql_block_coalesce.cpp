@@ -20,17 +20,17 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 template <typename TType>
-void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, arrow::MemoryPool& pool) {
+void DispatchCoalesceImpl(const arrow20::Datum& left, const arrow20::Datum& right, arrow20::Datum& out, arrow20::MemoryPool& pool) {
     bool outHasBitmask = (right.is_array() && right.null_count() > 0) || (right.is_scalar() && !right.scalar()->is_valid);
-    auto bitmap = outHasBitmask ? ARROW_RESULT(arrow::AllocateBitmap((left.array()->length + left.array()->offset % 8) * sizeof(ui8), &pool)) : nullptr;
+    auto bitmap = outHasBitmask ? ARROW_RESULT(arrow20::AllocateBitmap((left.array()->length + left.array()->offset % 8) * sizeof(ui8), &pool)) : nullptr;
     if (bitmap && bitmap->size() > 0) {
         // Fill first byte with zero to prevent further uninitialized memory access.
         bitmap->mutable_data()[0] = 0;
     }
-    out = arrow::ArrayData::Make(right.type(), left.array()->length,
+    out = arrow20::ArrayData::Make(right.type(), left.array()->length,
                                  {std::move(bitmap),
-                                  ARROW_RESULT(arrow::AllocateBuffer((left.array()->length + left.array()->offset % 8) * sizeof(TType), &pool))},
-                                 arrow::kUnknownNullCount, left.array()->offset % 8);
+                                  ARROW_RESULT(arrow20::AllocateBuffer((left.array()->length + left.array()->offset % 8) * sizeof(TType), &pool))},
+                                 arrow20::kUnknownNullCount, left.array()->offset % 8);
     if (outHasBitmask) {
         if (right.is_scalar()) {
             out = left;
@@ -59,7 +59,7 @@ void DispatchCoalesceImpl(const arrow::Datum& left, const arrow::Datum& right, a
     }
 }
 
-bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& right, arrow::Datum& out, TType* rightType, bool needUnwrapFirst, arrow::MemoryPool& pool) {
+bool DispatchBlendingCoalesce(const arrow20::Datum& left, const arrow20::Datum& right, arrow20::Datum& out, TType* rightType, bool needUnwrapFirst, arrow20::MemoryPool& pool) {
     TTypeInfoHelper typeInfoHelper;
     if (!needUnwrapFirst) {
         bool rightTypeIsOptional;
@@ -114,7 +114,7 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
 
 class TCoalesceBlockExec {
 public:
-    TCoalesceBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
+    TCoalesceBlockExec(const std::shared_ptr<arrow20::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
         : ReturnArrowType_(returnArrowType)
         , FirstItemType_(firstItemType)
         , SecondItemType_(secondItemType)
@@ -122,7 +122,7 @@ public:
     {
     }
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         const auto& first = batch.values[0];
         const auto& second = batch.values[1];
 
@@ -132,7 +132,7 @@ public:
             } else {
                 *res = second.scalar();
             }
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         MKQL_ENSURE(!first.is_scalar() || !second.is_scalar(), "Expected at least one array");
@@ -159,7 +159,7 @@ public:
                 *res = builder->Build(true);
             } else {
                 if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, NeedUnwrapFirst_, *ctx->memory_pool())) {
-                    return arrow::Status::OK();
+                    return arrow20::Status::OK();
                 }
 
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
@@ -184,7 +184,7 @@ public:
                 *res = second;
             } else {
                 if (DispatchBlendingCoalesce(first, second, *res, SecondItemType_, NeedUnwrapFirst_, *ctx->memory_pool())) {
-                    return arrow::Status::OK();
+                    return arrow20::Status::OK();
                 }
 
                 auto builder = NYql::NUdf::MakeArrayBuilder(TTypeInfoHelper(), SecondItemType_, *ctx->memory_pool(), length, nullptr);
@@ -202,32 +202,32 @@ public:
             }
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
-    const std::shared_ptr<arrow::DataType> ReturnArrowType_;
+    const std::shared_ptr<arrow20::DataType> ReturnArrowType_;
     TType* const FirstItemType_;
     TType* const SecondItemType_;
     const bool NeedUnwrapFirst_;
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {
     using TExec = TCoalesceBlockExec;
 
-    std::shared_ptr<arrow::DataType> returnArrowType;
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TExec>(
         returnArrowType,
         AS_TYPE(TBlockType, argTypes[0])->GetItemType(),
         AS_TYPE(TBlockType, argTypes[1])->GetItemType(),
         needUnwrapFirst);
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                 [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                      return exec->Exec(ctx, batch, res);
                                                                  });
 
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;
 }
 

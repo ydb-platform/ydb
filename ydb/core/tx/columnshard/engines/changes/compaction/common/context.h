@@ -16,7 +16,7 @@ private:
     ISnapshotSchema::TPtr SchemaInfo;
     YDB_ACCESSOR_DEF(TColumnSaver, Saver);
     YDB_READONLY_DEF(std::shared_ptr<TColumnLoader>, Loader);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Field>, ResultField);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Field>, ResultField);
     YDB_READONLY(ui64, ChunkPackedBytesLimit, 7 * 1024 * 1024);
     YDB_READONLY(ui64, ExpectedBlobPackedBytes, 4 * 1024 * 1024);
     YDB_READONLY(ui64, ChunkRawBytesLimit, 50 * 1024 * 1024);
@@ -28,7 +28,7 @@ private:
     const TIndexInfo& IndexInfo;
 
 public:
-    std::shared_ptr<arrow::Scalar> GetDefaultValue() const {
+    std::shared_ptr<arrow20::Scalar> GetDefaultValue() const {
         return Loader->GetDefaultValue();
     }
 
@@ -40,7 +40,7 @@ public:
         return ColumnStat;
     }
 
-    std::unique_ptr<arrow::ArrayBuilder> MakeBuilder() const {
+    std::unique_ptr<arrow20::ArrayBuilder> MakeBuilder() const {
         return NArrow::MakeBuilder(ResultField);
     }
 

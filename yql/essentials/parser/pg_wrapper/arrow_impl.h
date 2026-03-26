@@ -14,15 +14,15 @@ Numeric Uint64ToPgNumeric(ui64 value);
 Numeric DecimalToPgNumeric(const NUdf::TUnboxedValuePod& value, ui8 precision, ui8 scale);
 Numeric DyNumberToPgNumeric(const NUdf::TUnboxedValuePod& value);
 Numeric PgFloatToNumeric(double item, ui64 scale, int digits);
-Numeric PgDecimal128ToNumeric(arrow::Decimal128 val, int32_t precision, int32_t scale, Numeric high_bits_mul);
-TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);
+Numeric PgDecimal128ToNumeric(arrow20::Decimal128 val, int32_t precision, int32_t scale, Numeric high_bits_mul);
+TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow20::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType);
 
 template<typename T>
-std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Array>& value) {
+std::shared_ptr<arrow20::Array> PgConvertNumeric(const std::shared_ptr<arrow20::Array>& value) {
     TArenaMemoryContext arena;
     const auto& data = value->data();
     size_t length = data->length;
-    arrow::BinaryBuilder builder;
+    arrow20::BinaryBuilder builder;
     auto input = data->GetValues<T>(1);
     for (size_t i = 0; i < length; ++i) {
         if (value->IsNull(i)) {
@@ -45,13 +45,13 @@ std::shared_ptr<arrow::Array> PgConvertNumeric(const std::shared_ptr<arrow::Arra
         ARROW_OK(builder.Append(ptr - sizeof(void*), len + sizeof(void*)));
     }
 
-    std::shared_ptr<arrow::BinaryArray> ret;
+    std::shared_ptr<arrow20::BinaryArray> ret;
     ARROW_OK(builder.Finish(&ret));
     return ret;
 }
 
 
-std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow::Array>& value, int32_t precision, int32_t scale);
+std::shared_ptr<arrow20::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow20::Array>& value, int32_t precision, int32_t scale);
 
 }
 

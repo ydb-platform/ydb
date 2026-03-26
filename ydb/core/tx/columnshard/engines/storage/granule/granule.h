@@ -251,7 +251,7 @@ public:
     }
 
     void ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
-        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema);
+        std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow20::Schema>& pkSchema);
     void ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
         const NDataAccessorControl::TManagerConstructionContext& context);
 

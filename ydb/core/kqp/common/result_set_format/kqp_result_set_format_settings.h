@@ -78,28 +78,28 @@ struct TArrowFormatSettings {
         return settings;
     }
 
-    void FillWriteOptions(arrow::ipc::IpcWriteOptions& writeOptions) const {
+    void FillWriteOptions(arrow20::ipc::IpcWriteOptions& writeOptions) const {
         if (!CompressionCodec) {
             return;
         }
         auto codec = GetArrowCompressionType(CompressionCodec->Type);
-        if (codec != arrow::Compression::UNCOMPRESSED) {
-            auto level = CompressionCodec->Level.value_or(arrow::util::Codec::UseDefaultCompressionLevel());
-            auto resCodec = arrow::util::Codec::Create(codec, level);
+        if (codec != arrow20::Compression::UNCOMPRESSED) {
+            auto level = CompressionCodec->Level.value_or(arrow20::util::Codec::UseDefaultCompressionLevel());
+            auto resCodec = arrow20::util::Codec::Create(codec, level);
             YQL_ENSURE(resCodec.ok(), "Failed to create codec for arrow format: " << resCodec.status().ToString());
             writeOptions.codec.reset((*resCodec).release());
         }
     }
 
-    static arrow::Compression::type GetArrowCompressionType(TCompressionCodec::EType type) {
+    static arrow20::Compression::type GetArrowCompressionType(TCompressionCodec::EType type) {
         switch (type) {
             case TCompressionCodec::EType::UNSPECIFIED:
             case TCompressionCodec::EType::NONE:
-                return arrow::Compression::UNCOMPRESSED;
+                return arrow20::Compression::UNCOMPRESSED;
             case TCompressionCodec::EType::LZ4_FRAME:
-                return arrow::Compression::LZ4_FRAME;
+                return arrow20::Compression::LZ4_FRAME;
             case TCompressionCodec::EType::ZSTD:
-                return arrow::Compression::ZSTD;
+                return arrow20::Compression::ZSTD;
         }
     }
 

@@ -123,7 +123,7 @@ private:
     THashMap<TRWAddress, TRWAddressPortionsInfo> PortionIdByWaitDuration;
     THashMap<ui64, TFindActualizationInfo> PortionsInfo;
     THashSet<ui64> NewPortionIds;
-    THashMap<ui64, std::shared_ptr<arrow::Scalar>> MaxByPortionId;
+    THashMap<ui64, std::shared_ptr<arrow20::Scalar>> MaxByPortionId;
 
     std::shared_ptr<ISnapshotSchema> GetTargetSchema(const std::shared_ptr<ISnapshotSchema>& portionSchema) const;
 

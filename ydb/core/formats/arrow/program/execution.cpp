@@ -25,7 +25,7 @@ void TSimpleDataSource::DoAssembleAccessor(const TProcessorContext& context, con
     }
 }
 
-void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow::Array>& data) {
+void TSimpleDataSource::AddBlob(const ui32 columnId, const TString& subColumnName, const std::shared_ptr<arrow20::Array>& data) {
     if (!data->length()) {
         Blobs.emplace(TBlobAddress(columnId, subColumnName), "");
         NAccessor::TChunkConstructionData cData(1, nullptr, data->type(), std::make_shared<NSerialization::TNativeSerializer>());

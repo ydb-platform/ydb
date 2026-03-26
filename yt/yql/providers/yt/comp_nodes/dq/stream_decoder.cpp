@@ -43,9 +43,9 @@
 #include <generated/Schema.fbs.h>
 #include <generated/SparseTensor.fbs.h>
 
-namespace arrow {
+namespace arrow20 {
 
-namespace flatbuf = org::apache::arrow::flatbuf;
+namespace flatbuf = org::apache::arrow20::flatbuf;
 
 using internal::checked_cast;
 using internal::checked_pointer_cast;
@@ -503,8 +503,8 @@ MessageDecoder2::State MessageDecoder2::state() const { return impl_->state(); }
 enum class DictionaryKind { New, Delta, Replacement };
 
 Status InvalidMessageType(MessageType expected, MessageType actual) {
-  return Status::IOError("Expected IPC message of type ", ::arrow::ipc::FormatMessageType(expected),
-                         " but got ", ::arrow::ipc::FormatMessageType(actual));
+  return Status::IOError("Expected IPC message of type ", ::arrow20::ipc::FormatMessageType(expected),
+                         " but got ", ::arrow20::ipc::FormatMessageType(actual));
 }
 
 #define CHECK_MESSAGE_TYPE(expected, actual)           \
@@ -518,7 +518,7 @@ Status InvalidMessageType(MessageType expected, MessageType actual) {
   do {                                                                \
     if ((message).body() == nullptr) {                                \
       return Status::IOError("Expected body in IPC message of type ", \
-                             ::arrow::ipc::FormatMessageType((message).type()));    \
+                             ::arrow20::ipc::FormatMessageType((message).type()));    \
     }                                                                 \
   } while (0)
 
@@ -526,7 +526,7 @@ Status InvalidMessageType(MessageType expected, MessageType actual) {
   do {                                                                  \
     if ((message).body_length() != 0) {                                 \
       return Status::IOError("Unexpected body in IPC message of type ", \
-                             ::arrow::ipc::FormatMessageType((message).type()));      \
+                             ::arrow20::ipc::FormatMessageType((message).type()));      \
     }                                                                   \
   } while (0)
 struct IpcReadContext {
@@ -612,7 +612,7 @@ Status DecompressBuffers(Compression::type compression, const IpcReadOptions& op
   std::unique_ptr<util::Codec> codec;
   ARROW_ASSIGN_OR_RAISE(codec, util::Codec::Create(compression));
 
-  return ::arrow::internal::OptionalParallelFor(
+  return ::arrow20::internal::OptionalParallelFor(
       options.use_threads, static_cast<int>(buffers.size()), [&](int i) {
         ARROW_ASSIGN_OR_RAISE(*buffers[i],
                               DecompressBuffer(*buffers[i], options, codec.get()));
@@ -895,7 +895,7 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
                                     context.options.memory_pool));
 
   if (inclusion_mask) {
-    filtered_schema = ::arrow::schema(std::move(filtered_fields), schema->metadata());
+    filtered_schema = ::arrow20::schema(std::move(filtered_fields), schema->metadata());
     columns.clear();
   } else {
     filtered_schema = schema;
@@ -909,7 +909,7 @@ Result<std::shared_ptr<RecordBatch>> LoadRecordBatchSubset(
   if (context.swap_endian) {
     for (int i = 0; i < static_cast<int>(filtered_columns.size()); ++i) {
       ARROW_ASSIGN_OR_RAISE(filtered_columns[i],
-                            arrow::internal::SwapEndianArrayData(filtered_columns[i]));
+                            arrow20::internal::SwapEndianArrayData(filtered_columns[i]));
     }
   }
   return RecordBatch::Make(std::move(filtered_schema), metadata->length(),
@@ -955,7 +955,7 @@ Status GetCompressionExperimental(const flatbuf::Message* message,
     RETURN_NOT_OK(internal::GetKeyValueMetadata(message->custom_metadata(), &metadata));
     int index = metadata->FindKey("ARROW:experimental_compression");
     if (index != -1) {
-      auto name = arrow::internal::AsciiToLower(metadata->value(index));
+      auto name = arrow20::internal::AsciiToLower(metadata->value(index));
       ARROW_ASSIGN_OR_RAISE(*out, util::Codec::GetCompressionType(name));
     }
     return internal::CheckCompressionSupported(*out);
@@ -1128,7 +1128,7 @@ Status ReadDictionary(const Buffer& metadata, const IpcReadContext& context,
   }
 
   if (context.swap_endian) {
-    ARROW_ASSIGN_OR_RAISE(dict_data, ::arrow::internal::SwapEndianArrayData(dict_data));
+    ARROW_ASSIGN_OR_RAISE(dict_data, ::arrow20::internal::SwapEndianArrayData(dict_data));
   }
 
   if (dictionary_batch->isDelta()) {
@@ -1269,7 +1269,7 @@ class StreamDecoder2::StreamDecoder2Impl : public MessageDecoderListener {
   Status ReadDictionary(const Message& message) {
     DictionaryKind kind;
     IpcReadContext context(dictionary_memo_.get(), options_, swap_endian_);
-    RETURN_NOT_OK(::arrow::ipc::NDqs::ReadDictionary(message, context, &kind));
+    RETURN_NOT_OK(::arrow20::ipc::NDqs::ReadDictionary(message, context, &kind));
     ++stats_.num_dictionary_batches;
     switch (kind) {
       case DictionaryKind::New:
@@ -1401,4 +1401,4 @@ std::unique_ptr<MessageReader> MessageReader::Open(
 }
 
 }  // namespace ipc::NDqs
-}  // namespace arrow
+}  // namespace arrow20

@@ -15,7 +15,7 @@ void TRowWriter::AddRow(const TConstArrayRef<TCell>& cells) {
     Rows.emplace_back(std::move(serializedKey));
 }
 
-TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
+TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow20::RecordBatch>& batch,
                                                      const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema) {
     Y_ABORT_UNLESS(batch);
     TVector<TSerializedCellVec> cellVecs;
@@ -89,7 +89,7 @@ TExportDriver::TExportDriver(TActorSystem* actorSystem, const TActorId& subscrib
 class TUploaderActor: public TActorBootstrapped<TUploaderActor> {
 public:
     struct TBatchItem {
-        std::shared_ptr<arrow::RecordBatch> Data;
+        std::shared_ptr<arrow20::RecordBatch> Data;
         bool IsLast = false;
     };
 

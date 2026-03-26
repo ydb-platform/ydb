@@ -20,7 +20,7 @@ EValidationResult ValidateDefaultCompression(const NKikimrConfig::TColumnShardCo
         msg.push_back("ColumnShardConfig: compression level is set without compression type");
         return EValidationResult::Error;
     }
-    std::optional<arrow::Compression::type> codec = NArrow::CompressionFromProto(columnShardConfig.GetDefaultCompression());
+    std::optional<arrow20::Compression::type> codec = NArrow::CompressionFromProto(columnShardConfig.GetDefaultCompression());
     if (!codec.has_value()) {
         msg.push_back("ColumnShardConfig: Unknown compression");
         return EValidationResult::Error;

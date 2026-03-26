@@ -10,11 +10,11 @@ namespace {
 
 class TBlockExistsExec {
 public:
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         const auto& input = batch.values[0];
         if (input.is_scalar()) {
-            *res = arrow::Datum(static_cast<ui8>(input.scalar()->is_valid));
-            return arrow::Status::OK();
+            *res = arrow20::Datum(static_cast<ui8>(input.scalar()->is_valid));
+            return arrow20::Status::OK();
         }
         MKQL_ENSURE(input.is_array(), "Expected array");
         const auto& arr = *input.array();
@@ -29,21 +29,21 @@ public:
                                    arr.buffers[0]->data());
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 };
 
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockExistsKernel(const TVector<TType*>& argTypes, TType* resultType) {
-    std::shared_ptr<arrow::DataType> returnArrowType;
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeBlockExistsKernel(const TVector<TType*>& argTypes, TType* resultType) {
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     // Ensure the result Arrow type (i.e. boolean) is Arrow UInt8Type.
-    Y_DEBUG_ABORT_UNLESS(returnArrowType == arrow::uint8());
+    Y_DEBUG_ABORT_UNLESS(returnArrowType == arrow20::uint8());
     auto exec = std::make_shared<TBlockExistsExec>();
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                 [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                      return exec->Exec(ctx, batch, res);
                                                                  });
-    kernel->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+    kernel->null_handling = arrow20::compute::NullHandling::OUTPUT_NOT_NULL;
     return kernel;
 }
 

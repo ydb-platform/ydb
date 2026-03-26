@@ -10,35 +10,35 @@
 #include <util/system/hostname.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NGranules {
-std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
+std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::PathId::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : ExternalPathIds) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawValue());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i.GetRawValue());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::TabletId::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(GetTabletId()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::PortionsCount::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : PortionsCount) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i);
+            NArrow::Append<arrow20::UInt64Type>(*builder, i);
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::HostName::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::StringScalar(::HostName()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::StringScalar(::HostName()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::NodeId::ColumnId) {
         return NArrow::TStatusValidator::GetValid(
-            arrow::MakeArrayFromScalar(arrow::UInt64Scalar(NActors::TActivationContext::AsActorContext().SelfID.NodeId()), recordsCount));
+            arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(NActors::TActivationContext::AsActorContext().SelfID.NodeId()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexGranuleStats::InternalPathId::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : Granules) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i->GetPathId().GetRawValue());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i->GetPathId().GetRawValue());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

@@ -6,14 +6,14 @@ namespace NKikimr::NArrow::NSplitter {
 
 class TSaverSplittedChunk {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, SlicedBatch);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, SlicedBatch);
     YDB_READONLY_DEF(TString, SerializedChunk);
 public:
     ui32 GetRecordsCount() const {
         return SlicedBatch->num_rows();
     }
 
-    TSaverSplittedChunk(const std::shared_ptr<arrow::RecordBatch>& batch, TString&& serializedChunk)
+    TSaverSplittedChunk(const std::shared_ptr<arrow20::RecordBatch>& batch, TString&& serializedChunk)
         : SlicedBatch(batch)
         , SerializedChunk(std::move(serializedChunk)) {
         Y_ABORT_UNLESS(SlicedBatch);
@@ -111,11 +111,11 @@ public:
         return TLinearSplitInfo(countPacksMax, stepPackMin, objectsCount);
     }
 
-    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const;
-    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const;
-    std::vector<TSaverSplittedChunk> SplitByRecordsCount(const std::shared_ptr<arrow::RecordBatch>& data, const std::vector<ui32>& recordsCount) const;
+    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow20::Array>& data, const std::shared_ptr<arrow20::Field>& field, const ui32 maxBlobSize) const;
+    std::vector<TSaverSplittedChunk> Split(const std::shared_ptr<arrow20::RecordBatch>& data, const ui32 maxBlobSize) const;
+    std::vector<TSaverSplittedChunk> SplitByRecordsCount(const std::shared_ptr<arrow20::RecordBatch>& data, const std::vector<ui32>& recordsCount) const;
     std::vector<TSaverSplittedChunk> SplitBySizes(
-        std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
+        std::shared_ptr<arrow20::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const;
 };
 
 }

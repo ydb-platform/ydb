@@ -5,7 +5,7 @@
 
 namespace NKikimr::NArrow::NSplitter {
 
-std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::Schema>& schema) const {
+std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow20::Schema>& schema) const {
     std::optional<TBatchSerializationStat> result;
     for (auto&& i : schema->fields()) {
         auto columnInfo = GetColumnInfo(i->name());
@@ -19,7 +19,7 @@ std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBat
     return result;
 }
 
-std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow::RecordBatch>& rb) const {
+std::optional<TBatchSerializationStat> TSerializationStats::GetStatsForRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& rb) const {
     return GetStatsForRecordBatch(rb->schema());
 }
 

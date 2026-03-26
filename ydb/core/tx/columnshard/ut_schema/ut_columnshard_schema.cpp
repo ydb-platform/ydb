@@ -48,7 +48,7 @@ Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
 static const std::vector<NArrow::NTest::TTestColumn> testYdbSchema = TTestSchema::YdbSchema();
 static const std::vector<NArrow::NTest::TTestColumn> testYdbPk = TTestSchema::YdbPkSchema();
 
-std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBatch> batch, TString columnName, i64 seconds) {
+std::shared_ptr<arrow20::RecordBatch> UpdateColumn(std::shared_ptr<arrow20::RecordBatch> batch, TString columnName, i64 seconds) {
     std::string name(columnName.c_str(), columnName.size());
 
     auto schema = batch->schema();
@@ -56,25 +56,25 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     UNIT_ASSERT(pos >= 0);
     auto colType = batch->GetColumnByName(name)->type_id();
 
-    std::shared_ptr<arrow::Array> array;
-    if (colType == arrow::Type::TIMESTAMP) {
-        auto scalar = arrow::TimestampScalar(seconds * 1000 * 1000, arrow::timestamp(arrow::TimeUnit::MICRO));
+    std::shared_ptr<arrow20::Array> array;
+    if (colType == arrow20::Type::TIMESTAMP) {
+        auto scalar = arrow20::TimestampScalar(seconds * 1000 * 1000, arrow20::timestamp(arrow20::TimeUnit::MICRO));
         UNIT_ASSERT_VALUES_EQUAL(scalar.value, seconds * 1000 * 1000);
 
-        auto res = arrow::MakeArrayFromScalar(scalar, batch->num_rows());
+        auto res = arrow20::MakeArrayFromScalar(scalar, batch->num_rows());
         UNIT_ASSERT(res.ok());
         array = *res;
-    } else if (colType == arrow::Type::UINT16) { // YQL Date
+    } else if (colType == arrow20::Type::UINT16) { // YQL Date
         TInstant date(TInstant::Seconds(seconds));
-        auto res = arrow::MakeArrayFromScalar(arrow::UInt16Scalar(date.Days()), batch->num_rows());
+        auto res = arrow20::MakeArrayFromScalar(arrow20::UInt16Scalar(date.Days()), batch->num_rows());
         UNIT_ASSERT(res.ok());
         array = *res;
-    } else if (colType == arrow::Type::UINT32) { // YQL Datetime or Uint32
-        auto res = arrow::MakeArrayFromScalar(arrow::UInt32Scalar(seconds), batch->num_rows());
+    } else if (colType == arrow20::Type::UINT32) { // YQL Datetime or Uint32
+        auto res = arrow20::MakeArrayFromScalar(arrow20::UInt32Scalar(seconds), batch->num_rows());
         UNIT_ASSERT(res.ok());
         array = *res;
-    } else if (colType == arrow::Type::UINT64) {
-        auto res = arrow::MakeArrayFromScalar(arrow::UInt64Scalar(seconds), batch->num_rows());
+    } else if (colType == arrow20::Type::UINT64) {
+        auto res = arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(seconds), batch->num_rows());
         UNIT_ASSERT(res.ok());
         array = *res;
     }
@@ -83,7 +83,7 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
 
     auto columns = batch->columns();
     columns[pos] = array;
-    return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
+    return arrow20::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
 bool TriggerMetadata(

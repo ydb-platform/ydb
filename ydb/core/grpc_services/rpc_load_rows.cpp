@@ -29,52 +29,52 @@ using namespace Ydb;
 namespace {
 
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
-bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
+bool ConvertArrowToYdbPrimitive(const arrow20::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             toType.set_type_id(Ydb::Type::UINT8);
             return true;
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             toType.set_type_id(Ydb::Type::INT8);
             return true;
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             toType.set_type_id(Ydb::Type::UINT16);
             return true;
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             toType.set_type_id(Ydb::Type::INT16);
             return true;
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             toType.set_type_id(Ydb::Type::UINT32);
             return true;
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             toType.set_type_id(Ydb::Type::INT32);
             return true;
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             toType.set_type_id(Ydb::Type::UINT64);
             return true;
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             toType.set_type_id(Ydb::Type::INT64);
             return true;
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             toType.set_type_id(Ydb::Type::FLOAT);
             return true;
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             toType.set_type_id(Ydb::Type::DOUBLE);
             return true;
-        case arrow::Type::STRING:
+        case arrow20::Type::STRING:
             toType.set_type_id(Ydb::Type::UTF8);
             return true;
-        case arrow::Type::BINARY:
+        case arrow20::Type::BINARY:
             toType.set_type_id(Ydb::Type::STRING);
             return true;
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             toType.set_type_id(Ydb::Type::TIMESTAMP);
             return true;
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             toType.set_type_id(Ydb::Type::INTERVAL);
             return true;
-        case arrow::Type::FIXED_SIZE_BINARY: {
-            if (!tableColumnType || dynamic_cast<const arrow::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
+        case arrow20::Type::FIXED_SIZE_BINARY: {
+            if (!tableColumnType || dynamic_cast<const arrow20::FixedSizeBinaryType&>(type).byte_width() != NScheme::FSB_SIZE) {
                 break;
             }
 
@@ -93,29 +93,29 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
             }
             break;
         }
-        case arrow::Type::BOOL:
-        case arrow::Type::NA:
-        case arrow::Type::HALF_FLOAT:
-        case arrow::Type::DATE32:
-        case arrow::Type::DATE64:
-        case arrow::Type::TIME32:
-        case arrow::Type::TIME64:
-        case arrow::Type::INTERVAL_MONTHS:
-        case arrow::Type::LARGE_STRING:
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::DECIMAL:
-        case arrow::Type::DECIMAL256:
-        case arrow::Type::DENSE_UNION:
-        case arrow::Type::DICTIONARY:
-        case arrow::Type::EXTENSION:
-        case arrow::Type::FIXED_SIZE_LIST:
-        case arrow::Type::INTERVAL_DAY_TIME:
-        case arrow::Type::LARGE_LIST:
-        case arrow::Type::LIST:
-        case arrow::Type::MAP:
-        case arrow::Type::MAX_ID:
-        case arrow::Type::SPARSE_UNION:
-        case arrow::Type::STRUCT:
+        case arrow20::Type::BOOL:
+        case arrow20::Type::NA:
+        case arrow20::Type::HALF_FLOAT:
+        case arrow20::Type::DATE32:
+        case arrow20::Type::DATE64:
+        case arrow20::Type::TIME32:
+        case arrow20::Type::TIME64:
+        case arrow20::Type::INTERVAL_MONTHS:
+        case arrow20::Type::LARGE_STRING:
+        case arrow20::Type::LARGE_BINARY:
+        case arrow20::Type::DECIMAL:
+        case arrow20::Type::DECIMAL256:
+        case arrow20::Type::DENSE_UNION:
+        case arrow20::Type::DICTIONARY:
+        case arrow20::Type::EXTENSION:
+        case arrow20::Type::FIXED_SIZE_LIST:
+        case arrow20::Type::INTERVAL_DAY_TIME:
+        case arrow20::Type::LARGE_LIST:
+        case arrow20::Type::LIST:
+        case arrow20::Type::MAP:
+        case arrow20::Type::MAX_ID:
+        case arrow20::Type::SPARSE_UNION:
+        case arrow20::Type::STRUCT:
             break;
     }
     return false;
@@ -302,10 +302,10 @@ private:
         return Batch.get();
     }
 
-    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+    std::shared_ptr<arrow20::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
                                                     TString& errorMessage)
     {
-        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
+        NArrow::TArrowBatchBuilder batchBuilder(arrow20::Compression::UNCOMPRESSED, NotNullColumns);
         batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
         const auto startStatus = batchBuilder.Start(YdbSchema);
         if (!startStatus.ok()) {
@@ -465,7 +465,7 @@ private:
         return errorMessage.empty();
     }
 
-    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
+    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow20::RecordBatch>& batch,
                                                                 TString& errorMessage) {
         Y_ABORT_UNLESS(batch);
         TVector<std::pair<TSerializedCellVec, TString>> out;

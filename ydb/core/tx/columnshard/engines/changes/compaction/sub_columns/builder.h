@@ -12,8 +12,8 @@ namespace NKikimr::NOlap::NCompaction::NSubColumns {
 
 class TMergedBuilder {
 private:
-    using TSparsedBuilder = NArrow::NAccessor::TSparsedArray::TSparsedBuilder<arrow::BinaryType>;
-    using TPlainBuilder = NArrow::NAccessor::TTrivialArray::TPlainBuilder<arrow::BinaryType>;
+    using TSparsedBuilder = NArrow::NAccessor::TSparsedArray::TSparsedBuilder<arrow20::BinaryType>;
+    using TPlainBuilder = NArrow::NAccessor::TTrivialArray::TPlainBuilder<arrow20::BinaryType>;
     using TColumnsData = NArrow::NAccessor::NSubColumns::TColumnsData;
     using TOthersData = NArrow::NAccessor::NSubColumns::TOthersData;
     using TSettings = NArrow::NAccessor::NSubColumns::TSettings;

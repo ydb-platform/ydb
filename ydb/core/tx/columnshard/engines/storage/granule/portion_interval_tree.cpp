@@ -53,7 +53,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
         }
     };
 
-    auto getSchema = [](const TPositionVariant& pos) -> const std::shared_ptr<arrow::Schema>& {
+    auto getSchema = [](const TPositionVariant& pos) -> const std::shared_ptr<arrow20::Schema>& {
         switch (pos.index()) {
             case StartPortionInfo:
                 return std::get<StartPortionInfo>(pos)->GetMeta().GetPkSchema();

@@ -124,7 +124,7 @@ void FillSystemColumns(NUdf::TUnboxedValue* rowItems, TMaybe<ui64> shardId, cons
 }
 
 template <typename TArrayType, typename TValueType = typename TArrayType::value_type>
-NUdf::TUnboxedValue MakeUnboxedValue(arrow::Array* column, ui32 row) {
+NUdf::TUnboxedValue MakeUnboxedValue(arrow20::Array* column, ui32 row) {
     auto array = reinterpret_cast<TArrayType*>(column);
     return NUdf::TUnboxedValuePod(static_cast<TValueType>(array->Value(row)));
 }
@@ -233,16 +233,16 @@ public:
 };
 
 template <>
-class TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128> {
+class TElementAccessor<arrow20::Decimal128Array, NYql::NDecimal::TInt128> {
 public:
-    using TArrayType = arrow::Decimal128Array;
-    static void Validate(const arrow::Decimal128Array& array) {
-        const auto& type = arrow::internal::checked_cast<const arrow::Decimal128Type&>(*array.type());
+    using TArrayType = arrow20::Decimal128Array;
+    static void Validate(const arrow20::Decimal128Array& array) {
+        const auto& type = arrow20::internal::checked_cast<const arrow20::Decimal128Type&>(*array.type());
         TString error;
         YQL_ENSURE(NScheme::TDecimalType::Validate(type.precision(), type.scale(), error), "" << error);
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::Decimal128Array& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow20::Decimal128Array& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         YQL_ENSURE(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
         NYql::NDecimal::TInt128 val;
@@ -255,16 +255,16 @@ public:
 };
 
 template <>
-class TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NDecimal::TInt128> {
+class TElementAccessor<arrow20::FixedSizeBinaryArray, NYql::NDecimal::TInt128> {
 public:
-    using TArrayType = arrow::FixedSizeBinaryArray;
-    static void Validate(const arrow::FixedSizeBinaryArray& array) {
+    using TArrayType = arrow20::FixedSizeBinaryArray;
+    static void Validate(const arrow20::FixedSizeBinaryArray& array) {
         YQL_ENSURE(
             array.byte_width() == static_cast<i32>(sizeof(NYql::NDecimal::TInt128)),
             "Wrong Decimal byte width in FixedSizeBinaryArray: " << array.byte_width());
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow20::FixedSizeBinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         YQL_ENSURE(data.size() == sizeof(NYql::NDecimal::TInt128), "Wrong data size");
         NYql::NDecimal::TInt128 val;
@@ -277,13 +277,13 @@ public:
 };
 
 template <>
-class TElementAccessor<arrow::BinaryArray, NUdf::TStringRef> {
+class TElementAccessor<arrow20::BinaryArray, NUdf::TStringRef> {
 public:
-    using TArrayType = arrow::BinaryArray;
-    static void Validate(const arrow::BinaryArray& /*array*/) {
+    using TArrayType = arrow20::BinaryArray;
+    static void Validate(const arrow20::BinaryArray& /*array*/) {
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::BinaryArray& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow20::BinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         return MakeString(NUdf::TStringRef(data.data(), data.size()));
     }
@@ -293,13 +293,13 @@ public:
 };
 
 template <>
-class TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef> {
+class TElementAccessor<arrow20::FixedSizeBinaryArray, NUdf::TStringRef> {
 public:
-    using TArrayType = arrow::FixedSizeBinaryArray;
-    static void Validate(const arrow::FixedSizeBinaryArray& /*array*/) {
+    using TArrayType = arrow20::FixedSizeBinaryArray;
+    static void Validate(const arrow20::FixedSizeBinaryArray& /*array*/) {
     }
 
-    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow20::FixedSizeBinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         return MakeString(NUdf::TStringRef(data.data(), data.size() - 1));
     }
@@ -312,7 +312,7 @@ public:
 
 template <class TElementAccessor, class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
-    const TBatchDataAccessor& batch, const ui32 columnIndex, const std::shared_ptr<arrow::ChunkedArray>& chunkedArrayExt, NScheme::TTypeInfo columnType) {
+    const TBatchDataAccessor& batch, const ui32 columnIndex, const std::shared_ptr<arrow20::ChunkedArray>& chunkedArrayExt, NScheme::TTypeInfo columnType) {
     auto statAccumulator = TElementAccessor::BuildStatAccumulator(columnType);
 
     auto trivialChunkedArray = std::make_shared<NArrow::NAccessor::TTrivialChunkedArray>(chunkedArrayExt);
@@ -372,56 +372,56 @@ TBytesStatistics WriteColumnValuesFromArrowSpecImpl(TAccessor editAccessor,
 template <class TAccessor>
 TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
     const TBatchDataAccessor& batch, i64 columnIndex, NScheme::TTypeInfo columnType) {
-    const std::shared_ptr<arrow::ChunkedArray> columnPtr = batch.GetBatch()->column(columnIndex);
+    const std::shared_ptr<arrow20::ChunkedArray> columnPtr = batch.GetBatch()->column(columnIndex);
     namespace NTypeIds = NScheme::NTypeIds;
     switch (columnType.GetTypeId()) {
         case NTypeIds::Bool:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::BooleanArray, bool>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::BooleanArray, bool>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Int8:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int8Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int8Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Int16:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Date32:
         case NTypeIds::Int32:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Int64:
         case NTypeIds::Timestamp64:
         case NTypeIds::Interval64:
         case NTypeIds::Datetime64:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Uint8:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt8Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt8Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Uint16:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Uint32:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Uint64:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt64Array, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt64Array, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Float:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Double:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::String:
         case NTypeIds::Utf8:
@@ -430,31 +430,31 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         case NTypeIds::JsonDocument:
         case NTypeIds::DyNumber:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::BinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::BinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Date:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Datetime:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::UInt32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::UInt32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Timestamp:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::TimestampArray, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::TimestampArray, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Interval:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DurationArray, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::DurationArray, ui64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Decimal:
         {
             switch (columnPtr->type()->id()) {
-                case arrow::Type::DECIMAL:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Decimal128Array, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
-                case arrow::Type::FIXED_SIZE_BINARY:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case arrow20::Type::DECIMAL:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Decimal128Array, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                case arrow20::Type::FIXED_SIZE_BINARY:
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::FixedSizeBinaryArray, NYql::NDecimal::TInt128>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 default:
                     YQL_ENSURE(false, "Unsupported Arrow type for Decimal column: " << columnPtr->type()->ToString());
                     return {};
@@ -465,20 +465,20 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         case NTypeIds::StepOrderId:
         {
             Y_VERIFY_DEBUG_S(false, "Unsupported (deprecated) type: " << NScheme::TypeName(columnType.GetTypeId()));
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::FixedSizeBinaryArray, NUdf::TStringRef>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(columnType.GetPgTypeDesc())) {
                 case INT2OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int16Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int32Array>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case INT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::Int64Array, i64>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT4OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::FloatArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 case FLOAT8OID:
-                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+                    return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow20::DoubleArray>>(editAccessor, batch, columnIndex, columnPtr, columnType);
                 default:
                     break;
             }
@@ -687,27 +687,27 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TRowBatchReader::AddData(con
     return stats;
 }
 
-std::shared_ptr<arrow::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow::Array>& original,
+std::shared_ptr<arrow20::Array> AdoptArrowTypeToYQL(const std::shared_ptr<arrow20::Array>& original,
     const TKqpComputeContextBase::TColumn& column, std::optional<NYql::TColumnConverter>& cachedPgConverter)
 {
-    if (original->type_id() == arrow::Type::TIMESTAMP) {
-        auto timestamps = std::static_pointer_cast<arrow::TimestampArray>(original);
-        auto ui64Data = std::make_shared<arrow::ArrayData>(arrow::TypeTraits<arrow::UInt64Type>::type_singleton(), original->length(), timestamps->data()->buffers);
-        auto ui64Array = std::make_shared<arrow::UInt64Array>(ui64Data);
-        auto timestampType = std::static_pointer_cast<arrow::TimestampType>(original->type());
+    if (original->type_id() == arrow20::Type::TIMESTAMP) {
+        auto timestamps = std::static_pointer_cast<arrow20::TimestampArray>(original);
+        auto ui64Data = std::make_shared<arrow20::ArrayData>(arrow20::TypeTraits<arrow20::UInt64Type>::type_singleton(), original->length(), timestamps->data()->buffers);
+        auto ui64Array = std::make_shared<arrow20::UInt64Array>(ui64Data);
+        auto timestampType = std::static_pointer_cast<arrow20::TimestampType>(original->type());
 
-        static arrow::Datum const1M(std::make_shared<arrow::UInt64Scalar>(1000000));
-        static arrow::Datum const1K(std::make_shared<arrow::UInt64Scalar>(1000));
+        static arrow20::Datum const1M(std::make_shared<arrow20::UInt64Scalar>(1000000));
+        static arrow20::Datum const1K(std::make_shared<arrow20::UInt64Scalar>(1000));
 
         switch (timestampType->unit()) {
-        case arrow::TimeUnit::SECOND:
-            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(ui64Array, const1M)).make_array();
-        case arrow::TimeUnit::MILLI:
-            return NArrow::TStatusValidator::GetValid(arrow::compute::Multiply(ui64Array, const1K)).make_array();
-        case arrow::TimeUnit::MICRO:
+        case arrow20::TimeUnit::SECOND:
+            return NArrow::TStatusValidator::GetValid(arrow20::compute::Multiply(ui64Array, const1M)).make_array();
+        case arrow20::TimeUnit::MILLI:
+            return NArrow::TStatusValidator::GetValid(arrow20::compute::Multiply(ui64Array, const1K)).make_array();
+        case arrow20::TimeUnit::MICRO:
             return ui64Array;
-        case arrow::TimeUnit::NANO:
-            return NArrow::TStatusValidator::GetValid(arrow::compute::Divide(ui64Array, const1K)).make_array();
+        case arrow20::TimeUnit::NANO:
+            return NArrow::TStatusValidator::GetValid(arrow20::compute::Divide(ui64Array, const1K)).make_array();
         }
     }
 
@@ -737,7 +737,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         batchValues.resize(totalColsCount);
         Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
         for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i), ResultColumns[i], CachedPgConverters[i])));
+            batchValues[i] = holderFactory.CreateArrowBlock(arrow20::Datum(AdoptArrowTypeToYQL(filtered->column(i), ResultColumns[i], CachedPgConverters[i])));
         }
         const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
         stats.AddStatistics({batchByteSize, batchByteSize});
@@ -751,7 +751,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
         //     stats.AllocatedBytes += batch.num_rows() * SystemColumns.size() * sizeof(NUdf::TUnboxedValue);
         // }
 
-        batchValues[totalColsCount - 1] = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(filtered->num_rows())));
+        batchValues[totalColsCount - 1] = holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(filtered->num_rows())));
         stats.AddStatistics({sizeof(ui64) * filtered->num_rows(), sizeof(ui64) * filtered->num_rows()});
 
         BlockBatches.emplace(TBlockBatch(totalColsCount, filtered->num_rows(), std::move(batchValues), stats.AllocatedBytes));

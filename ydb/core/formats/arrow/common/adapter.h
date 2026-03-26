@@ -25,81 +25,81 @@ public:
 };
 
 template <>
-class TDataBuilderPolicy<arrow::RecordBatch> {
+class TDataBuilderPolicy<arrow20::RecordBatch> {
 public:
-    using TColumn = arrow::Array;
+    using TColumn = arrow20::Array;
     using TAccessor = NAccessor::TTrivialArray;
 
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> AddColumn(const std::shared_ptr<arrow::RecordBatch>& batch,
-        const std::shared_ptr<arrow::Field>& field, const std::shared_ptr<arrow::Array>& extCol) {
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> AddColumn(const std::shared_ptr<arrow20::RecordBatch>& batch,
+        const std::shared_ptr<arrow20::Field>& field, const std::shared_ptr<arrow20::Array>& extCol) {
         return TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), field, extCol));
     }
 
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> Build(std::vector<std::shared_ptr<arrow::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
-        return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(std::move(fields)), count, std::move(columns));
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> Build(std::vector<std::shared_ptr<arrow20::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(std::move(fields)), count, std::move(columns));
     }
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> Build(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
-        return arrow::RecordBatch::Make(schema, count, std::move(columns));
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> Build(const std::shared_ptr<arrow20::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow20::RecordBatch::Make(schema, count, std::move(columns));
     }
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplyArrowFilter(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const TColumnFilter& filter) {
-        auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> ApplyArrowFilter(
+        const std::shared_ptr<arrow20::RecordBatch>& batch, const TColumnFilter& filter) {
+        auto res = arrow20::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
         Y_VERIFY_S(res.ok(), res.status().message());
-        Y_ABORT_UNLESS(res->kind() == arrow::Datum::RECORD_BATCH);
+        Y_ABORT_UNLESS(res->kind() == arrow20::Datum::RECORD_BATCH);
         return res->record_batch();
     }
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> ApplySlicesFilter(
-        const std::shared_ptr<arrow::RecordBatch>& batch, TColumnFilter::TSlicesIterator filter) {
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> ApplySlicesFilter(
+        const std::shared_ptr<arrow20::RecordBatch>& batch, TColumnFilter::TSlicesIterator filter) {
         AFL_VERIFY(filter.GetRecordsCount() == batch->num_rows());
-        std::vector<std::shared_ptr<arrow::RecordBatch>> slices;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> slices;
         for (filter.Start(); filter.IsValid(); filter.Next()) {
             if (!filter.IsFiltered()) {
                 continue;
             }
             slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        return NArrow::ToBatch(TStatusValidator::GetValid(arrow::Table::FromRecordBatches(slices)));
+        return NArrow::ToBatch(TStatusValidator::GetValid(arrow20::Table::FromRecordBatches(slices)));
     }
-    [[nodiscard]] static std::shared_ptr<arrow::RecordBatch> GetEmptySame(const std::shared_ptr<arrow::RecordBatch>& batch) {
+    [[nodiscard]] static std::shared_ptr<arrow20::RecordBatch> GetEmptySame(const std::shared_ptr<arrow20::RecordBatch>& batch) {
         return batch->Slice(0, 0);
     }
 };
 
 template <>
-class TDataBuilderPolicy<arrow::Table> {
+class TDataBuilderPolicy<arrow20::Table> {
 public:
-    using TColumn = arrow::ChunkedArray;
+    using TColumn = arrow20::ChunkedArray;
     using TAccessor = NAccessor::TTrivialChunkedArray;
-    [[nodiscard]] static std::shared_ptr<arrow::Table> Build(std::vector<std::shared_ptr<arrow::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
-        return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(columns), count);
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> Build(std::vector<std::shared_ptr<arrow20::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow20::Table::Make(std::make_shared<arrow20::Schema>(std::move(fields)), std::move(columns), count);
     }
-    [[nodiscard]] static std::shared_ptr<arrow::Table> Build(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
-        return arrow::Table::Make(schema, std::move(columns), count);
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> Build(const std::shared_ptr<arrow20::Schema>& schema, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+        return arrow20::Table::Make(schema, std::move(columns), count);
     }
-    [[nodiscard]] static std::shared_ptr<arrow::Table> AddColumn(
-        const std::shared_ptr<arrow::Table>& batch, const std::shared_ptr<arrow::Field>& field, const std::shared_ptr<arrow::Array>& extCol) {
-        return TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), field, std::make_shared<arrow::ChunkedArray>(extCol)));
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> AddColumn(
+        const std::shared_ptr<arrow20::Table>& batch, const std::shared_ptr<arrow20::Field>& field, const std::shared_ptr<arrow20::Array>& extCol) {
+        return TStatusValidator::GetValid(batch->AddColumn(batch->num_columns(), field, std::make_shared<arrow20::ChunkedArray>(extCol)));
     }
 
-    [[nodiscard]] static std::shared_ptr<arrow::Table> ApplyArrowFilter(
-        const std::shared_ptr<arrow::Table>& batch, const TColumnFilter& filter) {
-        auto res = arrow::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> ApplyArrowFilter(
+        const std::shared_ptr<arrow20::Table>& batch, const TColumnFilter& filter) {
+        auto res = arrow20::compute::Filter(batch, filter.BuildArrowFilter(batch->num_rows()));
         Y_VERIFY_S(res.ok(), res.status().message());
-        Y_ABORT_UNLESS(res->kind() == arrow::Datum::TABLE);
+        Y_ABORT_UNLESS(res->kind() == arrow20::Datum::TABLE);
         return res->table();
     }
-    [[nodiscard]] static std::shared_ptr<arrow::Table> ApplySlicesFilter(
-        const std::shared_ptr<arrow::Table>& batch, TColumnFilter::TSlicesIterator filter) {
-        std::vector<std::shared_ptr<arrow::Table>> slices;
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> ApplySlicesFilter(
+        const std::shared_ptr<arrow20::Table>& batch, TColumnFilter::TSlicesIterator filter) {
+        std::vector<std::shared_ptr<arrow20::Table>> slices;
         for (filter.Start(); filter.IsValid(); filter.Next()) {
             if (!filter.IsFiltered()) {
                 continue;
             }
             slices.emplace_back(batch->Slice(filter.GetStartIndex(), filter.GetSliceSize()));
         }
-        return TStatusValidator::GetValid(arrow::ConcatenateTables(slices));
+        return TStatusValidator::GetValid(arrow20::ConcatenateTables(slices));
     }
-    [[nodiscard]] static std::shared_ptr<arrow::Table> GetEmptySame(const std::shared_ptr<arrow::Table>& batch) {
+    [[nodiscard]] static std::shared_ptr<arrow20::Table> GetEmptySame(const std::shared_ptr<arrow20::Table>& batch) {
         return batch->Slice(0, 0);
     }
 };
@@ -108,15 +108,15 @@ template <>
 class TDataBuilderPolicy<TGeneralContainer> {
 public:
     using TColumn = NAccessor::IChunkedArray;
-    [[nodiscard]] static std::shared_ptr<TGeneralContainer> Build(std::vector<std::shared_ptr<arrow::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
+    [[nodiscard]] static std::shared_ptr<TGeneralContainer> Build(std::vector<std::shared_ptr<arrow20::Field>>&& fields, std::vector<std::shared_ptr<TColumn>>&& columns, const ui32 count) {
         Y_ABORT_UNLESS(columns.size());
         for (auto&& i : columns) {
             Y_ABORT_UNLESS(i->GetRecordsCount() == count);
         }
-        return std::make_shared<TGeneralContainer>(std::make_shared<arrow::Schema>(std::move(fields)), std::move(columns));
+        return std::make_shared<TGeneralContainer>(std::make_shared<arrow20::Schema>(std::move(fields)), std::move(columns));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> AddColumn(const std::shared_ptr<TGeneralContainer>& batch,
-        const std::shared_ptr<arrow::Field>& field, const std::shared_ptr<arrow::Array>& extCol) {
+        const std::shared_ptr<arrow20::Field>& field, const std::shared_ptr<arrow20::Array>& extCol) {
         batch->AddField(field, std::make_shared<NAccessor::TTrivialArray>(extCol)).Validate();
         return batch;
     }
@@ -127,7 +127,7 @@ public:
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> ApplySlicesFilter(
         const std::shared_ptr<TGeneralContainer>& batch, TColumnFilter::TSlicesIterator filter) {
         auto table = batch->BuildTableVerified();
-        return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow::Table>::ApplySlicesFilter(table, filter));
+        return std::make_shared<TGeneralContainer>(TDataBuilderPolicy<arrow20::Table>::ApplySlicesFilter(table, filter));
     }
     [[nodiscard]] static std::shared_ptr<TGeneralContainer> GetEmptySame(const std::shared_ptr<TGeneralContainer>& batch) {
         return batch->BuildEmptySame();

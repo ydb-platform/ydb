@@ -13,7 +13,7 @@
 #define THROW_ARROW_NOT_OK(status)                                     \
     do                                                                 \
     {                                                                  \
-        if (::arrow::Status _s = (status); !_s.ok())                   \
+        if (::arrow20::Status _s = (status); !_s.ok())                   \
             throw yexception() << _s.ToString(); \
     } while (false)
 
@@ -26,7 +26,7 @@ public:
     }
 
     NThreading::TFuture<TSchemaResponse> GetSchema(const TArrowFileDesc& desc) const override final;
-    NThreading::TFuture<std::shared_ptr<arrow::Table>> ReadRowGroup(const TArrowFileDesc& desc, int rowGroupIndex, const std::vector<int>& columnIndices) const override final;
+    NThreading::TFuture<std::shared_ptr<arrow20::Table>> ReadRowGroup(const TArrowFileDesc& desc, int rowGroupIndex, const std::vector<int>& columnIndices) const override final;
     virtual ~TArrowReader() {
 
     }
@@ -39,28 +39,28 @@ IArrowReader::TPtr MakeArrowReader(const TArrowReaderSettings& settings) {
 }
 
 
-using ArrowFileReaderPtr = std::unique_ptr<parquet::arrow::FileReader>;
+using ArrowFileReaderPtr = std::unique_ptr<parquet::arrow20::FileReader>;
 
-class TS3RandomAccessFile : public arrow::io::RandomAccessFile {
+class TS3RandomAccessFile : public arrow20::io::RandomAccessFile {
 public:
     explicit TS3RandomAccessFile(const TArrowFileDesc& desc) : Gateway(desc.Gateway), Headers(desc.Headers), RetryPolicy(desc.RetryPolicy), Url(desc.Url), FileSize(desc.Size) {
 
     }
 
-    virtual arrow::Result<int64_t> GetSize() override {
+    virtual arrow20::Result<int64_t> GetSize() override {
         return FileSize;
     }
 
-    virtual arrow::Result<int64_t> Tell() const override {
+    virtual arrow20::Result<int64_t> Tell() const override {
         return InnerPos;
     }
     
-    virtual arrow::Status Seek(int64_t position) override {
+    virtual arrow20::Status Seek(int64_t position) override {
         InnerPos = position;
         return {};
     }
 
-    virtual arrow::Status Close() override {
+    virtual arrow20::Status Close() override {
         return {};
     }
 
@@ -68,17 +68,17 @@ public:
         return false;
     }
 
-    virtual arrow::Result<int64_t> Read(int64_t, void* ) override {
+    virtual arrow20::Result<int64_t> Read(int64_t, void* ) override {
         Y_ABORT_UNLESS(0);
-        return arrow::Result<int64_t>();
+        return arrow20::Result<int64_t>();
     }
 
-    virtual arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t) override {
+    virtual arrow20::Result<std::shared_ptr<arrow20::Buffer>> Read(int64_t) override {
         Y_ABORT_UNLESS(0);
-        return arrow::Result<std::shared_ptr<arrow::Buffer>>();
+        return arrow20::Result<std::shared_ptr<arrow20::Buffer>>();
     }
 
-    virtual arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
+    virtual arrow20::Result<std::shared_ptr<arrow20::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
         try {
             auto promise = NThreading::NewPromise<TString>();
             Gateway->Download(Url, Headers,
@@ -87,17 +87,17 @@ public:
                                 std::bind(&OnResult, promise, std::placeholders::_1),
                                 {},
                                 RetryPolicy);
-            return arrow::Buffer::FromString(promise.GetFuture().ExtractValueSync());
+            return arrow20::Buffer::FromString(promise.GetFuture().ExtractValueSync());
         } catch (const std::exception& e) {
-            return arrow::Status::UnknownError(e.what());
+            return arrow20::Status::UnknownError(e.what());
         }
     }
 
-    virtual arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext&, int64_t,
+    virtual arrow20::Future<std::shared_ptr<arrow20::Buffer>> ReadAsync(const arrow20::io::IOContext&, int64_t,
                                                     int64_t) override
     {
         Y_ABORT_UNLESS(0);
-        return arrow::Future<std::shared_ptr<arrow::Buffer>>();
+        return arrow20::Future<std::shared_ptr<arrow20::Buffer>>();
     }
 
 
@@ -123,20 +123,20 @@ struct TFileReaderWrapper {
 public:
     TFileReaderWrapper(const TArrowFileDesc& desc) {
         if (desc.Contents) {
-            ArrowFile = std::make_shared<arrow::io::BufferReader>(arrow::Buffer::FromString(*desc.Contents));
+            ArrowFile = std::make_shared<arrow20::io::BufferReader>(arrow20::Buffer::FromString(*desc.Contents));
         } else {
             if (desc.IsLocal) {
-                ArrowFile = arrow::io::ReadableFile::Open(desc.Url.substr(7), arrow::default_memory_pool()).ValueOrDie();
+                ArrowFile = arrow20::io::ReadableFile::Open(desc.Url.substr(7), arrow20::default_memory_pool()).ValueOrDie();
             } else {
                 ArrowFile = std::make_shared<TS3RandomAccessFile>(desc);
             }
         }
 
-        THROW_ARROW_NOT_OK(parquet::arrow::OpenFile(ArrowFile, arrow::default_memory_pool(), &FileReader));
+        THROW_ARROW_NOT_OK(parquet::arrow20::OpenFile(ArrowFile, arrow20::default_memory_pool(), &FileReader));
     }
 
     ArrowFileReaderPtr FileReader;
-    std::shared_ptr<arrow::io::RandomAccessFile> ArrowFile;
+    std::shared_ptr<arrow20::io::RandomAccessFile> ArrowFile;
 };
 
 struct TArrowFileCookie {
@@ -162,7 +162,7 @@ NThreading::TFuture<IArrowReader::TSchemaResponse> TArrowReader::GetSchema(const
                 cookie = std::make_shared<TArrowFileCookie>(desc);
             }
             
-            std::shared_ptr<arrow::Schema> schema;
+            std::shared_ptr<arrow20::Schema> schema;
             
             THROW_ARROW_NOT_OK(cookie->Wrapper.FileReader->GetSchema(&schema));
             
@@ -178,10 +178,10 @@ NThreading::TFuture<IArrowReader::TSchemaResponse> TArrowReader::GetSchema(const
     return future;
 }
 
-NThreading::TFuture<std::shared_ptr<arrow::Table>> TArrowReader::ReadRowGroup(const TArrowFileDesc& desc, int rowGroupIndex, 
+NThreading::TFuture<std::shared_ptr<arrow20::Table>> TArrowReader::ReadRowGroup(const TArrowFileDesc& desc, int rowGroupIndex, 
                                                     const std::vector<int>& columnIndices) const
 {
-    auto promise = NThreading::NewPromise<std::shared_ptr<arrow::Table>>();
+    auto promise = NThreading::NewPromise<std::shared_ptr<arrow20::Table>>();
     auto future = promise.GetFuture();
     
     if (!ThreadPool->AddFunc([desc, promise, rowGroupIndex, columnIndices] () mutable {
@@ -192,7 +192,7 @@ NThreading::TFuture<std::shared_ptr<arrow::Table>> TArrowReader::ReadRowGroup(co
                 cookie = std::make_shared<TArrowFileCookie>(desc);
             }
 
-            std::shared_ptr<arrow::Table> currentTable;
+            std::shared_ptr<arrow20::Table> currentTable;
 
             THROW_ARROW_NOT_OK(cookie->Wrapper.FileReader->ReadRowGroup(rowGroupIndex, columnIndices, &currentTable));
 

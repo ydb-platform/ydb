@@ -162,7 +162,7 @@ private:
     using TBase = TColumnsSetIds;
     YDB_READONLY_DEF(std::set<TString>, ColumnNames);
     std::vector<TString> ColumnNamesVector;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, Schema);
     ISnapshotSchema::TPtr FullReadSchema;
     YDB_READONLY_DEF(ISnapshotSchema::TPtr, FilteredSchema);
 

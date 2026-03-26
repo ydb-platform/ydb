@@ -37,7 +37,7 @@ TString TestIntsData(const TVector<std::pair<TString, NScheme::TTypeInfo>>& colu
     return data;
 }
 
-std::shared_ptr<arrow::RecordBatch>
+std::shared_ptr<arrow20::RecordBatch>
 TestReadSingleBatch(TArrowCSV& reader,
                     const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, const TString& data, ui32 numRows) {
     TString errorMessage;
@@ -61,7 +61,7 @@ TestReadSingleBatch(TArrowCSV& reader,
     return batch;
 }
 
-std::shared_ptr<arrow::RecordBatch>
+std::shared_ptr<arrow20::RecordBatch>
 TestReadSingleBatch(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, const TString& data,
                     char delimiter, bool header, ui32 numRows, ui32 skipRows = 0, std::optional<char> escape = {}) {
     auto reader = TArrowCSVScheme::Create(columns, header);
@@ -117,39 +117,39 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
             auto cDatetime = batch->GetColumnByName("datetime");
             auto cTimestamp = batch->GetColumnByName("timestamp");
 
-            Y_ABORT_UNLESS(cDate->type()->id() == arrow::UInt16Type::type_id);
-            Y_ABORT_UNLESS(cDatetime->type()->id() == arrow::UInt32Type::type_id);
-            Y_ABORT_UNLESS(cTimestamp->type()->id() == arrow::TimestampType::type_id);
-            Y_ABORT_UNLESS(cDatetimeInt->type()->id() == arrow::UInt32Type::type_id);
-            Y_ABORT_UNLESS(cTimestampInt->type()->id() == arrow::TimestampType::type_id);
+            Y_ABORT_UNLESS(cDate->type()->id() == arrow20::UInt16Type::type_id);
+            Y_ABORT_UNLESS(cDatetime->type()->id() == arrow20::UInt32Type::type_id);
+            Y_ABORT_UNLESS(cTimestamp->type()->id() == arrow20::TimestampType::type_id);
+            Y_ABORT_UNLESS(cDatetimeInt->type()->id() == arrow20::UInt32Type::type_id);
+            Y_ABORT_UNLESS(cTimestampInt->type()->id() == arrow20::TimestampType::type_id);
             Y_ABORT_UNLESS(batch->num_rows() == 1);
 
             {
-                auto& ui16Column = static_cast<arrow::UInt32Array&>(*cDateNull);
+                auto& ui16Column = static_cast<arrow20::UInt32Array&>(*cDateNull);
                 Y_ABORT_UNLESS(ui16Column.IsNull(0));
             }
             {
-                auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetimeNull);
+                auto& ui32Column = static_cast<arrow20::UInt32Array&>(*cDatetimeNull);
                 Y_ABORT_UNLESS(ui32Column.IsNull(0));
             }
             {
-                auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestampNull);
+                auto& tsColumn = static_cast<arrow20::TimestampArray&>(*cTimestampNull);
                 Y_ABORT_UNLESS(tsColumn.IsNull(0));
             }
             {
-                auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetimeInt);
+                auto& ui32Column = static_cast<arrow20::UInt32Array&>(*cDatetimeInt);
                 Y_ABORT_UNLESS(ui32Column.Value(0) == 11, "%d", ui32Column.Value(0));
             }
             {
-                auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestampInt);
+                auto& tsColumn = static_cast<arrow20::TimestampArray&>(*cTimestampInt);
                 Cerr << tsColumn.Value(0) << Endl;
                 Y_ABORT_UNLESS(tsColumn.Value(0) == 12 * 1000000);
             }
-            auto& ui16Column = static_cast<arrow::UInt16Array&>(*cDate);
+            auto& ui16Column = static_cast<arrow20::UInt16Array&>(*cDate);
             Y_ABORT_UNLESS(ui16Column.Value(0) == 15901, "%d", ui16Column.Value(0));
-            auto& ui32Column = static_cast<arrow::UInt32Array&>(*cDatetime);
+            auto& ui32Column = static_cast<arrow20::UInt32Array&>(*cDatetime);
             Y_ABORT_UNLESS(ui32Column.Value(0) == dtInstant.Seconds(), "%d", ui32Column.Value(0));
-            auto& tsColumn = static_cast<arrow::TimestampArray&>(*cTimestamp);
+            auto& tsColumn = static_cast<arrow20::TimestampArray&>(*cTimestamp);
             Y_ABORT_UNLESS(tsColumn.Value(0) == (i64)dtInstant.MicroSeconds());
         }
     }
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
 
             auto batch = TestReadSingleBatch(columns, csv, delimiter, false, 2, 0, '\\');
             for (auto& col : batch->columns()) {
-                auto& typedColumn = static_cast<arrow::BinaryArray&>(*col);
+                auto& typedColumn = static_cast<arrow20::BinaryArray&>(*col);
                 for (int i = 0; i < typedColumn.length(); ++i) {
                     auto view = typedColumn.GetView(i);
                     std::string_view value(view.data(), view.size());
@@ -309,9 +309,9 @@ Y_UNIT_TEST_SUITE(FormatCSV) {
 
             Cerr << "src:\n" << csv;
 
-            auto& ui32Column = static_cast<arrow::UInt32Array&>(*batch->columns()[0]);
-            auto& strColumn = static_cast<arrow::BinaryArray&>(*batch->columns()[1]);
-            auto& utf8Column = static_cast<arrow::StringArray&>(*batch->columns()[2]);
+            auto& ui32Column = static_cast<arrow20::UInt32Array&>(*batch->columns()[0]);
+            auto& strColumn = static_cast<arrow20::BinaryArray&>(*batch->columns()[1]);
+            auto& utf8Column = static_cast<arrow20::StringArray&>(*batch->columns()[2]);
 
             Cerr << "parsed:\n";
 

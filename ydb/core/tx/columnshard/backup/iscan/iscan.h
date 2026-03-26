@@ -31,7 +31,7 @@ private:
     TActorId SubscriberActorId;
 };
 
-TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema);
+TConclusion<TVector<TSerializedCellVec>> BatchToRows(const std::shared_ptr<arrow20::RecordBatch>& batch, const TVector<std::pair<TString, NScheme::TTypeInfo>>& ydbSchema);
 
 TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TActorId& subscriberActorId, const NKikimrSchemeOp::TBackupTask& backupTask, const NDataShard::IExportFactory* exportFactory, const NDataShard::IExport::TTableColumns& tableColumns, ui64 txId);
 

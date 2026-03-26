@@ -85,7 +85,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
 
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
     for (auto&& i : columnElements) {
-        records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::binary()), i->GetAccessorVerified()).Validate();
+        records->AddField(std::make_shared<arrow20::Field>(std::string(i->GetKeyName()), arrow20::binary()), i->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
@@ -146,7 +146,7 @@ TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf
     return TStringBuf(it->second.data(), it->second.size());
 }
 
-TDataBuilder::TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
+TDataBuilder::TDataBuilder(const std::shared_ptr<arrow20::DataType>& type, const TSettings& settings)
     : Type(type)
     , Settings(settings) {
 }

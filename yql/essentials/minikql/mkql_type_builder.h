@@ -33,37 +33,37 @@ inline size_t CalcBlockLen(size_t maxBlockItemSize) {
 }
 
 using TArrowConvertFailedCallback = std::function<void(TType*)>;
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
-bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
-bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& = {});
-bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type);
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow20::DataType>& type, const TArrowConvertFailedCallback& = {});
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow20::DataType>& type);
+bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow20::DataType>& type, const TArrowConvertFailedCallback& = {});
+bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow20::DataType>& type);
 
 using NYql::NUdf::MakeTzLayoutArrowType;
 
 template <NUdf::EDataSlot slot>
-std::shared_ptr<arrow::StructType> MakeTzDateArrowType() {
-    std::vector<std::shared_ptr<arrow::Field>> fields{
-        std::make_shared<arrow::Field>("datetime", MakeTzLayoutArrowType<slot>(), false),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false),
+std::shared_ptr<arrow20::StructType> MakeTzDateArrowType() {
+    std::vector<std::shared_ptr<arrow20::Field>> fields{
+        std::make_shared<arrow20::Field>("datetime", MakeTzLayoutArrowType<slot>(), false),
+        std::make_shared<arrow20::Field>("timezoneId", arrow20::uint16(), false),
     };
-    return std::make_shared<arrow::StructType>(fields);
+    return std::make_shared<arrow20::StructType>(fields);
 }
 
 class TArrowType: public NUdf::IArrowType {
 public:
-    explicit TArrowType(const std::shared_ptr<arrow::DataType>& type)
+    explicit TArrowType(const std::shared_ptr<arrow20::DataType>& type)
         : Type_(type)
     {
     }
 
-    std::shared_ptr<arrow::DataType> GetType() const {
+    std::shared_ptr<arrow20::DataType> GetType() const {
         return Type_;
     }
 
     void Export(ArrowSchema* out) const final;
 
 private:
-    const std::shared_ptr<arrow::DataType> Type_;
+    const std::shared_ptr<arrow20::DataType> Type_;
 };
 
 //////////////////////////////////////////////////////////////////////////////

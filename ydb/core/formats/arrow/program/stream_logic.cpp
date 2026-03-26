@@ -70,7 +70,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             return AddMonoValue(*isMonoInput.GetResult(), accResult, context);
         }
         if (!accResult) {
-            AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
+            AFL_VERIFY(accInput->GetDataType()->id() == arrow20::uint8()->id())("type", accInput->GetDataType()->ToString());
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
         } else {
             auto result = Function->Call(TColumnChainInfo::BuildVector({ GetOutputColumnIdOnce(), inputId }), context.GetResources());
@@ -105,15 +105,15 @@ class TSpecFunctionsOperator {
 private:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> Registry;
     NMiniKQL::TComputationNodeFactory Factory;
-    std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> Kernels;
-    std::vector<std::shared_ptr<const arrow::compute::ScalarFunction>> Functions;
+    std::vector<std::shared_ptr<const arrow20::compute::ScalarKernel>> Kernels;
+    std::vector<std::shared_ptr<const arrow20::compute::ScalarFunction>> Functions;
 
 public:
-    const std::shared_ptr<const arrow::compute::ScalarFunction>& GetANDKernel() const {
+    const std::shared_ptr<const arrow20::compute::ScalarFunction>& GetANDKernel() const {
         return Functions[0];
     }
 
-    const std::shared_ptr<const arrow::compute::ScalarFunction>& GetORKernel() const {
+    const std::shared_ptr<const arrow20::compute::ScalarFunction>& GetORKernel() const {
         return Functions[1];
     }
 
@@ -134,8 +134,8 @@ public:
         AFL_VERIFY(Kernels.size() == 2);
 
         for (auto&& i : Kernels) {
-            arrow::compute::Arity arity(i->signature->in_types().size(), i->signature->is_varargs());
-            auto func = std::make_shared<arrow::compute::ScalarFunction>("local_function", arity, nullptr);
+            arrow20::compute::Arity arity(i->signature->in_types().size(), i->signature->is_varargs());
+            auto func = std::make_shared<arrow20::compute::ScalarFunction>("local_function", arity, nullptr);
             TStatusValidator::Validate(func->AddKernel(*i));
             Functions.push_back(func);
         }
@@ -161,10 +161,10 @@ NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
     return result;
 }
 
-bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
-    const auto arrChecker = [&](const arrow::Array& arr) {
-        AFL_VERIFY(arr.type()->id() == arrow::uint8()->id());
-        const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
+bool TStreamLogicProcessor::IsFinishDatum(const arrow20::Datum& datum) const {
+    const auto arrChecker = [&](const arrow20::Array& arr) {
+        AFL_VERIFY(arr.type()->id() == arrow20::uint8()->id());
+        const arrow20::UInt8Array& ui8Arr = static_cast<const arrow20::UInt8Array&>(arr);
         const ui8* values = ui8Arr.raw_values();
         if (Operation == NKernels::EOperation::And) {
             for (ui32 i = 0; i < ui8Arr.length(); ++i) {
@@ -188,7 +188,7 @@ bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
         return arrChecker(*arr);
     } else if (datum.is_arraylike()) {
         auto arr = datum.chunked_array();
-        AFL_VERIFY(arr->type()->id() == arrow::uint8()->id());
+        AFL_VERIFY(arr->type()->id() == arrow20::uint8()->id());
         for (auto&& chunk : arr->chunks()) {
             if (!arrChecker(*chunk)) {
                 return false;
@@ -202,7 +202,7 @@ bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
 }
 
 TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {
-    std::shared_ptr<arrow::Scalar> monoValue;
+    std::shared_ptr<arrow20::Scalar> monoValue;
     const auto isMonoValue = inputArray->CheckOneValueAccessor(monoValue);
     if (!isMonoValue || !*isMonoValue) {
         return std::optional<bool>();
@@ -214,10 +214,10 @@ TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::
     return !*isFalseConclusion;
 }
 
-TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow::Scalar>& scalar) const {
+TConclusion<bool> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<arrow20::Scalar>& scalar) const {
     AFL_VERIFY(scalar);
-    AFL_VERIFY(scalar->type->id() == arrow::uint8()->id())("type", scalar->type->ToString());
-    return static_cast<const arrow::UInt8Scalar*>(scalar.get())->value != 0;
+    AFL_VERIFY(scalar->type->id() == arrow20::uint8()->id())("type", scalar->type->ToString());
+    return static_cast<const arrow20::UInt8Scalar*>(scalar.get())->value != 0;
 }
 
 }   // namespace NKikimr::NArrow::NSSA

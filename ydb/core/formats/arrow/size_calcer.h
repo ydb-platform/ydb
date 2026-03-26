@@ -23,7 +23,7 @@ public:
 
     }
 
-    void SetFieldsForSpecialKeys(const std::shared_ptr<arrow::Schema>& schema) {
+    void SetFieldsForSpecialKeys(const std::shared_ptr<arrow20::Schema>& schema) {
         std::vector<TString> local;
         for (auto&& i : schema->fields()) {
             local.emplace_back(i->name());
@@ -61,9 +61,9 @@ public:
 
     TString DebugString() const;
 
-    static TConclusion<std::vector<TSerializedBatch>> BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context);
-    static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
-    static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context);
+    static TConclusion<std::vector<TSerializedBatch>> BuildWithLimit(std::shared_ptr<arrow20::RecordBatch> batch, const TBatchSplittingContext& context);
+    static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow20::RecordBatch> batch, const TBatchSplittingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
+    static TSerializedBatch Build(std::shared_ptr<arrow20::RecordBatch> batch, const TBatchSplittingContext& context);
 
     TSerializedBatch(TString&& data, const ui32 rowsCount, const ui32 rawBytes,
         const std::optional<TString>& specialKeysPayload, const std::optional<TString>& specialKeysFull)
@@ -76,6 +76,6 @@ public:
     }
 };
 
-TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplittingContext& context);
+TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow20::RecordBatch>& batch, const TBatchSplittingContext& context);
 
 }

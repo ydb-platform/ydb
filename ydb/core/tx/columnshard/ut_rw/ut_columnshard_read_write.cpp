@@ -42,7 +42,7 @@ using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 template <typename TKey = ui64>
-bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
+bool DataHas(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
     const std::string& columnName = "timestamp", const bool inverseCheck = false) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
@@ -57,7 +57,7 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
 
     for (auto& batch : batches) {
         UNIT_ASSERT(batch);
-        std::shared_ptr<arrow::Array> array = batch->GetColumnByName(columnName);
+        std::shared_ptr<arrow20::Array> array = batch->GetColumnByName(columnName);
         UNIT_ASSERT(array);
 
         for (int i = 0; i < array->length(); ++i) {
@@ -65,13 +65,13 @@ bool DataHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, st
 
             NArrow::SwitchType(array->type_id(), [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
-                using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+                using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
 
-                if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
+                if constexpr (isStrKey && arrow20::has_string_view<typename TWrap::T>()) {
                     value = static_cast<const TArray&>(*array).GetString(i);
                     return true;
                 }
-                if constexpr (!isStrKey && arrow::has_c_type<typename TWrap::T>()) {
+                if constexpr (!isStrKey && arrow20::has_c_type<typename TWrap::T>()) {
                     auto& column = static_cast<const TArray&>(*array);
                     value = column.Value(i);
                     return true;
@@ -103,7 +103,7 @@ template <typename TKey = ui64>
 bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range, bool requireUniq = false,
     const std::string& columnName = "timestamp") {
     auto schema = NArrow::DeserializeSchema(srtSchema);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
     for (auto& blob : blobs) {
         batches.emplace_back(NArrow::DeserializeBatch(blob, schema));
     }
@@ -111,13 +111,13 @@ bool DataHas(const std::vector<TString>& blobs, const TString& srtSchema, std::p
     return DataHas<TKey>(batches, range, requireUniq, columnName);
 }
 
-bool DataNotHas(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
+bool DataNotHas(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& batches, std::pair<ui64, ui64> range, bool requireUniq = false,
     const std::string& columnName = "timestamp") {
     return DataHas<ui64>(batches, range, requireUniq, columnName, true);
 }
 
 template <typename TKey = ui64>
-bool DataHasOnly(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::pair<ui64, ui64> range) {
+bool DataHasOnly(const std::vector<std::shared_ptr<arrow20::RecordBatch>>& batches, std::pair<ui64, ui64> range) {
     static constexpr const bool isStrKey = std::is_same_v<TKey, std::string>;
 
     THashSet<TKey> keys;
@@ -132,7 +132,7 @@ bool DataHasOnly(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
     for (auto& batch : batches) {
         UNIT_ASSERT(batch);
 
-        std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
+        std::shared_ptr<arrow20::Array> array = batch->GetColumnByName("timestamp");
         UNIT_ASSERT(array);
 
         for (int i = 0; i < array->length(); ++i) {
@@ -140,13 +140,13 @@ bool DataHasOnly(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
 
             NArrow::SwitchType(array->type_id(), [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
-                using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+                using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
 
-                if constexpr (isStrKey && arrow::has_string_view<typename TWrap::T>()) {
+                if constexpr (isStrKey && arrow20::has_string_view<typename TWrap::T>()) {
                     value = static_cast<const TArray&>(*array).GetView(i);
                     return true;
                 }
-                if constexpr (!isStrKey && arrow::has_c_type<typename TWrap::T>()) {
+                if constexpr (!isStrKey && arrow20::has_c_type<typename TWrap::T>()) {
                     auto& column = static_cast<const TArray&>(*array);
                     value = column.Value(i);
                     return true;
@@ -168,7 +168,7 @@ bool DataHasOnly(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches
 template <typename TKey = ui64>
 bool DataHasOnly(const std::vector<TString>& blobs, const TString& srtSchema, std::pair<ui64, ui64> range) {
     auto schema = NArrow::DeserializeSchema(srtSchema);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
     for (auto& blob : blobs) {
         batches.emplace_back(NArrow::DeserializeBatch(blob, schema));
     }
@@ -177,8 +177,8 @@ bool DataHasOnly(const std::vector<TString>& blobs, const TString& srtSchema, st
 }
 
 template <typename TArrowType>
-bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const std::vector<int64_t>& expected) {
-    using TArray = typename arrow::TypeTraits<TArrowType>::ArrayType;
+bool CheckTypedIntValues(const std::shared_ptr<arrow20::Array>& array, const std::vector<int64_t>& expected) {
+    using TArray = typename arrow20::TypeTraits<TArrowType>::ArrayType;
 
     UNIT_ASSERT(array);
     UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
@@ -193,8 +193,8 @@ bool CheckTypedIntValues(const std::shared_ptr<arrow::Array>& array, const std::
 }
 
 template <typename TArrowType>
-bool CheckTypedStrValues(const std::shared_ptr<arrow::Array>& array, const std::vector<std::string>& expected) {
-    using TArray = typename arrow::TypeTraits<TArrowType>::ArrayType;
+bool CheckTypedStrValues(const std::shared_ptr<arrow20::Array>& array, const std::vector<std::string>& expected) {
+    using TArray = typename arrow20::TypeTraits<TArrowType>::ArrayType;
 
     UNIT_ASSERT(array);
     UNIT_ASSERT_VALUES_EQUAL(array->length(), (int)expected.size());
@@ -208,7 +208,7 @@ bool CheckTypedStrValues(const std::shared_ptr<arrow::Array>& array, const std::
     return true;
 }
 
-bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const std::vector<int64_t>& expected) {
+bool CheckIntValues(const std::shared_ptr<arrow20::Array>& array, const std::vector<int64_t>& expected) {
     UNIT_ASSERT(array);
 
     std::vector<std::string> expectedStr;
@@ -218,39 +218,39 @@ bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const std::vecto
     }
 
     switch (array->type()->id()) {
-        case arrow::Type::UINT8:
-            return CheckTypedIntValues<arrow::UInt8Type>(array, expected);
-        case arrow::Type::UINT16:
-            return CheckTypedIntValues<arrow::UInt16Type>(array, expected);
-        case arrow::Type::UINT32:
-            return CheckTypedIntValues<arrow::UInt32Type>(array, expected);
-        case arrow::Type::UINT64:
-            return CheckTypedIntValues<arrow::UInt64Type>(array, expected);
-        case arrow::Type::INT8:
-            return CheckTypedIntValues<arrow::Int8Type>(array, expected);
-        case arrow::Type::INT16:
-            return CheckTypedIntValues<arrow::Int16Type>(array, expected);
-        case arrow::Type::INT32:
-            return CheckTypedIntValues<arrow::Int32Type>(array, expected);
-        case arrow::Type::INT64:
-            return CheckTypedIntValues<arrow::Int64Type>(array, expected);
+        case arrow20::Type::UINT8:
+            return CheckTypedIntValues<arrow20::UInt8Type>(array, expected);
+        case arrow20::Type::UINT16:
+            return CheckTypedIntValues<arrow20::UInt16Type>(array, expected);
+        case arrow20::Type::UINT32:
+            return CheckTypedIntValues<arrow20::UInt32Type>(array, expected);
+        case arrow20::Type::UINT64:
+            return CheckTypedIntValues<arrow20::UInt64Type>(array, expected);
+        case arrow20::Type::INT8:
+            return CheckTypedIntValues<arrow20::Int8Type>(array, expected);
+        case arrow20::Type::INT16:
+            return CheckTypedIntValues<arrow20::Int16Type>(array, expected);
+        case arrow20::Type::INT32:
+            return CheckTypedIntValues<arrow20::Int32Type>(array, expected);
+        case arrow20::Type::INT64:
+            return CheckTypedIntValues<arrow20::Int64Type>(array, expected);
 
-        case arrow::Type::TIMESTAMP:
-            return CheckTypedIntValues<arrow::TimestampType>(array, expected);
-        case arrow::Type::DURATION:
-            return CheckTypedIntValues<arrow::DurationType>(array, expected);
+        case arrow20::Type::TIMESTAMP:
+            return CheckTypedIntValues<arrow20::TimestampType>(array, expected);
+        case arrow20::Type::DURATION:
+            return CheckTypedIntValues<arrow20::DurationType>(array, expected);
 
-        case arrow::Type::FLOAT:
-            return CheckTypedIntValues<arrow::FloatType>(array, expected);
-        case arrow::Type::DOUBLE:
-            return CheckTypedIntValues<arrow::DoubleType>(array, expected);
+        case arrow20::Type::FLOAT:
+            return CheckTypedIntValues<arrow20::FloatType>(array, expected);
+        case arrow20::Type::DOUBLE:
+            return CheckTypedIntValues<arrow20::DoubleType>(array, expected);
 
-        case arrow::Type::STRING:
-            return CheckTypedStrValues<arrow::StringType>(array, expectedStr);
-        case arrow::Type::BINARY:
-            return CheckTypedStrValues<arrow::BinaryType>(array, expectedStr);
-        case arrow::Type::FIXED_SIZE_BINARY:
-            return CheckTypedStrValues<arrow::FixedSizeBinaryType>(array, expectedStr);
+        case arrow20::Type::STRING:
+            return CheckTypedStrValues<arrow20::StringType>(array, expectedStr);
+        case arrow20::Type::BINARY:
+            return CheckTypedStrValues<arrow20::BinaryType>(array, expectedStr);
+        case arrow20::Type::FIXED_SIZE_BINARY:
+            return CheckTypedStrValues<arrow20::FixedSizeBinaryType>(array, expectedStr);
 
         default:
             Cerr << "type : " << array->type()->ToString() << "\n";
@@ -260,10 +260,10 @@ bool CheckIntValues(const std::shared_ptr<arrow::Array>& array, const std::vecto
     return true;
 }
 
-bool CheckOrdered(const std::shared_ptr<arrow::RecordBatch>& batch) {
+bool CheckOrdered(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     UNIT_ASSERT(batch);
 
-    std::shared_ptr<arrow::Array> array = batch->GetColumnByName("timestamp");
+    std::shared_ptr<arrow20::Array> array = batch->GetColumnByName("timestamp");
     UNIT_ASSERT(array);
     if (!array->length()) {
         return true;
@@ -277,14 +277,14 @@ bool CheckOrdered(const std::shared_ptr<arrow::RecordBatch>& batch) {
 
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
-            using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+            using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
 
-            if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+            if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                 auto& column = static_cast<const TArray&>(*array);
                 value = column.Value(i);
                 return true;
             }
-            if constexpr (arrow::is_base_binary_type<typename TWrap::T>()) {
+            if constexpr (arrow20::is_base_binary_type<typename TWrap::T>()) {
                 auto v = static_cast<const TArray&>(*array).GetView(i);
                 strValue = TString(v.data(), v.size());
                 return true;
@@ -295,7 +295,7 @@ bool CheckOrdered(const std::shared_ptr<arrow::RecordBatch>& batch) {
             return false;
         });
 
-        if (arrow::is_base_binary_like(array->type_id())) {
+        if (arrow20::is_base_binary_like(array->type_id())) {
             if (!i) {
                 strPrev = strValue;
                 continue;
@@ -320,7 +320,7 @@ bool CheckOrdered(const std::shared_ptr<arrow::RecordBatch>& batch) {
     return true;
 }
 
-bool CheckColumns(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& colNames, std::optional<size_t> rowsCount) {
+bool CheckColumns(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<TString>& colNames, std::optional<size_t> rowsCount) {
     UNIT_ASSERT(batch);
     UNIT_ASSERT_VALUES_EQUAL((ui64)batch->num_columns(), colNames.size());
     if (rowsCount) {
@@ -1573,7 +1573,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
@@ -1612,7 +1612,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
@@ -1641,7 +1641,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, TLimits::GetMaxBlobSize() / 1024));
 
@@ -1676,7 +1676,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         {
             NConstruction::IArrayBuilder::TPtr keyColumn =
-                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key");
             NConstruction::IArrayBuilder::TPtr column =
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
@@ -1689,7 +1689,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         }
         {
             NConstruction::IArrayBuilder::TPtr keyColumn =
-                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key", 2049);
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key", 2049);
             NConstruction::IArrayBuilder::TPtr column =
                 std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                     "field", NConstruction::TStringPoolFiller(8, 100));
@@ -2333,13 +2333,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
-                    const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
-                    auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
+                    const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow20::UInt64Array&>(*paths).Value(i));
+                    auto kind = static_cast<arrow20::StringArray&>(*kinds).Value(i);
                     const TString kindStr(kind.data(), kind.size());
-                    ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
-                    ui64 numBytes = static_cast<arrow::UInt64Array&>(*bytes).Value(i);
-                    ui64 numRawBytes = static_cast<arrow::UInt64Array&>(*rawBytes).Value(i);
-                    bool activity = static_cast<arrow::UInt8Array&>(*activities).Value(i);
+                    ui64 numRows = static_cast<arrow20::UInt64Array&>(*rows).Value(i);
+                    ui64 numBytes = static_cast<arrow20::UInt64Array&>(*bytes).Value(i);
+                    ui64 numRawBytes = static_cast<arrow20::UInt64Array&>(*rawBytes).Value(i);
+                    bool activity = static_cast<arrow20::UInt8Array&>(*activities).Value(i);
                     if (!activity) {
                         continue;
                     }

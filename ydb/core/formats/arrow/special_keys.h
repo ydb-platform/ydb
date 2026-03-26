@@ -12,21 +12,21 @@ namespace NKikimr::NArrow {
 
 class TSpecialKeys {
 protected:
-    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow20::Schema> Schema;
     TRowsCollection Rows;
 
-    std::shared_ptr<arrow::RecordBatch> BuildBatch() const;
+    std::shared_ptr<arrow20::RecordBatch> BuildBatch() const;
 
     bool DeserializeFromString(const TString& data);
 
     TSimpleRow GetKeyByIndex(const ui32 position) const;
 
     TSpecialKeys() = default;
-    TSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& data) {
+    TSpecialKeys(const std::shared_ptr<arrow20::RecordBatch>& data) {
         Initialize(data);
     }
 
-    void Initialize(const std::shared_ptr<arrow::RecordBatch>& data) {
+    void Initialize(const std::shared_ptr<arrow20::RecordBatch>& data) {
         Schema = data->schema();
         Rows = TRowsCollection(data);
         AFL_VERIFY(data);
@@ -37,7 +37,7 @@ protected:
     }
 
 public:
-    TSpecialKeys(const std::vector<TString>& rows, const std::shared_ptr<arrow::Schema>& schema)
+    TSpecialKeys(const std::vector<TString>& rows, const std::shared_ptr<arrow20::Schema>& schema)
         : Schema(schema)
         , Rows(rows) {
     }
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    const std::shared_ptr<arrow::Schema>& GetSchema() const {
+    const std::shared_ptr<arrow20::Schema>& GetSchema() const {
         return Schema;
     }
 
@@ -68,7 +68,7 @@ public:
         return Rows.GetRecordsCount();
     }
 
-    TSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema) {
+    TSpecialKeys(const TString& data, const std::shared_ptr<arrow20::Schema>& schema) {
         auto rbData = NArrow::DeserializeBatch(data, schema);
         Initialize(rbData);
     }
@@ -90,16 +90,16 @@ private:
 
 public:
     explicit TFirstLastSpecialKeys(const TString& data);
-    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow, const std::shared_ptr<arrow::Schema>& schema)
+    explicit TFirstLastSpecialKeys(const TSimpleRow& firstRow, const TSimpleRow& lastRow, const std::shared_ptr<arrow20::Schema>& schema)
         : TBase(std::vector<TString>({ firstRow.GetData(), lastRow.GetData() }), schema) {
     }
-    explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow::Schema>& schema)
+    explicit TFirstLastSpecialKeys(const TString& firstRow, const TString& lastRow, const std::shared_ptr<arrow20::Schema>& schema)
         : TBase(std::vector<TString>({ firstRow, lastRow }), schema) {
     }
-    explicit TFirstLastSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
+    explicit TFirstLastSpecialKeys(const TString& data, const std::shared_ptr<arrow20::Schema>& schema)
         : TBase(data, schema) {
     }
-    explicit TFirstLastSpecialKeys(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<TString>& columnNames = {});
+    explicit TFirstLastSpecialKeys(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<TString>& columnNames = {});
 };
 
 class TMinMaxSpecialKeys: public TSpecialKeys {
@@ -107,7 +107,7 @@ private:
     using TBase = TSpecialKeys;
 
 protected:
-    TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> data)
+    TMinMaxSpecialKeys(std::shared_ptr<arrow20::RecordBatch> data)
         : TBase(data) {
     }
 
@@ -120,11 +120,11 @@ public:
     }
 
     explicit TMinMaxSpecialKeys(const TString& data);
-    explicit TMinMaxSpecialKeys(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
+    explicit TMinMaxSpecialKeys(const TString& data, const std::shared_ptr<arrow20::Schema>& schema)
         : TBase(data, schema) {
     }
 
-    explicit TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch, const std::shared_ptr<arrow::Schema>& schema);
+    explicit TMinMaxSpecialKeys(std::shared_ptr<arrow20::RecordBatch> batch, const std::shared_ptr<arrow20::Schema>& schema);
 };
 
 }   // namespace NKikimr::NArrow

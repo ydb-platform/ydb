@@ -22,7 +22,7 @@ namespace {
 
 using TChunkedArrayIndex = std::vector<IArrayBuilder::TArrayDataItem>;
 
-TChunkedArrayIndex MakeChunkedArrayIndex(const arrow::Datum& datum) {
+TChunkedArrayIndex MakeChunkedArrayIndex(const arrow20::Datum& datum) {
     TChunkedArrayIndex result;
     if (datum.is_array()) {
         result.push_back({datum.array().get(), 0});
@@ -50,7 +50,7 @@ public:
     const ui64 Count_;
     const std::vector<TBlockType*> Columns_;
     const std::vector<ui32> KeyIndicies_;
-    std::vector<std::vector<arrow::Datum>> SortInput_;
+    std::vector<std::vector<arrow20::Datum>> SortInput_;
     std::vector<ui64> SortPermutation_;
     std::vector<TChunkedArrayIndex> SortArrays_;
 
@@ -185,7 +185,7 @@ public:
     }
 
     void ProcessInput() {
-        const ui64 blockLen = TArrowBlock::From(Values.back()).GetDatum().template scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 blockLen = TArrowBlock::From(Values.back()).GetDatum().template scalar_as<arrow20::UInt64Scalar>().value;
 
         if (!ScalarsFilled_) {
             for (ui32 i = 0; i < Columns_.size(); ++i) {
@@ -247,7 +247,7 @@ public:
     void CompressBuilders(bool sort) {
         Y_ABORT_UNLESS(ScalarsFilled_);
         std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-        std::vector<arrow::Datum> tmpDatums(Columns_.size());
+        std::vector<arrow20::Datum> tmpDatums(Columns_.size());
         for (ui32 i = 0; i < Columns_.size(); ++i) {
             if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
                 auto datum = Builders_[i]->Build(false);
@@ -344,11 +344,11 @@ public:
                 if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
                     Values[i] = ScalarValues_[i];
                 } else {
-                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)));
+                    Values[i] = holderFactory.CreateArrowBlock(arrow20::Datum(Builders_[i]->Build(true)));
                 }
             }
 
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)));
+            Values.back() = holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(BuilderLength_)));
         }
         FillArrays();
         return true;
@@ -363,11 +363,11 @@ public:
                 Values[i] = ScalarValues_[i];
             } else {
                 Builders_[i]->AddMany(SortArrays_[i].data(), SortArrays_[i].size(), SortPermutation_.data() + Written_, blockLen);
-                Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)));
+                Values[i] = holderFactory.CreateArrowBlock(arrow20::Datum(Builders_[i]->Build(isLast)));
             }
         }
 
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+        Values.back() = holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(blockLen)));
         Written_ += blockLen;
         if (Written_ >= OutputLength_) {
             IsFinished_ = true;

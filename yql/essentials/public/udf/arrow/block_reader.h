@@ -16,16 +16,16 @@ class IBlockReader: private TNonCopyable {
 public:
     virtual ~IBlockReader() = default;
     // result will reference to Array/Scalar internals and will be valid until next call to GetItem/GetScalarItem
-    virtual TBlockItem GetItem(const arrow::ArrayData& data, size_t index) = 0;
-    virtual TBlockItem GetScalarItem(const arrow::Scalar& scalar) = 0;
+    virtual TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) = 0;
+    virtual TBlockItem GetScalarItem(const arrow20::Scalar& scalar) = 0;
 
-    virtual ui64 GetDataWeight(const arrow::ArrayData& data) const = 0;
-    virtual ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
+    virtual ui64 GetDataWeight(const arrow20::ArrayData& data) const = 0;
+    virtual ui64 GetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const = 0;
     virtual ui64 GetDataWeight(TBlockItem item) const = 0;
     virtual ui64 GetDefaultValueWeight() const = 0;
 
-    virtual void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const = 0;
-    virtual void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const = 0;
+    virtual void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const = 0;
+    virtual void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const = 0;
 };
 
 struct TBlockItemSerializeProps {
@@ -36,7 +36,7 @@ struct TBlockItemSerializeProps {
 
 class TBlockReaderBase: public IBlockReader {
 public:
-    ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 GetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         Y_ENSURE(0 <= offset && offset < data.length);
         Y_ENSURE(offset + length >= offset);
         Y_ENSURE(offset + length <= data.length);
@@ -44,7 +44,7 @@ public:
     }
 
 protected:
-    virtual ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const = 0;
+    virtual ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const = 0;
 
     static ui64 GetBitmaskDataWeight(int64_t dataLength) {
         if (dataLength <= 0) {
@@ -57,7 +57,7 @@ protected:
 template <typename T, bool Nullable, typename TDerived>
 class TFixedSizeBlockReaderBase: public TBlockReaderBase {
 public:
-    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+    TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return {};
@@ -66,8 +66,8 @@ public:
         return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
     }
 
-    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
-        using namespace arrow::internal;
+    TBlockItem GetScalarItem(const arrow20::Scalar& scalar) final {
+        using namespace arrow20::internal;
 
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
@@ -76,7 +76,7 @@ public:
         }
 
         if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
-            auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            auto& fixedScalar = checked_cast<const arrow20::FixedSizeBinaryScalar&>(scalar);
             T value;
             memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             return static_cast<TDerived*>(this)->MakeBlockItem(value);
@@ -86,11 +86,11 @@ public:
         }
     }
 
-    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+    ui64 GetDataWeight(const arrow20::ArrayData& data) const final {
         return GetDataWeightImpl(data.length);
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         Y_UNUSED(data, offset);
         return GetDataWeightImpl(length);
     }
@@ -107,7 +107,7 @@ public:
         return sizeof(T);
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+    void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return out.PushChar(0);
@@ -118,7 +118,7 @@ public:
         out.PushNumber(data.GetValues<T>(1)[index]);
     }
 
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+    void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return out.PushChar(0);
@@ -127,12 +127,12 @@ public:
         }
 
         if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
-            auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
+            auto& fixedScalar = arrow20::internal::checked_cast<const arrow20::FixedSizeBinaryScalar&>(scalar);
             T value;
             memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             out.PushNumber(value);
         } else {
-            out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
+            out.PushNumber(*static_cast<const T*>(arrow20::internal::checked_cast<const arrow20::internal::PrimitiveScalarBase&>(scalar).data()));
         }
     }
 
@@ -169,7 +169,7 @@ class TStringBlockReader final: public TBlockReaderBase {
 public:
     using TOffset = typename TStringType::offset_type;
 
-    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+    TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) final {
         Y_DEBUG_ABORT_UNLESS(data.buffers.size() == 3);
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
@@ -184,23 +184,23 @@ public:
         return TBlockItem(str);
     }
 
-    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow20::Scalar& scalar) final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return {};
             }
         }
 
-        auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
+        auto buffer = arrow20::internal::checked_cast<const arrow20::BaseBinaryScalar&>(scalar).value;
         std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
         return TBlockItem(str);
     }
 
-    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+    ui64 GetDataWeight(const arrow20::ArrayData& data) const final {
         return GetDataWeightImpl(data.length, data.GetValues<TOffset>(1));
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         return GetDataWeightImpl(length, data.GetValues<TOffset>(1, offset));
     }
 
@@ -218,7 +218,7 @@ public:
         return 0;
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+    void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         Y_DEBUG_ABORT_UNLESS(data.buffers.size() == 3);
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
@@ -234,7 +234,7 @@ public:
         out.PushString(str);
     }
 
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+    void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return out.PushChar(0);
@@ -242,7 +242,7 @@ public:
             out.PushChar(1);
         }
 
-        auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
+        auto buffer = arrow20::internal::checked_cast<const arrow20::BaseBinaryScalar&>(scalar).value;
         std::string_view str(reinterpret_cast<const char*>(buffer->data()), buffer->size());
         out.PushString(str);
     }
@@ -262,7 +262,7 @@ private:
 template <bool Nullable, typename TDerived>
 class TTupleBlockReaderBase: public TBlockReaderBase {
 public:
-    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+    TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return {};
@@ -271,18 +271,18 @@ public:
         return static_cast<TDerived*>(this)->GetChildrenItems(data, index);
     }
 
-    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow20::Scalar& scalar) final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return {};
             }
         }
 
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(scalar);
         return static_cast<TDerived*>(this)->GetChildrenScalarItems(structScalar);
     }
 
-    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+    ui64 GetDataWeight(const arrow20::ArrayData& data) const final {
         ui64 size = 0;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(data.length);
@@ -291,7 +291,7 @@ public:
         return size;
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         ui64 size = 0;
         if constexpr (Nullable) {
             size += GetBitmaskDataWeight(length);
@@ -313,7 +313,7 @@ public:
         return size;
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+    void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (IsNull(data, index)) {
                 return out.PushChar(0);
@@ -324,7 +324,7 @@ public:
         static_cast<const TDerived*>(this)->SaveChildrenItems(data, index, out);
     }
 
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+    void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const final {
         if constexpr (Nullable) {
             if (!scalar.is_valid) {
                 return out.PushChar(0);
@@ -332,7 +332,7 @@ public:
             out.PushChar(1);
         }
 
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(scalar);
 
         static_cast<const TDerived*>(this)->SaveChildrenScalarItems(structScalar, out);
     }
@@ -347,7 +347,7 @@ public:
     {
     }
 
-    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
+    TBlockItem GetChildrenItems(const arrow20::ArrayData& data, size_t index) {
         for (ui32 i = 0; i < Children_.size(); ++i) {
             Items_[i] = Children_[i]->GetItem(*data.child_data[i], index);
         }
@@ -355,7 +355,7 @@ public:
         return TBlockItem(Items_.data());
     }
 
-    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
+    TBlockItem GetChildrenScalarItems(const arrow20::StructScalar& structScalar) {
         for (ui32 i = 0; i < Children_.size(); ++i) {
             Items_[i] = Children_[i]->GetScalarItem(*structScalar.value[i]);
         }
@@ -383,7 +383,7 @@ public:
         return size;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data) const {
+    size_t GetChildrenDataWeight(const arrow20::ArrayData& data) const {
         size_t size = 0;
         for (ui32 i = 0; i < Children_.size(); ++i) {
             size += Children_[i]->GetDataWeight(*data.child_data[i]);
@@ -392,7 +392,7 @@ public:
         return size;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+    size_t GetChildrenDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const {
         size_t size = 0;
         for (ui32 i = 0; i < Children_.size(); ++i) {
             size += Children_[i]->GetSliceDataWeight(*data.child_data[i], offset, length);
@@ -408,13 +408,13 @@ public:
         return size;
     }
 
-    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
+    void SaveChildrenItems(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children_.size(); ++i) {
             Children_[i]->SaveItem(*data.child_data[i], index, out);
         }
     }
 
-    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
+    void SaveChildrenScalarItems(const arrow20::StructScalar& structScalar, TOutputBuffer& out) const {
         for (ui32 i = 0; i < Children_.size(); ++i) {
             Children_[i]->SaveScalarItem(*structScalar.value[i], out);
         }
@@ -428,7 +428,7 @@ private:
 template <typename TTzDate, bool Nullable>
 class TTzDateBlockReader final: public TTupleBlockReaderBase<Nullable, TTzDateBlockReader<TTzDate, Nullable>> {
 public:
-    TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
+    TBlockItem GetChildrenItems(const arrow20::ArrayData& data, size_t index) {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
         TBlockItem item{DateReader_.GetItem(*data.child_data[0], index)};
@@ -436,7 +436,7 @@ public:
         return item;
     }
 
-    TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
+    TBlockItem GetChildrenScalarItems(const arrow20::StructScalar& structScalar) {
         Y_DEBUG_ABORT_UNLESS(structScalar.value.size() == 2);
 
         TBlockItem item{DateReader_.GetScalarItem(*structScalar.value[0])};
@@ -444,7 +444,7 @@ public:
         return item;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data) const {
+    size_t GetChildrenDataWeight(const arrow20::ArrayData& data) const {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
         size_t size = 0;
@@ -453,7 +453,7 @@ public:
         return size;
     }
 
-    size_t GetChildrenDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const {
+    size_t GetChildrenDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
         size_t size = 0;
@@ -478,12 +478,12 @@ public:
         return size;
     }
 
-    void SaveChildrenItems(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const {
+    void SaveChildrenItems(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const {
         DateReader_.SaveItem(*data.child_data[0], index, out);
         TimezoneReader_.SaveItem(*data.child_data[1], index, out);
     }
 
-    void SaveChildrenScalarItems(const arrow::StructScalar& structScalar, TOutputBuffer& out) const {
+    void SaveChildrenScalarItems(const arrow20::StructScalar& structScalar, TOutputBuffer& out) const {
         DateReader_.SaveScalarItem(*structScalar.value[0], out);
         TimezoneReader_.SaveScalarItem(*structScalar.value[1], out);
     }
@@ -493,12 +493,12 @@ private:
     TFixedSizeBlockReader<ui16, /* Nullable */ false> TimezoneReader_;
 };
 
-// NOTE: For null singular type we use arrow::null() data type.
+// NOTE: For null singular type we use arrow20::null() data type.
 // This data type DOES NOT support bit mask so for optional type
 // we have to use |TExternalOptional| wrapper.
 //
-// For non-null singular types we use arrow::Struct({}).
-// We do not allow using bitmask too to be consistent with arrow::null().
+// For non-null singular types we use arrow20::Struct({}).
+// We do not allow using bitmask too to be consistent with arrow20::null().
 template <bool IsNull>
 class TSingularTypeBlockReader: public TBlockReaderBase {
 public:
@@ -506,22 +506,22 @@ public:
 
     ~TSingularTypeBlockReader() override = default;
 
-    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
+    TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) override {
         Y_UNUSED(data, index);
         return CreateSingularBlockItem<IsNull>();
     }
 
-    TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
+    TBlockItem GetScalarItem(const arrow20::Scalar& scalar) override {
         Y_UNUSED(scalar);
         return CreateSingularBlockItem<IsNull>();
     }
 
-    ui64 GetDataWeight(const arrow::ArrayData& data) const override {
+    ui64 GetDataWeight(const arrow20::ArrayData& data) const override {
         Y_UNUSED(data);
         return 0;
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         Y_UNUSED(data, offset, length);
         return 0;
     }
@@ -535,11 +535,11 @@ public:
         return 0;
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const override {
+    void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const override {
         Y_UNUSED(index, data, out);
     }
 
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const override {
+    void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const override {
         Y_UNUSED(scalar, out);
     }
 };
@@ -551,7 +551,7 @@ public:
     {
     }
 
-    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
+    TBlockItem GetItem(const arrow20::ArrayData& data, size_t index) final {
         if (IsNull(data, index)) {
             return {};
         }
@@ -559,20 +559,20 @@ public:
         return Inner_->GetItem(*data.child_data.front(), index).MakeOptional();
     }
 
-    TBlockItem GetScalarItem(const arrow::Scalar& scalar) final {
+    TBlockItem GetScalarItem(const arrow20::Scalar& scalar) final {
         if (!scalar.is_valid) {
             return {};
         }
 
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(scalar);
         return Inner_->GetScalarItem(*structScalar.value.front()).MakeOptional();
     }
 
-    ui64 GetDataWeight(const arrow::ArrayData& data) const final {
+    ui64 GetDataWeight(const arrow20::ArrayData& data) const final {
         return GetBitmaskDataWeight(data.length) + Inner_->GetDataWeight(*data.child_data.front());
     }
 
-    ui64 DoGetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
+    ui64 DoGetSliceDataWeight(const arrow20::ArrayData& data, int64_t offset, int64_t length) const final {
         return GetBitmaskDataWeight(length) + Inner_->GetSliceDataWeight(*data.child_data.front(), offset, length);
     }
 
@@ -587,7 +587,7 @@ public:
         return 1 + Inner_->GetDefaultValueWeight();
     }
 
-    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const final {
+    void SaveItem(const arrow20::ArrayData& data, size_t index, TOutputBuffer& out) const final {
         if (IsNull(data, index)) {
             return out.PushChar(0);
         }
@@ -596,13 +596,13 @@ public:
         Inner_->SaveItem(*data.child_data.front(), index, out);
     }
 
-    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {
+    void SaveScalarItem(const arrow20::Scalar& scalar, TOutputBuffer& out) const final {
         if (!scalar.is_valid) {
             return out.PushChar(0);
         }
         out.PushChar(1);
 
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(scalar);
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(scalar);
         Inner_->SaveScalarItem(*structScalar.value.front(), out);
     }
 
@@ -633,7 +633,7 @@ struct TReaderTraits {
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
-            return std::make_unique<TStrings<arrow::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
+            return std::make_unique<TStrings<arrow20::BinaryType, true, NKikimr::NUdf::EDataSlot::String>>();
         }
     }
 

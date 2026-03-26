@@ -14,20 +14,20 @@ class ReadBuffer;
 class SeekableReadBuffer;
 class WriteBuffer;
 
-class ArrowBufferedOutputStream : public arrow::io::OutputStream
+class ArrowBufferedOutputStream : public arrow20::io::OutputStream
 {
 public:
     explicit ArrowBufferedOutputStream(WriteBuffer & out_);
 
     // FileInterface
-    arrow::Status Close() override;
+    arrow20::Status Close() override;
 
-    arrow::Result<int64_t> Tell() const override;
+    arrow20::Result<int64_t> Tell() const override;
 
     bool closed() const override { return !is_open; }
 
     // Writable
-    arrow::Status Write(const void * data, int64_t length) override;
+    arrow20::Status Write(const void * data, int64_t length) override;
 
 private:
     WriteBuffer & out;
@@ -37,24 +37,24 @@ private:
     ARROW_DISALLOW_COPY_AND_ASSIGN(ArrowBufferedOutputStream);
 };
 
-class RandomAccessFileFromSeekableReadBuffer : public arrow::io::RandomAccessFile
+class RandomAccessFileFromSeekableReadBuffer : public arrow20::io::RandomAccessFile
 {
 public:
     RandomAccessFileFromSeekableReadBuffer(SeekableReadBuffer & in_, off_t file_size_);
 
-    arrow::Result<int64_t> GetSize() override;
+    arrow20::Result<int64_t> GetSize() override;
 
-    arrow::Status Close() override;
+    arrow20::Status Close() override;
 
-    arrow::Result<int64_t> Tell() const override;
+    arrow20::Result<int64_t> Tell() const override;
 
     bool closed() const override { return !is_open; }
 
-    arrow::Result<int64_t> Read(int64_t nbytes, void * out) override;
+    arrow20::Result<int64_t> Read(int64_t nbytes, void * out) override;
 
-    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
+    arrow20::Result<std::shared_ptr<arrow20::Buffer>> Read(int64_t nbytes) override;
 
-    arrow::Status Seek(int64_t position) override;
+    arrow20::Status Seek(int64_t position) override;
 
 private:
     SeekableReadBuffer & in;
@@ -64,15 +64,15 @@ private:
     ARROW_DISALLOW_COPY_AND_ASSIGN(RandomAccessFileFromSeekableReadBuffer);
 };
 
-class ArrowInputStreamFromReadBuffer : public arrow::io::InputStream
+class ArrowInputStreamFromReadBuffer : public arrow20::io::InputStream
 {
 public:
     explicit ArrowInputStreamFromReadBuffer(ReadBuffer & in);
-    arrow::Result<int64_t> Read(int64_t nbytes, void* out) override;
-    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
-    arrow::Status Abort() override;
-    arrow::Result<int64_t> Tell() const override;
-    arrow::Status Close() override;
+    arrow20::Result<int64_t> Read(int64_t nbytes, void* out) override;
+    arrow20::Result<std::shared_ptr<arrow20::Buffer>> Read(int64_t nbytes) override;
+    arrow20::Status Abort() override;
+    arrow20::Result<int64_t> Tell() const override;
+    arrow20::Status Close() override;
     bool closed() const override { return !is_open; }
 
 private:
@@ -82,7 +82,7 @@ private:
     ARROW_DISALLOW_COPY_AND_ASSIGN(ArrowInputStreamFromReadBuffer);
 };
 
-std::shared_ptr<arrow::io::RandomAccessFile> asArrowFile(ReadBuffer & in);
+std::shared_ptr<arrow20::io::RandomAccessFile> asArrowFile(ReadBuffer & in);
 
 }
 

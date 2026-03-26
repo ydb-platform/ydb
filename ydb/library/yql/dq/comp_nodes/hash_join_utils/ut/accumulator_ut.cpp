@@ -215,7 +215,7 @@ Y_UNIT_TEST(AccumulatorFuzz) {
         for (ui32 subtest = 0; subtest < 10; ++subtest) {
             ui32 log2Buckets = rng() % 11;
             ui32 nBuckets = (1 << log2Buckets);
-            ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
+            ui32 bitsCount = arrow20::BitUtil::NumRequiredBits(nBuckets - 1);
             ui32 shift = 32 - bitsCount;
             ui32 mask = (1 << bitsCount) - 1;
             ui32 subRows = 1 + (rows ? rng() % (rows - 1) : 0);
@@ -327,7 +327,7 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     CTEST << "Pack speed: " << TuplesDataBytes / packTime << "[MB/sec]" << Endl;
     CTEST << " " << Endl;
 
-    ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
+    ui32 bitsCount = arrow20::BitUtil::NumRequiredBits(nBuckets - 1);
     ui32 shift = 32 - bitsCount;
     ui32 mask = (1 << bitsCount) - 1;
 
@@ -499,7 +499,7 @@ static bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Bucke
     CTEST << "Pack speed: " << TuplesDataBytes / packTime << "[MB/sec]" << Endl;
     CTEST << " " << Endl;
 
-    ui32 bitsCount = arrow::BitUtil::NumRequiredBits(nBuckets - 1);
+    ui32 bitsCount = arrow20::BitUtil::NumRequiredBits(nBuckets - 1);
     ui32 shift = 32 - bitsCount;
     ui32 mask = (1 << bitsCount) - 1;
 

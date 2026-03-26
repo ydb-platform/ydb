@@ -41,7 +41,7 @@ public:
         bool ScalarsProcessed = false;
     };
 
-    struct TKernelState: public arrow::compute::KernelState {
+    struct TKernelState: public arrow20::compute::KernelState {
         TKernelState(const TVector<TType*>& argsTypes, TType* returnType, const TComputationContext& originalContext)
             : Alloc(__LOCATION__)
             , TypeEnv(Alloc)
@@ -85,7 +85,7 @@ public:
             : Parent_(parent)
             , OriginalContext_(originalContext)
             , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes_))
-            , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ReturnType_), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , Kernel_(ConvertToInputTypes(parent->ArgsTypes_), ConvertToOutputType(parent->ReturnType_), [parent](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
                 auto guard = Guard(state.Alloc);
                 TVector<TDatumProvider> providers;
@@ -95,14 +95,14 @@ public:
                 }
 
                 *res = parent->CalculateImpl(providers, state.Accessors, *NYql::NUdf::GetYqlMemoryPool(), state.Ctx);
-                return arrow::Status::OK();
+                return arrow20::Status::OK();
             })
         {
-            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
-            Kernel_.init = [parent, ctx = &OriginalContext_](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+            Kernel_.null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+            Kernel_.mem_allocation = arrow20::compute::MemAllocation::NO_PREALLOCATE;
+            Kernel_.init = [parent, ctx = &OriginalContext_](arrow20::compute::KernelContext*, const arrow20::compute::KernelInitArgs&) {
                 auto state = std::make_unique<TKernelState>(parent->ArgsTypes_, parent->ReturnType_, *ctx);
-                return arrow::Result(std::move(state));
+                return arrow20::Result(std::move(state));
             };
         }
 
@@ -110,11 +110,11 @@ public:
             return "ScalarApply";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow20::compute::ScalarKernel& GetArrowKernel() const {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
             return ArgsValuesDescr_;
         }
 
@@ -125,8 +125,8 @@ public:
     private:
         const TScalarApplyWrapper* Parent_;
         const TComputationContext& OriginalContext_;
-        const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
-        arrow::compute::ScalarKernel Kernel_;
+        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;
 
@@ -158,9 +158,9 @@ public:
         return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx));
     }
 
-    arrow::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow::MemoryPool& memoryPool,
+    arrow20::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow20::MemoryPool& memoryPool,
                                TComputationContext& ctx) const {
-        TVector<arrow::Datum> args;
+        TVector<arrow20::Datum> args;
         args.reserve(providers.size());
         size_t length = 1;
         for (const auto& prov : providers) {

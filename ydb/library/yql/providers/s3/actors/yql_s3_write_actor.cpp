@@ -844,32 +844,32 @@ private:
 class TS3BlockWriteActor : public TS3WriteActorBase {
     using TBase = TS3WriteActorBase;
 
-    class TBlockWriter : public arrow::io::OutputStream {
+    class TBlockWriter : public arrow20::io::OutputStream {
     public:
         explicit TBlockWriter(TS3BlockWriteActor& self)
             : Self(self)
             , SerializedOutput(Self.SerializedData)
         {}
 
-        arrow::Status Write(const void* data, int64_t nbytes) override {
+        arrow20::Status Write(const void* data, int64_t nbytes) override {
             if (Closed) {
-                return arrow::Status::IOError("Cannot write to closed stream");
+                return arrow20::Status::IOError("Cannot write to closed stream");
             }
             Position += nbytes;
             SerializedOutput << TStringBuf(reinterpret_cast<const char*>(data), nbytes);
             Self.BatchSize += nbytes;
             Self.FileSize += nbytes;
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
-        arrow::Status Close() override {
+        arrow20::Status Close() override {
             Self.BatchSize = 0;
             Self.FileSize = 0;
             Closed = true;
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
-        arrow::Result<int64_t> Tell() const override {
+        arrow20::Result<int64_t> Tell() const override {
             return Position;
         }
 
@@ -886,7 +886,7 @@ class TS3BlockWriteActor : public TS3WriteActorBase {
 
 public:
     struct TBlockSettings {
-        std::shared_ptr<arrow::Schema> ArrowSchema;
+        std::shared_ptr<arrow20::Schema> ArrowSchema;
         std::vector<TColumnConverter> ColumnConverters;
         ui64 MaxFileSize;
         ui64 MaxBlockSize;
@@ -921,25 +921,25 @@ private:
     void SerializeValue(NYql::NUdf::TUnboxedValue* values, ui32 width) {
         YQL_ENSURE(width, "Expected non zero width for block output");
 
-        std::vector<std::shared_ptr<arrow::Array>> columns;
+        std::vector<std::shared_ptr<arrow20::Array>> columns;
         columns.reserve(width - 1);
         for (ui32 i = 0; i < width - 1; ++i) {
             columns.emplace_back(TArrowBlock::From(values[i]).GetDatum().make_array());
         }
-        const auto numRows = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const auto numRows = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
 
-        auto tableResult = arrow::Table::FromRecordBatches({
-            ConvertArrowColumns(arrow::RecordBatch::Make(ArrowSchema, numRows, std::move(columns)), ColumnConverters)
+        auto tableResult = arrow20::Table::FromRecordBatches({
+            ConvertArrowColumns(arrow20::RecordBatch::Make(ArrowSchema, numRows, std::move(columns)), ColumnConverters)
         });
         ARROW_OK(tableResult.status());
         const auto table = std::move(tableResult).ValueOrDie();
 
         if (!Writer) {
-            ARROW_OK(parquet::arrow::FileWriter::Open(
+            ARROW_OK(parquet::arrow20::FileWriter::Open(
                 *ArrowSchema,
-                arrow::default_memory_pool(),
+                arrow20::default_memory_pool(),
                 std::make_shared<TBlockWriter>(*this),
-                parquet::WriterProperties::Builder().compression(arrow::Compression::SNAPPY)->build(),
+                parquet::WriterProperties::Builder().compression(arrow20::Compression::SNAPPY)->build(),
                 &Writer
             ));
         }
@@ -970,7 +970,7 @@ private:
     }
 
 private:
-    const std::shared_ptr<arrow::Schema> ArrowSchema;
+    const std::shared_ptr<arrow20::Schema> ArrowSchema;
     std::vector<TColumnConverter> ColumnConverters;
     const ui64 MaxFileSize;
     const ui64 MaxBlockSize;
@@ -978,7 +978,7 @@ private:
     ui64 BatchSize = 0;
     ui64 FileSize = 0;
     TString SerializedData;
-    std::unique_ptr<parquet::arrow::FileWriter> Writer;
+    std::unique_ptr<parquet::arrow20::FileWriter> Writer;
 };
 #endif
 
@@ -1036,14 +1036,14 @@ std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateS3WriteActor(
     YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 
-    arrow::SchemaBuilder builder;
+    arrow20::SchemaBuilder builder;
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
         const auto memberType = structType->GetMemberType(i);
-        std::shared_ptr<arrow::DataType> dataType;
+        std::shared_ptr<arrow20::DataType> dataType;
         YQL_ENSURE(S3ConvertArrowOutputType(memberType, dataType), "Unsupported arrow type");
 
         const std::string memberName(structType->GetMemberName(i));
-        ARROW_OK(builder.AddField(std::make_shared<arrow::Field>(memberName, dataType, memberType->IsOptional())));
+        ARROW_OK(builder.AddField(std::make_shared<arrow20::Field>(memberName, dataType, memberType->IsOptional())));
     }
 
     auto schemaResult = builder.Finish();

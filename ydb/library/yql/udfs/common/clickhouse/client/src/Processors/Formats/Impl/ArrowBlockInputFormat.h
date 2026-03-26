@@ -8,8 +8,8 @@
 #include <Processors/Formats/IInputFormat.h>
 #include <Formats/FormatSettings.h>
 
-namespace arrow { class RecordBatchReader; }
-namespace arrow::ipc { class RecordBatchFileReader; }
+namespace arrow20 { class RecordBatchReader; }
+namespace arrow20::ipc { class RecordBatchFileReader; }
 
 namespace NDB
 {
@@ -33,9 +33,9 @@ private:
     // Whether to use ArrowStream format
     bool stream;
     // This field is only used for ArrowStream format
-    std::shared_ptr<arrow::RecordBatchReader> stream_reader;
+    std::shared_ptr<arrow20::RecordBatchReader> stream_reader;
     // The following fields are used only for Arrow format
-    std::shared_ptr<arrow::ipc::RecordBatchFileReader> file_reader;
+    std::shared_ptr<arrow20::ipc::RecordBatchFileReader> file_reader;
 
     std::unique_ptr<ArrowColumnToCHColumn> arrow_column_to_ch_column;
 

@@ -10,44 +10,44 @@
 #include <util/system/hostname.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
-std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
+std::shared_ptr<arrow20::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
     //        PrimaryIndexSchemaStats
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::TabletId::ColumnId) {
-        return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(GetTabletId()), recordsCount));
+        return NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(GetTabletId()), recordsCount));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::PresetId::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : Schemas) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i->GetIndexInfo().GetPresetId());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i->GetIndexInfo().GetPresetId());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::SchemaVersion::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : Schemas) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i->GetVersion());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i->GetVersion());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::SchemaSnapshotPlanStep::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : Schemas) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i->GetSnapshot().GetPlanStep());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i->GetSnapshot().GetPlanStep());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::SchemaSnapshotTxId::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::uint64());
+        auto builder = NArrow::MakeBuilder(arrow20::uint64());
         for (auto&& i : Schemas) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i->GetSnapshot().GetTxId());
+            NArrow::Append<arrow20::UInt64Type>(*builder, i->GetSnapshot().GetTxId());
         }
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexSchemaStats::SchemaDetails::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        auto builder = NArrow::MakeBuilder(arrow20::utf8());
         for (auto&& i : Schemas) {
             const TString jsonDescription = i->DebugJson().GetStringRobust();
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(jsonDescription.data(), jsonDescription.size()));
+            NArrow::Append<arrow20::StringType>(*builder, arrow20::util::string_view(jsonDescription.data(), jsonDescription.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

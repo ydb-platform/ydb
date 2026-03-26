@@ -254,48 +254,48 @@ namespace
     }
 }
 
-bool insertData(MutableColumn & column, const StringRef & value, const arrow::Type::type typeId)
+bool insertData(MutableColumn & column, const StringRef & value, const arrow20::Type::type typeId)
 {
     switch (typeId)
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return insertNumber(column, unalignedLoad<UInt8>(value.data));
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return insertNumber(column, unalignedLoad<UInt16>(value.data));
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return insertNumber(column, unalignedLoad<UInt32>(value.data));
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return insertNumber(column, unalignedLoad<UInt64>(value.data));
 
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return insertNumber(column, unalignedLoad<Int8>(value.data));
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return insertNumber(column, unalignedLoad<Int16>(value.data));
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return insertNumber(column, unalignedLoad<Int32>(value.data));
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return insertNumber(column, unalignedLoad<Int64>(value.data));
 
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return insertNumber(column, unalignedLoad<float>(value.data));
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return insertNumber(column, unalignedLoad<double>(value.data));
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
             return insertFixedString(column, value);
 
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
             return insertString(column, value);
 
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return insertTimestamp(column, unalignedLoad<Int64>(value.data));
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return insertDuration(column, unalignedLoad<Int64>(value.data));
-        case arrow::Type::DECIMAL:
+        case arrow20::Type::DECIMAL:
             return insertDecimal(column, value);
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
         default:
@@ -309,52 +309,52 @@ StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & poo
 {
     switch (column.type_id())
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return serializeNumberIntoArena(assert_cast<const ColumnUInt8 &>(column).Value(row), pool, begin);
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return serializeNumberIntoArena(assert_cast<const ColumnUInt16 &>(column).Value(row), pool, begin);
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return serializeNumberIntoArena(assert_cast<const ColumnUInt32 &>(column).Value(row), pool, begin);
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return serializeNumberIntoArena(assert_cast<const ColumnUInt64 &>(column).Value(row), pool, begin);
 
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return serializeNumberIntoArena(assert_cast<const ColumnInt8 &>(column).Value(row), pool, begin);
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return serializeNumberIntoArena(assert_cast<const ColumnInt16 &>(column).Value(row), pool, begin);
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return serializeNumberIntoArena(assert_cast<const ColumnInt32 &>(column).Value(row), pool, begin);
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return serializeNumberIntoArena(assert_cast<const ColumnInt64 &>(column).Value(row), pool, begin);
 
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return serializeNumberIntoArena(assert_cast<const ColumnFloat32 &>(column).Value(row), pool, begin);
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return serializeNumberIntoArena(assert_cast<const ColumnFloat64 &>(column).Value(row), pool, begin);
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
         {
             auto str = assert_cast<const ColumnFixedString &>(column).GetView(row);
             return serializeFixedStringIntoArena(StringRef(str.data(), str.size()), pool, begin);
         }
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
         {
             auto str = assert_cast<const ColumnBinary &>(column).GetView(row);
             return serializeStringIntoArena(StringRef(str.data(), str.size()), pool, begin);
         }
 
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return serializeNumberIntoArena(assert_cast<const ColumnTimestamp &>(column).Value(row), pool, begin);
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return serializeNumberIntoArena(assert_cast<const ColumnDuration &>(column).Value(row), pool, begin);
-        case arrow::Type::DECIMAL:
+        case arrow20::Type::DECIMAL:
         {
             auto str = assert_cast<const ColumnDecimal &>(column).GetView(row);
             return serializeDecimalIntoArena(StringRef(str.data(), str.size()), pool, begin);
         }
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
         default:
@@ -364,48 +364,48 @@ StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & poo
     throw Exception(std::string(__FUNCTION__) + " unexpected type " + column.type()->ToString());
 }
 
-const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow::Type::type typeId)
+const char * deserializeAndInsertFromArena(MutableColumn& column, const char * pos, const arrow20::Type::type typeId)
 {
     switch (typeId)
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return deserializeNumberFromArena(assert_cast<MutableColumnUInt8 &>(column), pos);
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return deserializeNumberFromArena(assert_cast<MutableColumnUInt16 &>(column), pos);
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return deserializeNumberFromArena(assert_cast<MutableColumnUInt32 &>(column), pos);
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return deserializeNumberFromArena(assert_cast<MutableColumnUInt64 &>(column), pos);
 
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return deserializeNumberFromArena(assert_cast<MutableColumnInt8 &>(column), pos);
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return deserializeNumberFromArena(assert_cast<MutableColumnInt16 &>(column), pos);
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return deserializeNumberFromArena(assert_cast<MutableColumnInt32 &>(column), pos);
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return deserializeNumberFromArena(assert_cast<MutableColumnInt64 &>(column), pos);
 
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return deserializeNumberFromArena(assert_cast<MutableColumnFloat32 &>(column), pos);
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return deserializeNumberFromArena(assert_cast<MutableColumnFloat64 &>(column), pos);
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
             return deserializeStringFromArena(assert_cast<MutableColumnFixedString &>(column), pos);
 
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
             return deserializeStringFromArena(assert_cast<MutableColumnBinary &>(column), pos);
 
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return deserializeNumberFromArena(assert_cast<MutableColumnTimestamp &>(column), pos);
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return deserializeNumberFromArena(assert_cast<MutableColumnDuration &>(column), pos);
-        case arrow::Type::DECIMAL:
+        case arrow20::Type::DECIMAL:
             return deserializeDecimalFromArena(assert_cast<MutableColumnDecimal &>(column), pos);
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
         default:
@@ -419,49 +419,49 @@ void updateHashWithValue(const IColumn& column, size_t row, SipHash & hash)
 {
     switch (column.type_id())
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return hash.update(assert_cast<const ColumnUInt8 &>(column).Value(row));
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return hash.update(assert_cast<const ColumnUInt16 &>(column).Value(row));
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return hash.update(assert_cast<const ColumnUInt32 &>(column).Value(row));
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return hash.update(assert_cast<const ColumnUInt64 &>(column).Value(row));
 
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return hash.update(assert_cast<const ColumnInt8 &>(column).Value(row));
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return hash.update(assert_cast<const ColumnInt16 &>(column).Value(row));
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return hash.update(assert_cast<const ColumnInt32 &>(column).Value(row));
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return hash.update(assert_cast<const ColumnInt64 &>(column).Value(row));
 
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return hash.update(assert_cast<const ColumnFloat32 &>(column).Value(row));
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return hash.update(assert_cast<const ColumnFloat64 &>(column).Value(row));
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
         {
             auto str = assert_cast<const ColumnFixedString &>(column).GetView(row);
             return hash.update(str.data(), str.size());
         }
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
         {
             auto str = assert_cast<const ColumnBinary &>(column).GetView(row);
             return hash.update(str.data(), str.size());
         }
 
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return hash.update(assert_cast<const ColumnTimestamp &>(column).Value(row));
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return hash.update(assert_cast<const ColumnDuration &>(column).Value(row));
-        case arrow::Type::DECIMAL:
+        case arrow20::Type::DECIMAL:
             return hash.update(assert_cast<const ColumnDecimal &>(column).Value(row));
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
         default:
@@ -475,45 +475,45 @@ MutableColumnPtr createMutableColumn(const DataTypePtr & type)
 {
     switch (type->id())
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return std::make_shared<MutableColumnUInt8>();
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return std::make_shared<MutableColumnUInt16>();
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return std::make_shared<MutableColumnUInt32>();
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return std::make_shared<MutableColumnUInt64>();
 
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return std::make_shared<MutableColumnInt8>();
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return std::make_shared<MutableColumnInt16>();
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return std::make_shared<MutableColumnInt32>();
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return std::make_shared<MutableColumnInt64>();
 
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return std::make_shared<MutableColumnFloat32>();
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return std::make_shared<MutableColumnFloat64>();
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
             return std::make_shared<MutableColumnFixedString>(type);
 
-        case arrow::Type::BINARY:
+        case arrow20::Type::BINARY:
             return std::make_shared<MutableColumnBinary>();
-        case arrow::Type::STRING:
+        case arrow20::Type::STRING:
             return std::make_shared<MutableColumnString>();
 
-        case arrow::Type::TIMESTAMP:
-            return std::make_shared<MutableColumnTimestamp>(type, arrow::default_memory_pool());
-        case arrow::Type::DURATION:
-            return std::make_shared<MutableColumnDuration>(type, arrow::default_memory_pool());
-        case arrow::Type::DECIMAL:
-            return std::make_shared<MutableColumnDecimal>(type, arrow::default_memory_pool());
+        case arrow20::Type::TIMESTAMP:
+            return std::make_shared<MutableColumnTimestamp>(type, arrow20::default_memory_pool());
+        case arrow20::Type::DURATION:
+            return std::make_shared<MutableColumnDuration>(type, arrow20::default_memory_pool());
+        case arrow20::Type::DECIMAL:
+            return std::make_shared<MutableColumnDecimal>(type, arrow20::default_memory_pool());
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break; // TODO: do we really need it here?
 
         default:
@@ -527,42 +527,42 @@ uint32_t fixedContiguousSize(const DataTypePtr & type)
 {
     switch (type->id())
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return 1;
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return 2;
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return 4;
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return 8;
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return 1;
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return 2;
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return 4;
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return 8;
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return 4;
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return 8;
 
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
             return std::static_pointer_cast<DataTypeFixedString>(type)->byte_width();
 
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
             break;
 
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return 8;
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return 8;
-        case arrow::Type::DECIMAL:
+        case arrow20::Type::DECIMAL:
             return std::static_pointer_cast<DataTypeDecimal>(type)->byte_width();
 
-        case arrow::Type::EXTENSION: // AggregateColumn
+        case arrow20::Type::EXTENSION: // AggregateColumn
             break;
 
         default:

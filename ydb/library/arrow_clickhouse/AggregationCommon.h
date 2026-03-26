@@ -59,8 +59,8 @@ constexpr auto getBitmapSize()
 template <typename DataType>
 static inline size_t ALWAYS_INLINE packFixedKey(char * __restrict dst, const IColumn * column, size_t row)
 {
-    using ColumnType = typename arrow::TypeTraits<DataType>::ArrayType;
-    using CType = typename arrow::TypeTraits<DataType>::CType;
+    using ColumnType = typename arrow20::TypeTraits<DataType>::ArrayType;
+    using CType = typename arrow20::TypeTraits<DataType>::CType;
 
     auto * typed_column = assert_cast<const ColumnType *>(column);
     memcpy(dst, typed_column->raw_values() + row, sizeof(CType));
@@ -79,29 +79,29 @@ static inline size_t ALWAYS_INLINE switchPackFixedKey(char * __restrict bytes, c
 {
     switch (column->type_id())
     {
-        case arrow::Type::UINT8:
+        case arrow20::Type::UINT8:
             return packFixedKey<DataTypeUInt8>(bytes, column, row);
-        case arrow::Type::UINT16:
+        case arrow20::Type::UINT16:
             return packFixedKey<DataTypeUInt16>(bytes, column, row);
-        case arrow::Type::UINT32:
+        case arrow20::Type::UINT32:
             return packFixedKey<DataTypeUInt32>(bytes, column, row);
-        case arrow::Type::UINT64:
+        case arrow20::Type::UINT64:
             return packFixedKey<DataTypeUInt64>(bytes, column, row);
-        case arrow::Type::INT8:
+        case arrow20::Type::INT8:
             return packFixedKey<DataTypeInt8>(bytes, column, row);
-        case arrow::Type::INT16:
+        case arrow20::Type::INT16:
             return packFixedKey<DataTypeInt16>(bytes, column, row);
-        case arrow::Type::INT32:
+        case arrow20::Type::INT32:
             return packFixedKey<DataTypeInt32>(bytes, column, row);
-        case arrow::Type::INT64:
+        case arrow20::Type::INT64:
             return packFixedKey<DataTypeInt64>(bytes, column, row);
-        case arrow::Type::FLOAT:
+        case arrow20::Type::FLOAT:
             return packFixedKey<DataTypeFloat32>(bytes, column, row);
-        case arrow::Type::DOUBLE:
+        case arrow20::Type::DOUBLE:
             return packFixedKey<DataTypeFloat64>(bytes, column, row);
-        case arrow::Type::TIMESTAMP:
+        case arrow20::Type::TIMESTAMP:
             return packFixedKey<DataTypeTimestamp>(bytes, column, row);
-        case arrow::Type::DURATION:
+        case arrow20::Type::DURATION:
             return packFixedKey<DataTypeDuration>(bytes, column, row);
         // TODO: TIME32 DATE64 TIME64 INTERVAL_DAY_TIME DECIMAL128 DECIMAL256
         default:

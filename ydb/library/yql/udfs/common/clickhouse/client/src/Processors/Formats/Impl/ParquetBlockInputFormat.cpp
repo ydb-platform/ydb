@@ -27,7 +27,7 @@ namespace ErrorCodes
 #define THROW_ARROW_NOT_OK(status)                                     \
     do                                                                 \
     {                                                                  \
-        if (::arrow::Status _s = (status); !_s.ok())                   \
+        if (::arrow20::Status _s = (status); !_s.ok())                   \
             throw Exception(_s.ToString(), ErrorCodes::BAD_ARGUMENTS); \
     } while (false)
 
@@ -46,8 +46,8 @@ Chunk ParquetBlockInputFormat::generate()
     if (row_group_current >= row_group_total)
         return res;
 
-    std::shared_ptr<arrow::Table> table;
-    arrow::Status read_status = file_reader->ReadRowGroup(row_group_current, column_indices, &table);
+    std::shared_ptr<arrow20::Table> table;
+    arrow20::Status read_status = file_reader->ReadRowGroup(row_group_current, column_indices, &table);
     if (!read_status.ok())
         throw ParsingException{"Error while reading Parquet data: " + read_status.ToString(),
                         ErrorCodes::CANNOT_READ_ALL_DATA};
@@ -67,23 +67,23 @@ void ParquetBlockInputFormat::resetParser()
     row_group_current = 0;
 }
 
-static size_t countIndicesForType(std::shared_ptr<arrow::DataType> type)
+static size_t countIndicesForType(std::shared_ptr<arrow20::DataType> type)
 {
-    if (type->id() == arrow::Type::LIST)
-        return countIndicesForType(static_cast<arrow::ListType *>(type.get())->value_type());
+    if (type->id() == arrow20::Type::LIST)
+        return countIndicesForType(static_cast<arrow20::ListType *>(type.get())->value_type());
 
-    if (type->id() == arrow::Type::STRUCT)
+    if (type->id() == arrow20::Type::STRUCT)
     {
         int indices = 0;
-        auto * struct_type = static_cast<arrow::StructType *>(type.get());
+        auto * struct_type = static_cast<arrow20::StructType *>(type.get());
         for (int i = 0; i != struct_type->num_fields(); ++i)
             indices += countIndicesForType(struct_type->field(i)->type());
         return indices;
     }
 
-    if (type->id() == arrow::Type::MAP)
+    if (type->id() == arrow20::Type::MAP)
     {
-        auto * map_type = static_cast<arrow::MapType *>(type.get());
+        auto * map_type = static_cast<arrow20::MapType *>(type.get());
         return countIndicesForType(map_type->key_type()) + countIndicesForType(map_type->item_type());
     }
 
@@ -92,11 +92,11 @@ static size_t countIndicesForType(std::shared_ptr<arrow::DataType> type)
 
 void ParquetBlockInputFormat::prepareReader()
 {
-    THROW_ARROW_NOT_OK(parquet::arrow::OpenFile(asArrowFile(in), arrow::default_memory_pool(), &file_reader));
+    THROW_ARROW_NOT_OK(parquet::arrow20::OpenFile(asArrowFile(in), arrow20::default_memory_pool(), &file_reader));
     row_group_total = file_reader->num_row_groups();
     row_group_current = 0;
 
-    std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<arrow20::Schema> schema;
     THROW_ARROW_NOT_OK(file_reader->GetSchema(&schema));
 
     arrow_column_to_ch_column = std::make_unique<ArrowColumnToCHColumn>(getPort().getHeader(), "Parquet", format_settings.parquet.import_nested);

@@ -18,10 +18,10 @@ public:
     void CreateTestOlapStore(TString scheme);
     void CreateTestOlapTable(TString storeOrDirName, TString scheme);
     void SendDataViaActorSystem(TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui32 tsStepUs = 1) const;
-    void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+    void SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow20::RecordBatch> batch,
         const Ydb::StatusIds_StatusCode& expectedStatus = Ydb::StatusIds::SUCCESS, const TString& expectedIssuePrefix = {}) const;
 
-    virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs = 1) const = 0;
+    virtual std::shared_ptr<arrow20::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs = 1) const = 0;
     virtual ~THelperSchemaless() = default;
 };
 
@@ -29,7 +29,7 @@ class THelper: public THelperSchemaless {
 private:
     using TBase = THelperSchemaless;
 
-    std::shared_ptr<arrow::Schema> GetArrowSchema() const;
+    std::shared_ptr<arrow20::Schema> GetArrowSchema() const;
     YDB_FLAG_ACCESSOR(WithJsonDocument, false);
     YDB_ACCESSOR(TString, OptionalStorageId, "__MEMORY");
 protected:
@@ -75,14 +75,14 @@ public:
     }
     virtual TString GetTestTableSchema() const;
 
-    virtual std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs = 1) const override;
+    virtual std::shared_ptr<arrow20::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs = 1) const override;
 };
 
 class TCickBenchHelper: public THelperSchemaless {
 private:
     using TBase = THelperSchemaless;
 
-    std::shared_ptr<arrow::Schema> GetArrowSchema() const;
+    std::shared_ptr<arrow20::Schema> GetArrowSchema() const;
 
 public:
     using TBase::TBase;
@@ -196,14 +196,14 @@ public:
         KeyColumnNames: ["EventTime", "EventDate", "CounterID", "UserID", "WatchID"]
     )";
 
-    std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs = 1) const override;
+    std::shared_ptr<arrow20::RecordBatch> TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs = 1) const override;
 };
 
 class TTableWithNullsHelper: public THelperSchemaless {
 private:
     using TBase = THelperSchemaless;
 
-    std::shared_ptr<arrow::Schema> GetArrowSchema() const;
+    std::shared_ptr<arrow20::Schema> GetArrowSchema() const;
 public:
     using TBase::TBase;
 
@@ -217,8 +217,8 @@ public:
         KeyColumnNames: "id"
     )";
 
-    std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64, ui64, size_t rowCount = 10, const ui64 tsStepUs = 1) const override;
-    std::shared_ptr<arrow::RecordBatch> TestArrowBatch() const;
+    std::shared_ptr<arrow20::RecordBatch> TestArrowBatch(ui64, ui64, size_t rowCount = 10, const ui64 tsStepUs = 1) const override;
+    std::shared_ptr<arrow20::RecordBatch> TestArrowBatch() const;
 };
 
 }

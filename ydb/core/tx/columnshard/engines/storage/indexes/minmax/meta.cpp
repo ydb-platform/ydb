@@ -12,25 +12,25 @@
 #define VALUE_OR_VERIFY(result) NKikimr::NArrow::TStatusValidator::GetValid(result)
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
-inline bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    arrow::Datum res =
-        VALUE_OR_VERIFY(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
-    return res.scalar_as<arrow::BooleanScalar>().value;
+inline bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow20::Scalar>& left, const std::shared_ptr<arrow20::Scalar>& right) {
+    arrow20::Datum res =
+        VALUE_OR_VERIFY(arrow20::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
+    return res.scalar_as<arrow20::BooleanScalar>().value;
 }
 
-inline bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+inline bool operator<(const std::shared_ptr<arrow20::Scalar>& left, const std::shared_ptr<arrow20::Scalar>& right) {
     return cmp(NKernels::EOperation::Less, left, right);
 }
 
-inline bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+inline bool operator>(const std::shared_ptr<arrow20::Scalar>& left, const std::shared_ptr<arrow20::Scalar>& right) {
     return cmp(NKernels::EOperation::Greater, left, right);
 }
 
-inline bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+inline bool operator<=(const std::shared_ptr<arrow20::Scalar>& left, const std::shared_ptr<arrow20::Scalar>& right) {
     return cmp(NKernels::EOperation::LessEqual, left, right);
 }
 
-inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+inline bool operator>=(const std::shared_ptr<arrow20::Scalar>& left, const std::shared_ptr<arrow20::Scalar>& right) {
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
 
@@ -53,7 +53,7 @@ inline TString Serialize(const NArrow::NAccessor::TMinMax& typedPair) {
     writeNext(maxSerialized);
     return res;
 }
-inline NArrow::NAccessor::TMinMax Deserialize(TStringBuf data, const std::shared_ptr<arrow::DataType>& type) {
+inline NArrow::NAccessor::TMinMax Deserialize(TStringBuf data, const std::shared_ptr<arrow20::DataType>& type) {
     NArrow::NAccessor::TMinMax typed;
     ui64 offset = 0;
     auto readNext = [&] {
@@ -138,14 +138,14 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     return true;
 }
 bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat,
-    const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
+    const std::shared_ptr<arrow20::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
     NArrow::NAccessor::TMinMax chunkValue =
         NSerializePair::Deserialize(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
     return !Skip(chunkValue, requestValue, op);
 }
 
-bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
+bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow20::Scalar>& requestValue,
     const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:

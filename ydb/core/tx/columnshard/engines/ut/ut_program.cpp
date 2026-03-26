@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
             auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 
-            auto schema = arrow::schema({arrow::field("21", arrow::boolean())});
+            auto schema = arrow20::schema({arrow20::field("21", arrow20::boolean())});
             TTableUpdatesBuilder result(schema);
             result.AddRow().Add<bool>(true);
             result.AddRow().Add<bool>(false);

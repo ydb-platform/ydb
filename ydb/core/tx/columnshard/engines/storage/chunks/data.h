@@ -29,10 +29,10 @@ protected:
     virtual std::optional<ui64> DoGetRawBytes() const override {
         return RawBytes;
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetFirstScalar() const override {
         return nullptr;
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetLastScalar() const override {
         return nullptr;
     }
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;

@@ -168,14 +168,14 @@ public:
 
 class TBuildFilterContext: public NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, public TMoveOnly {
 private:
-    using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
+    using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow20::Field>>;
     using TPortionIndex = THashMap<ui64, TPortionInfo::TConstPtr>;
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
     TSnapshot MaxVersion;
     TPortionIndex RequiredPortions;
     YDB_READONLY_DEF(TFieldByColumn, Columns);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, PKSchema);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, SnapshotSchema);
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
@@ -186,7 +186,7 @@ private:
 
 public:
     TBuildFilterContext(const TActorId owner, const std::shared_ptr<const TAtomicCounter>& abortionFlag, const TSnapshot& maxVersion,
-        TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow::Schema>& pkSchema,
+        TPortionIndex&& portions, const TFieldByColumn& columns, const std::shared_ptr<arrow20::Schema>& pkSchema,
         const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,

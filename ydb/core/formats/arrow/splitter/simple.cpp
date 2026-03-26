@@ -10,17 +10,17 @@
 namespace NKikimr::NArrow::NSplitter {
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(
-    const std::shared_ptr<arrow::Array>& data, const std::shared_ptr<arrow::Field>& field, const ui32 maxBlobSize) const {
+    const std::shared_ptr<arrow20::Array>& data, const std::shared_ptr<arrow20::Field>& field, const ui32 maxBlobSize) const {
     AFL_VERIFY(data);
     AFL_VERIFY(field);
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{ field });
-    auto batch = arrow::RecordBatch::Make(schema, data->length(), { data });
+    auto schema = std::make_shared<arrow20::Schema>(arrow20::FieldVector{ field });
+    auto batch = arrow20::RecordBatch::Make(schema, data->length(), { data });
     return Split(batch, maxBlobSize);
 }
 
 class TSplitChunk {
 private:
-    std::shared_ptr<arrow::RecordBatch> Data;
+    std::shared_ptr<arrow20::RecordBatch> Data;
     YDB_READONLY_DEF(std::optional<TSaverSplittedChunk>, Result);
     ui32 SplitFactor = 0;
     ui32 Iterations = 0;
@@ -28,7 +28,7 @@ private:
     NAccessor::TColumnSaver ColumnSaver;
 
 public:
-    TSplitChunk(const ui32 baseSplitFactor, const ui32 maxBlobSize, const std::shared_ptr<arrow::RecordBatch>& data,
+    TSplitChunk(const ui32 baseSplitFactor, const ui32 maxBlobSize, const std::shared_ptr<arrow20::RecordBatch>& data,
         const NAccessor::TColumnSaver& columnSaver)
         : Data(data)
         , SplitFactor(baseSplitFactor)
@@ -38,7 +38,7 @@ public:
         AFL_VERIFY(SplitFactor);
     }
 
-    TSplitChunk(const ui32 baseSplitFactor, const ui32 maxBlobSize, const std::shared_ptr<arrow::RecordBatch>& data, TString&& serializedData,
+    TSplitChunk(const ui32 baseSplitFactor, const ui32 maxBlobSize, const std::shared_ptr<arrow20::RecordBatch>& data, TString&& serializedData,
         const NAccessor::TColumnSaver& columnSaver)
         : Data(data)
         , Result(TSaverSplittedChunk(data, std::move(serializedData)))
@@ -125,7 +125,7 @@ public:
     }
 };
 
-std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow::RecordBatch>& data, const ui32 maxBlobSize) const {
+std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<arrow20::RecordBatch>& data, const ui32 maxBlobSize) const {
     AFL_VERIFY(data->num_rows());
     TSplitChunk baseChunk(
         Stats ? Stats->PredictOptimalSplitFactor(data->num_rows(), maxBlobSize).value_or(1) : 1, maxBlobSize, data, ColumnSaver);
@@ -153,7 +153,7 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::Split(const std::shared_ptr<ar
 }
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(
-    const std::shared_ptr<arrow::RecordBatch>& data, const std::vector<ui32>& recordsCount) const {
+    const std::shared_ptr<arrow20::RecordBatch>& data, const std::vector<ui32>& recordsCount) const {
     std::vector<TSaverSplittedChunk> result;
     ui64 position = 0;
     for (auto&& i : recordsCount) {
@@ -166,7 +166,7 @@ std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitByRecordsCount(
 }
 
 std::vector<TSaverSplittedChunk> TSimpleSplitter::SplitBySizes(
-    std::shared_ptr<arrow::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
+    std::shared_ptr<arrow20::RecordBatch> data, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt) const {
     return SplitByRecordsCount(data, TSimilarPacker::SizesToRecordsCount(data->num_rows(), dataSerialization, splitPartSizesExt));
 }
 

@@ -202,23 +202,23 @@ struct TTestOlap {
     static constexpr const char * TableName = "OlapTable";
     static constexpr const char * TablePath = "/Root/OlapStore/OlapTable";
 
-    static std::shared_ptr<arrow::Schema> ArrowSchema(
-            std::shared_ptr<arrow::DataType> tsType = arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO))
+    static std::shared_ptr<arrow20::Schema> ArrowSchema(
+            std::shared_ptr<arrow20::DataType> tsType = arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO))
     {
-        return std::make_shared<arrow::Schema>(
-            std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("timestamp", tsType, false),
-                arrow::field("resource_type", arrow::utf8()),
-                arrow::field("resource_id", arrow::utf8()),
-                arrow::field("uid", arrow::utf8(), false),
-                arrow::field("level", arrow::int32()),
-                arrow::field("message", arrow::utf8()),
-                arrow::field("json_payload", arrow::binary()),
-                arrow::field("ingested_at", tsType),
-                arrow::field("saved_at", tsType),
-                arrow::field("request_id", arrow::utf8()),
-                arrow::field("flt", arrow::float32()),
-                arrow::field("dbl", arrow::float64())
+        return std::make_shared<arrow20::Schema>(
+            std::vector<std::shared_ptr<arrow20::Field>>{
+                arrow20::field("timestamp", tsType, false),
+                arrow20::field("resource_type", arrow20::utf8()),
+                arrow20::field("resource_id", arrow20::utf8()),
+                arrow20::field("uid", arrow20::utf8(), false),
+                arrow20::field("level", arrow20::int32()),
+                arrow20::field("message", arrow20::utf8()),
+                arrow20::field("json_payload", arrow20::binary()),
+                arrow20::field("ingested_at", tsType),
+                arrow20::field("saved_at", tsType),
+                arrow20::field("request_id", arrow20::utf8()),
+                arrow20::field("flt", arrow20::float32()),
+                arrow20::field("dbl", arrow20::float64())
             });
     }
 
@@ -291,10 +291,10 @@ struct TTestOlap {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    static std::shared_ptr<arrow::RecordBatch> SampleBatch(bool strTimestamps = false, ui32 rowsCount = 100) {
+    static std::shared_ptr<arrow20::RecordBatch> SampleBatch(bool strTimestamps = false, ui32 rowsCount = 100) {
         auto schema = ArrowSchema();
         if (strTimestamps) {
-            schema = ArrowSchema(arrow::binary());
+            schema = ArrowSchema(arrow20::binary());
         }
         auto builders = NArrow::MakeBuilders(schema, rowsCount);
 
@@ -310,43 +310,43 @@ struct TTestOlap {
 
                 std::string ts = std::string("1970-01-01T00:00:00.") + std::string(us.data(), us.size());
 
-                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[0], ts));
-                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[7], ts));
-                Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[8], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::BinaryType>(*builders[0], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::BinaryType>(*builders[7], ts));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::BinaryType>(*builders[8], ts));
             } else {
-                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[0], i));
-                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[7], i));
-                Y_ABORT_UNLESS(NArrow::Append<arrow::TimestampType>(*builders[8], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::TimestampType>(*builders[0], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::TimestampType>(*builders[7], i));
+                Y_ABORT_UNLESS(NArrow::Append<arrow20::TimestampType>(*builders[8], i));
             }
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[1], s));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[2], s));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[3], s));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[4], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::FloatType>(*builders[10], i * 1.5f));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::DoubleType>(*builders[11], i * 2.5));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[1], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[2], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[3], s));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int32Type>(*builders[4], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[5], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[9], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::FloatType>(*builders[10], i * 1.5f));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::DoubleType>(*builders[11], i * 2.5));
         }
 
-        return arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
+        return arrow20::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
     }
 
-    static TString ToCSV(const std::shared_ptr<arrow::RecordBatch>& batch, bool withHeader = false) {
-        auto res1 = arrow::io::BufferOutputStream::Create();
+    static TString ToCSV(const std::shared_ptr<arrow20::RecordBatch>& batch, bool withHeader = false) {
+        auto res1 = arrow20::io::BufferOutputStream::Create();
         Y_ABORT_UNLESS(res1.ok());
-        std::shared_ptr<arrow::io::BufferOutputStream> outStream = *res1;
+        std::shared_ptr<arrow20::io::BufferOutputStream> outStream = *res1;
 
-        arrow::csv::WriteOptions options = arrow::csv::WriteOptions::Defaults();
+        arrow20::csv::WriteOptions options = arrow20::csv::WriteOptions::Defaults();
         options.include_header = withHeader;
 
-        auto status = arrow::csv::WriteCSV(*batch, options, outStream.get());
+        auto status = arrow20::csv::WriteCSV(*batch, options, outStream.get());
         Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str());
 
         auto res2 = outStream->Finish();
         Y_ABORT_UNLESS(res2.ok());
 
-        std::shared_ptr<arrow::Buffer> buffer = *res2;
+        std::shared_ptr<arrow20::Buffer> buffer = *res2;
         TString out((const char*)buffer->data(), buffer->size());
         //Cerr << out;
         return out;

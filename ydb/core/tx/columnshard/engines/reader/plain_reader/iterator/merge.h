@@ -59,8 +59,8 @@ private:
     using TBase = IDataTasksProcessor::ITask;
 
 protected:
-    std::shared_ptr<arrow::Table> ResultBatch;
-    std::shared_ptr<arrow::RecordBatch> LastPK;
+    std::shared_ptr<arrow20::Table> ResultBatch;
+    std::shared_ptr<arrow20::RecordBatch> LastPK;
     std::shared_ptr<TSpecialReadContext> Context;
     std::unique_ptr<NArrow::NMerger::TMergePartialStream> Merger;
     std::shared_ptr<TMergingContext> MergingContext;

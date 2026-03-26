@@ -59,13 +59,13 @@ TColumnPortionResult TSparsedMerger::DoExecute(const TChunkMergeContext& chunkCo
 }
 
 TColumnPortionResult TSparsedMerger::TWriter::Flush(const ui32 recordsCount) {
-    std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-        std::make_shared<arrow::Field>("value", DataType) };
-    auto schema = std::make_shared<arrow::Schema>(fields);
-    std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
+    std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>("index", arrow20::uint32()),
+        std::make_shared<arrow20::Field>("value", DataType) };
+    auto schema = std::make_shared<arrow20::Schema>(fields);
+    std::vector<std::shared_ptr<arrow20::Array>> columns = { NArrow::TStatusValidator::GetValid(IndexBuilder->Finish()),
         NArrow::TStatusValidator::GetValid(ValueBuilder->Finish()) };
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "sparsed_flush")("count", recordsCount)("useful", UsefulRecordsCount);
-    auto recordBatch = arrow::RecordBatch::Make(schema, UsefulRecordsCount, columns);
+    auto recordBatch = arrow20::RecordBatch::Make(schema, UsefulRecordsCount, columns);
     NArrow::NAccessor::TSparsedArray::TBuilder builder(
         Context.GetIndexInfo().GetColumnFeaturesVerified(Context.GetColumnId()).GetDefaultValue().GetValue(), Context.GetResultField()->type());
     builder.AddChunk(recordsCount, recordBatch);
@@ -78,9 +78,9 @@ TSparsedMerger::TWriter::TWriter(const TColumnMergeContext& context)
     : TBase(context.GetColumnId())
     , DataType(context.GetResultField()->type())
     , Context(context) {
-    IndexBuilder = NArrow::MakeBuilder(arrow::uint32());
+    IndexBuilder = NArrow::MakeBuilder(arrow20::uint32());
     ValueBuilder = NArrow::MakeBuilder(DataType);
-    IndexBuilderImpl = (arrow::UInt32Builder*)(IndexBuilder.get());
+    IndexBuilderImpl = (arrow20::UInt32Builder*)(IndexBuilder.get());
 }
 
 bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(TWriter& writer) {

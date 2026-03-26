@@ -17,12 +17,12 @@ private:
     std::vector<NMetadata::NCSIndex::TObject> Indexes;
     mutable TAtomicCounter AtomicCounter = 0;
     IDataUpsertController::TPtr ExternalController;
-    std::shared_ptr<arrow::RecordBatch> Data;
+    std::shared_ptr<arrow20::RecordBatch> Data;
 public:
     TDataUpserter(
         const TString& databaseName,
         std::vector<NMetadata::NCSIndex::TObject>&& indexes,
-        IDataUpsertController::TPtr externalController, std::shared_ptr<arrow::RecordBatch> data)
+        IDataUpsertController::TPtr externalController, std::shared_ptr<arrow20::RecordBatch> data)
         : DatabaseName(databaseName)
         , Indexes(std::move(indexes))
         , ExternalController(externalController)

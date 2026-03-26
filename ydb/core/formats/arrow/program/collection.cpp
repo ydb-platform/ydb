@@ -14,7 +14,7 @@ void TAccessorsCollection::Upsert(const ui32 columnId, const std::shared_ptr<ICh
     AddVerified(columnId, data, withFilter);
 }
 
-void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow::Datum& data) {
+void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow20::Datum& data) {
     if (data.is_scalar()) {
         AddConstantVerified(columnId, data.scalar());
         RecordsCountActual = 1;
@@ -23,7 +23,7 @@ void TAccessorsCollection::AddCalculated(const ui32 columnId, const arrow::Datum
     }
 }
 
-void TAccessorsCollection::AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter) {
+void TAccessorsCollection::AddInput(const ui32 columnId, const arrow20::Datum& data, const bool withFilter) {
     if (data.is_scalar()) {
         AFL_VERIFY(!withFilter);
         AddConstantVerified(columnId, data.scalar());
@@ -53,25 +53,25 @@ void TAccessorsCollection::AddVerified(const ui32 columnId, const TAccessorColle
     }
 }
 
-std::shared_ptr<arrow::Array> TAccessorsCollection::GetArrayVerified(const ui32 columnId) const {
+std::shared_ptr<arrow20::Array> TAccessorsCollection::GetArrayVerified(const ui32 columnId) const {
     auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();
     if (chunked->num_chunks() == 1) {
         return chunked->chunk(0);
     }
-    arrow::FieldVector fields = { GetFieldVerified(columnId) };
-    auto schema = std::make_shared<arrow::Schema>(fields);
-    return NArrow::ToBatch(arrow::Table::Make(schema, { chunked }))->column(0);
+    arrow20::FieldVector fields = { GetFieldVerified(columnId) };
+    auto schema = std::make_shared<arrow20::Schema>(fields);
+    return NArrow::ToBatch(arrow20::Table::Make(schema, { chunked }))->column(0);
 }
 
-std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<ui32>& columnIds) const {
+std::shared_ptr<arrow20::Table> TAccessorsCollection::GetTable(const std::vector<ui32>& columnIds) const {
     AFL_VERIFY(columnIds.size());
     auto accessors = GetAccessors(columnIds);
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> arrays;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::ChunkedArray>> arrays;
     std::optional<ui32> recordsCount;
     ui32 idx = 0;
     for (auto&& arr : accessors) {
-        fields.emplace_back(std::make_shared<arrow::Field>(::ToString(columnIds[idx]), arr->GetDataType()));
+        fields.emplace_back(std::make_shared<arrow20::Field>(::ToString(columnIds[idx]), arr->GetDataType()));
         arrays.emplace_back(arr->GetChunkedArray());
         if (!recordsCount) {
             recordsCount = arr->GetRecordsCount();
@@ -81,7 +81,7 @@ std::shared_ptr<arrow::Table> TAccessorsCollection::GetTable(const std::vector<u
         ++idx;
     }
     AFL_VERIFY(recordsCount);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
+    return arrow20::Table::Make(std::make_shared<arrow20::Schema>(std::move(fields)), std::move(arrays), *recordsCount);
 }
 
 std::shared_ptr<IChunkedArray> TAccessorsCollection::ExtractAccessorOptional(const ui32 columnId) {
@@ -139,25 +139,25 @@ TAccessorsCollection::TChunkedArguments TAccessorsCollection::GetArguments(const
 std::shared_ptr<IChunkedArray> TAccessorsCollection::GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end());
-    return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*it->second, recordsCount)));
+    return std::make_shared<TTrivialArray>(NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(*it->second, recordsCount)));
 }
 
-const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
+const std::shared_ptr<arrow20::Scalar>& TAccessorsCollection::GetConstantScalarVerified(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     AFL_VERIFY(it != Constants.end())("id", columnId);
     return it->second;
 }
 
-const std::shared_ptr<arrow::Scalar>& TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
+const std::shared_ptr<arrow20::Scalar>& TAccessorsCollection::GetConstantScalarOptional(const ui32 columnId) const {
     auto it = Constants.find(columnId);
     if (it != Constants.end()) {
         return it->second;
     } else {
-        return Default<std::shared_ptr<arrow::Scalar>>();
+        return Default<std::shared_ptr<arrow20::Scalar>>();
     }
 }
 
-TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::RecordBatch>& data, const NSSA::IColumnResolver& resolver) {
+TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow20::RecordBatch>& data, const NSSA::IColumnResolver& resolver) {
     ui32 idx = 0;
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
@@ -167,7 +167,7 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::RecordBa
     }
 }
 
-TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::Table>& data, const NSSA::IColumnResolver& resolver) {
+TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow20::Table>& data, const NSSA::IColumnResolver& resolver) {
     ui32 idx = 0;
     for (auto&& i : data->columns()) {
         const std::string arrName = data->schema()->field(idx)->name();
@@ -177,12 +177,12 @@ TAccessorsCollection::TAccessorsCollection(const std::shared_ptr<arrow::Table>& 
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> TAccessorsCollection::ToBatch(const NSSA::IColumnResolver* resolver, const bool strictResolver) const {
+std::shared_ptr<arrow20::RecordBatch> TAccessorsCollection::ToBatch(const NSSA::IColumnResolver* resolver, const bool strictResolver) const {
     auto table = ToGeneralContainer(resolver, {}, strictResolver)->BuildTableVerified();
     return NArrow::ToBatch(table);
 }
 
-std::shared_ptr<arrow::Table> TAccessorsCollection::ToTable(
+std::shared_ptr<arrow20::Table> TAccessorsCollection::ToTable(
     const std::optional<std::set<ui32>>& columnIds, const NSSA::IColumnResolver* resolver, const bool strictResolver) const {
     return ToGeneralContainer(resolver, columnIds, strictResolver)->BuildTableVerified();
 }
@@ -203,7 +203,7 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
         }
         return colName;
     };
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     std::vector<std::shared_ptr<IChunkedArray>> arrays;
     if (ColumnIdsSequence.size()) {
         for (auto&& i : ColumnIdsSequence) {
@@ -211,11 +211,11 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
                 continue;
             }
             if (auto accessor = GetAccessorOptional(i)) {
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), accessor->GetDataType()));
+                fields.emplace_back(std::make_shared<arrow20::Field>(predColumnName(i), accessor->GetDataType()));
                 arrays.emplace_back(accessor);
             } else {
                 const auto& scalar = GetConstantScalarVerified(i);
-                fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i), scalar->type));
+                fields.emplace_back(std::make_shared<arrow20::Field>(predColumnName(i), scalar->type));
                 arrays.emplace_back(std::make_shared<NAccessor::TTrivialArray>(scalar));
             }
         }
@@ -224,7 +224,7 @@ std::shared_ptr<NArrow::TGeneralContainer> TAccessorsCollection::ToGeneralContai
             if (columnIds && !columnIds->contains(i.first)) {
                 continue;
             }
-            fields.emplace_back(std::make_shared<arrow::Field>(predColumnName(i.first), i.second->GetDataType()));
+            fields.emplace_back(std::make_shared<arrow20::Field>(predColumnName(i.first), i.second->GetDataType()));
             arrays.emplace_back(i.second.GetData());
         }
     }
@@ -290,7 +290,7 @@ void TAccessorsCollection::AddBatch(
     }
 }
 
-TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow::Datum& data) {
+TAccessorCollectedContainer::TAccessorCollectedContainer(const arrow20::Datum& data) {
     if (data.is_array()) {
         Data = std::make_shared<TTrivialArray>(data.make_array());
     } else if (data.is_arraylike()) {

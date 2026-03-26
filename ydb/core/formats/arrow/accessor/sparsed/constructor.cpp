@@ -11,9 +11,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
-    arrow::FieldVector fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-        std::make_shared<arrow::Field>("value", externalInfo.GetColumnType()) };
-    auto schema = std::make_shared<arrow::Schema>(fields);
+    arrow20::FieldVector fields = { std::make_shared<arrow20::Field>("index", arrow20::uint32()),
+        std::make_shared<arrow20::Field>("value", externalInfo.GetColumnType()) };
+    auto schema = std::make_shared<arrow20::Schema>(fields);
     auto rbParsed = externalInfo.GetDefaultSerializer()->Deserialize(originalData, schema);
     if (!rbParsed.ok()) {
         return TConclusionStatus::Fail(TStringBuilder{}

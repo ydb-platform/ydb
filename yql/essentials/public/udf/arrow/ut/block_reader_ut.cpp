@@ -18,7 +18,7 @@ class TBlockReaderFixture: public NUnitTest::TBaseFixture {
     public:
         using TPtr = TIntrusivePtr<TArrayHelpers>;
 
-        explicit TArrayHelpers(const NMiniKQL::TType* type, arrow::MemoryPool* const arrowPool)
+        explicit TArrayHelpers(const NMiniKQL::TType* type, arrow20::MemoryPool* const arrowPool)
             : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), nullptr))
             , Reader(MakeBlockReader(NMiniKQL::TTypeInfoHelper(), type))
         {
@@ -66,7 +66,7 @@ public:
     NMiniKQL::TScopedAlloc Alloc;
     NMiniKQL::TTypeEnvironment Env;
     NMiniKQL::TProgramBuilder PgmBuilder;
-    arrow::MemoryPool* const ArrowPool;
+    arrow20::MemoryPool* const ArrowPool;
 };
 
 } // anonymous namespace
@@ -97,7 +97,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
         arrayHelpers[4]->Builder->Add(TBlockItem());
     }
 
-    std::vector<std::shared_ptr<arrow::ArrayData>> arrays;
+    std::vector<std::shared_ptr<arrow20::ArrayData>> arrays;
     arrays.reserve(arrayHelpers.size());
     for (const auto& helper : arrayHelpers) {
         arrays.emplace_back(helper->Builder->Build(true).array());
@@ -107,7 +107,7 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
     constexpr ui32 len = 533;
     static_assert(offset + len < size);
 
-    constexpr ui64 offsetSize = sizeof(arrow::BinaryType::offset_type) * len;
+    constexpr ui64 offsetSize = sizeof(arrow20::BinaryType::offset_type) * len;
     constexpr ui64 bitmaskSize = (len - 1) / 8 + 1;
     constexpr ui64 nonEmptyStrings = (len - offset % 2) / 2 + offset % 2;
     const std::vector<ui64> expectedLogicalSize = {

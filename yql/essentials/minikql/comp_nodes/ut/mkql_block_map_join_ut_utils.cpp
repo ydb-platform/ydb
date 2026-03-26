@@ -220,14 +220,14 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
                 builders[j]->Add(item);
             }
         }
-        std::vector<arrow::Datum> batch;
+        std::vector<arrow20::Datum> batch;
         batch.reserve(width);
         for (size_t i = 0; i < width; i++) {
             batch.emplace_back(builders[i]->Build(converted >= total));
         }
 
         NUdf::TArgsDechunker dechunker(std::move(batch));
-        std::vector<arrow::Datum> chunk;
+        std::vector<arrow20::Datum> chunk;
         ui64 chunkLen = 0;
         while (dechunker.Next(chunk, chunkLen)) {
             NUdf::TUnboxedValue* items = nullptr;
@@ -264,7 +264,7 @@ NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t bl
         const auto tuple = holderFactory.CreateDirectArrayHolder(width + 1, items);
         for (size_t i = 0; i < width; i++) {
             const NUdf::TUnboxedValuePod& item = row.GetElement(i);
-            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(item.Get<ui64>())));
+            items[i] = holderFactory.CreateArrowBlock(arrow20::Datum(static_cast<uint64_t>(item.Get<ui64>())));
         }
         items[width] = MakeBlockCount(holderFactory, std::min(blockSize, rowsCount - rowOffset));
         listValues = listValues.Append(std::move(tuple));
@@ -293,7 +293,7 @@ NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
         const auto blockLengthValue = current.GetElement(width);
         const auto blockLengthDatum = TArrowBlock::From(blockLengthValue).GetDatum();
         Y_ENSURE(blockLengthDatum.is_scalar());
-        const auto blockLength = blockLengthDatum.scalar_as<arrow::UInt64Scalar>().value;
+        const auto blockLength = blockLengthDatum.scalar_as<arrow20::UInt64Scalar>().value;
         for (size_t i = 0; i < blockLength; i++) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto tuple = holderFactory.CreateDirectArrayHolder(width, items);

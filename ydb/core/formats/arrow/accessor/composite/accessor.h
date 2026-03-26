@@ -22,7 +22,7 @@ private:
 private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<IChunkedArray>>, Chunks);
 
-    virtual std::shared_ptr<arrow::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const override;
+    virtual std::shared_ptr<arrow20::ChunkedArray> DoGetChunkedArray(const TColumnConstructionContext& context) const override;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         for (auto&& i : Chunks) {
@@ -43,14 +43,14 @@ protected:
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");
         return nullptr;
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
         return {};
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetMaxScalar() const override {
         AFL_VERIFY(false);
         return nullptr;
     }
@@ -62,13 +62,13 @@ protected:
 
 public:
     TCompositeChunkedArray(std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& chunks, const ui32 recordsCount,
-        const std::shared_ptr<arrow::DataType>& type)
+        const std::shared_ptr<arrow20::DataType>& type)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::CompositeChunkedArray, type)
         , Chunks(std::move(chunks))
     {
     }
 
-    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const override;
 
     virtual bool HasSubColumnData(const TString& subColumnName) const override {
         for (auto&& i : Chunks) {
@@ -134,11 +134,11 @@ public:
     private:
         ui32 RecordsCount = 0;
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> Chunks;
-        const std::shared_ptr<arrow::DataType> Type;
+        const std::shared_ptr<arrow20::DataType> Type;
         bool Finished = false;
 
     public:
-        TBuilder(const std::shared_ptr<arrow::DataType>& type)
+        TBuilder(const std::shared_ptr<arrow20::DataType>& type)
             : Type(type)
         {
             AFL_VERIFY(Type);

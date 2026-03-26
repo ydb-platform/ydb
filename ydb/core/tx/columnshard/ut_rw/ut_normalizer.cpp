@@ -125,8 +125,8 @@ public:
                 metaProto.SetDeletionsCount(0);
                 metaProto.SetIsInserted(true);
 
-                const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
-                    { std::make_shared<arrow::Field>("key1", arrow::uint64()), std::make_shared<arrow::Field>("key2", arrow::uint64()) }));
+                const auto schema = std::make_shared<arrow20::Schema>(arrow20::FieldVector(
+                    { std::make_shared<arrow20::Field>("key1", arrow20::uint64()), std::make_shared<arrow20::Field>("key2", arrow20::uint64()) }));
                 auto batch = NArrow::MakeEmptyBatch(schema, 1);
                 NArrow::TFirstLastSpecialKeys keys(batch);
                 metaProto.SetPrimaryKeyBorders(keys.SerializePayloadToString());
@@ -312,9 +312,9 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key1");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key1");
         NConstruction::IArrayBuilder::TPtr key2Column =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key2");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("key2");
         NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
             "field", NConstruction::TStringPoolFiller(8, 100));
 
@@ -553,14 +553,14 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         class TJsonSeqFiller {
             TString Data = HexDecode("01030000410000001C00000020000000040500000406000002000000C0040000000500006100620000000000000010400000000000001440");
         public:
-            using TValue = arrow::BinaryType;
-            arrow::util::string_view GetValue(const ui32) const {
-                return arrow::util::string_view(Data.data(), Data.size());
+            using TValue = arrow20::BinaryType;
+            arrow20::util::string_view GetValue(const ui32) const {
+                return arrow20::util::string_view(Data.data(), Data.size());
             };
         };
 
         NConstruction::IArrayBuilder::TPtr idColumn =
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("id");
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("id");
         NConstruction::IArrayBuilder::TPtr jsonColumn = std::make_shared<NConstruction::TSimpleArrayConstructor<TJsonSeqFiller>>(
             "json_payload", TJsonSeqFiller());
 

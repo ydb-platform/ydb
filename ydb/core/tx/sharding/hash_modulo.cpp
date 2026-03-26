@@ -2,7 +2,7 @@
 
 namespace NKikimr::NSharding::NModulo {
 
-THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> THashShardingModuloN::MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     const std::vector<ui64> hashes = MakeHashes(batch);
     if (!SpecialShardingInfo) {
         THashMap<ui64, std::vector<ui32>> resultHash;

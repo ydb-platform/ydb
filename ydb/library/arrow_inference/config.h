@@ -28,9 +28,9 @@ struct TFormatConfig {
 };
 
 struct TCsvConfig : public TFormatConfig {
-    arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
-    arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
-    arrow::csv::ReadOptions ReadOpts = arrow::csv::ReadOptions::Defaults(); // use_threads and block_size will be rewritten
+    arrow20::csv::ParseOptions ParseOpts = arrow20::csv::ParseOptions::Defaults();
+    arrow20::csv::ConvertOptions ConvOpts = arrow20::csv::ConvertOptions::Defaults();
+    arrow20::csv::ReadOptions ReadOpts = arrow20::csv::ReadOptions::Defaults(); // use_threads and block_size will be rewritten
     int RowsToAnalyze = 0; // 0 means unlimited
 };
 
@@ -38,7 +38,7 @@ using TTsvConfig = TCsvConfig;
 using TParquetConfig = TFormatConfig;
 
 struct TJsonConfig : public TFormatConfig {
-    arrow::json::ParseOptions ParseOpts = arrow::json::ParseOptions::Defaults();
+    arrow20::json::ParseOptions ParseOpts = arrow20::json::ParseOptions::Defaults();
 };
 
 // Convert string representation to EFileFormat

@@ -12,7 +12,7 @@ public:
 
 private:
     using TBase = TSkipBitmapIndex;
-    std::shared_ptr<arrow::Schema> ResultSchema;
+    std::shared_ptr<arrow20::Schema> ResultSchema;
     double FalsePositiveProbability = 0.1;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
@@ -32,7 +32,7 @@ protected:
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;
 
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow20::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
 
 public:

@@ -37,27 +37,27 @@ public:
 UDF_ASSERT_TYPE_SIZE(IBlockTypeHelper, 8);
 
 template <EDataSlot slot>
-std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
+std::shared_ptr<arrow20::DataType> MakeTzLayoutArrowType() {
     static_assert(slot == EDataSlot::TzDate || slot == EDataSlot::TzDatetime || slot == EDataSlot::TzTimestamp || slot == EDataSlot::TzDate32 || slot == EDataSlot::TzDatetime64 || slot == EDataSlot::TzTimestamp64,
                   "Expected tz date type slot");
 
     if constexpr (slot == EDataSlot::TzDate) {
-        return arrow::uint16();
+        return arrow20::uint16();
     }
     if constexpr (slot == EDataSlot::TzDatetime) {
-        return arrow::uint32();
+        return arrow20::uint32();
     }
     if constexpr (slot == EDataSlot::TzTimestamp) {
-        return arrow::uint64();
+        return arrow20::uint64();
     }
     if constexpr (slot == EDataSlot::TzDate32) {
-        return arrow::int32();
+        return arrow20::int32();
     }
     if constexpr (slot == EDataSlot::TzDatetime64) {
-        return arrow::int64();
+        return arrow20::int64();
     }
     if constexpr (slot == EDataSlot::TzTimestamp64) {
-        return arrow::int64();
+        return arrow20::int64();
     }
 }
 

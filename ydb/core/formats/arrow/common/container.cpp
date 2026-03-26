@@ -31,7 +31,7 @@ TConclusionStatus TGeneralContainer::MergeColumnsStrictly(const TGeneralContaine
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data) {
+TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data) {
     AFL_VERIFY(f);
     AFL_VERIFY(data);
     if (RecordsCount && data->GetRecordsCount() != *RecordsCount) {
@@ -53,11 +53,11 @@ TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data) {
+TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<arrow20::ChunkedArray>& data) {
     return AddField(f, std::make_shared<NAccessor::TTrivialChunkedArray>(data));
 }
 
-TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data) {
+TConclusionStatus TGeneralContainer::AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<arrow20::Array>& data) {
     return AddField(f, std::make_shared<NAccessor::TTrivialArray>(data));
 }
 
@@ -89,7 +89,7 @@ void TGeneralContainer::Initialize() {
 }
 
 TGeneralContainer::TGeneralContainer(
-    const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
+    const std::vector<std::shared_ptr<arrow20::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Schema(std::make_shared<NModifier::TSchema>(fields))
     , Columns(std::move(columns)) {
     Initialize();
@@ -103,13 +103,13 @@ TGeneralContainer::TGeneralContainer(
 }
 
 TGeneralContainer::TGeneralContainer(
-    const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
+    const std::shared_ptr<arrow20::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns)
     : Schema(std::make_shared<NModifier::TSchema>(schema))
     , Columns(std::move(columns)) {
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow20::Table>& table)
     : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
     , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
@@ -123,7 +123,7 @@ TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::Table>& table)
     Initialize();
 }
 
-TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table)
+TGeneralContainer::TGeneralContainer(const std::shared_ptr<arrow20::RecordBatch>& table)
     : RecordsCount(TValidator::CheckNotNull(table)->num_rows())
     , Schema(std::make_shared<NModifier::TSchema>(TValidator::CheckNotNull(table)->schema())) {
     AFL_VERIFY(table);
@@ -152,9 +152,9 @@ std::shared_ptr<NKikimr::NArrow::TGeneralContainer> TGeneralContainer::BuildEmpt
     return std::make_shared<TGeneralContainer>(Schema, std::move(columns));
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTableConstructionContext& context) const {
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns;
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+std::shared_ptr<arrow20::Table> TGeneralContainer::BuildTableOptional(const TTableConstructionContext& context) const {
+    std::vector<std::shared_ptr<arrow20::ChunkedArray>> columns;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     std::optional<ui32> count;
     for (i32 i = 0; i < Schema->num_fields(); ++i) {
         if (context.GetColumnNames() && !context.GetColumnNames()->contains(Schema->field(i)->name())) {
@@ -172,10 +172,10 @@ std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableOptional(const TTable
         return nullptr;
     }
     AFL_VERIFY(count);
-    return arrow::Table::Make(std::make_shared<arrow::Schema>(fields), columns, *count);
+    return arrow20::Table::Make(std::make_shared<arrow20::Schema>(fields), columns, *count);
 }
 
-std::shared_ptr<arrow::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
+std::shared_ptr<arrow20::Table> TGeneralContainer::BuildTableVerified(const TTableConstructionContext& context) const {
     auto result = BuildTableOptional(context);
     AFL_VERIFY(result);
     AFL_VERIFY(!context.GetColumnNames() || result->schema()->num_fields() == (i32)context.GetColumnNames()->size());
@@ -192,7 +192,7 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TGeneralContainer::GetAccessor
 }
 
 TConclusionStatus TGeneralContainer::SyncSchemaTo(
-    const std::shared_ptr<arrow::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults) {
+    const std::shared_ptr<arrow20::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults) {
     std::shared_ptr<NModifier::TSchema> schemaNew = std::make_shared<NModifier::TSchema>();
     std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columnsNew;
     if (!RecordsCount) {
@@ -254,8 +254,8 @@ TGeneralContainer TGeneralContainer::ApplyFilter(const TColumnFilter& filter) co
     }
 }
 
-TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(
-    const std::shared_ptr<arrow::Field>& field, const bool force) const {
+TConclusion<std::shared_ptr<arrow20::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(
+    const std::shared_ptr<arrow20::Field>& field, const bool force) const {
     AFL_VERIFY(field);
     auto result = DoGetDefaultColumnElementValue(field->name());
     if (result) {

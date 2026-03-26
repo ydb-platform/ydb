@@ -50,7 +50,7 @@ public:
 
     DataTypePtr getReturnType() const override
     {
-        return std::make_shared<arrow::DoubleType>();
+        return std::make_shared<arrow20::DoubleType>();
     }
 
     bool allocatesMemoryInArena() const override { return false; }
@@ -105,8 +105,8 @@ public:
     using Denominator = typename Base::Denominator;
     using Fraction = typename Base::Fraction;
 
-    using ColumnType = arrow::NumericArray<T>;
-    using MutableColumnType = arrow::NumericBuilder<T>;
+    using ColumnType = arrow20::NumericArray<T>;
+    using MutableColumnType = arrow20::NumericBuilder<T>;
 
     void add(AggregateDataPtr __restrict place, const IColumn ** columns, size_t row_num, Arena *) const final
     {
@@ -129,7 +129,7 @@ public:
             auto length = row_end - row_begin;
 
             sum_data.addManyConditional(column.raw_values(), condition_map, row_begin, row_end);
-            this->data(place).denominator += arrow::internal::CountSetBits(condition_map, row_begin, length);
+            this->data(place).denominator += arrow20::internal::CountSetBits(condition_map, row_begin, length);
         }
         else
         {
@@ -167,28 +167,28 @@ public:
         const DataTypePtr & type = argument_types[0];
 
         switch (type->id()) {
-            case arrow::Type::INT8:
-                return std::make_shared<AggFunc<arrow::Int8Type>>(argument_types);
-            case arrow::Type::INT16:
-                return std::make_shared<AggFunc<arrow::Int16Type>>(argument_types);
-            case arrow::Type::INT32:
-                return std::make_shared<AggFunc<arrow::Int32Type>>(argument_types);
-            case arrow::Type::INT64:
-                return std::make_shared<AggFunc<arrow::Int64Type>>(argument_types);
-            case arrow::Type::UINT8:
-                return std::make_shared<AggFunc<arrow::UInt8Type>>(argument_types);
-            case arrow::Type::UINT16:
-                return std::make_shared<AggFunc<arrow::UInt16Type>>(argument_types);
-            case arrow::Type::UINT32:
-                return std::make_shared<AggFunc<arrow::UInt32Type>>(argument_types);
-            case arrow::Type::UINT64:
-                return std::make_shared<AggFunc<arrow::UInt64Type>>(argument_types);
-            case arrow::Type::FLOAT:
-                return std::make_shared<AggFunc<arrow::FloatType>>(argument_types);
-            case arrow::Type::DOUBLE:
-                return std::make_shared<AggFunc<arrow::DoubleType>>(argument_types);
-            case arrow::Type::DURATION:
-                return std::make_shared<AggFunc<arrow::DurationType>>(argument_types);
+            case arrow20::Type::INT8:
+                return std::make_shared<AggFunc<arrow20::Int8Type>>(argument_types);
+            case arrow20::Type::INT16:
+                return std::make_shared<AggFunc<arrow20::Int16Type>>(argument_types);
+            case arrow20::Type::INT32:
+                return std::make_shared<AggFunc<arrow20::Int32Type>>(argument_types);
+            case arrow20::Type::INT64:
+                return std::make_shared<AggFunc<arrow20::Int64Type>>(argument_types);
+            case arrow20::Type::UINT8:
+                return std::make_shared<AggFunc<arrow20::UInt8Type>>(argument_types);
+            case arrow20::Type::UINT16:
+                return std::make_shared<AggFunc<arrow20::UInt16Type>>(argument_types);
+            case arrow20::Type::UINT32:
+                return std::make_shared<AggFunc<arrow20::UInt32Type>>(argument_types);
+            case arrow20::Type::UINT64:
+                return std::make_shared<AggFunc<arrow20::UInt64Type>>(argument_types);
+            case arrow20::Type::FLOAT:
+                return std::make_shared<AggFunc<arrow20::FloatType>>(argument_types);
+            case arrow20::Type::DOUBLE:
+                return std::make_shared<AggFunc<arrow20::DoubleType>>(argument_types);
+            case arrow20::Type::DURATION:
+                return std::make_shared<AggFunc<arrow20::DurationType>>(argument_types);
             default:
                 break;
         }

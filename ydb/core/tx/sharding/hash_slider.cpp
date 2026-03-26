@@ -2,13 +2,13 @@
 
 namespace NKikimr::NSharding {
 
-THashMap<ui64, std::vector<ui32>> TLogsSharding::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> TLogsSharding::MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     if (GetShardingColumns().size() < 2) {
         return {};
     }
 
     auto tsArray = batch->GetColumnByName(GetShardingColumns()[0]);
-    if (!tsArray || tsArray->type_id() != arrow::Type::TIMESTAMP) {
+    if (!tsArray || tsArray->type_id() != arrow20::Type::TIMESTAMP) {
         return {};
     }
 
@@ -17,7 +17,7 @@ THashMap<ui64, std::vector<ui32>> TLogsSharding::MakeSharding(const std::shared_
         return {};
     }
 
-    auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(tsArray);
+    auto tsColumn = std::static_pointer_cast<arrow20::TimestampArray>(tsArray);
 
     std::vector<std::vector<ui32>> result;
     result.resize(GetOrderedShardIds().size());

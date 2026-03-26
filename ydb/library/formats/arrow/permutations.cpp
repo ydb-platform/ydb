@@ -14,8 +14,8 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool reverse) {
-    arrow::UInt64Builder builder;
+std::shared_ptr<arrow20::UInt64Array> MakePermutation(const int size, const bool reverse) {
+    arrow20::UInt64Builder builder;
     TStatusValidator::Validate(builder.Reserve(size));
 
     if (size) {
@@ -31,18 +31,18 @@ std::shared_ptr<arrow::UInt64Array> MakePermutation(const int size, const bool r
         }
     }
 
-    std::shared_ptr<arrow::UInt64Array> out;
+    std::shared_ptr<arrow20::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
 template <class TIndex>
-std::shared_ptr<arrow::UInt64Array> MakeFilterPermutationImpl(const std::vector<TIndex>& indexes) {
+std::shared_ptr<arrow20::UInt64Array> MakeFilterPermutationImpl(const std::vector<TIndex>& indexes) {
     if (indexes.empty()) {
         return {};
     }
 
-    arrow::UInt64Builder builder;
+    arrow20::UInt64Builder builder;
     if (!builder.Reserve(indexes.size()).ok()) {
         return {};
     }
@@ -50,45 +50,45 @@ std::shared_ptr<arrow::UInt64Array> MakeFilterPermutationImpl(const std::vector<
     for (auto&& i : indexes) {
         TStatusValidator::Validate(builder.Append(i));
     }
-    std::shared_ptr<arrow::UInt64Array> out;
+    std::shared_ptr<arrow20::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui32>& indexes) {
+std::shared_ptr<arrow20::UInt64Array> MakeFilterPermutation(const std::vector<ui32>& indexes) {
     return MakeFilterPermutationImpl(indexes);
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
+std::shared_ptr<arrow20::UInt64Array> MakeFilterPermutation(const std::vector<ui64>& indexes) {
     return MakeFilterPermutationImpl(indexes);
 }
 
-std::shared_ptr<arrow::RecordBatch> CopyRecords(const std::shared_ptr<arrow::RecordBatch>& source, const std::vector<ui64>& indexes) {
+std::shared_ptr<arrow20::RecordBatch> CopyRecords(const std::shared_ptr<arrow20::RecordBatch>& source, const std::vector<ui64>& indexes) {
     Y_ABORT_UNLESS(!!source);
     auto schema = source->schema();
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     for (auto&& i : source->columns()) {
         columns.emplace_back(CopyRecords(i, indexes));
     }
-    return arrow::RecordBatch::Make(schema, indexes.size(), columns);
+    return arrow20::RecordBatch::Make(schema, indexes.size(), columns);
 }
 
-std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& source, const std::vector<ui64>& indexes) {
+std::shared_ptr<arrow20::Array> CopyRecords(const std::shared_ptr<arrow20::Array>& source, const std::vector<ui64>& indexes) {
     if (!source) {
         return source;
     }
-    std::shared_ptr<arrow::Array> result;
+    std::shared_ptr<arrow20::Array> result;
     SwitchType(source->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+        using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
+        using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
         auto& column = static_cast<const TArray&>(*source);
 
-        std::unique_ptr<arrow::ArrayBuilder> builder;
-        TStatusValidator::Validate(arrow::MakeBuilder(arrow::default_memory_pool(), source->type(), &builder));
+        std::unique_ptr<arrow20::ArrayBuilder> builder;
+        TStatusValidator::Validate(arrow20::MakeBuilder(arrow20::default_memory_pool(), source->type(), &builder));
         auto& builderImpl = static_cast<TBuilder&>(*builder);
 
-        if constexpr (arrow::has_string_view<typename TWrap::T>::value) {
+        if constexpr (arrow20::has_string_view<typename TWrap::T>::value) {
             ui64 sumByIndexes = 0;
             for (auto&& idx : indexes) {
                 Y_ABORT_UNLESS(idx < (ui64)column.length());
@@ -114,34 +114,34 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     AFL_VERIFY(batch);
-    RecordBatch = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), { batch }));
+    RecordBatch = TStatusValidator::GetValid(arrow20::Table::FromRecordBatches(batch->schema(), { batch }));
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch)
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow20::Table>& batch)
     : RecordBatch(batch) {
     AFL_VERIFY(RecordBatch);
 }
 
-TShardedRecordBatch::TShardedRecordBatch(std::shared_ptr<arrow::Table>&& batch)
+TShardedRecordBatch::TShardedRecordBatch(std::shared_ptr<arrow20::Table>&& batch)
     : RecordBatch(std::move(batch)) {
     AFL_VERIFY(RecordBatch);
 }
 
-TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
+TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow20::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
     : RecordBatch(batch)
     , SplittedByShards(std::move(splittedByShards)) {
     AFL_VERIFY(RecordBatch);
     AFL_VERIFY(SplittedByShards.size());
 }
 
-std::shared_ptr<arrow::Table> TShardedRecordBatch::ExtractRecordBatch() {
+std::shared_ptr<arrow20::Table> TShardedRecordBatch::ExtractRecordBatch() {
     AFL_VERIFY(!!RecordBatch);
     return std::move(RecordBatch);
 }
 
-std::shared_ptr<arrow::Schema> TShardedRecordBatch::GetResultSchema() const {
+std::shared_ptr<arrow20::Schema> TShardedRecordBatch::GetResultSchema() const {
     AFL_VERIFY(RecordBatch);
     return RecordBatch->schema();
 }
@@ -151,18 +151,18 @@ ui64 TShardedRecordBatch::GetRecordsCount() const {
     return RecordBatch->num_rows();
 }
 
-const std::shared_ptr<arrow::Table>& TShardedRecordBatch::GetRecordBatch() const {
+const std::shared_ptr<arrow20::Table>& TShardedRecordBatch::GetRecordBatch() const {
     AFL_VERIFY(RecordBatch);
     return RecordBatch;
 }
 
-std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::Table>& input) {
+std::vector<std::shared_ptr<arrow20::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow20::Table>& input) {
     AFL_VERIFY(input);
     AFL_VERIFY(input->num_rows() == RecordsCount);
     auto permutation = BuildPermutation();
-    auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::compute::Take(input, *permutation)).table();
+    auto resultBatch = NArrow::TStatusValidator::GetValid(arrow20::compute::Take(input, *permutation)).table();
     AFL_VERIFY(resultBatch->num_rows() == RecordsCount);
-    std::vector<std::shared_ptr<arrow::Table>> result;
+    std::vector<std::shared_ptr<arrow20::Table>> result;
     ui64 startIndex = 0;
     for (auto&& i : Remapping) {
         result.emplace_back(resultBatch->Slice(startIndex, i.size()));
@@ -173,7 +173,7 @@ std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std:
 }
 
 NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(
-    const ui32 shardsCount, const std::shared_ptr<arrow::Table>& input, const std::string& hashColumnName) {
+    const ui32 shardsCount, const std::shared_ptr<arrow20::Table>& input, const std::string& hashColumnName) {
     AFL_VERIFY(input);
     if (shardsCount == 1) {
         return TShardedRecordBatch(input);
@@ -183,14 +183,14 @@ NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(
         return TShardedRecordBatch(input);
     }
     std::optional<TShardingSplitIndex> splitter;
-    if (hashColumn->type()->id() == arrow::Type::UINT64) {
-        splitter = TShardingSplitIndex::Build<arrow::UInt64Array>(shardsCount, *hashColumn);
-    } else if (hashColumn->type()->id() == arrow::Type::UINT32) {
-        splitter = TShardingSplitIndex::Build<arrow::UInt32Array>(shardsCount, *hashColumn);
-    } else if (hashColumn->type()->id() == arrow::Type::INT64) {
-        splitter = TShardingSplitIndex::Build<arrow::Int64Array>(shardsCount, *hashColumn);
-    } else if (hashColumn->type()->id() == arrow::Type::INT32) {
-        splitter = TShardingSplitIndex::Build<arrow::Int32Array>(shardsCount, *hashColumn);
+    if (hashColumn->type()->id() == arrow20::Type::UINT64) {
+        splitter = TShardingSplitIndex::Build<arrow20::UInt64Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow20::Type::UINT32) {
+        splitter = TShardingSplitIndex::Build<arrow20::UInt32Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow20::Type::INT64) {
+        splitter = TShardingSplitIndex::Build<arrow20::Int64Array>(shardsCount, *hashColumn);
+    } else if (hashColumn->type()->id() == arrow20::Type::INT32) {
+        splitter = TShardingSplitIndex::Build<arrow20::Int32Array>(shardsCount, *hashColumn);
     } else {
         Y_ABORT_UNLESS(false);
     }
@@ -199,12 +199,12 @@ NKikimr::NArrow::TShardedRecordBatch TShardingSplitIndex::Apply(
 }
 
 TShardedRecordBatch TShardingSplitIndex::Apply(
-    const ui32 shardsCount, const std::shared_ptr<arrow::RecordBatch>& input, const std::string& hashColumnName) {
-    return Apply(shardsCount, TStatusValidator::GetValid(arrow::Table::FromRecordBatches(input->schema(), { input })), hashColumnName);
+    const ui32 shardsCount, const std::shared_ptr<arrow20::RecordBatch>& input, const std::string& hashColumnName) {
+    return Apply(shardsCount, TStatusValidator::GetValid(arrow20::Table::FromRecordBatches(input->schema(), { input })), hashColumnName);
 }
 
-std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() const {
-    arrow::UInt64Builder builder;
+std::shared_ptr<arrow20::UInt64Array> TShardingSplitIndex::BuildPermutation() const {
+    arrow20::UInt64Builder builder;
     Y_ABORT_UNLESS(builder.Reserve(RecordsCount).ok());
 
     for (auto&& i : Remapping) {
@@ -213,21 +213,21 @@ std::shared_ptr<arrow::UInt64Array> TShardingSplitIndex::BuildPermutation() cons
         }
     }
 
-    std::shared_ptr<arrow::UInt64Array> out;
+    std::shared_ptr<arrow20::UInt64Array> out;
     Y_ABORT_UNLESS(builder.Finish(&out).ok());
     return out;
 }
 
-std::shared_ptr<arrow::RecordBatch> ReverseRecords(const std::shared_ptr<arrow::RecordBatch>& batch) {
+std::shared_ptr<arrow20::RecordBatch> ReverseRecords(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     AFL_VERIFY(batch);
     auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
-    return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).record_batch();
+    return NArrow::TStatusValidator::GetValid(arrow20::compute::Take(batch, permutation)).record_batch();
 }
 
-std::shared_ptr<arrow::Table> ReverseRecords(const std::shared_ptr<arrow::Table>& batch) {
+std::shared_ptr<arrow20::Table> ReverseRecords(const std::shared_ptr<arrow20::Table>& batch) {
     AFL_VERIFY(batch);
     auto permutation = NArrow::MakePermutation(batch->num_rows(), true);
-    return NArrow::TStatusValidator::GetValid(arrow::compute::Take(batch, permutation)).table();
+    return NArrow::TStatusValidator::GetValid(arrow20::compute::Take(batch, permutation)).table();
 }
 
 }   // namespace NKikimr::NArrow

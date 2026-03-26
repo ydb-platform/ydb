@@ -131,7 +131,7 @@ public:
     }
 
     void MakeBlocks(const THolderFactory& holderFactory) {
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
+        Values.back() = holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(OutputRows_)));
         OutputRows_ = 0;
         BuilderAllocatedSize_ = 0;
 
@@ -231,7 +231,7 @@ private:
     size_t OutputWidth_;
     TUnboxedValueVector Inputs_;
     const TVector<ui32> LeftIOMap_;
-    const std::vector<arrow::ValueDescr> InputsDescr_;
+    const std::vector<arrow20::ValueDescr> InputsDescr_;
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IBlockItemConverter>> Converters_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
@@ -244,10 +244,10 @@ class TBlockStorage: public TComputationValue<TBlockStorage> {
 public:
     struct TBlock {
         size_t Size;
-        std::vector<arrow::Datum> Columns;
+        std::vector<arrow20::Datum> Columns;
 
         TBlock() = default;
-        TBlock(size_t size, std::vector<arrow::Datum> columns)
+        TBlock(size_t size, std::vector<arrow20::Datum> columns)
             : Size(size)
             , Columns(std::move(columns))
         {
@@ -321,7 +321,7 @@ public:
         size_t blockLengthIndex,
         NUdf::TUnboxedValue listIter,
         TStringBuf resourceTag,
-        arrow::MemoryPool* pool)
+        arrow20::MemoryPool* pool)
         : TBase(memInfo)
         , InputsDescr_(ToValueDescr(types))
         , Readers_(types.size())
@@ -355,7 +355,7 @@ public:
 
         Y_ENSURE(!IsFinished_, "Got data on finished stream");
 
-        std::vector<arrow::Datum> blockColumns(Readers_.size());
+        std::vector<arrow20::Datum> blockColumns(Readers_.size());
         for (size_t i = 0; i < Readers_.size(); i++) {
             if (i == BlockLengthIndex_) {
                 continue;
@@ -446,7 +446,7 @@ private:
     }
 
 protected:
-    const std::vector<arrow::ValueDescr> InputsDescr_;
+    const std::vector<arrow20::ValueDescr> InputsDescr_;
 
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<NUdf::IBlockItemHasher::TPtr> Hashers_;

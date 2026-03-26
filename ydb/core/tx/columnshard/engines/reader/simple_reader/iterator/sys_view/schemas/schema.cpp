@@ -13,11 +13,11 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const ui64 tabletId, const ui6
     return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
-const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
-    static const std::shared_ptr<arrow::Schema> schema = []() {
-        arrow::FieldVector fields = { std::make_shared<arrow::Field>("TabletId", arrow::uint64()),
-            std::make_shared<arrow::Field>("PresetId", arrow::uint64()), std::make_shared<arrow::Field>("SchemaVersion", arrow::uint64()) };
-        return std::make_shared<arrow::Schema>(std::move(fields));
+const std::shared_ptr<arrow20::Schema>& TSchemaAdapter::GetPKSchema() {
+    static const std::shared_ptr<arrow20::Schema> schema = []() {
+        arrow20::FieldVector fields = { std::make_shared<arrow20::Field>("TabletId", arrow20::uint64()),
+            std::make_shared<arrow20::Field>("PresetId", arrow20::uint64()), std::make_shared<arrow20::Field>("SchemaVersion", arrow20::uint64()) };
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }();
     return schema;
 }

@@ -12,7 +12,7 @@ TFilteredSnapshotSchema::TFilteredSnapshotSchema(const ISnapshotSchema::TPtr& or
     : OriginalSnapshot(originalSnapshot)
     , ColumnIds(columnIds)
 {
-    std::vector<std::shared_ptr<arrow::Field>> schemaFields;
+    std::vector<std::shared_ptr<arrow20::Field>> schemaFields;
     for (auto&& i : columnIds) {
         IdIntoIndex.emplace(i, schemaFields.size());
         schemaFields.emplace_back(originalSnapshot->GetFieldByColumnIdVerified(i));

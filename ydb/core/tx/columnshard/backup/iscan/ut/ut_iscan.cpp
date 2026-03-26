@@ -19,30 +19,30 @@ namespace NKikimr {
 
 namespace {
 
-std::shared_ptr<arrow::RecordBatch> TestRecordBatch() {
+std::shared_ptr<arrow20::RecordBatch> TestRecordBatch() {
     std::vector<std::string> keys = {"foo", "bar", "baz"};
     std::vector<std::string> values = {"one", "two", "three"};
 
-    arrow::StringBuilder key_builder;
+    arrow20::StringBuilder key_builder;
     for (const auto& k : keys) {
         Y_UNUSED(key_builder.Append(k));
     }
-    std::shared_ptr<arrow::Array> key_array;
+    std::shared_ptr<arrow20::Array> key_array;
     Y_UNUSED(key_builder.Finish(&key_array));
 
-    arrow::StringBuilder value_builder;
+    arrow20::StringBuilder value_builder;
     for (const auto& v : values) {
         Y_UNUSED(value_builder.Append(v));
     }
-    std::shared_ptr<arrow::Array> value_array;
+    std::shared_ptr<arrow20::Array> value_array;
     Y_UNUSED(value_builder.Finish(&value_array));
 
-    auto schema = arrow::schema({
-        arrow::field("key", arrow::binary()),
-        arrow::field("value", arrow::binary())
+    auto schema = arrow20::schema({
+        arrow20::field("key", arrow20::binary()),
+        arrow20::field("value", arrow20::binary())
     });
 
-    return arrow::RecordBatch::Make(schema, keys.size(), {key_array, value_array});
+    return arrow20::RecordBatch::Make(schema, keys.size(), {key_array, value_array});
 }
 
 TVector<std::pair<TString, NScheme::TTypeInfo>> MakeYdbSchema() {

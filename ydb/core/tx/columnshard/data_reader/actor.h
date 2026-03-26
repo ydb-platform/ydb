@@ -11,7 +11,7 @@ private:
     YDB_READONLY_DEF(TString, TaskId);
     YDB_READONLY(ui64, TabletId, 0);
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
-    virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
+    virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow20::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
     virtual void DoOnError(const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
@@ -21,7 +21,7 @@ public:
     virtual TString GetErrorMessage() const = 0;
     virtual TDuration GetTimeout() const = 0;
 
-    TConclusionStatus OnDataChunk(const std::shared_ptr<arrow::Table>& data) {
+    TConclusionStatus OnDataChunk(const std::shared_ptr<arrow20::Table>& data) {
         AFL_VERIFY(data->num_rows());
         return DoOnDataChunk(data);
     }

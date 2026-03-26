@@ -25,7 +25,7 @@ std::shared_ptr<ISerializer> TSerializerContainer::GetDefaultSerializer() {
     return std::make_shared<TNativeSerializer>();
 }
 std::shared_ptr<ISerializer> TSerializerContainer::GetFastestSerializer() {
-    return std::make_shared<TNativeSerializer>(arrow::Compression::UNCOMPRESSED);
+    return std::make_shared<TNativeSerializer>(arrow20::Compression::UNCOMPRESSED);
 }
 
 

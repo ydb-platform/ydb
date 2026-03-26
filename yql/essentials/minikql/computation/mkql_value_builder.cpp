@@ -188,13 +188,13 @@ NUdf::TUnboxedValue TDefaultValueBuilder::Run(const NUdf::TSourcePosition& calle
 
 void TDefaultValueBuilder::ExportArrowBlock(NUdf::TUnboxedValuePod value, ui32 chunk, ArrowArray* out) const {
     const auto& datum = TArrowBlock::From(value).GetDatum();
-    std::shared_ptr<arrow::Array> arr;
+    std::shared_ptr<arrow20::Array> arr;
     if (datum.is_scalar()) {
         if (chunk != 0) {
             UdfTerminate("Bad chunk index");
         }
 
-        auto arrRes = arrow::MakeArrayFromScalar(*datum.scalar(), 1);
+        auto arrRes = arrow20::MakeArrayFromScalar(*datum.scalar(), 1);
         if (!arrRes.status().ok()) {
             UdfTerminate(arrRes.status().ToString().c_str());
         }
@@ -214,10 +214,10 @@ void TDefaultValueBuilder::ExportArrowBlock(NUdf::TUnboxedValuePod value, ui32 c
 
         arr = chunks[chunk];
     } else {
-        UdfTerminate("Unexpected kind of arrow::Datum");
+        UdfTerminate("Unexpected kind of arrow20::Datum");
     }
 
-    auto status = arrow::ExportArray(*arr, out);
+    auto status = arrow20::ExportArray(*arr, out);
     if (!status.ok()) {
         UdfTerminate(status.ToString().c_str());
     }
@@ -230,7 +230,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, u
             UdfTerminate("Bad chunkCount value");
         }
 
-        auto arrRes = arrow::ImportArray(arrays, dataType);
+        auto arrRes = arrow20::ImportArray(arrays, dataType);
         auto arr = std::move(arrRes).ValueOrDie();
         if (arr->length() != 1) {
             UdfTerminate("Expected array with one element");
@@ -248,9 +248,9 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, u
             UdfTerminate("Bad chunkCount value");
         }
 
-        TVector<std::shared_ptr<arrow::Array>> imported(chunkCount);
+        TVector<std::shared_ptr<arrow20::Array>> imported(chunkCount);
         for (ui32 i = 0; i < chunkCount; ++i) {
-            auto arrRes = arrow::ImportArray(arrays + i, dataType);
+            auto arrRes = arrow20::ImportArray(arrays + i, dataType);
             if (!arrRes.status().ok()) {
                 UdfTerminate(arrRes.status().ToString().c_str());
             }
@@ -261,7 +261,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, u
         if (chunkCount == 1) {
             return HolderFactory_.CreateArrowBlock(imported.front());
         } else {
-            return HolderFactory_.CreateArrowBlock(arrow::ChunkedArray::Make(std::move(imported), dataType).ValueOrDie());
+            return HolderFactory_.CreateArrowBlock(arrow20::ChunkedArray::Make(std::move(imported), dataType).ValueOrDie());
         }
     }
 }
@@ -278,7 +278,7 @@ ui32 TDefaultValueBuilder::GetArrowBlockChunks(NUdf::TUnboxedValuePod value, boo
     } else if (datum.is_arraylike()) {
         return datum.chunks().size();
     } else {
-        UdfTerminate("Unexpected kind of arrow::Datum");
+        UdfTerminate("Unexpected kind of arrow20::Datum");
     }
 }
 

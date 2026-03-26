@@ -55,14 +55,14 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize, cons
                 builders[j]->Add(item);
             }
         }
-        std::vector<arrow::Datum> batch;
+        std::vector<arrow20::Datum> batch;
         batch.reserve(width);
         for (size_t i = 0; i < width; i++) {
             batch.emplace_back(builders[i]->Build(converted >= total));
         }
 
         NUdf::TArgsDechunker dechunker(std::move(batch));
-        std::vector<arrow::Datum> chunk;
+        std::vector<arrow20::Datum> chunk;
         ui64 chunkLen = 0;
         while (dechunker.Next(chunk, chunkLen)) {
             NUdf::TUnboxedValue* items = nullptr;
@@ -253,7 +253,7 @@ TVector<NUdf::TUnboxedValue> FlattenBlocks(const TComputationContext& ctx, TVect
     TTypeInfoHelper typeInfoHelper;
     size_t resultTupleSize = outputType->GetElementsCount();
     std::vector<NYql::NUdf::TUnboxedValue> UVBlocks{resultTupleSize};
-    std::vector<const arrow::Datum*> Blocks{resultTupleSize};
+    std::vector<const arrow20::Datum*> Blocks{resultTupleSize};
     std::vector<std::unique_ptr<IBlockReader>> InputReaders{resultTupleSize};
     std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters{resultTupleSize};
     for (size_t index = 0; index < resultTupleSize; ++index) {

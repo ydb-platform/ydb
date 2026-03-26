@@ -8,15 +8,15 @@ namespace NKikimr::NKernels {
 
 // Metafunction for dispatching to appropriate CastFunction. This corresponds
 // to the standard SQL CAST(expr AS target_type)
-class YdbCastMetaFunction : public ::arrow::compute::MetaFunction {
+class YdbCastMetaFunction : public ::arrow20::compute::MetaFunction {
  public:
   YdbCastMetaFunction();
 
-  ::arrow::Result<const ::arrow::compute::CastOptions*> ValidateOptions(const ::arrow::compute::FunctionOptions* options) const;
+  ::arrow20::Result<const ::arrow20::compute::CastOptions*> ValidateOptions(const ::arrow20::compute::FunctionOptions* options) const;
 
-  ::arrow::Result<::arrow::Datum> ExecuteImpl(const std::vector<::arrow::Datum>& args,
-                            const ::arrow::compute::FunctionOptions* options,
-                            ::arrow::compute::ExecContext* ctx) const override;
+  ::arrow20::Result<::arrow20::Datum> ExecuteImpl(const std::vector<::arrow20::Datum>& args,
+                            const ::arrow20::compute::FunctionOptions* options,
+                            ::arrow20::compute::ExecContext* ctx) const override;
 };
 
 }

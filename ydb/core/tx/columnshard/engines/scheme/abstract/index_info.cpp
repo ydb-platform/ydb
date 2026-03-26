@@ -16,8 +16,8 @@ const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const 
 void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
-        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
+    batch.AddField(arrow20::field(SPEC_COL_DELETE_FLAG, arrow20::boolean()),
+        NArrow::TThreadSimpleArraysCache::GetConst(arrow20::boolean(), std::make_shared<arrow20::BooleanScalar>(isDelete), numRows)).Validate();
 }
 
 void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId) {
@@ -76,7 +76,7 @@ TString IIndexInfo::GetColumnName(const ui32 id, const bool required) const {
     }
 }
 
-ui32 IIndexInfo::CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch, const bool needExistsColumn) {
+ui32 IIndexInfo::CalcDeletions(const std::shared_ptr<arrow20::RecordBatch>& batch, const bool needExistsColumn) {
     auto c = batch->GetColumnByName(IIndexInfo::SPEC_COL_DELETE_FLAG);
     if (!needExistsColumn) {
         if (!c) {
@@ -84,12 +84,12 @@ ui32 IIndexInfo::CalcDeletions(const std::shared_ptr<arrow::RecordBatch>& batch,
         }
     }
     AFL_VERIFY(c);
-    AFL_VERIFY(c->type()->id() == arrow::boolean()->id());
-    auto cBool = static_pointer_cast<arrow::BooleanArray>(c);
+    AFL_VERIFY(c->type()->id() == arrow20::boolean()->id());
+    auto cBool = static_pointer_cast<arrow20::BooleanArray>(c);
     return cBool->true_count();
 }
 
-std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldOptional(const ui32 columnId) {
+std::shared_ptr<arrow20::Field> IIndexInfo::GetColumnFieldOptional(const ui32 columnId) {
     if (ESpecialColumn(columnId) == ESpecialColumn::PLAN_STEP) {
         return ArrowSchemaSnapshot()->field(0);
     } else if (ESpecialColumn(columnId) == ESpecialColumn::TX_ID) {
@@ -103,13 +103,13 @@ std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldOptional(const ui32 colu
     }
 }
 
-std::shared_ptr<arrow::Field> IIndexInfo::GetColumnFieldVerified(const ui32 columnId) {
+std::shared_ptr<arrow20::Field> IIndexInfo::GetColumnFieldVerified(const ui32 columnId) {
     auto result = GetColumnFieldOptional(columnId);
     AFL_VERIFY(result);
     return result;
 }
 
-std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) {
+std::shared_ptr<arrow20::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) {
     if (colId == (ui32)ESpecialColumn::PLAN_STEP) {
         return nullptr;
     } else if (colId == (ui32)ESpecialColumn::TX_ID) {
@@ -117,7 +117,7 @@ std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) 
     } else if (colId == (ui32)ESpecialColumn::WRITE_ID) {
         return nullptr;
     } else if (colId == (ui32)ESpecialColumn::DELETE_FLAG) {
-        static const std::shared_ptr<arrow::Scalar> deleteDefault(new arrow::BooleanScalar(false));
+        static const std::shared_ptr<arrow20::Scalar> deleteDefault(new arrow20::BooleanScalar(false));
         return deleteDefault;
     } else {
         AFL_VERIFY(false);

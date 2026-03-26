@@ -7,15 +7,15 @@
 
 namespace NYql::NCommon {
 
-arrow::Status TOutputBufArrowOutputStream::Write(const void* data, int64_t nbytes) {
+arrow20::Status TOutputBufArrowOutputStream::Write(const void* data, int64_t nbytes) {
     Buffer_.WriteMany(static_cast<const char*>(data), nbytes);
     BytesWritten_ += nbytes;
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
-arrow::Status TOutputBufArrowOutputStream::Flush() {
+arrow20::Status TOutputBufArrowOutputStream::Flush() {
     Buffer_.Flush();
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
 } // namespace NYql::NCommon

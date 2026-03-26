@@ -26,37 +26,37 @@ enum class EPgStringType {
     Fixed
 };
 
-std::shared_ptr<arrow::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow::MemoryPool* pool);
-std::shared_ptr<arrow::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
-std::shared_ptr<arrow::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow::MemoryPool* pool);
-std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, size_t offset, arrow::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> AllocateBitmapWithReserve(size_t bitCount, arrow20::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> MakeDenseBitmap(const ui8* srcSparse, size_t len, arrow20::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> MakeDenseBitmapNegate(const ui8* srcSparse, size_t len, arrow20::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> MakeDenseBitmapCopy(const ui8* src, size_t len, size_t offset, arrow20::MemoryPool* pool);
 
 // Note: return src if offsets are same so don't change result bitmap.
-std::shared_ptr<arrow::Buffer> MakeDenseBitmapCopyIfOffsetDiffers(std::shared_ptr<arrow::Buffer> src, size_t len, size_t sourceOffset, size_t resultOffset, arrow::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> MakeDenseBitmapCopyIfOffsetDiffers(std::shared_ptr<arrow20::Buffer> src, size_t len, size_t sourceOffset, size_t resultOffset, arrow20::MemoryPool* pool);
 
-std::shared_ptr<arrow::Buffer> MakeDenseFalseBitmap(int64_t len, arrow::MemoryPool* pool);
+std::shared_ptr<arrow20::Buffer> MakeDenseFalseBitmap(int64_t len, arrow20::MemoryPool* pool);
 
 /// \brief Recursive version of ArrayData::Slice() method
-std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayData>& data, size_t offset, size_t len);
+std::shared_ptr<arrow20::ArrayData> DeepSlice(const std::shared_ptr<arrow20::ArrayData>& data, size_t offset, size_t len);
 
 /// \brief Chops first len items of `data` as new ArrayData object
-std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len);
+std::shared_ptr<arrow20::ArrayData> Chop(std::shared_ptr<arrow20::ArrayData>& data, size_t len);
 
-void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func);
-arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks);
+void ForEachArrayData(const arrow20::Datum& datum, const std::function<void(const std::shared_ptr<arrow20::ArrayData>&)>& func);
+arrow20::Datum MakeArray(const TVector<std::shared_ptr<arrow20::ArrayData>>& chunks);
 
-inline bool IsNull(const arrow::ArrayData& data, size_t index) {
-    return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
+inline bool IsNull(const arrow20::ArrayData& data, size_t index) {
+    return data.GetNullCount() > 0 && !arrow20::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
-ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
-ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
-ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
+ui64 GetSizeOfArrayDataInBytes(const arrow20::ArrayData& data);
+ui64 GetSizeOfArrowBatchInBytes(const arrow20::RecordBatch& batch);
+ui64 GetSizeOfArrowExecBatchInBytes(const arrow20::compute::ExecBatch& batch);
 
-class TResizeableBuffer: public arrow::ResizableBuffer {
+class TResizeableBuffer: public arrow20::ResizableBuffer {
 public:
-    explicit TResizeableBuffer(arrow::MemoryPool* pool)
-        : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
+    explicit TResizeableBuffer(arrow20::MemoryPool* pool)
+        : ResizableBuffer(nullptr, 0, arrow20::CPUDevice::memory_manager(pool))
         , Pool_(pool)
     {
     }
@@ -67,13 +67,13 @@ public:
         }
     }
 
-    arrow::Status Reserve(const int64_t capacity) override {
+    arrow20::Status Reserve(const int64_t capacity) override {
         if (capacity < 0) {
-            return arrow::Status::Invalid("Negative buffer capacity: ", capacity);
+            return arrow20::Status::Invalid("Negative buffer capacity: ", capacity);
         }
         uint8_t* ptr = mutable_data();
         if (!ptr || capacity > capacity_) {
-            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(capacity);
+            int64_t newCapacity = arrow20::BitUtil::RoundUpToMultipleOf64(capacity);
             if (ptr) {
                 ARROW_RETURN_NOT_OK(Pool_->Reallocate(capacity_, newCapacity, &ptr));
             } else {
@@ -82,16 +82,16 @@ public:
             data_ = ptr;
             capacity_ = newCapacity;
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Resize(const int64_t newSize, bool shrink_to_fit = true) override {
+    arrow20::Status Resize(const int64_t newSize, bool shrink_to_fit = true) override {
         if (ARROW_PREDICT_FALSE(newSize < 0)) {
-            return arrow::Status::Invalid("Negative buffer resize: ", newSize);
+            return arrow20::Status::Invalid("Negative buffer resize: ", newSize);
         }
         uint8_t* ptr = mutable_data();
         if (ptr && shrink_to_fit) {
-            int64_t newCapacity = arrow::BitUtil::RoundUpToMultipleOf64(newSize);
+            int64_t newCapacity = arrow20::BitUtil::RoundUpToMultipleOf64(newSize);
             if (capacity_ != newCapacity) {
                 ARROW_RETURN_NOT_OK(Pool_->Reallocate(capacity_, newCapacity, &ptr));
                 data_ = ptr;
@@ -102,15 +102,15 @@ public:
         }
         size_ = newSize;
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
-    arrow::MemoryPool* Pool_;
+    arrow20::MemoryPool* Pool_;
 };
 
 template <typename TBuffer = TResizeableBuffer>
-std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity, arrow::MemoryPool* pool, bool zeroPad = false) {
+std::unique_ptr<arrow20::ResizableBuffer> AllocateResizableBuffer(size_t capacity, arrow20::MemoryPool* pool, bool zeroPad = false) {
     std::unique_ptr<TBuffer> result = std::make_unique<TBuffer>(pool);
     ARROW_OK(result->Reserve(capacity));
     if (zeroPad) {
@@ -125,7 +125,7 @@ class TResizableManagedBuffer final: public TResizeableBuffer {
     static_assert(!std::is_trivially_destructible_v<T>);
 
 public:
-    explicit TResizableManagedBuffer(arrow::MemoryPool* pool)
+    explicit TResizableManagedBuffer(arrow20::MemoryPool* pool)
         : TResizeableBuffer(pool)
     {
     }
@@ -138,7 +138,7 @@ public:
     }
 };
 
-// similar to arrow::TypedBufferBuilder, but:
+// similar to arrow20::TypedBufferBuilder, but:
 // 1) with UnsafeAdvance() method
 // 2) shrinkToFit = false
 // 3) doesn't zero pad buffer
@@ -149,7 +149,7 @@ class TTypedBufferBuilder {
     using TArrowBuffer = std::conditional_t<std::is_trivially_destructible_v<T>, TResizeableBuffer, TResizableManagedBuffer<T>>;
 
 public:
-    explicit TTypedBufferBuilder(arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
+    explicit TTypedBufferBuilder(arrow20::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
         : MinFillPercentage_(minFillPercentage)
         , Pool_(pool)
     {
@@ -214,13 +214,13 @@ public:
         Len_ += count;
     }
 
-    inline std::shared_ptr<arrow::Buffer> Finish() {
+    inline std::shared_ptr<arrow20::Buffer> Finish() {
         int64_t newSize = Len_ * sizeof(T);
         bool shrinkToFit = MinFillPercentage_
                                ? newSize <= Buffer_->capacity() * *MinFillPercentage_ / 100
                                : false;
         ARROW_OK(Buffer_->Resize(newSize, shrinkToFit));
-        std::shared_ptr<arrow::ResizableBuffer> result;
+        std::shared_ptr<arrow20::ResizableBuffer> result;
         std::swap(result, Buffer_);
         Len_ = 0;
         return result;
@@ -228,8 +228,8 @@ public:
 
 private:
     const TMaybe<ui8> MinFillPercentage_;
-    arrow::MemoryPool* const Pool_;
-    std::shared_ptr<arrow::ResizableBuffer> Buffer_;
+    arrow20::MemoryPool* const Pool_;
+    std::shared_ptr<arrow20::ResizableBuffer> Buffer_;
     size_t Len_ = 0;
 };
 
@@ -271,27 +271,27 @@ inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, 
     return false;
 }
 
-inline std::shared_ptr<arrow::DataType> MakeSingularType(bool isNull) {
+inline std::shared_ptr<arrow20::DataType> MakeSingularType(bool isNull) {
     if (isNull) {
-        return arrow::null();
+        return arrow20::null();
     } else {
-        return std::make_shared<arrow::StructType>(std::vector<std::shared_ptr<arrow::Field>>{});
+        return std::make_shared<arrow20::StructType>(std::vector<std::shared_ptr<arrow20::Field>>{});
     }
 }
 
-inline std::shared_ptr<arrow::ArrayData> MakeSingularArray(bool isNull, i64 length) {
+inline std::shared_ptr<arrow20::ArrayData> MakeSingularArray(bool isNull, i64 length) {
     if (isNull) {
-        return arrow::NullArray(length).data();
+        return arrow20::NullArray(length).data();
     } else {
-        return arrow::StructArray(MakeSingularType(/*isNull=*/false), length, /*children=*/{}, nullptr, /*null_count=*/0).data();
+        return arrow20::StructArray(MakeSingularType(/*isNull=*/false), length, /*children=*/{}, nullptr, /*null_count=*/0).data();
     }
 }
 
-inline std::shared_ptr<arrow::Scalar> MakeSingularScalar(bool isNull) {
+inline std::shared_ptr<arrow20::Scalar> MakeSingularScalar(bool isNull) {
     if (isNull) {
-        return arrow::MakeNullScalar(MakeSingularType(/*isNull=*/true));
+        return arrow20::MakeNullScalar(MakeSingularType(/*isNull=*/true));
     } else {
-        return std::make_shared<arrow::StructScalar>(std::vector<std::shared_ptr<arrow::Scalar>>{}, MakeSingularType(/*isNull=*/false));
+        return std::make_shared<arrow20::StructScalar>(std::vector<std::shared_ptr<arrow20::Scalar>>{}, MakeSingularType(/*isNull=*/false));
     }
 }
 

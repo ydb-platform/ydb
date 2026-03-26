@@ -499,7 +499,7 @@ enum class AggFunctionId {
     AGG_NUM_ROWS = 17,
 };
 
-struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
+struct GroupByOptions : public arrow20::compute::ScalarAggregateOptions {
     // We have to return aggregates + aggregate keys in result.
     // We use pair {AGG_UNSPECIFIED, result_column} to specify a key.
     // Then we could place aggregates and keys in one vector to set their order in result.
@@ -509,7 +509,7 @@ struct GroupByOptions : public arrow::compute::ScalarAggregateOptions {
         std::vector<std::string> arguments;
     };
 
-    std::shared_ptr<arrow::Schema> schema; // types and names of input arguments
+    std::shared_ptr<arrow20::Schema> schema; // types and names of input arguments
     std::vector<Assign> assigns; // aggregates and keys in needed result order
     bool has_nullable_key = true;
 };

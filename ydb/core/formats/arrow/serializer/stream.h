@@ -10,37 +10,37 @@
 namespace NKikimr::NArrow::NSerialization {
 
 // Arrow internally keeps references to Buffer objects with the data
-// This helper class implements arrow::Buffer over TString that owns
+// This helper class implements arrow20::Buffer over TString that owns
 // the actual memory
 // Its use for no-compression mode, where RecordBatch dont own memory
-class TBufferOverString: public arrow::Buffer {
+class TBufferOverString: public arrow20::Buffer {
     TString Str;
 public:
     explicit TBufferOverString(TString str)
-        : arrow::Buffer((const unsigned char*)str.data(), str.size())
+        : arrow20::Buffer(reinterpret_cast<const uint8_t*>(str.data()), static_cast<int64_t>(str.size()))
         , Str(str) {
-        Y_ABORT_UNLESS(data() == (const unsigned char*)Str.data());
+        Y_ABORT_UNLESS(data() == reinterpret_cast<const uint8_t*>(Str.data()));
     }
 };
 
-class TFixedStringOutputStream final: public arrow::io::OutputStream {
+class TFixedStringOutputStream final: public arrow20::io::OutputStream {
 public:
     TFixedStringOutputStream(TString* out)
         : Out(out)
         , Position(0) {
     }
 
-    arrow::Status Close() override;
+    arrow20::Status Close() override;
 
     bool closed() const override {
         return Out == nullptr;
     }
 
-    arrow::Result<int64_t> Tell() const override {
+    arrow20::Result<int64_t> Tell() const override {
         return Position;
     }
 
-    arrow::Status Write(const void* data, int64_t nbytes) override;
+    arrow20::Status Write(const void* data, int64_t nbytes) override;
 
     size_t GetPosition() const {
         return Position;
@@ -51,33 +51,33 @@ private:
     size_t Position;
 };
 
-class TStringOutputStream final: public arrow::io::OutputStream {
+class TStringOutputStream final: public arrow20::io::OutputStream {
 public:
     TStringOutputStream(TString* out)
         : Out(out)
         , Position(0) {
     }
 
-    arrow::Status Close() override {
+    arrow20::Status Close() override {
         Out = nullptr;
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     bool closed() const override {
         return Out == nullptr;
     }
 
-    arrow::Result<int64_t> Tell() const override {
+    arrow20::Result<int64_t> Tell() const override {
         return Position;
     }
 
-    arrow::Status Write(const void* data, int64_t nbytes) override {
+    arrow20::Status Write(const void* data, int64_t nbytes) override {
         if (Y_LIKELY(nbytes > 0)) {
             Out->append((const char*)data, nbytes);
             Position += nbytes;
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     size_t GetPosition() const {

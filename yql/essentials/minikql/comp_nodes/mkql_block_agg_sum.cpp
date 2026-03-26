@@ -104,7 +104,7 @@ class TAvgResultColumnBuilder: public IAggColumnBuilder {
 public:
     TAvgResultColumnBuilder(ui64 size, TComputationContext& ctx)
         : Ctx_(ctx)
-        , Builder_(TTypeInfoHelper(), arrow::TypeTraits<typename TPrimitiveDataType<TOut>::TResult>::type_singleton(), ctx.ArrowMemoryPool, size)
+        , Builder_(TTypeInfoHelper(), arrow20::TypeTraits<typename TPrimitiveDataType<TOut>::TResult>::type_singleton(), ctx.ArrowMemoryPool, size)
     {
     }
 
@@ -246,7 +246,7 @@ private:
 };
 
 template <bool IsNullable, bool IsScalar, typename TIn, typename TSum>
-void PushValueToState(TSumState<IsNullable, TSum>* typedState, const arrow::Datum& datum, ui64 row) {
+void PushValueToState(TSumState<IsNullable, TSum>* typedState, const arrow20::Datum& datum, ui64 row) {
     using TInScalar = typename TPrimitiveDataType<TIn>::TScalarResult;
     if constexpr (IsScalar) {
         Y_ENSURE(datum.is_scalar());
@@ -586,10 +586,10 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*datum.scalar());
+                const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*datum.scalar());
 
-                typedState->Sum_ += Cast(arrow::internal::checked_cast<const TInScalar&>(*structScalar.value[0]).value);
-                typedState->Count_ += arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*structScalar.value[1]).value;
+                typedState->Sum_ += Cast(arrow20::internal::checked_cast<const TInScalar&>(*structScalar.value[0]).value);
+                typedState->Count_ += arrow20::internal::checked_cast<const arrow20::UInt64Scalar&>(*structScalar.value[1]).value;
             }
         } else {
             const auto& array = datum.array();

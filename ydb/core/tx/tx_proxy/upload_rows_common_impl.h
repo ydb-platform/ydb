@@ -106,7 +106,7 @@ namespace NTxProxy {
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
-    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow20::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
     const TString& userSID);
 
@@ -196,7 +196,7 @@ protected:
     TBackoff Backoff = TBackoff(5, TDuration::Seconds(1), TDuration::Seconds(15));
 
     std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> Rows;
-    std::shared_ptr<arrow::RecordBatch> Batch;
+    std::shared_ptr<arrow20::RecordBatch> Batch;
     float RuCost = 0.0;
 
     NWilson::TSpan Span;
@@ -353,7 +353,7 @@ private:
             ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);
         }
         if (!ok) {
-            // TODO: SwitchYqlTypeToArrowType(Interval) == arrow::Type::DURATION, but YQL Interval is Int64
+            // TODO: SwitchYqlTypeToArrowType(Interval) == arrow20::Type::DURATION, but YQL Interval is Int64
             ok = type1.GetTypeId() == NScheme::NTypeIds::Int64 && type2.GetTypeId() == NScheme::NTypeIds::Interval;
         }
         return ok;
@@ -666,16 +666,16 @@ private:
             ctx);
     }
 
-    bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow::RecordBatch>& batch, TString& error) {
+    bool IsTimestampColumnsArePositive(const std::shared_ptr<arrow20::RecordBatch>& batch, TString& error) {
         if (!batch) {
             return true;
         }
         for (int i = 0; i < batch->num_columns(); ++i) {
-            std::shared_ptr<arrow::Array> column = batch->column(i);
-            std::shared_ptr<arrow::DataType> type = column->type();
+            std::shared_ptr<arrow20::Array> column = batch->column(i);
+            std::shared_ptr<arrow20::DataType> type = column->type();
             std::string columnName = batch->schema()->field(i)->name();
-            if (type->id() == arrow::Type::TIMESTAMP) {
-                auto timestampArray = std::static_pointer_cast<arrow::TimestampArray>(column);
+            if (type->id() == arrow20::Type::TIMESTAMP) {
+                auto timestampArray = std::static_pointer_cast<arrow20::TimestampArray>(column);
                 for (int64_t j = 0; j < timestampArray->length(); ++j) {
                     if (timestampArray->IsValid(j)) {
                         int64_t timestampValue = timestampArray->Value(j);

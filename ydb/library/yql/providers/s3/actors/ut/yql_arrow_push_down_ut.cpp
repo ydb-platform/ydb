@@ -38,12 +38,12 @@ struct TFileMetaDataBuilder {
         parquet::RowGroupMetaDataBuilder* RowGroup;
     };
 
-    TFileMetaDataBuilder(const TVector<std::shared_ptr<arrow::Field>>& columns) {
-        auto schema = arrow::schema(columns);
+    TFileMetaDataBuilder(const TVector<std::shared_ptr<arrow20::Field>>& columns) {
+        auto schema = arrow20::schema(columns);
         parquet::WriterProperties::Builder builder;
         auto properties = builder.build();
         
-        UNIT_ASSERT(parquet::arrow::ToParquetSchema(schema.get(), *properties, &Schema) == ::arrow::Status::OK());
+        UNIT_ASSERT(parquet::arrow20::ToParquetSchema(schema.get(), *properties, &Schema) == ::arrow20::Status::OK());
 
        FileMetadata = parquet::FileMetaDataBuilder::Make(Schema.get(), properties);
     }
@@ -70,9 +70,9 @@ NYql::NConnector::NApi::TPredicate BuildPredicate(const TString& text) {
 Y_UNIT_TEST_SUITE(TArrowPushDown) {
     Y_UNIT_TEST(SimplePushDown) {
         TFileMetaDataBuilder builder{{
-            arrow::field("field1", arrow::timestamp(arrow::TimeUnit::type::MILLI)),
-            arrow::field("field2", arrow::int64()),
-            arrow::field("field3", arrow::float64())
+            arrow20::field("field1", arrow20::timestamp(arrow20::TimeUnit::type::MILLI)),
+            arrow20::field("field2", arrow20::int64()),
+            arrow20::field("field3", arrow20::float64())
         }};
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-03-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds())
@@ -106,9 +106,9 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
 
     Y_UNIT_TEST(FilterEverything) {
         TFileMetaDataBuilder builder{{
-            arrow::field("field1", arrow::timestamp(arrow::TimeUnit::type::MILLI)),
-            arrow::field("field2", arrow::int64()),
-            arrow::field("field3", arrow::float64())
+            arrow20::field("field1", arrow20::timestamp(arrow20::TimeUnit::type::MILLI)),
+            arrow20::field("field2", arrow20::int64()),
+            arrow20::field("field3", arrow20::float64())
         }};
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-13T00:00:00Z").MilliSeconds())
@@ -141,9 +141,9 @@ Y_UNIT_TEST_SUITE(TArrowPushDown) {
 
     Y_UNIT_TEST(MatchSeveralRowGroups) {
         TFileMetaDataBuilder builder{{
-            arrow::field("field1", arrow::timestamp(arrow::TimeUnit::type::MILLI)),
-            arrow::field("field2", arrow::int64()),
-            arrow::field("field3", arrow::float64())
+            arrow20::field("field1", arrow20::timestamp(arrow20::TimeUnit::type::MILLI)),
+            arrow20::field("field2", arrow20::int64()),
+            arrow20::field("field3", arrow20::float64())
         }};
         auto fileMetadata = builder.AddRowGroup()
                                    .AddColumnTimestampStatistics(0, TInstant::ParseIso8601("2024-03-01T00:00:00Z").MilliSeconds(), TInstant::ParseIso8601("2024-04-01T00:00:00Z").MilliSeconds())

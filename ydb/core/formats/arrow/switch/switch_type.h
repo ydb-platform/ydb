@@ -25,52 +25,52 @@ template <typename TFunc>
 [[nodiscard]] bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return callback(TTypeWrapper<arrow::UInt8Type>());
+            return callback(TTypeWrapper<arrow20::UInt8Type>());
         case NScheme::NTypeIds::Int8:
-            return callback(TTypeWrapper<arrow::Int8Type>());
+            return callback(TTypeWrapper<arrow20::Int8Type>());
         case NScheme::NTypeIds::Uint8:
-            return callback(TTypeWrapper<arrow::UInt8Type>());
+            return callback(TTypeWrapper<arrow20::UInt8Type>());
         case NScheme::NTypeIds::Int16:
-            return callback(TTypeWrapper<arrow::Int16Type>());
+            return callback(TTypeWrapper<arrow20::Int16Type>());
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Uint16:
-            return callback(TTypeWrapper<arrow::UInt16Type>());
+            return callback(TTypeWrapper<arrow20::UInt16Type>());
         case NScheme::NTypeIds::Int32:
         case NScheme::NTypeIds::Date32:
-            return callback(TTypeWrapper<arrow::Int32Type>());
+            return callback(TTypeWrapper<arrow20::Int32Type>());
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Uint32:
-            return callback(TTypeWrapper<arrow::UInt32Type>());
+            return callback(TTypeWrapper<arrow20::UInt32Type>());
         case NScheme::NTypeIds::Int64:
-            return callback(TTypeWrapper<arrow::Int64Type>());
+            return callback(TTypeWrapper<arrow20::Int64Type>());
         case NScheme::NTypeIds::Uint64:
-            return callback(TTypeWrapper<arrow::UInt64Type>());
+            return callback(TTypeWrapper<arrow20::UInt64Type>());
         case NScheme::NTypeIds::Float:
-            return callback(TTypeWrapper<arrow::FloatType>());
+            return callback(TTypeWrapper<arrow20::FloatType>());
         case NScheme::NTypeIds::Double:
-            return callback(TTypeWrapper<arrow::DoubleType>());
+            return callback(TTypeWrapper<arrow20::DoubleType>());
         case NScheme::NTypeIds::Utf8:
         case NScheme::NTypeIds::Json:
-            return callback(TTypeWrapper<arrow::StringType>());
+            return callback(TTypeWrapper<arrow20::StringType>());
         case NScheme::NTypeIds::String:
         case NScheme::NTypeIds::String4k:
         case NScheme::NTypeIds::String2m:
         case NScheme::NTypeIds::Yson:
         case NScheme::NTypeIds::DyNumber:
         case NScheme::NTypeIds::JsonDocument:
-            return callback(TTypeWrapper<arrow::BinaryType>());
+            return callback(TTypeWrapper<arrow20::BinaryType>());
         case NScheme::NTypeIds::Timestamp:
-            return callback(TTypeWrapper<arrow::TimestampType>());
+            return callback(TTypeWrapper<arrow20::TimestampType>());
         case NScheme::NTypeIds::Interval:
-            return callback(TTypeWrapper<arrow::DurationType>());
+            return callback(TTypeWrapper<arrow20::DurationType>());
         case NScheme::NTypeIds::Decimal:
         case NScheme::NTypeIds::Uuid:
-            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
+            return callback(TTypeWrapper<arrow20::FixedSizeBinaryType>());
 
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:
         case NScheme::NTypeIds::Interval64:
-            return callback(TTypeWrapper<arrow::Int64Type>());
+            return callback(TTypeWrapper<arrow20::Int64Type>());
 
         case NScheme::NTypeIds::PairUi64Ui64:
         case NScheme::NTypeIds::ActorId:
@@ -80,19 +80,19 @@ template <typename TFunc>
         case NScheme::NTypeIds::Pg:
             switch (NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc())) {
                 case INT2OID:
-                    return callback(TTypeWrapper<arrow::Int16Type>());
+                    return callback(TTypeWrapper<arrow20::Int16Type>());
                 case INT4OID:
-                    return callback(TTypeWrapper<arrow::Int32Type>());
+                    return callback(TTypeWrapper<arrow20::Int32Type>());
                 case INT8OID:
-                    return callback(TTypeWrapper<arrow::Int64Type>());
+                    return callback(TTypeWrapper<arrow20::Int64Type>());
                 case FLOAT4OID:
-                    return callback(TTypeWrapper<arrow::FloatType>());
+                    return callback(TTypeWrapper<arrow20::FloatType>());
                 case FLOAT8OID:
-                    return callback(TTypeWrapper<arrow::DoubleType>());
+                    return callback(TTypeWrapper<arrow20::DoubleType>());
                 case BYTEAOID:
-                    return callback(TTypeWrapper<arrow::BinaryType>());
+                    return callback(TTypeWrapper<arrow20::BinaryType>());
                 case TEXTOID:
-                    return callback(TTypeWrapper<arrow::StringType>());
+                    return callback(TTypeWrapper<arrow20::StringType>());
                 default:
                     return false;
             }

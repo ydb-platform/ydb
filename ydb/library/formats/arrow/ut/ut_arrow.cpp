@@ -60,37 +60,37 @@ struct TDataRow {
             //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
     }
 
-    static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::boolean()),
-            arrow::field("i8", arrow::int8()),
-            arrow::field("i16", arrow::int16()),
-            arrow::field("i32", arrow::int32()),
-            arrow::field("i64", arrow::int64()),
-            arrow::field("ui8", arrow::uint8()),
-            arrow::field("ui16", arrow::uint16()),
-            arrow::field("ui32", arrow::uint32()),
-            arrow::field("ui64", arrow::uint64()),
-            arrow::field("f32", arrow::float32()),
-            arrow::field("f64", arrow::float64()),
-            arrow::field("string", arrow::binary()),
-            arrow::field("utf8", arrow::utf8()),
-            arrow::field("json", arrow::utf8()),
-            arrow::field("yson", arrow::binary()),
-            arrow::field("date", arrow::uint16()),
-            arrow::field("datetime", arrow::uint32()),
-            arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("json_doc", arrow::binary()),
-            //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
+    static std::shared_ptr<arrow20::Schema> MakeArrowSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("bool", arrow20::boolean()),
+            arrow20::field("i8", arrow20::int8()),
+            arrow20::field("i16", arrow20::int16()),
+            arrow20::field("i32", arrow20::int32()),
+            arrow20::field("i64", arrow20::int64()),
+            arrow20::field("ui8", arrow20::uint8()),
+            arrow20::field("ui16", arrow20::uint16()),
+            arrow20::field("ui32", arrow20::uint32()),
+            arrow20::field("ui64", arrow20::uint64()),
+            arrow20::field("f32", arrow20::float32()),
+            arrow20::field("f64", arrow20::float64()),
+            arrow20::field("string", arrow20::binary()),
+            arrow20::field("utf8", arrow20::utf8()),
+            arrow20::field("json", arrow20::utf8()),
+            arrow20::field("yson", arrow20::binary()),
+            arrow20::field("date", arrow20::uint16()),
+            arrow20::field("datetime", arrow20::uint32()),
+            arrow20::field("ts", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO)),
+            arrow20::field("ival", arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO)),
+            arrow20::field("json_doc", arrow20::binary()),
+            //arrow20::field("dec", arrow20::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 };
 
 
-std::shared_ptr<arrow::Array> GetColumn(const arrow::Table& table, int i, int chunk = 0) {
+std::shared_ptr<arrow20::Array> GetColumn(const arrow20::Table& table, int i, int chunk = 0) {
     return table.column(i)->chunk(chunk);
 }
 
@@ -98,30 +98,30 @@ template <typename T>
 std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     std::vector<TDataRow> rows;
 
-    auto arbool = std::static_pointer_cast<arrow::BooleanArray>(GetColumn(*table, 0));
-    auto ari8 = std::static_pointer_cast<arrow::Int8Array>(GetColumn(*table, 1));
-    auto ari16 = std::static_pointer_cast<arrow::Int16Array>(GetColumn(*table, 2));
-    auto ari32 = std::static_pointer_cast<arrow::Int32Array>(GetColumn(*table, 3));
-    auto ari64 = std::static_pointer_cast<arrow::Int64Array>(GetColumn(*table, 4));
-    auto aru8 = std::static_pointer_cast<arrow::UInt8Array>(GetColumn(*table, 5));
-    auto aru16 = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 6));
-    auto aru32 = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 7));
-    auto aru64 = std::static_pointer_cast<arrow::UInt64Array>(GetColumn(*table, 8));
-    auto arf32 = std::static_pointer_cast<arrow::FloatArray>(GetColumn(*table, 9));
-    auto arf64 = std::static_pointer_cast<arrow::DoubleArray>(GetColumn(*table, 10));
+    auto arbool = std::static_pointer_cast<arrow20::BooleanArray>(GetColumn(*table, 0));
+    auto ari8 = std::static_pointer_cast<arrow20::Int8Array>(GetColumn(*table, 1));
+    auto ari16 = std::static_pointer_cast<arrow20::Int16Array>(GetColumn(*table, 2));
+    auto ari32 = std::static_pointer_cast<arrow20::Int32Array>(GetColumn(*table, 3));
+    auto ari64 = std::static_pointer_cast<arrow20::Int64Array>(GetColumn(*table, 4));
+    auto aru8 = std::static_pointer_cast<arrow20::UInt8Array>(GetColumn(*table, 5));
+    auto aru16 = std::static_pointer_cast<arrow20::UInt16Array>(GetColumn(*table, 6));
+    auto aru32 = std::static_pointer_cast<arrow20::UInt32Array>(GetColumn(*table, 7));
+    auto aru64 = std::static_pointer_cast<arrow20::UInt64Array>(GetColumn(*table, 8));
+    auto arf32 = std::static_pointer_cast<arrow20::FloatArray>(GetColumn(*table, 9));
+    auto arf64 = std::static_pointer_cast<arrow20::DoubleArray>(GetColumn(*table, 10));
 
-    auto arstr = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 11));
-    auto arutf = std::static_pointer_cast<arrow::StringArray>(GetColumn(*table, 12));
-    auto arj = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 13));
-    auto ary = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 14));
+    auto arstr = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 11));
+    auto arutf = std::static_pointer_cast<arrow20::StringArray>(GetColumn(*table, 12));
+    auto arj = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 13));
+    auto ary = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 14));
 
-    auto ard = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 15));
-    auto ardt = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 16));
-    auto arts = std::static_pointer_cast<arrow::TimestampArray>(GetColumn(*table, 17));
-    auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
+    auto ard = std::static_pointer_cast<arrow20::UInt16Array>(GetColumn(*table, 15));
+    auto ardt = std::static_pointer_cast<arrow20::UInt32Array>(GetColumn(*table, 16));
+    auto arts = std::static_pointer_cast<arrow20::TimestampArray>(GetColumn(*table, 17));
+    auto arival = std::static_pointer_cast<arrow20::DurationArray>(GetColumn(*table, 18));
 
-    auto arjd = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 19));
-    //auto ardec = std::static_pointer_cast<arrow::Decimal128Array>(GetColumn(*table, 19));
+    auto arjd = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 19));
+    //auto ardec = std::static_pointer_cast<arrow20::Decimal128Array>(GetColumn(*table, 19));
 
     for (int64_t i = 0; i < table->num_rows(); ++i) {
         //ui64 dec[2];
@@ -144,9 +144,9 @@ class TDataRowTableBuilder
 {
 public:
     TDataRowTableBuilder()
-        : Bts(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        , Bival(arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
+        : Bts(arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool())
+        , Bival(arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool())
+        //, Bdec(arrow20::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow20::default_memory_pool())
     {}
 
     void AddRow(const TDataRow& row) {
@@ -176,31 +176,31 @@ public:
         //UNIT_ASSERT(Bdec.Append((const char *)&row.Decimal).ok());
     }
 
-    std::shared_ptr<arrow::Table> Finish() {
-        std::shared_ptr<arrow::BooleanArray> arbool;
-        std::shared_ptr<arrow::Int8Array> ari8;
-        std::shared_ptr<arrow::Int16Array> ari16;
-        std::shared_ptr<arrow::Int32Array> ari32;
-        std::shared_ptr<arrow::Int64Array> ari64;
-        std::shared_ptr<arrow::UInt8Array> aru8;
-        std::shared_ptr<arrow::UInt16Array> aru16;
-        std::shared_ptr<arrow::UInt32Array> aru32;
-        std::shared_ptr<arrow::UInt64Array> aru64;
-        std::shared_ptr<arrow::FloatArray> arf32;
-        std::shared_ptr<arrow::DoubleArray> arf64;
+    std::shared_ptr<arrow20::Table> Finish() {
+        std::shared_ptr<arrow20::BooleanArray> arbool;
+        std::shared_ptr<arrow20::Int8Array> ari8;
+        std::shared_ptr<arrow20::Int16Array> ari16;
+        std::shared_ptr<arrow20::Int32Array> ari32;
+        std::shared_ptr<arrow20::Int64Array> ari64;
+        std::shared_ptr<arrow20::UInt8Array> aru8;
+        std::shared_ptr<arrow20::UInt16Array> aru16;
+        std::shared_ptr<arrow20::UInt32Array> aru32;
+        std::shared_ptr<arrow20::UInt64Array> aru64;
+        std::shared_ptr<arrow20::FloatArray> arf32;
+        std::shared_ptr<arrow20::DoubleArray> arf64;
 
-        std::shared_ptr<arrow::BinaryArray> arstr;
-        std::shared_ptr<arrow::StringArray> arutf;
-        std::shared_ptr<arrow::BinaryArray> arj;
-        std::shared_ptr<arrow::BinaryArray> ary;
+        std::shared_ptr<arrow20::BinaryArray> arstr;
+        std::shared_ptr<arrow20::StringArray> arutf;
+        std::shared_ptr<arrow20::BinaryArray> arj;
+        std::shared_ptr<arrow20::BinaryArray> ary;
 
-        std::shared_ptr<arrow::UInt16Array> ard;
-        std::shared_ptr<arrow::UInt32Array> ardt;
-        std::shared_ptr<arrow::TimestampArray> arts;
-        std::shared_ptr<arrow::DurationArray> arival;
+        std::shared_ptr<arrow20::UInt16Array> ard;
+        std::shared_ptr<arrow20::UInt32Array> ardt;
+        std::shared_ptr<arrow20::TimestampArray> arts;
+        std::shared_ptr<arrow20::DurationArray> arival;
 
-        std::shared_ptr<arrow::BinaryArray> arjd;
-        //std::shared_ptr<arrow::Decimal128Array> ardec;
+        std::shared_ptr<arrow20::BinaryArray> arjd;
+        //std::shared_ptr<arrow20::Decimal128Array> ardec;
 
         UNIT_ASSERT(Bbool.Finish(&arbool).ok());
         UNIT_ASSERT(Bi8.Finish(&ari8).ok());
@@ -227,8 +227,8 @@ public:
         UNIT_ASSERT(Bjd.Finish(&arjd).ok());
         //UNIT_ASSERT(Bdec.Finish(&ardec).ok());
 
-        std::shared_ptr<arrow::Schema> schema = TDataRow::MakeArrowSchema();
-        return arrow::Table::Make(schema, {
+        std::shared_ptr<arrow20::Schema> schema = TDataRow::MakeArrowSchema();
+        return arrow20::Table::Make(schema, {
             arbool,
             ari8, ari16, ari32, ari64,
             aru8, aru16, aru32, aru64,
@@ -239,7 +239,7 @@ public:
         });
     }
 
-    static std::shared_ptr<arrow::Table> Build(const std::vector<struct TDataRow>& rows) {
+    static std::shared_ptr<arrow20::Table> Build(const std::vector<struct TDataRow>& rows) {
         TDataRowTableBuilder builder;
         for (const TDataRow& row : rows) {
             builder.AddRow(row);
@@ -248,27 +248,27 @@ public:
     }
 
 private:
-    arrow::BooleanBuilder Bbool;
-    arrow::Int8Builder Bi8;
-    arrow::Int16Builder Bi16;
-    arrow::Int32Builder Bi32;
-    arrow::Int64Builder Bi64;
-    arrow::UInt8Builder Bu8;
-    arrow::UInt16Builder Bu16;
-    arrow::UInt32Builder Bu32;
-    arrow::UInt64Builder Bu64;
-    arrow::FloatBuilder Bf32;
-    arrow::DoubleBuilder Bf64;
-    arrow::BinaryBuilder Bstr;
-    arrow::StringBuilder Butf;
-    arrow::BinaryBuilder Bj;
-    arrow::BinaryBuilder By;
-    arrow::UInt16Builder Bd;
-    arrow::UInt32Builder Bdt;
-    arrow::TimestampBuilder Bts;
-    arrow::DurationBuilder Bival;
-    arrow::BinaryBuilder Bjd;
-    //arrow::Decimal128Builder Bdec;
+    arrow20::BooleanBuilder Bbool;
+    arrow20::Int8Builder Bi8;
+    arrow20::Int16Builder Bi16;
+    arrow20::Int32Builder Bi32;
+    arrow20::Int64Builder Bi64;
+    arrow20::UInt8Builder Bu8;
+    arrow20::UInt16Builder Bu16;
+    arrow20::UInt32Builder Bu32;
+    arrow20::UInt64Builder Bu64;
+    arrow20::FloatBuilder Bf32;
+    arrow20::DoubleBuilder Bf64;
+    arrow20::BinaryBuilder Bstr;
+    arrow20::StringBuilder Butf;
+    arrow20::BinaryBuilder Bj;
+    arrow20::BinaryBuilder By;
+    arrow20::UInt16Builder Bd;
+    arrow20::UInt32Builder Bdt;
+    arrow20::TimestampBuilder Bts;
+    arrow20::DurationBuilder Bival;
+    arrow20::BinaryBuilder Bjd;
+    //arrow20::Decimal128Builder Bdec;
 };
 
 std::vector<TDataRow> TestRows() {
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(Basic) {
         std::vector<TDataRow> rows = TestRows();
 
-        std::shared_ptr<arrow::Table> table = TDataRowTableBuilder::Build(rows);
+        std::shared_ptr<arrow20::Table> table = TDataRowTableBuilder::Build(rows);
 
         auto expectedSchema = TDataRow::MakeArrowSchema();
         UNIT_ASSERT_EQUAL(expectedSchema->Equals(*table->schema()), true);

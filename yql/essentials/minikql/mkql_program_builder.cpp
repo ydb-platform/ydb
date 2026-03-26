@@ -6339,7 +6339,7 @@ TRuntimeNode TProgramBuilder::ScalarApply(const TArrayRef<const TRuntimeNode>& a
     MKQL_ENSURE(!args.empty(), "Required at least one argument");
     TVector<TRuntimeNode> lambdaArgs;
     bool scalarOnly = true;
-    std::shared_ptr<arrow::DataType> arrowType;
+    std::shared_ptr<arrow20::DataType> arrowType;
     for (const auto& arg : args) {
         auto blockType = AS_TYPE(TBlockType, arg.GetStaticType());
         scalarOnly = scalarOnly && blockType->GetShape() == TBlockType::EShape::Scalar;

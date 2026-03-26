@@ -250,7 +250,7 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Result()
                     .AddResponse(
-                        MakeRecordBatch<arrow::UInt16Builder>("col1", colData, arrow::uint16()),
+                        MakeRecordBatch<arrow20::UInt16Builder>("col1", colData, arrow20::uint16()),
                         NewSuccess());
             // clang-format on
 
@@ -604,9 +604,9 @@ namespace NKikimr::NKqp {
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
-                        MakeArray<arrow::UInt16Builder>("colDate", colDate, arrow::uint16()),
-                        MakeArray<arrow::Int32Builder>("colInt32", colInt32, arrow::int32()),
-                        MakeArray<arrow::BinaryBuilder>("colString", colString, arrow::binary())),
+                        MakeArray<arrow20::UInt16Builder>("colDate", colDate, arrow20::uint16()),
+                        MakeArray<arrow20::Int32Builder>("colInt32", colInt32, arrow20::int32()),
+                        MakeArray<arrow20::BinaryBuilder>("colString", colString, arrow20::binary())),
                         NewSuccess());
 
             const TString query = fmt::format(

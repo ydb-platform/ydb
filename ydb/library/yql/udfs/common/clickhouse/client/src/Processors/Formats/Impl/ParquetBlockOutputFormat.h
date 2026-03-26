@@ -40,7 +40,7 @@ public:
 private:
     const FormatSettings format_settings;
 
-    std::unique_ptr<parquet::arrow::FileWriter> file_writer;
+    std::unique_ptr<parquet::arrow20::FileWriter> file_writer;
     std::unique_ptr<CHColumnToArrowColumn> ch_column_to_arrow_column;
 };
 

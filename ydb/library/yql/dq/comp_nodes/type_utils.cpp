@@ -31,7 +31,7 @@ void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb) 
 }
 
 int ArrowScalarAsInt(const TArrowBlock& scalar) {
-    return scalar.GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+    return scalar.GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
 }
 
 bool ForceRightOptional(EJoinKind kind) {

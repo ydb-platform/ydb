@@ -30,7 +30,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
 
     if (Tiering) {
         AFL_VERIFY(TieringColumnId);
-        std::shared_ptr<arrow::Scalar> max;
+        std::shared_ptr<arrow20::Scalar> max;
         {
             auto it = MaxByPortionId.find(portion.GetPortionId());
             if (it == MaxByPortionId.end()) {
@@ -132,7 +132,7 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
     auto& portion = accessor.GetPortionInfo();
     if (Tiering) {
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
-        std::shared_ptr<arrow::Scalar> max;
+        std::shared_ptr<arrow20::Scalar> max;
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
         if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));

@@ -34,7 +34,7 @@ private:
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
 
 public:
-    bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
+    bool IsSchemaEqualTo(const std::shared_ptr<arrow20::Schema>& schema) const {
         if (!Object) {
             return false;
         }
@@ -61,7 +61,7 @@ public:
         return Object->Batch.ComparePartial(pk);
     }
 
-    void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
+    void AppendPointTo(std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders) const {
         AFL_VERIFY(Object);
         Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
     }
@@ -77,7 +77,7 @@ public:
 
     TString DebugString() const;
 
-    int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;
+    int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow20::Scalar>& s) const;
 
     std::vector<std::string> GetColumnNames() const;
     ui32 NumColumns() const {

@@ -19,22 +19,22 @@ ArrowBufferedOutputStream::ArrowBufferedOutputStream(WriteBuffer & out_) : out{o
 {
 }
 
-arrow::Status ArrowBufferedOutputStream::Close()
+arrow20::Status ArrowBufferedOutputStream::Close()
 {
     is_open = false;
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
-arrow::Result<int64_t> ArrowBufferedOutputStream::Tell() const
+arrow20::Result<int64_t> ArrowBufferedOutputStream::Tell() const
 {
-    return arrow::Result<int64_t>(total_length);
+    return arrow20::Result<int64_t>(total_length);
 }
 
-arrow::Status ArrowBufferedOutputStream::Write(const void * data, int64_t length)
+arrow20::Status ArrowBufferedOutputStream::Write(const void * data, int64_t length)
 {
     out.write(reinterpret_cast<const char *>(data), length);
     total_length += length;
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
 RandomAccessFileFromSeekableReadBuffer::RandomAccessFileFromSeekableReadBuffer(SeekableReadBuffer & in_, off_t file_size_)
@@ -42,30 +42,30 @@ RandomAccessFileFromSeekableReadBuffer::RandomAccessFileFromSeekableReadBuffer(S
 {
 }
 
-arrow::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::GetSize()
+arrow20::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::GetSize()
 {
-    return arrow::Result<int64_t>(file_size);
+    return arrow20::Result<int64_t>(file_size);
 }
 
-arrow::Status RandomAccessFileFromSeekableReadBuffer::Close()
+arrow20::Status RandomAccessFileFromSeekableReadBuffer::Close()
 {
     is_open = false;
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
-arrow::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::Tell() const
+arrow20::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::Tell() const
 {
     return in.getPosition();
 }
 
-arrow::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::Read(int64_t nbytes, void * out)
+arrow20::Result<int64_t> RandomAccessFileFromSeekableReadBuffer::Read(int64_t nbytes, void * out)
 {
     return in.readBig(reinterpret_cast<char *>(out), nbytes);
 }
 
-arrow::Result<std::shared_ptr<arrow::Buffer>> RandomAccessFileFromSeekableReadBuffer::Read(int64_t nbytes)
+arrow20::Result<std::shared_ptr<arrow20::Buffer>> RandomAccessFileFromSeekableReadBuffer::Read(int64_t nbytes)
 {
-    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateResizableBuffer(nbytes))
+    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow20::AllocateResizableBuffer(nbytes))
     ARROW_ASSIGN_OR_RAISE(int64_t bytes_read, Read(nbytes, buffer->mutable_data()))
 
     if (bytes_read < nbytes)
@@ -74,10 +74,10 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> RandomAccessFileFromSeekableReadBu
     return buffer;
 }
 
-arrow::Status RandomAccessFileFromSeekableReadBuffer::Seek(int64_t position)
+arrow20::Status RandomAccessFileFromSeekableReadBuffer::Seek(int64_t position)
 {
     in.seek(position, SEEK_SET);
-    return arrow::Status::OK();
+    return arrow20::Status::OK();
 }
 
 
@@ -85,14 +85,14 @@ ArrowInputStreamFromReadBuffer::ArrowInputStreamFromReadBuffer(ReadBuffer & in_)
 {
 }
 
-arrow::Result<int64_t> ArrowInputStreamFromReadBuffer::Read(int64_t nbytes, void * out)
+arrow20::Result<int64_t> ArrowInputStreamFromReadBuffer::Read(int64_t nbytes, void * out)
 {
     return in.readBig(reinterpret_cast<char *>(out), nbytes);
 }
 
-arrow::Result<std::shared_ptr<arrow::Buffer>> ArrowInputStreamFromReadBuffer::Read(int64_t nbytes)
+arrow20::Result<std::shared_ptr<arrow20::Buffer>> ArrowInputStreamFromReadBuffer::Read(int64_t nbytes)
 {
-    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateResizableBuffer(nbytes))
+    ARROW_ASSIGN_OR_RAISE(auto buffer, arrow20::AllocateResizableBuffer(nbytes))
     ARROW_ASSIGN_OR_RAISE(int64_t bytes_read, Read(nbytes, buffer->mutable_data()))
 
     if (bytes_read < nbytes)
@@ -101,23 +101,23 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ArrowInputStreamFromReadBuffer::Re
     return buffer;
 }
 
-arrow::Status ArrowInputStreamFromReadBuffer::Abort()
+arrow20::Status ArrowInputStreamFromReadBuffer::Abort()
 {
-    return arrow::Status();
+    return arrow20::Status();
 }
 
-arrow::Result<int64_t> ArrowInputStreamFromReadBuffer::Tell() const
+arrow20::Result<int64_t> ArrowInputStreamFromReadBuffer::Tell() const
 {
     return in.count();
 }
 
-arrow::Status ArrowInputStreamFromReadBuffer::Close()
+arrow20::Status ArrowInputStreamFromReadBuffer::Close()
 {
     is_open = false;
-    return arrow::Status();
+    return arrow20::Status();
 }
 
-std::shared_ptr<arrow::io::RandomAccessFile> asArrowFile(ReadBuffer & in)
+std::shared_ptr<arrow20::io::RandomAccessFile> asArrowFile(ReadBuffer & in)
 {
     if (auto * fd_in = dynamic_cast<ReadBufferFromFileDescriptor *>(&in))
     {
@@ -135,7 +135,7 @@ std::shared_ptr<arrow::io::RandomAccessFile> asArrowFile(ReadBuffer & in)
         copyData(in, file_buffer);
     }
 
-    return std::make_shared<arrow::io::BufferReader>(arrow::Buffer::FromString(std::move(file_data)));
+    return std::make_shared<arrow20::io::BufferReader>(arrow20::Buffer::FromString(std::move(file_data)));
 }
 
 }

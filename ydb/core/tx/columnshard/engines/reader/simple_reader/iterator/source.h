@@ -39,7 +39,7 @@ private:
     YDB_READONLY(ui32, StartIndex, 0);
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui64, MemoryBytes, 0);
-    YDB_ACCESSOR_DEF(std::shared_ptr<arrow::Table>, Result);
+    YDB_ACCESSOR_DEF(std::shared_ptr<arrow20::Table>, Result);
 
 public:
     TPortionPage(const ui32 startIndex, const ui32 recordsCount, const ui64 memoryBytes)
@@ -266,7 +266,7 @@ private:
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
-        const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) override;
+        const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow20::Scalar>& value) override;
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
@@ -458,7 +458,7 @@ private:
         return TConclusionStatus::Fail("not implemented DoStartFetchIndex for TAggregationDataSource");
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
-        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckIndex for TAggregationDataSource");
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(

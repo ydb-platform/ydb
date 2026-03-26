@@ -12,10 +12,10 @@ namespace {
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeInfo = NScheme::TTypeInfo;
 
-std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> table) {
-    std::shared_ptr<arrow::RecordBatch> batch;
+std::shared_ptr<arrow20::RecordBatch> ExtractBatch(std::shared_ptr<arrow20::Table> table) {
+    std::shared_ptr<arrow20::RecordBatch> batch;
 
-    arrow::TableBatchReader reader(*table);
+    arrow20::TableBatchReader reader(*table);
     auto result = reader.Next();
     Y_ABORT_UNLESS(result.ok());
     batch = *result;
@@ -41,35 +41,35 @@ struct TDataRow {
         return (id1 == r.id1) && (value == r.value) && (version == r.version);
     }
 
-    static std::shared_ptr<arrow::Schema> MakeFullSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("id1", arrow::int32(), false),
-            arrow::field("value", arrow::int32(), false),
-            arrow::field("version", arrow::int32(), false)};
+    static std::shared_ptr<arrow20::Schema> MakeFullSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("id1", arrow20::int32(), false),
+            arrow20::field("value", arrow20::int32(), false),
+            arrow20::field("version", arrow20::int32(), false)};
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 
-    static std::shared_ptr<arrow::Schema> MakeDataSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("id1", arrow::int32(), false),
-            arrow::field("value", arrow::int32(), false)};
+    static std::shared_ptr<arrow20::Schema> MakeDataSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("id1", arrow20::int32(), false),
+            arrow20::field("value", arrow20::int32(), false)};
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 
-    static std::shared_ptr<arrow::Schema> MakeSortingSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("id1", arrow::int32(), false)};
+    static std::shared_ptr<arrow20::Schema> MakeSortingSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("id1", arrow20::int32(), false)};
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 
-    static std::shared_ptr<arrow::Schema> MakeVersionSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("version", arrow::int32(), false)};
+    static std::shared_ptr<arrow20::Schema> MakeVersionSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("version", arrow20::int32(), false)};
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 
     static std::vector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
@@ -114,20 +114,20 @@ public:
         UNIT_ASSERT(Bversion.Append(row.version).ok());
     }
 
-    std::shared_ptr<arrow::Table> Finish() {
-        std::shared_ptr<arrow::Int32Array> arid1;
-        std::shared_ptr<arrow::Int32Array> arvalue;
-        std::shared_ptr<arrow::Int32Array> arversion;
+    std::shared_ptr<arrow20::Table> Finish() {
+        std::shared_ptr<arrow20::Int32Array> arid1;
+        std::shared_ptr<arrow20::Int32Array> arvalue;
+        std::shared_ptr<arrow20::Int32Array> arversion;
 
         UNIT_ASSERT(Bid1.Finish(&arid1).ok());
         UNIT_ASSERT(Bvalue.Finish(&arvalue).ok());
         UNIT_ASSERT(Bversion.Finish(&arversion).ok());
 
-        std::shared_ptr<arrow::Schema> schema = TDataRow::MakeFullSchema();
-        return arrow::Table::Make(schema, {arid1, arvalue, arversion});
+        std::shared_ptr<arrow20::Schema> schema = TDataRow::MakeFullSchema();
+        return arrow20::Table::Make(schema, {arid1, arvalue, arversion});
     }
 
-    static std::shared_ptr<arrow::Table> Build(const std::vector<struct TDataRow>& rows) {
+    static std::shared_ptr<arrow20::Table> Build(const std::vector<struct TDataRow>& rows) {
         TDataRowTableBuilder builder;
         for (const TDataRow& row : rows) {
             builder.AddRow(row);
@@ -135,7 +135,7 @@ public:
         return builder.Finish();
     }
 
-    static std::shared_ptr<arrow::RecordBatch> buildBatch(const std::vector<std::pair<int, int>>& rows, int version) {
+    static std::shared_ptr<arrow20::RecordBatch> buildBatch(const std::vector<std::pair<int, int>>& rows, int version) {
         TDataRowTableBuilder builder;
         for (auto [i, j] : rows) {
             builder.AddRow(TDataRow{i, j, version});
@@ -153,46 +153,46 @@ public:
     };
 
 private:
-    arrow::Int32Builder Bid1;
-    arrow::Int32Builder Bvalue;
-    arrow::Int32Builder Bversion;
+    arrow20::Int32Builder Bid1;
+    arrow20::Int32Builder Bvalue;
+    arrow20::Int32Builder Bversion;
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(SortableBatchPosition) {
     Y_UNIT_TEST(FindPosition) {
-        std::shared_ptr<arrow::RecordBatch> data;
-        std::shared_ptr<arrow::Schema> schema =
-            std::make_shared<arrow::Schema>(arrow::Schema({ std::make_shared<arrow::Field>("class", std::make_shared<arrow::StringType>()),
-                std::make_shared<arrow::Field>("name", std::make_shared<arrow::StringType>()) }));
+        std::shared_ptr<arrow20::RecordBatch> data;
+        std::shared_ptr<arrow20::Schema> schema =
+            std::make_shared<arrow20::Schema>(arrow20::Schema({ std::make_shared<arrow20::Field>("class", std::make_shared<arrow20::StringType>()),
+                std::make_shared<arrow20::Field>("name", std::make_shared<arrow20::StringType>()) }));
         {
-            std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-            UNIT_ASSERT(arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder).ok());
+            std::unique_ptr<arrow20::RecordBatchBuilder> batchBuilder;
+            UNIT_ASSERT(arrow20::RecordBatchBuilder::Make(schema, arrow20::default_memory_pool(), &batchBuilder).ok());
 
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("c").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("c").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("c").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("c").ok());
 
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("c").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("c").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("c").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("c").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("c").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("c").ok());
 
             UNIT_ASSERT(batchBuilder->Flush(&data).ok());
         }
 
-        std::shared_ptr<arrow::RecordBatch> search;
+        std::shared_ptr<arrow20::RecordBatch> search;
         {
-            std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-            UNIT_ASSERT(arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder).ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(0)->Append("a").ok());
-            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow::TypeTraits<arrow::StringType>::BuilderType>(1)->Append("c").ok());
+            std::unique_ptr<arrow20::RecordBatchBuilder> batchBuilder;
+            UNIT_ASSERT(arrow20::RecordBatchBuilder::Make(schema, arrow20::default_memory_pool(), &batchBuilder).ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(0)->Append("a").ok());
+            UNIT_ASSERT(batchBuilder->GetFieldAs<arrow20::TypeTraits<arrow20::StringType>::BuilderType>(1)->Append("c").ok());
             UNIT_ASSERT(batchBuilder->Flush(&search).ok());
         }
 
@@ -235,9 +235,9 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         const int oldVersion = 0;
         const int newVersion = 1;
 
-        std::shared_ptr<arrow::RecordBatch> batch1 = TDataRowTableBuilder::buildBatch({{p1, oldValue}}, oldVersion);
-        std::shared_ptr<arrow::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, oldVersion);
-        std::shared_ptr<arrow::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}}, newVersion);
+        std::shared_ptr<arrow20::RecordBatch> batch1 = TDataRowTableBuilder::buildBatch({{p1, oldValue}}, oldVersion);
+        std::shared_ptr<arrow20::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, oldVersion);
+        std::shared_ptr<arrow20::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}}, newVersion);
 
         auto vColumns = TDataRow::GetVersionColumns();
         auto sColumns = TDataRow::GetSortingColumns();
@@ -262,10 +262,10 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         merger->DrainToControlPoint(builder, includeFinish, &lastResultPosition);
 
         UNIT_ASSERT(lastResultPosition);
-        auto lrpVal = std::static_pointer_cast<arrow::Int32Array>(lastResultPosition->ExtractSortingPosition(TDataRow::MakeSortingSchema()->fields())->column(0))->Value(0);
+        auto lrpVal = std::static_pointer_cast<arrow20::Int32Array>(lastResultPosition->ExtractSortingPosition(TDataRow::MakeSortingSchema()->fields())->column(0))->Value(0);
         UNIT_ASSERT_EQUAL(p1, lrpVal);
 
-        auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({builder.Finalize()}));
+        auto resultBatch = NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({builder.Finalize()}));
         UNIT_ASSERT(resultBatch);
 
         UNIT_ASSERT_EQUAL(1, resultBatch->num_rows());
@@ -276,8 +276,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         UNIT_ASSERT_EQUAL(1, id1Col->num_chunks());
         UNIT_ASSERT_EQUAL(1, valueCol->num_chunks());
 
-        auto id1Val = std::static_pointer_cast<arrow::Int32Array>(id1Col->chunk(0))->Value(0);
-        auto valueVal = std::static_pointer_cast<arrow::Int32Array>(valueCol->chunk(0))->Value(0);
+        auto id1Val = std::static_pointer_cast<arrow20::Int32Array>(id1Col->chunk(0))->Value(0);
+        auto valueVal = std::static_pointer_cast<arrow20::Int32Array>(valueCol->chunk(0))->Value(0);
 
         UNIT_ASSERT_EQUAL(p1, id1Val);
         UNIT_ASSERT_EQUAL(newValue, valueVal);
@@ -299,9 +299,9 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         const int v1 = 1;
         const int v2 = 2;
 
-        std::shared_ptr<arrow::RecordBatch> batch1 = TDataRowTableBuilder::buildBatch({{p1, oldValue}, {p4, oldValue}}, v0);
-        std::shared_ptr<arrow::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}, {p3, oldValue}}, v1);
-        std::shared_ptr<arrow::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}, {p3, newValue}, {p4, newValue}}, v2);
+        std::shared_ptr<arrow20::RecordBatch> batch1 = TDataRowTableBuilder::buildBatch({{p1, oldValue}, {p4, oldValue}}, v0);
+        std::shared_ptr<arrow20::RecordBatch> batch2 = TDataRowTableBuilder::buildBatch({{p2, oldValue}, {p3, oldValue}}, v1);
+        std::shared_ptr<arrow20::RecordBatch> batch3 = TDataRowTableBuilder::buildBatch({{p1, newValue}, {p2, newValue}, {p3, newValue}, {p4, newValue}}, v2);
 
         auto vColumns = TDataRow::GetVersionColumns();
         auto sColumns = TDataRow::GetSortingColumns();
@@ -314,8 +314,8 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch3, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         // Range to include in result batch, only points p2 p3 matters here
-        std::shared_ptr<arrow::RecordBatch> p2sp = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, v0);
-        std::shared_ptr<arrow::RecordBatch> p3sp = TDataRowTableBuilder::buildBatch({{p3, oldValue}}, v0);
+        std::shared_ptr<arrow20::RecordBatch> p2sp = TDataRowTableBuilder::buildBatch({{p2, oldValue}}, v0);
+        std::shared_ptr<arrow20::RecordBatch> p3sp = TDataRowTableBuilder::buildBatch({{p3, oldValue}}, v0);
         NArrow::NMerger::TSortableBatchPosition startingPoint(isReverse ? p3sp : p2sp, 0, sColumns, {}, isReverse);
         NArrow::NMerger::TSortableBatchPosition finishPoint(isReverse ? p2sp : p3sp, 0, sColumns, {}, isReverse);
 
@@ -328,10 +328,10 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         merger->DrainToControlPoint(builder, includeFinish, &lastResultPosition);
 
         UNIT_ASSERT(lastResultPosition);
-        auto lrpVal = std::static_pointer_cast<arrow::Int32Array>(lastResultPosition->ExtractSortingPosition(TDataRow::MakeSortingSchema()->fields())->column(0))->Value(0);
+        auto lrpVal = std::static_pointer_cast<arrow20::Int32Array>(lastResultPosition->ExtractSortingPosition(TDataRow::MakeSortingSchema()->fields())->column(0))->Value(0);
         UNIT_ASSERT_EQUAL(p2, lrpVal);
 
-        auto resultBatch = NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({builder.Finalize()}));
+        auto resultBatch = NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({builder.Finalize()}));
         UNIT_ASSERT(resultBatch);
         UNIT_ASSERT_EQUAL(2, resultBatch->num_rows());
 
@@ -341,10 +341,10 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
         UNIT_ASSERT_EQUAL(1, id1Col->num_chunks());
         UNIT_ASSERT_EQUAL(1, valueCol->num_chunks());
 
-        auto firstId1 = std::static_pointer_cast<arrow::Int32Array>(id1Col->chunk(0))->Value(0);
-        auto secondId1 = std::static_pointer_cast<arrow::Int32Array>(id1Col->chunk(0))->Value(1);
-        auto firstVal = std::static_pointer_cast<arrow::Int32Array>(valueCol->chunk(0))->Value(0);
-        auto secondVal = std::static_pointer_cast<arrow::Int32Array>(valueCol->chunk(0))->Value(1);
+        auto firstId1 = std::static_pointer_cast<arrow20::Int32Array>(id1Col->chunk(0))->Value(0);
+        auto secondId1 = std::static_pointer_cast<arrow20::Int32Array>(id1Col->chunk(0))->Value(1);
+        auto firstVal = std::static_pointer_cast<arrow20::Int32Array>(valueCol->chunk(0))->Value(0);
+        auto secondVal = std::static_pointer_cast<arrow20::Int32Array>(valueCol->chunk(0))->Value(1);
 
         UNIT_ASSERT_EQUAL((isReverse ? p3 : p2), firstId1);
         UNIT_ASSERT_EQUAL((isReverse ? p2 : p3), secondId1);

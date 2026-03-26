@@ -103,7 +103,7 @@ public:
         BatchLengthID_ = *batchLengthID;
     }
 
-    void DoConvert(arrow::compute::ExecBatch* batch, TUnboxedValue& result) {
+    void DoConvert(arrow20::compute::ExecBatch* batch, TUnboxedValue& result) {
         size_t nvalues = DatumToMemberIDMap_.size();
         Y_ENSURE(nvalues == static_cast<size_t>(batch->num_values()));
 
@@ -113,7 +113,7 @@ public:
             const ui32 id = DatumToMemberIDMap_[i];
             datums[id] = Factory_.CreateArrowBlock(std::move(batch->values[i]));
         }
-        arrow::Datum length(std::make_shared<arrow::UInt64Scalar>(batch->length));
+        arrow20::Datum length(std::make_shared<arrow20::UInt64Scalar>(batch->length));
         datums[BatchLengthID_] = Factory_.CreateArrowBlock(std::move(length));
     }
 };
@@ -125,11 +125,11 @@ class TArrowOutputConverter {
 protected:
     const THolderFactory& Factory_;
     TVector<ui32> DatumToMemberIDMap_;
-    THolder<arrow::compute::ExecBatch> Batch_;
+    THolder<arrow20::compute::ExecBatch> Batch_;
     size_t BatchLengthID_;
     bool UntrackBatch_;
 
-    arrow::Datum& PrepareDatum(arrow::Datum& datum) {
+    arrow20::Datum& PrepareDatum(arrow20::Datum& datum) {
         if (UntrackBatch_) {
             UntrackDatum(datum);
         }
@@ -143,7 +143,7 @@ public:
         : Factory_(worker->GetGraph().GetHolderFactory())
         , UntrackBatch_(outputSpec.UntrackBatches())
     {
-        Batch_.Reset(new arrow::compute::ExecBatch);
+        Batch_.Reset(new arrow20::compute::ExecBatch);
 
         const NYT::TNode& outputSchema = outputSpec.GetSchema();
         // Deduce the schema from the output MKQL type, if no is
@@ -181,10 +181,10 @@ public:
         const auto& sizeDatum = TArrowBlock::From(sizeValue).GetDatum();
         Y_ENSURE(sizeDatum.is_scalar());
         const auto& sizeScalar = sizeDatum.scalar();
-        const auto& sizeData = arrow::internal::checked_cast<const arrow::UInt64Scalar&>(*sizeScalar);
+        const auto& sizeData = arrow20::internal::checked_cast<const arrow20::UInt64Scalar&>(*sizeScalar);
         const int64_t length = sizeData.value;
 
-        TVector<arrow::Datum> datums(nvalues);
+        TVector<arrow20::Datum> datums(nvalues);
         for (size_t i = 0; i < nvalues; i++) {
             const ui32 id = DatumToMemberIDMap_[i];
             const auto& datumValue = value.GetElement(id);
@@ -196,7 +196,7 @@ public:
             Y_ENSURE(datum.length() == length);
         }
 
-        *batch = arrow::compute::ExecBatch(std::move(datums), length);
+        *batch = arrow20::compute::ExecBatch(std::move(datums), length);
         return batch;
     }
 
@@ -259,7 +259,7 @@ public:
     }
 
     bool Next(TUnboxedValue& result) override {
-        arrow::compute::ExecBatch* batch;
+        arrow20::compute::ExecBatch* batch;
         {
             auto unguard = Unguard(ScopedAlloc_);
             batch = Underlying_->Fetch();
@@ -355,7 +355,7 @@ public:
  * Consumer which converts Datums to unboxed values and relays them to the
  * worker. Used as a return value of the push processor's Process function.
  */
-class TArrowConsumerImpl final: public IConsumer<arrow::compute::ExecBatch*> {
+class TArrowConsumerImpl final: public IConsumer<arrow20::compute::ExecBatch*> {
 private:
     TWorkerHolder<IPushStreamWorker> WorkerHolder_;
     TArrowInputConverter Converter_;
@@ -377,7 +377,7 @@ public:
     {
     }
 
-    void OnObject(arrow::compute::ExecBatch* batch) override {
+    void OnObject(arrow20::compute::ExecBatch* batch) override {
         TBindTerminator bind(WorkerHolder_->GetGraph().GetTerminator());
 
         with_lock (WorkerHolder_->GetScopedAlloc()) {

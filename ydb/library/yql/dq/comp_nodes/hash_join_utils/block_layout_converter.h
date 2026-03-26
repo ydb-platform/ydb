@@ -19,16 +19,16 @@ public:
     virtual ~IBlockLayoutConverter() = default;
 
     // Can be called multiple times to accumulate packed data in one storage
-    virtual void Pack(const TVector<arrow::Datum>& columns, TPackResult& packed) = 0;
-    virtual void BucketPack(const TVector<arrow::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
+    virtual void Pack(const TVector<arrow20::Datum>& columns, TPackResult& packed) = 0;
+    virtual void BucketPack(const TVector<arrow20::Datum>& columns, TPaddedPtr<TPackResult> packs, ui32 bucketsLogNum) = 0;
     // Can not be called multiple times due to immutability of arrow arrays
-    virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
+    virtual void Unpack(const TPackResult& packed, TVector<arrow20::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
-    const TVector<NPackedTuple::EColumnRole>& roles, arrow::MemoryPool* pool,
+    const TVector<NPackedTuple::EColumnRole>& roles, arrow20::MemoryPool* pool,
     bool rememberNullBitmaps = true);
 }

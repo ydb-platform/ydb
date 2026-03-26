@@ -9,8 +9,8 @@
 
 namespace NKikimr::NOlap {
 
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch, const TSnapshot& snapshot);
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::Table>& batch, const TSnapshot& snapshot);
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow20::RecordBatch>& batch, const TSnapshot& snapshot);
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow20::Table>& batch, const TSnapshot& snapshot);
 
 struct TReadMetadata;
 }   // namespace NKikimr::NOlap

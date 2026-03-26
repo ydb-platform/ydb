@@ -8,7 +8,7 @@ namespace NKikimr::NArrow::NTransformation {
 
 class ITransformer {
 protected:
-    virtual std::shared_ptr<arrow::RecordBatch> DoTransform(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
+    virtual std::shared_ptr<arrow20::RecordBatch> DoTransform(const std::shared_ptr<arrow20::RecordBatch>& batch) const = 0;
     virtual TString DoDebugString() const = 0;
     virtual bool IsEqualToSameClass(const ITransformer& item) const = 0;
 public:
@@ -28,7 +28,7 @@ public:
         return IsEqualToSameClass(item);
     }
 
-    std::shared_ptr<arrow::RecordBatch> Transform(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    std::shared_ptr<arrow20::RecordBatch> Transform(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         return DoTransform(batch);
     }
 };

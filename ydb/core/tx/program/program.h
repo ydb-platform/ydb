@@ -18,7 +18,7 @@ private:
     using TColumnInfo = NArrow::NSSA::TColumnInfo;
     NKikimrSSA::TProgram ProgramProto;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
-    std::shared_ptr<arrow::RecordBatch> ProgramParameters;   // TODO
+    std::shared_ptr<arrow20::RecordBatch> ProgramParameters;   // TODO
     NArrow::NSSA::TKernelsRegistry KernelsRegistry;
     std::optional<THashSet<ui32>> OverrideProcessingColumnsSet;
     std::optional<std::vector<ui32>> OverrideProcessingColumnsVector;
@@ -90,8 +90,8 @@ public:
 
     [[nodiscard]] TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> ApplyProgram(
         std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
-    [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
+    [[nodiscard]] TConclusion<std::shared_ptr<arrow20::RecordBatch>> ApplyProgram(
+        const std::shared_ptr<arrow20::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 
     bool HasProgram() const;
 

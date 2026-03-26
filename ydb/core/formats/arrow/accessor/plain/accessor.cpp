@@ -13,7 +13,7 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
+std::shared_ptr<arrow20::Scalar> TTrivialArray::DoGetMaxScalar() const {
     auto minMaxPos = NArrow::FindMinMaxPosition(Array);
     return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
 }
@@ -30,7 +30,7 @@ ui32 TTrivialArray::DoGetValueRawBytes() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<arrow::DataType>& type) {
+std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<arrow20::DataType>& type) {
     return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(type, 0));
 }
 
@@ -38,18 +38,18 @@ void TTrivialArray::Reallocate() {
     Array = NArrow::ReallocateArray(Array);
 }
 
-std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
-    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
+std::shared_ptr<arrow20::Array> TTrivialArray::BuildArrayFromOptionalScalar(
+    const std::shared_ptr<arrow20::Scalar>& scalar, const std::shared_ptr<arrow20::DataType>& typePtr) {
     AFL_VERIFY(!!typePtr);
     if (scalar) {
         AFL_VERIFY(scalar->type->id() == typePtr->id());
         return BuildArrayFromScalar(scalar);
     } else {
-        return TStatusValidator::GetValid(arrow::MakeArrayOfNull(typePtr, 1));
+        return TStatusValidator::GetValid(arrow20::MakeArrayOfNull(typePtr, 1));
     }
 }
 
-std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const {
     if (Array->length() == 1) {
         value = TStatusValidator::GetValid(Array->GetScalar(0));
         return true;
@@ -60,11 +60,11 @@ std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow
 namespace {
 class TChunkAccessor {
 private:
-    std::shared_ptr<arrow::ChunkedArray> ChunkedArray;
+    std::shared_ptr<arrow20::ChunkedArray> ChunkedArray;
     std::optional<IChunkedArray::TLocalDataAddress>* Result;
 
 public:
-    TChunkAccessor(const std::shared_ptr<arrow::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
+    TChunkAccessor(const std::shared_ptr<arrow20::ChunkedArray>& chunkedArray, std::optional<IChunkedArray::TLocalDataAddress>& result)
         : ChunkedArray(chunkedArray)
         , Result(&result)
     {
@@ -121,8 +121,8 @@ TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
     return result;
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
+std::shared_ptr<arrow20::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
+    std::shared_ptr<arrow20::Scalar> result;
     for (auto&& i : Array->chunks()) {
         if (!i->length()) {
             continue;

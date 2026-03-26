@@ -12,7 +12,7 @@ public:
 
 private:
     using TBase = TSkipBitmapIndex;
-    std::shared_ptr<arrow::Schema> ResultSchema;
+    std::shared_ptr<arrow20::Schema> ResultSchema;
     bool CaseSensitive = true;
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
@@ -21,8 +21,8 @@ private:
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
         AFL_VERIFY(!ResultSchema);
-        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("", arrow::boolean()) };
-        ResultSchema = std::make_shared<arrow::Schema>(fields);
+        std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>("", arrow20::boolean()) };
+        ResultSchema = std::make_shared<arrow20::Schema>(fields);
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
         AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
@@ -111,7 +111,7 @@ protected:
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 
-    bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow20::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
 
 public:

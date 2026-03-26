@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 class TEvReadStartWriter: public ITxEventWriter {
 private:
     YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
 
@@ -24,7 +24,7 @@ private:
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
+    TEvReadStartWriter(const NColumnShard::TUnifiedPathId pathId, const std::shared_ptr<arrow20::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
         const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
@@ -45,7 +45,7 @@ public:
 
 private:
     const NColumnShard::TUnifiedPathId PathId;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
 
     virtual bool DoDeserializeFromProto(const NKikimrColumnShardTxProto::TEvent& proto) override;
@@ -64,7 +64,7 @@ public:
     }
 
     TEvReadStart() = default;
-    TEvReadStart(const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+    TEvReadStart(const NColumnShard::TUnifiedPathId& pathId, const std::shared_ptr<arrow20::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter) {

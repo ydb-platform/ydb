@@ -59,7 +59,7 @@ class TMiniKQLComputationNodePackTest: public TTestBase {
 
     TValuePackerType MakeValuePacker(bool stable, const TType* type,
                                      EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize = Nothing(),
-                                     arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
+                                     arrow20::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
         if constexpr (Transport) {
             return TValuePackerType(stable, type, valuePackerVersion, bufferPageAllocSize, pool, minFillPercentage);
         } else {
@@ -797,14 +797,14 @@ protected:
         }
 
         std::string_view testScalarString = "foobar";
-        auto strbuf = std::make_shared<arrow::Buffer>((const ui8*)testScalarString.data(), testScalarString.size());
+        auto strbuf = std::make_shared<arrow20::Buffer>((const ui8*)testScalarString.data(), testScalarString.size());
 
-        TVector<arrow::Datum> datums;
+        TVector<arrow20::Datum> datums;
         if (legacyStruct) {
             datums.emplace_back(builder1->Build(true));
             datums.emplace_back(builder2->Build(true));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
+            datums.emplace_back(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(blockLen)));
+            datums.emplace_back(arrow20::Datum(std::make_shared<arrow20::BinaryScalar>(strbuf)));
             datums.emplace_back(builder3->Build(true));
             datums.emplace_back(builder4->Build(true));
             datums.emplace_back(builder5->Build(true));
@@ -812,12 +812,12 @@ protected:
         } else {
             datums.emplace_back(builder1->Build(true));
             datums.emplace_back(builder2->Build(true));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::BinaryScalar>(strbuf)));
+            datums.emplace_back(arrow20::Datum(std::make_shared<arrow20::BinaryScalar>(strbuf)));
             datums.emplace_back(builder3->Build(true));
             datums.emplace_back(builder4->Build(true));
             datums.emplace_back(builder5->Build(true));
             datums.emplace_back(builder6->Build(true));
-            datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+            datums.emplace_back(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(blockLen)));
         }
 
         const ui32 blockLenIndex = legacyStruct ? 2 : datums.size() - 1;
@@ -827,7 +827,7 @@ protected:
                     datum = NYql::NUdf::DeepSlice(datum.array(), offset, len);
                 }
             }
-            datums[blockLenIndex] = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len));
+            datums[blockLenIndex] = arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(len));
         }
 
         const auto trimmerFactory = [&](ui32 index) {
@@ -877,11 +877,11 @@ protected:
 
         UNIT_ASSERT_VALUES_EQUAL(unpackedColumns.size(), columns.size());
         if (legacyStruct) {
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[3]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value, len);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[3]).GetDatum().scalar_as<arrow20::BinaryScalar>().value->ToString(), testScalarString);
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
-            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow20::UInt64Scalar>().value, len);
+            UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow20::BinaryScalar>().value->ToString(), testScalarString);
         }
 
         if (args.MinFillPercentage) {
@@ -991,7 +991,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(3));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1019,7 +1019,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1046,7 +1046,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1074,7 +1074,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(NYql::NUdf::TStringRef("str3")));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1103,7 +1103,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(ui32(3)));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1131,7 +1131,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1160,7 +1160,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem().MakeOptional());
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1194,7 +1194,7 @@ protected:
         builder->Add(tzDate3);
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1227,7 +1227,7 @@ protected:
         builder->Add(tzDate3);
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1260,7 +1260,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1293,7 +1293,7 @@ protected:
         builder->Add(NYql::NUdf::TBlockItem(tuple3Items.data()));
         TUnboxedValueVector columns;
         columns.emplace_back(HolderFactory_.CreateArrowBlock(builder->Build(/*finish=*/true)));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(3))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(3))));
         TChunkedBuffer serialized = MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish();
         TStringStream stream;
         serialized.CopyTo(stream);
@@ -1332,7 +1332,7 @@ protected:
             builder->Add(TBlockItem(tuple.data()));
         }
         auto buildResult = builder->Build(/*finish=*/true);
-        UNIT_ASSERT_EQUAL(buildResult.kind(), arrow::Datum::CHUNKED_ARRAY);
+        UNIT_ASSERT_EQUAL(buildResult.kind(), arrow20::Datum::CHUNKED_ARRAY);
         UNIT_ASSERT_EQUAL(buildResult.chunks().size(), 2);
 
         auto children = buildResult.chunks()[1]->data()->child_data;
@@ -1343,7 +1343,7 @@ protected:
         TUnboxedValueVector columns;
         // Here we take only second chunk with exactly one element.
         columns.emplace_back(HolderFactory_.CreateArrowBlock(buildResult.chunks()[1]));
-        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1))));
+        columns.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(1))));
 
         if (expectedToFail) {
             UNIT_ASSERT_EXCEPTION(MakeValuePacker(false, rowType, valuePackerVersion, {}, ArrowPool_, Nothing()).AddWideItem(columns.data(), columns.size()).Finish(), yexception);
@@ -1378,7 +1378,7 @@ protected:
 
         UNIT_ASSERT_VALUES_EQUAL(elements[0].As<i32>(), 3);
         UNIT_ASSERT_VALUES_EQUAL(TString(elements[1].AsStringRef()), bigString);
-        UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, 1);
+        UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value, 1);
     }
 
     void TestBlockPackingSerializeTupleShiftedOffset() {
@@ -1394,7 +1394,7 @@ private:
     TProgramBuilder PgmBuilder_;
     TMemoryUsageInfo MemInfo_;
     THolderFactory HolderFactory_;
-    arrow::MemoryPool* const ArrowPool_;
+    arrow20::MemoryPool* const ArrowPool_;
 };
 
 class TMiniKQLComputationNodeGenericPackTest: public TMiniKQLComputationNodePackTest<false, false> {

@@ -9,7 +9,7 @@ struct TModuloOrZero {
     static constexpr const char * Name = "modOrZero";
 
     template <typename TRes, typename TArg0, typename TArg1>
-    static constexpr EnableIfInteger<TRes> Call(arrow::compute::KernelContext*, TArg0 lhs, TArg1 rhs, arrow::Status*) {
+    static constexpr EnableIfInteger<TRes> Call(arrow20::compute::KernelContext*, TArg0 lhs, TArg1 rhs, arrow20::Status*) {
         static_assert(std::is_same<TRes, TArg0>::value && std::is_same<TRes, TArg1>::value, "");
         if (ARROW_PREDICT_FALSE(rhs == 0)) {
             return 0;
@@ -18,7 +18,7 @@ struct TModuloOrZero {
     }
 
     template <typename TRes, typename TArg0, typename TArg1>
-    static constexpr EnableIfFloatingPoint<TRes> Call(arrow::compute::KernelContext*, TArg0 lhs, TArg1 rhs, arrow::Status*) {
+    static constexpr EnableIfFloatingPoint<TRes> Call(arrow20::compute::KernelContext*, TArg0 lhs, TArg1 rhs, arrow20::Status*) {
         static_assert(std::is_same<TRes, TArg0>::value && std::is_same<TRes, TArg1>::value, "");
         if (static_cast<typename TToInteger<TArg1>::Type::c_type>(rhs) == 0) {
             return 0;

@@ -194,10 +194,10 @@ struct TEvS3Provider {
     };
 
     struct TEvNextRecordBatch : public NActors::TEventLocal<TEvNextRecordBatch, EvNextRecordBatch> {
-        TEvNextRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
+        TEvNextRecordBatch(const std::shared_ptr<arrow20::RecordBatch>& batch, size_t pathInd, ui64 ingressDelta, TDuration cpuTimeDelta)
             : Batch(batch), PathIndex(pathInd), IngressDelta(ingressDelta), CpuTimeDelta(cpuTimeDelta) {
         }
-        std::shared_ptr<arrow::RecordBatch> Batch;
+        std::shared_ptr<arrow20::RecordBatch> Batch;
         const size_t PathIndex;
         const ui64 IngressDelta;
         const TDuration CpuTimeDelta;
@@ -277,7 +277,7 @@ struct TEvS3Provider {
     struct TEvCacheCheckResult : public NActors::TEventLocal<TEvCacheCheckResult, EvCacheCheckResult> {
         TString Path;
         ui64 RowGroup;
-        std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> Batches;
         bool Hit = false;
     };
 
@@ -285,13 +285,13 @@ struct TEvS3Provider {
         NActors::TActorId SourceId;
         TString Path;
         ui64 RowGroup = 0;
-        std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> Batches;
     };
 
     struct TEvCacheNotification : public NActors::TEventLocal<TEvCacheNotification, EvCacheNotification> {
         TString Path;
         ui64 RowGroup = 0;
-        std::vector<std::shared_ptr<arrow::RecordBatch>> Batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> Batches;
     };
 
     struct TEvCacheSourceFinish : public NActors::TEventLocal<TEvCacheSourceFinish, EvCacheSourceFinish> {

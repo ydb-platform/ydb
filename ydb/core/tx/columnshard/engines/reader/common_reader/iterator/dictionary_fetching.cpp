@@ -25,7 +25,7 @@ void TDictionaryChunkRestoreInfo::SetDictionaryBlob(TString&& blob) {
     DictionaryArray = conclusion.DetachResult();
 }
 
-const std::shared_ptr<arrow::Array>& TDictionaryChunkRestoreInfo::GetDictionaryArray() const {
+const std::shared_ptr<arrow20::Array>& TDictionaryChunkRestoreInfo::GetDictionaryArray() const {
     return DictionaryArray;
 }
 
@@ -37,7 +37,7 @@ TDictionaryChunkRestoreInfo::TDictionaryChunkRestoreInfo(const TBlobRange& fullC
     if (dictData && dictData->DictionaryBlobSize > 0 && fullChunkRange.GetSize() > 0) {
         DictionaryBlobRange = fullChunkRange.BuildSubset(0, dictData->DictionaryBlobSize);
     } else {
-        DictionaryArray = NArrow::TStatusValidator::GetValid(arrow::MakeArrayOfNull(chunkExternalInfo.GetColumnType(), 0));
+        DictionaryArray = NArrow::TStatusValidator::GetValid(arrow20::MakeArrayOfNull(chunkExternalInfo.GetColumnType(), 0));
     }
 }
 

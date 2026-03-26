@@ -13,7 +13,7 @@
 
 namespace NKikimr::NArrow {
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& keyColumns, const bool andUnique) {
+std::shared_ptr<arrow20::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow20::Array>>& keyColumns, const bool andUnique) {
     std::optional<i64> count;
     for (auto&& i : keyColumns) {
         AFL_VERIFY(i);
@@ -50,7 +50,7 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
         });
     }
 
-    arrow::UInt64Builder builder;
+    arrow20::UInt64Builder builder;
     TStatusValidator::Validate(builder.Reserve(points.size()));
 
     TRawReplaceKey* predKey = nullptr;
@@ -80,13 +80,13 @@ std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::s
         return nullptr;
     }
 
-    std::shared_ptr<arrow::UInt64Array> out;
+    std::shared_ptr<arrow20::UInt64Array> out;
     TStatusValidator::Validate(builder.Finish(&out));
     return out;
 }
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+std::shared_ptr<arrow20::UInt64Array> MakeSortPermutation(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, const bool andUnique) {
     auto keyBatch = TColumnOperator().VerifyIfAbsent().Adapt(batch, sortingKey).DetachResult();
     return MakeSortPermutation(keyBatch->columns(), andUnique);
 }
@@ -106,29 +106,29 @@ bool BuildHashUI64Impl(std::shared_ptr<TDataContainer>& batch, const std::vector
             return false;
         }
         Y_ABORT_UNLESS(column);
-        if (column->type()->id() == arrow::Type::UINT64 || column->type()->id() == arrow::Type::UINT32 ||
-            column->type()->id() == arrow::Type::INT64 || column->type()->id() == arrow::Type::INT32) {
+        if (column->type()->id() == arrow20::Type::UINT64 || column->type()->id() == arrow20::Type::UINT32 ||
+            column->type()->id() == arrow20::Type::INT64 || column->type()->id() == arrow20::Type::INT32) {
             batch = TStatusValidator::GetValid(
-                batch->AddColumn(batch->num_columns(), std::make_shared<arrow::Field>(hashFieldName, column->type()), column));
+                batch->AddColumn(batch->num_columns(), std::make_shared<arrow20::Field>(hashFieldName, column->type()), column));
             return true;
         }
     }
-    std::shared_ptr<arrow::Array> hashColumn =
+    std::shared_ptr<arrow20::Array> hashColumn =
         NArrow::NHash::TXX64(fieldNames, NArrow::NHash::TXX64::ENoColumnPolicy::Verify, 34323543).ExecuteToArray(batch);
     batch = NAdapter::TDataBuilderPolicy<TDataContainer>::AddColumn(
-        batch, std::make_shared<arrow::Field>(hashFieldName, hashColumn->type()), hashColumn);
+        batch, std::make_shared<arrow20::Field>(hashFieldName, hashColumn->type()), hashColumn);
     return true;
 }
 
 }   // namespace
 
 bool THashConstructor::BuildHashUI64(
-    std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    std::shared_ptr<arrow20::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
     return BuildHashUI64Impl(batch, fieldNames, hashFieldName);
 }
 
 bool THashConstructor::BuildHashUI64(
-    std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
+    std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName) {
     return BuildHashUI64Impl(batch, fieldNames, hashFieldName);
 }
 

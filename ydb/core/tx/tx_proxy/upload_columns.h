@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-namespace arrow {
+namespace arrow20 {
     class RecordBatch;
 }
 
@@ -17,7 +17,7 @@ IActor* CreateUploadColumnsInternal(const TActorId& sender,
                                     const TString& database,
                                     const TString& table,
                                     std::shared_ptr<TUploadTypes> types,
-                                    std::shared_ptr<arrow::RecordBatch> data,
+                                    std::shared_ptr<arrow20::RecordBatch> data,
                                     ui64 cookie = 0);
 
 } // namespace NKikimr::NTxProxy

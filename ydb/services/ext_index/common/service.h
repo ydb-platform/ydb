@@ -18,12 +18,12 @@ public:
 
 class TEvAddData: public NActors::TEventLocal<TEvAddData, EEvents::EvAddData> {
 private:
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Data);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, Data);
     YDB_READONLY_DEF(TString, DatabaseName);
     YDB_READONLY_DEF(TString, TablePath);
     YDB_READONLY_DEF(IDataUpsertController::TPtr, ExternalController);
 public:
-    TEvAddData(std::shared_ptr<arrow::RecordBatch> data,
+    TEvAddData(std::shared_ptr<arrow20::RecordBatch> data,
         const TString& databaseName, const TString& tablePath,
         IDataUpsertController::TPtr externalController
     )

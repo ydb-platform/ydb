@@ -40,7 +40,7 @@ void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     int arrayLength = state.range(0);
     constexpr int batchSize = 30720;
 
-    arrow::compute::ExecContext execCtx;
+    arrow20::compute::ExecContext execCtx;
     const auto drng = CreateDeterministicRandomProvider(1);
     TTypeInfoHelper tif;
 
@@ -56,11 +56,11 @@ void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
         return array_builder->Build(/*finish=*/true);
     };
 
-    arrow::compute::KernelContext ctx(&execCtx);
+    arrow20::compute::KernelContext ctx(&execCtx);
 
     const auto optType = setup.PgmBuilder->NewOptionalType(type);
     auto left = getArray(optType, /*isOptional=*/true);
-    arrow::Datum right;
+    arrow20::Datum right;
     if (secondIsScalar) {
         right = MakeScalarDatum<T>(drng->GenRand64());
     } else {
@@ -76,11 +76,11 @@ void BenchmarkFixedSizeCoalesce(benchmark::State& state) {
     Y_ENSURE(kernel.size() == 1);
 
     for (auto _ : state) {
-        auto bi = ARROW_RESULT(arrow::compute::detail::ExecBatchIterator::Make({left, right}, batchSize));
+        auto bi = ARROW_RESULT(arrow20::compute::detail::ExecBatchIterator::Make({left, right}, batchSize));
 
-        arrow::compute::ExecBatch batch;
+        arrow20::compute::ExecBatch batch;
         while (bi->Next(&batch)) {
-            arrow::Datum out;
+            arrow20::Datum out;
             Y_ENSURE(kernel[0]->exec(&ctx, batch, &out).ok());
             benchmark::DoNotOptimize(out);
         }

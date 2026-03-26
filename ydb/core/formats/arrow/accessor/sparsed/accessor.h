@@ -20,15 +20,15 @@ namespace NKikimr::NArrow::NAccessor {
 class TSparsedArrayChunk {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Records);
-    std::shared_ptr<arrow::Scalar> DefaultValue;
-    std::shared_ptr<arrow::DataType> DataType;
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::RecordBatch>, Records);
+    std::shared_ptr<arrow20::Scalar> DefaultValue;
+    std::shared_ptr<arrow20::DataType> DataType;
 
-    std::shared_ptr<arrow::Array> ColIndex;
+    std::shared_ptr<arrow20::Array> ColIndex;
     const ui32* RawValues = nullptr;
     ui32 NotDefaultRecordsCount = 0;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::UInt32Array>, UI32ColIndex);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Array>, ColValue);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::UInt32Array>, UI32ColIndex);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Array>, ColValue);
 
     class TInternalChunkInfo {
     private:
@@ -52,7 +52,7 @@ private:
         }
     };
     std::vector<TInternalChunkInfo> RemapExternalToInternal;
-    std::shared_ptr<arrow::Array> DefaultsArray;
+    std::shared_ptr<arrow20::Array> DefaultsArray;
     TSparsedArrayChunk(const TSparsedArrayChunk&) = default;
 
     TSparsedArrayChunk(const ui32 recordsCount, const TSparsedArrayChunk& original)
@@ -100,15 +100,15 @@ public:
 
     ui32 GetFirstIndexNotDefault() const;
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar() const;
+    std::shared_ptr<arrow20::Scalar> GetMaxScalar() const;
     TMinMax GetMinMaxScalars() const;
 
-    std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const;
+    std::shared_ptr<arrow20::Scalar> GetScalar(const ui32 index) const;
 
     IChunkedArray::TLocalDataAddress GetChunk(const std::optional<IChunkedArray::TCommonChunkAddress>& chunkCurrent, const ui64 position) const;
 
     TSparsedArrayChunk(
-        const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records, const std::shared_ptr<arrow::Scalar>& defaultValue);
+        const ui32 recordsCount, const std::shared_ptr<arrow20::RecordBatch>& records, const std::shared_ptr<arrow20::Scalar>& defaultValue);
 
     ui64 GetRawSize() const;
 
@@ -134,7 +134,7 @@ public:
 class TSparsedArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultValue);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Scalar>, DefaultValue);
     TSparsedArrayChunk Record;
     friend class TSparsedArrayChunk;
 
@@ -142,7 +142,7 @@ private:
         Record.VisitValues(visitor);
     }
 
-    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const override {
         if (Record.GetNotDefaultRecordsCount()) {
             return false;
         } else {
@@ -152,7 +152,7 @@ private:
     }
 
 protected:
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetMaxScalar() const override;
     virtual TMinMax DoGetMinMaxScalars() const override;
 
     virtual ui32 DoGetNullsCount() const override {
@@ -181,22 +181,22 @@ protected:
         return Record.GetRawSize();
     }
 
-    TSparsedArray(TSparsedArrayChunk&& data, const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type)
+    TSparsedArray(TSparsedArrayChunk&& data, const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::shared_ptr<arrow20::DataType>& type)
         : TBase(data.GetRecordsCount(), EType::SparsedArray, type)
         , DefaultValue(defaultValue)
         , Record(std::move(data))
     {
     }
 
-    static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static ui32 GetLastIndex(const std::shared_ptr<arrow20::RecordBatch>& batch);
 
-    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& typePtr) {
-        std::shared_ptr<arrow::Schema> result;
+    static std::shared_ptr<arrow20::Schema> BuildSchema(const std::shared_ptr<arrow20::DataType>& typePtr) {
+        std::shared_ptr<arrow20::Schema> result;
         NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
-            static const std::shared_ptr<arrow::Schema> schemaResult = [&]() {
-                std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-                    std::make_shared<arrow::Field>("value", typePtr) };
-                return std::make_shared<arrow::Schema>(fields);
+            static const std::shared_ptr<arrow20::Schema> schemaResult = [&]() {
+                std::vector<std::shared_ptr<arrow20::Field>> fields = { std::make_shared<arrow20::Field>("index", arrow20::uint32()),
+                    std::make_shared<arrow20::Field>("value", typePtr) };
+                return std::make_shared<arrow20::Schema>(fields);
             }();
             result = schemaResult;
             return true;
@@ -206,7 +206,7 @@ protected:
     }
 
     static TSparsedArrayChunk MakeDefaultChunk(
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
+        const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::shared_ptr<arrow20::DataType>& type, const ui32 recordsCount);
 
 public:
     static EType GetTypeStatic() {
@@ -217,21 +217,21 @@ public:
 
     static std::shared_ptr<TSparsedArray> BuildFalseArrayUI8(const ui32 recordsCount) {
         static const std::shared_ptr<TSparsedArray> preResult(
-            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), 1));
+            new NAccessor::TSparsedArray(std::make_shared<arrow20::UInt8Scalar>(0), arrow20::uint8(), 1));
         return std::shared_ptr<NAccessor::TSparsedArray>(
             new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
     }
 
     static std::shared_ptr<TSparsedArray> BuildTrueArrayUI8(const ui32 recordsCount) {
         static const std::shared_ptr<TSparsedArray> preResult(
-            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), 1));
+            new NAccessor::TSparsedArray(std::make_shared<arrow20::UInt8Scalar>(1), arrow20::uint8(), 1));
         return std::shared_ptr<NAccessor::TSparsedArray>(
             new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
     }
 
-    static std::shared_ptr<TSparsedArray> Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
+    static std::shared_ptr<TSparsedArray> Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow20::Scalar>& defaultValue);
 
-    TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
+    TSparsedArray(const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::shared_ptr<arrow20::DataType>& type, const ui32 recordsCount)
         : TBase(recordsCount, EType::SparsedArray, type)
         , DefaultValue(defaultValue)
         , Record(MakeDefaultChunk(defaultValue, type, recordsCount))
@@ -247,29 +247,29 @@ public:
         return Record;
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetScalar(const ui32 index) const override {
         return Record.GetScalar(index);
     }
 
-    std::shared_ptr<arrow::RecordBatch> GetRecordBatchVerified() const {
+    std::shared_ptr<arrow20::RecordBatch> GetRecordBatchVerified() const {
         return Record.GetRecords();
     }
 
     template <class TDataType>
     class TSparsedBuilder {
     private:
-        std::unique_ptr<arrow::ArrayBuilder> IndexBuilder;
-        std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
+        std::unique_ptr<arrow20::ArrayBuilder> IndexBuilder;
+        std::unique_ptr<arrow20::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
-        const std::shared_ptr<arrow::Scalar> DefaultValue;
+        const std::shared_ptr<arrow20::Scalar> DefaultValue;
         std::optional<ui32> LastRecordIndex;
 
     public:
-        TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
+        TSparsedBuilder(const std::shared_ptr<arrow20::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
             : DefaultValue(defaultValue)
         {
-            IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
-            ValueBuilder = NArrow::MakeBuilder(arrow::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData);
+            IndexBuilder = NArrow::MakeBuilder(arrow20::uint32(), reserveItems, 0);
+            ValueBuilder = NArrow::MakeBuilder(arrow20::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData);
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
@@ -277,8 +277,8 @@ public:
                 AFL_VERIFY(*LastRecordIndex < recordIndex);
             }
             LastRecordIndex = recordIndex;
-            AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
+            AFL_VERIFY(NArrow::Append<arrow20::UInt32Type>(*IndexBuilder, recordIndex));
+            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow20::util::string_view(value.data(), value.size())));
             ++RecordsCount;
         }
 
@@ -287,47 +287,47 @@ public:
                 AFL_VERIFY(*LastRecordIndex < recordIndex);
             }
             LastRecordIndex = recordIndex;
-            if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
-                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+            if (!!DefaultValue && DefaultValue->type->id() != arrow20::null()->id()) {
+                AFL_VERIFY(NArrow::Append<arrow20::UInt32Type>(*IndexBuilder, recordIndex));
                 TStatusValidator::Validate(ValueBuilder->AppendNull());
             }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
-            TSparsedArray::TBuilder builder(DefaultValue, arrow::TypeTraits<TDataType>::type_singleton());
-            std::vector<std::unique_ptr<arrow::ArrayBuilder>> builders;
+            TSparsedArray::TBuilder builder(DefaultValue, arrow20::TypeTraits<TDataType>::type_singleton());
+            std::vector<std::unique_ptr<arrow20::ArrayBuilder>> builders;
             builders.emplace_back(std::move(IndexBuilder));
             builders.emplace_back(std::move(ValueBuilder));
-            builder.AddChunk(recordsCount, arrow::RecordBatch::Make(TSparsedArray::BuildSchema(arrow::TypeTraits<TDataType>::type_singleton()),
+            builder.AddChunk(recordsCount, arrow20::RecordBatch::Make(TSparsedArray::BuildSchema(arrow20::TypeTraits<TDataType>::type_singleton()),
                                                RecordsCount, NArrow::Finish(std::move(builders))));
             return builder.Finish();
         }
     };
 
-    static TSparsedBuilder<arrow::BinaryType> MakeBuilderBinary(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
-        return TSparsedBuilder<arrow::BinaryType>(nullptr, reserveItems, reserveData);
+    static TSparsedBuilder<arrow20::BinaryType> MakeBuilderBinary(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
+        return TSparsedBuilder<arrow20::BinaryType>(nullptr, reserveItems, reserveData);
     }
 
-    static TSparsedBuilder<arrow::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
-        return TSparsedBuilder<arrow::StringType>(nullptr, reserveItems, reserveData);
+    static TSparsedBuilder<arrow20::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
+        return TSparsedBuilder<arrow20::StringType>(nullptr, reserveItems, reserveData);
     }
 
     class TBuilder {
     private:
         ui32 RecordsCount = 0;
         std::vector<TSparsedArrayChunk> Chunks;
-        std::shared_ptr<arrow::Scalar> DefaultValue;
-        std::shared_ptr<arrow::DataType> Type;
+        std::shared_ptr<arrow20::Scalar> DefaultValue;
+        std::shared_ptr<arrow20::DataType> Type;
 
     public:
-        TBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type)
+        TBuilder(const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::shared_ptr<arrow20::DataType>& type)
             : DefaultValue(defaultValue)
             , Type(type)
         {
         }
 
-        void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data);
-        void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::Array>& indexes, const std::shared_ptr<arrow::Array>& values);
+        void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow20::RecordBatch>& data);
+        void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow20::Array>& indexes, const std::shared_ptr<arrow20::Array>& values);
         void AddChunk(TSparsedArrayChunk&& chunk) {
             RecordsCount += chunk.GetRecordsCount();
             Chunks.emplace_back(std::move(chunk));

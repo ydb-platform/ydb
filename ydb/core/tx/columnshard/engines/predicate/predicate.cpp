@@ -21,7 +21,7 @@ std::vector<TString> TPredicate::ColumnNames() const {
 }
 
 NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const ui64 rowIdx, const std::shared_ptr<arrow20::Schema>& pkSchema) {
     AFL_VERIFY((i64)rowIdx < batch->num_rows())("idx", rowIdx)("count", batch->num_rows());
     std::vector<std::string> colsNotNull;
     for (const auto& field : pkSchema->field_names()) {
@@ -34,7 +34,7 @@ NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
     return NArrow::NMerger::TSortableBatchPosition(batch, rowIdx, colsNotNull, std::vector<std::string>(), false);
 }
 
-bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {
+bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow20::Schema>& schema) const {
     AFL_VERIFY(schema);
     return Batch.IsSameSortingSchema(*schema);
 }

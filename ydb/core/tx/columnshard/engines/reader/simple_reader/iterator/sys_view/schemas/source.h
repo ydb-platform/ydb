@@ -12,7 +12,7 @@ private:
     using TBase = NAbstract::TTabletSourceData;
     std::vector<ISnapshotSchema::TPtr> Schemas;
 
-    virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
+    virtual std::shared_ptr<arrow20::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);

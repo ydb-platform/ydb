@@ -91,10 +91,10 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
     return *result;
 }
 
-std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
-    std::optional<std::shared_ptr<arrow::Scalar>> result;
+std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const {
+    std::optional<std::shared_ptr<arrow20::Scalar>> result;
     for (auto&& i : Chunks) {
-        std::shared_ptr<arrow::Scalar> valLocal;
+        std::shared_ptr<arrow20::Scalar> valLocal;
         auto res = i->CheckOneValueAccessor(valLocal);
         if (!res || !*res) {
             return res;
@@ -110,9 +110,9 @@ std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_
     return true;
 }
 
-std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow20::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     ui32 pos = 0;
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    std::vector<std::shared_ptr<arrow20::Array>> chunks;
     for (auto&& i : Chunks) {
         auto sliceCtx = context.Slice(pos, i->GetRecordsCount());
         if (!sliceCtx) {
@@ -123,11 +123,11 @@ std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(c
                 continue;
             }
         }
-        std::shared_ptr<arrow::ChunkedArray> arr = i->GetChunkedArray(*sliceCtx);
+        std::shared_ptr<arrow20::ChunkedArray> arr = i->GetChunkedArray(*sliceCtx);
         chunks.insert(chunks.end(), arr->chunks().begin(), arr->chunks().end());
         pos += i->GetRecordsCount();
     }
-    return std::make_shared<arrow::ChunkedArray>(std::move(chunks));
+    return std::make_shared<arrow20::ChunkedArray>(std::move(chunks));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

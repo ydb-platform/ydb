@@ -620,7 +620,7 @@ private:
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(count == OutputWidth_);
-        const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         if (!inputBlockLen) {
             return;
         }
@@ -758,12 +758,12 @@ private:
     void WideConsume(TUnboxedValue values[], ui32 count) final {
         YQL_ENSURE(count == OutputWidth_);
 
-        const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 inputBlockLen = TArrowBlock::From(values[count - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         if (!inputBlockLen) {
             return;
         }
 
-        TVector<const arrow::Datum*> datums;
+        TVector<const arrow20::Datum*> datums;
         datums.reserve(count - 1);
         for (ui32 i = 0; i < count - 1; ++i) {
             datums.push_back(&TArrowBlock::From(values[i]).GetDatum());
@@ -785,9 +785,9 @@ private:
             MakeBuilders(outputBlockLen);
             const ui64* indexes = outputBlockIndexes[i].data();
 
-            std::vector<arrow::Datum> output;
+            std::vector<arrow20::Datum> output;
             for (size_t j = 0; j < datums.size(); ++j) {
-                const arrow::Datum* src = datums[j];
+                const arrow20::Datum* src = datums[j];
                 if (src->is_scalar()) {
                     output.emplace_back(*src);
                 } else {
@@ -811,7 +811,7 @@ private:
         while (!outputData.empty()) {
             bool hasData = false;
             for (size_t i = 0; i < Outputs_.size(); ++i) {
-                std::vector<arrow::Datum> chunk;
+                std::vector<arrow20::Datum> chunk;
                 ui64 blockLen = 0;
                 if (outputData[i] && outputData[i]->Next(chunk, blockLen)) {
                     YQL_ENSURE(blockLen > 0);
@@ -820,7 +820,7 @@ private:
                     for (auto& datum : chunk) {
                         outputValues.emplace_back(HolderFactory_.CreateArrowBlock(std::move(datum)));
                     }
-                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen))));
+                    outputValues.emplace_back(HolderFactory_.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(blockLen))));
                     Outputs_[i]->WidePush(outputValues.data(), outputValues.size());
                 }
             }
@@ -862,7 +862,7 @@ private:
         return Aggregator->IsEarlyFinished();
     }
 
-    size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
+    size_t GetHashPartitionIndex(const arrow20::Datum* values[], ui64 blockIndex) {
         HashFunc.Start();
 
         for (size_t keyId = 0; keyId < KeyColumns_.size(); keyId++) {

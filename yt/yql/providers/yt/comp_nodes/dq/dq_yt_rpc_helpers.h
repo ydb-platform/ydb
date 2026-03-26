@@ -66,7 +66,7 @@ struct TSettingsHolder : public TNonCopyable {
     NYT::NApi::IConnectionPtr Connection;
     NYT::TIntrusivePtr<NYT::NApi::NRpcProxy::TClient> Client;
     const TMkqlIOSpecs* Specs = nullptr;
-    arrow::MemoryPool* Pool = nullptr;
+    arrow20::MemoryPool* Pool = nullptr;
     const NUdf::IPgBuilder* PgBuilder = nullptr;
     TVector<NYT::NApi::NRpcProxy::TApiServiceProxy::TReqReadTablePtr> Requests;
 

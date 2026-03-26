@@ -16,14 +16,14 @@ class TChunkConstructionData {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(std::optional<ui32>, NotNullRecordsCount);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Scalar>, DefaultValue);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::DataType>, ColumnType);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Scalar>, DefaultValue);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::DataType>, ColumnType);
     YDB_READONLY_DEF(std::shared_ptr<NSerialization::ISerializer>, DefaultSerializer);
     YDB_READONLY_DEF(std::shared_ptr<IAdditionalAccessorData>, AdditionalAccessorData);
 
 public:
-    TChunkConstructionData(const ui32 recordsCount, const std::shared_ptr<arrow::Scalar>& defaultValue,
-        const std::shared_ptr<arrow::DataType>& columnType, const std::shared_ptr<NSerialization::ISerializer>& defaultSerializer,
+    TChunkConstructionData(const ui32 recordsCount, const std::shared_ptr<arrow20::Scalar>& defaultValue,
+        const std::shared_ptr<arrow20::DataType>& columnType, const std::shared_ptr<NSerialization::ISerializer>& defaultSerializer,
         const std::optional<ui32>& notNullRecordsCount = std::nullopt,
         std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr);
 

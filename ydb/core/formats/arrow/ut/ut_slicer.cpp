@@ -9,7 +9,7 @@
 
 
 static std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> BuildArray() {
-    NKikimr::NArrow::NAccessor::TTrivialArray::TPlainBuilder<arrow::BinaryType> arrBuilder;
+    NKikimr::NArrow::NAccessor::TTrivialArray::TPlainBuilder<arrow20::BinaryType> arrBuilder;
     arrBuilder.AddRecord(1, "b1");
     arrBuilder.AddRecord(3, "b2");
     arrBuilder.AddRecord(4, "b3");
@@ -30,9 +30,9 @@ Y_UNIT_TEST_SUITE(Slicer) {
         
         NKikimr::NArrow::NSerialization::TNativeSerializer serializer;
         for (const auto& chunk: arr->SplitBySizes(predSaver, serialized, {1, 1, 1})) {
-            auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", arrow::utf8()) }));
+            auto schema = std::make_shared<arrow20::Schema>(arrow20::FieldVector({ std::make_shared<arrow20::Field>("val", arrow20::utf8()) }));
             TString serializedData = chunk.GetSerializedData();
-            arrow::Result<std::shared_ptr<arrow::RecordBatch>> result = serializer.Deserialize(serializedData, schema);
+            arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> result = serializer.Deserialize(serializedData, schema);
             UNIT_ASSERT_C(result.status().ok(), result.status().ToString());
         }
     }

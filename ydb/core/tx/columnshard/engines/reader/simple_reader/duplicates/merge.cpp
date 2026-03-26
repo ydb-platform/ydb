@@ -27,7 +27,7 @@ public:
         ++RowsSkipped;
     }
 
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const {
+    void ValidateDataSchema(const std::shared_ptr<arrow20::Schema>& /*schema*/) const {
     }
 
     bool IsBufferExhausted() const {

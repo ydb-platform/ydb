@@ -116,7 +116,7 @@ public:
     std::optional<ui32> GetFilteredCount() const;
     ui32 GetFilteredCountVerified() const;
     const std::vector<bool>& BuildSimpleFilter() const;
-    std::shared_ptr<arrow::BooleanArray> BuildArrowFilter(
+    std::shared_ptr<arrow20::BooleanArray> BuildArrowFilter(
         const ui32 expectedSize, const std::optional<ui32> startPos = {}, const std::optional<ui32> count = {}) const;
 
     ui64 GetDataSize() const {
@@ -295,9 +295,9 @@ public:
     };
 
     void Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    void Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
-    void Apply(const ui32 expectedRecordsCount, std::vector<arrow::Datum*>& datums) const;
+    void Apply(std::shared_ptr<arrow20::Table>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    void Apply(std::shared_ptr<arrow20::RecordBatch>& batch, const TApplyContext& context = Default<TApplyContext>()) const;
+    void Apply(const ui32 expectedRecordsCount, std::vector<arrow20::Datum*>& datums) const;
     [[nodiscard]] std::shared_ptr<NAccessor::IChunkedArray> Apply(
         const std::shared_ptr<NAccessor::IChunkedArray>& source, const TApplyContext& context = Default<TApplyContext>()) const;
 

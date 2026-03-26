@@ -297,19 +297,19 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-            std::vector<std::shared_ptr<arrow::Field>> fields;
-            fields.push_back(std::make_shared<arrow::Field>("a", arrow::utf8()));
-            fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8()));
-            fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8())); // not unique column
-            fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
+            std::vector<std::shared_ptr<arrow20::Field>> fields;
+            fields.push_back(std::make_shared<arrow20::Field>("a", arrow20::utf8()));
+            fields.push_back(std::make_shared<arrow20::Field>("b", arrow20::utf8()));
+            fields.push_back(std::make_shared<arrow20::Field>("b", arrow20::utf8())); // not unique column
+            fields.push_back(std::make_shared<arrow20::Field>("c", arrow20::utf8()));
 
-            auto schema = std::make_shared<arrow::Schema>(fields);
-            std::unique_ptr<arrow::RecordBatchBuilder> builder;
-            arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), 1, &builder).ok();
+            auto schema = std::make_shared<arrow20::Schema>(fields);
+            std::unique_ptr<arrow20::RecordBatchBuilder> builder;
+            arrow20::RecordBatchBuilder::Make(schema, arrow20::default_memory_pool(), 1, &builder).ok();
             for (i64 i = 0; i < schema->num_fields(); ++i) {
-                builder->GetFieldAs<arrow::StringBuilder>(i)->Append("test").ok();
+                builder->GetFieldAs<arrow20::StringBuilder>(i)->Append("test").ok();
             }
-            std::shared_ptr<arrow::RecordBatch> batch;
+            std::shared_ptr<arrow20::RecordBatch> batch;
             builder->Flush(false, &batch).ok();
 
             TString strSchema = NArrow::SerializeSchema(*schema);
@@ -379,31 +379,31 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_EQUAL(descResult.GetTableDescription().GetStoreType(), tableType);
         }
 
-        auto batchSchema = std::make_shared<arrow::Schema>(
-            std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("id", arrow::uint32(), false),
-                arrow::field("timestamp", arrow::int64(), false),
-                arrow::field("dateTimeS", arrow::int32()),
-                arrow::field("dateTimeU", arrow::uint32()),
-                arrow::field("date", arrow::uint16()),
-                arrow::field("utf8ToString", arrow::utf8()),
-                arrow::field("stringToString", arrow::binary()),
+        auto batchSchema = std::make_shared<arrow20::Schema>(
+            std::vector<std::shared_ptr<arrow20::Field>>{
+                arrow20::field("id", arrow20::uint32(), false),
+                arrow20::field("timestamp", arrow20::int64(), false),
+                arrow20::field("dateTimeS", arrow20::int32()),
+                arrow20::field("dateTimeU", arrow20::uint32()),
+                arrow20::field("date", arrow20::uint16()),
+                arrow20::field("utf8ToString", arrow20::utf8()),
+                arrow20::field("stringToString", arrow20::binary()),
             });
 
         size_t rowsCount = 100;
         auto builders = NArrow::MakeBuilders(batchSchema, rowsCount);
 
         for (size_t i = 0; i < rowsCount; ++i) {
-            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt32Type>(*builders[0], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int64Type>(*builders[1], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[2], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int32Type>(*builders[3], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt16Type>(*builders[4], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], std::to_string(i)));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], std::to_string(i)));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::UInt32Type>(*builders[0], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int64Type>(*builders[1], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int32Type>(*builders[2], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int32Type>(*builders[3], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::UInt16Type>(*builders[4], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::StringType>(*builders[5], std::to_string(i)));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::BinaryType>(*builders[6], std::to_string(i)));
         }
 
-        auto srcBatch = arrow::RecordBatch::Make(batchSchema, rowsCount, NArrow::Finish(std::move(builders)));
+        auto srcBatch = arrow20::RecordBatch::Make(batchSchema, rowsCount, NArrow::Finish(std::move(builders)));
         TString strSchema = NArrow::SerializeSchema(*batchSchema);
         TString strBatch = NArrow::SerializeBatchNoCompression(srcBatch);
 

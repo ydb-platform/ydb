@@ -12,7 +12,7 @@ class TDictionaryChunkRestoreInfo {
 private:
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
     std::optional<TBlobRange> DictionaryBlobRange;
-    std::shared_ptr<arrow::Array> DictionaryArray;
+    std::shared_ptr<arrow20::Array> DictionaryArray;
     YDB_READONLY_DEF(TBlobRange, FullChunkRange);
 
 public:
@@ -22,7 +22,7 @@ public:
 
     void SetDictionaryBlob(TString&& blob);
 
-    const std::shared_ptr<arrow::Array>& GetDictionaryArray() const;
+    const std::shared_ptr<arrow20::Array>& GetDictionaryArray() const;
 
     TDictionaryChunkRestoreInfo(const TBlobRange& fullChunkRange,
         const NArrow::NAccessor::TChunkConstructionData& chunkExternalInfo);

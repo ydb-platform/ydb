@@ -98,10 +98,10 @@ private:
     YDB_READONLY_DEF(std::vector<TInsertWriteId>, InsertWriteIds);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::IBlobsWritingAction>, BlobsAction);
     YDB_READONLY_DEF(NArrow::TSchemaSubset, SchemaSubset);
-    std::shared_ptr<arrow::RecordBatch> RecordBatch;
+    std::shared_ptr<arrow20::RecordBatch> RecordBatch;
 
 public:
-    const std::shared_ptr<arrow::RecordBatch>& GetRecordBatch() const {
+    const std::shared_ptr<arrow20::RecordBatch>& GetRecordBatch() const {
         AFL_VERIFY(RecordBatch);
         return RecordBatch;
     }
@@ -123,7 +123,7 @@ public:
     }
 
     TWriteAggregation(const NEvWrite::TWriteData& writeData, std::vector<NArrow::TSerializedBatch>&& splittedBlobs,
-        const std::shared_ptr<arrow::RecordBatch>& batch)
+        const std::shared_ptr<arrow20::RecordBatch>& batch)
         : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())

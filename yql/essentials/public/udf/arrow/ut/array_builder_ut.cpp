@@ -29,7 +29,7 @@ struct TArrayBuilderTestData {
     NMiniKQL::TTypeEnvironment Env;
     NMiniKQL::TProgramBuilder PgmBuilder;
     NMiniKQL::TMemoryUsageInfo MemInfo;
-    arrow::MemoryPool* const ArrowPool;
+    arrow20::MemoryPool* const ArrowPool;
 };
 
 std::unique_ptr<IArrayBuilder> MakeResourceArrayBuilder(TType* resourceType, TArrayBuilderTestData& data) {
@@ -283,7 +283,7 @@ Y_UNIT_TEST(TestSingularTypeValueBuilderReader) {
     TArrayBuilderTestData data;
     const auto nullType = data.PgmBuilder.NewNullType();
 
-    std::shared_ptr<arrow::ArrayData> arrayData = NYql::NUdf::MakeSingularArray(/*isNull=*/true, 42);
+    std::shared_ptr<arrow20::ArrayData> arrayData = NYql::NUdf::MakeSingularArray(/*isNull=*/true, 42);
     IArrayBuilder::TArrayDataItem arrayDataItem = {.Data = arrayData.get(), .StartOffset = 0};
     {
         const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), nullType, *data.ArrowPool, MAX_BLOCK_SIZE, /*pgBuilder=*/nullptr);
@@ -352,13 +352,13 @@ Y_UNIT_TEST(TestBuilderAllocatedSize) {
     const TBlockItem hugeItem = sItem2.MakeOptional();
 
     const size_t stringAllocStep =
-        arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +       // String NullMask
-        arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) + // String Offsets
+        arrow20::BitUtil::RoundUpToMultipleOf64(blockLen + 1) +       // String NullMask
+        arrow20::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 4) + // String Offsets
         NMiniKQL::MaxBlockSizeInBytes;                              // String Data
     const size_t initialAllocated =
         stringAllocStep +
-        arrow::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 8) + // Int64 Data
-        2 * arrow::BitUtil::RoundUpToMultipleOf64(blockLen + 1);    // Double Optional
+        arrow20::BitUtil::RoundUpToMultipleOf64((blockLen + 1) * 8) + // Int64 Data
+        2 * arrow20::BitUtil::RoundUpToMultipleOf64(blockLen + 1);    // Double Optional
 
     size_t totalAllocated = 0;
     auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptStructType, *data.ArrowPool, blockLen, nullptr, &totalAllocated);

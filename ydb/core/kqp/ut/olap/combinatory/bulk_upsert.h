@@ -12,7 +12,7 @@ namespace NKikimr::NKqp {
 class TBulkUpsertCommand: public ICommand {
 private:
     TString TableName;
-    std::shared_ptr<arrow::RecordBatch> ArrowBatch;
+    std::shared_ptr<arrow20::RecordBatch> ArrowBatch;
     Ydb::StatusIds_StatusCode ExpectedCode = Ydb::StatusIds::SUCCESS;
     ui32 PartsCount = 1;
 

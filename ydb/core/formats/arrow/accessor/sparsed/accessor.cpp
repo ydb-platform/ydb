@@ -9,22 +9,22 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue) {
+std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow20::Scalar>& defaultValue) {
     if (defaultValue) {
         AFL_VERIFY(defaultValue->type->id() == defaultArray.GetDataType()->id());
     }
     std::optional<TFullDataAddress> current;
-    std::shared_ptr<arrow::RecordBatch> records;
+    std::shared_ptr<arrow20::RecordBatch> records;
     ui32 sparsedRecordsCount = 0;
     AFL_VERIFY(SwitchType(defaultArray.GetDataType()->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
-        using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+        using TScalar = typename arrow20::TypeTraits<typename TWrap::T>::ScalarType;
+        using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
+        using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
         auto builderValue = NArrow::MakeBuilder(defaultArray.GetDataType());
         TBuilder* builderValueImpl = (TBuilder*)builderValue.get();
-        auto builderIndex = NArrow::MakeBuilder(arrow::uint32());
-        arrow::UInt32Builder* builderIndexImpl = (arrow::UInt32Builder*)builderIndex.get();
+        auto builderIndex = NArrow::MakeBuilder(arrow20::uint32());
+        arrow20::UInt32Builder* builderIndexImpl = (arrow20::UInt32Builder*)builderIndex.get();
         auto scalar = static_pointer_cast<TScalar>(defaultValue);
         for (ui32 pos = 0; pos < defaultArray.GetRecordsCount();) {
             current = defaultArray.GetChunk(current, pos);
@@ -32,9 +32,9 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
             for (ui32 i = 0; i < typedArray->length(); ++i) {
                 std::optional<bool> isDefault;
                 if (scalar) {
-                    if constexpr (arrow::has_string_view<typename TWrap::T>()) {
-                        isDefault = arrow::util::string_view((char*)scalar->value->data(), scalar->value->size()) == typedArray->GetView(i);
-                    } else if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                    if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
+                        isDefault = arrow20::util::string_view((char*)scalar->value->data(), scalar->value->size()) == typedArray->GetView(i);
+                    } else if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                         isDefault = scalar->value == typedArray->Value(i);
                     } else {
                         AFL_VERIFY(false)("type", defaultArray.GetDataType()->ToString());
@@ -43,11 +43,11 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
                     isDefault = typedArray->IsNull(i);
                 }
                 if (!*isDefault) {
-                    if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                    if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
                         NArrow::TStatusValidator::Validate(builderValueImpl->Append(typedArray->GetView(i)));
                         NArrow::TStatusValidator::Validate(builderIndexImpl->Append(pos + i));
                         ++sparsedRecordsCount;
-                    } else if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                    } else if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                         NArrow::TStatusValidator::Validate(builderValueImpl->Append(typedArray->Value(i)));
                         NArrow::TStatusValidator::Validate(builderIndexImpl->Append(pos + i));
                         ++sparsedRecordsCount;
@@ -59,9 +59,9 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
             pos = current->GetAddress().GetGlobalFinishPosition();
             AFL_VERIFY(pos <= defaultArray.GetRecordsCount());
         }
-        std::vector<std::shared_ptr<arrow::Array>> columns = { NArrow::TStatusValidator::GetValid(builderIndex->Finish()),
+        std::vector<std::shared_ptr<arrow20::Array>> columns = { NArrow::TStatusValidator::GetValid(builderIndex->Finish()),
             NArrow::TStatusValidator::GetValid(builderValue->Finish()) };
-        records = arrow::RecordBatch::Make(BuildSchema(defaultArray.GetDataType()), sparsedRecordsCount, columns);
+        records = arrow20::RecordBatch::Make(BuildSchema(defaultArray.GetDataType()), sparsedRecordsCount, columns);
         AFL_VERIFY_DEBUG(records->ValidateFull().ok());
         return true;
     }));
@@ -69,7 +69,7 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
     return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(chunk), defaultValue, defaultArray.GetDataType()));
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
+std::shared_ptr<arrow20::Scalar> TSparsedArray::DoGetMaxScalar() const {
     return Record.GetMaxScalar();
 }
 
@@ -77,22 +77,22 @@ TMinMax TSparsedArray::DoGetMinMaxScalars() const {
     return Record.GetMinMaxScalars();
 }
 
-ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch) {
+ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     AFL_VERIFY(batch);
     AFL_VERIFY(batch->num_rows());
     auto c = batch->GetColumnByName("index");
     AFL_VERIFY(c)("schema", batch->schema()->ToString());
-    AFL_VERIFY(c->type_id() == arrow::uint32()->id())("type", c->type()->ToString());
-    auto ui32Column = static_pointer_cast<arrow::UInt32Array>(c);
+    AFL_VERIFY(c->type_id() == arrow20::uint32()->id())("type", c->type()->ToString());
+    auto ui32Column = static_pointer_cast<arrow20::UInt32Array>(c);
     return ui32Column->Value(ui32Column->length() - 1);
 }
 
 namespace {
-static thread_local THashMap<TString, std::shared_ptr<arrow::RecordBatch>> SimpleBatchesCache;
+static thread_local THashMap<TString, std::shared_ptr<arrow20::RecordBatch>> SimpleBatchesCache;
 }
 
 TSparsedArrayChunk TSparsedArray::MakeDefaultChunk(
-    const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount) {
+    const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::shared_ptr<arrow20::DataType>& type, const ui32 recordsCount) {
     auto it = SimpleBatchesCache.find(type->ToString());
     if (it == SimpleBatchesCache.end()) {
         it = SimpleBatchesCache.emplace(type->ToString(), NArrow::MakeEmptyBatch(BuildSchema(type))).first;
@@ -114,11 +114,11 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     AFL_VERIFY(it != RemapExternalToInternal.begin());
     --it;
     if (it->GetIsDefault()) {
-        std::shared_ptr<arrow::Array> arr;
+        std::shared_ptr<arrow20::Array> arr;
         if (!DefaultValue) {
             arr = NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize());
         } else {
-            arr = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
+            arr = NArrow::TStatusValidator::GetValid(arrow20::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
         }
         return IChunkedArray::TLocalDataAddress(arr, it->GetStartExt(), 0);
     } else {
@@ -127,7 +127,7 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
 }
 
 TSparsedArrayChunk::TSparsedArrayChunk(
-    const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records, const std::shared_ptr<arrow::Scalar>& defaultValue)
+    const ui32 recordsCount, const std::shared_ptr<arrow20::RecordBatch>& records, const std::shared_ptr<arrow20::Scalar>& defaultValue)
     : RecordsCount(recordsCount)
     , Records(records)
     , DefaultValue(defaultValue)
@@ -136,8 +136,8 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     AFL_VERIFY(records->num_columns() == 2);
     ColIndex = Records->GetColumnByName("index");
     AFL_VERIFY(ColIndex);
-    AFL_VERIFY(ColIndex->type_id() == arrow::uint32()->id());
-    UI32ColIndex = static_pointer_cast<arrow::UInt32Array>(ColIndex);
+    AFL_VERIFY(ColIndex->type_id() == arrow20::uint32()->id());
+    UI32ColIndex = static_pointer_cast<arrow20::UInt32Array>(ColIndex);
     if (UI32ColIndex->length()) {
         AFL_VERIFY(UI32ColIndex->Value(UI32ColIndex->length() - 1) < recordsCount)("val", UI32ColIndex->Value(UI32ColIndex->length() - 1))(
             "count", recordsCount);
@@ -186,7 +186,7 @@ ui64 TSparsedArrayChunk::GetRawSize() const {
     return std::max<ui64>(NArrow::GetBatchDataSize(Records), 8);
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetScalar(const ui32 index) const {
+std::shared_ptr<arrow20::Scalar> TSparsedArrayChunk::GetScalar(const ui32 index) const {
     AFL_VERIFY(index < RecordsCount);
     for (ui32 idx = 0; idx < UI32ColIndex->length(); ++idx) {
         if (UI32ColIndex->Value(idx) == index) {
@@ -224,7 +224,7 @@ TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
     return result;
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMaxScalar() const {
+std::shared_ptr<arrow20::Scalar> TSparsedArrayChunk::GetMaxScalar() const {
     if (!ColValue->length()) {
         return DefaultValue;
     }
@@ -249,7 +249,7 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
     TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
-    auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
+    auto indexesBuilder = NArrow::MakeBuilder(arrow20::uint32(), filter.GetFilteredCountVerified());
     auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {
         for (; recordIndex < UI32ColIndex->length(); ++recordIndex) {
@@ -257,7 +257,7 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
                 Y_ABORT_UNLESS(false);
             } else if (UI32ColIndex->Value(recordIndex) < filterIntervalStart + *it) {
                 if (currentAcceptance) {
-                    AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*indexesBuilder, UI32ColIndex->Value(recordIndex) - skippedCount));
+                    AFL_VERIFY(NArrow::Append<arrow20::UInt32Type>(*indexesBuilder, UI32ColIndex->Value(recordIndex) - skippedCount));
                     AFL_VERIFY(NArrow::Append(*valuesBuilder, *ColValue, recordIndex));
                     ++filteredCount;
                 }
@@ -275,8 +275,8 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     AFL_VERIFY(recordIndex == UI32ColIndex->length());
     auto indexesArr = NArrow::FinishBuilder(std::move(indexesBuilder));
     auto valuesArr = NArrow::FinishBuilder(std::move(valuesBuilder));
-    std::shared_ptr<arrow::RecordBatch> result =
-        arrow::RecordBatch::Make(TSparsedArray::BuildSchema(ColValue->type()), filteredCount, { indexesArr, valuesArr });
+    std::shared_ptr<arrow20::RecordBatch> result =
+        arrow20::RecordBatch::Make(TSparsedArray::BuildSchema(ColValue->type()), filteredCount, { indexesArr, valuesArr });
     return TSparsedArrayChunk(filter.GetFilteredCountVerified(), result, DefaultValue);
 }
 
@@ -288,27 +288,27 @@ TSparsedArrayChunk TSparsedArrayChunk::Slice(const ui32 offset, const ui32 count
         return TSparsedArrayChunk(count, NArrow::MakeEmptyBatch(Records->schema(), 0), DefaultValue);
     } else {
         AFL_VERIFY(startPosition);
-        auto builder = NArrow::MakeBuilder(arrow::uint32());
+        auto builder = NArrow::MakeBuilder(arrow20::uint32());
         for (ui32 i = *startPosition; i < finishPosition.value_or(Records->num_rows()); ++i) {
-            NArrow::Append<arrow::UInt32Type>(*builder, UI32ColIndex->Value(i) - offset);
+            NArrow::Append<arrow20::UInt32Type>(*builder, UI32ColIndex->Value(i) - offset);
         }
         auto arrIndexes = NArrow::FinishBuilder(std::move(builder));
         auto arrValue = ColValue->Slice(*startPosition, finishPosition.value_or(Records->num_rows()) - *startPosition);
-        auto sliceRecords = arrow::RecordBatch::Make(Records->schema(), arrValue->length(), { arrIndexes, arrValue });
+        auto sliceRecords = arrow20::RecordBatch::Make(Records->schema(), arrValue->length(), { arrIndexes, arrValue });
         return TSparsedArrayChunk(count, sliceRecords, DefaultValue);
     }
 }
 
-void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data) {
+void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow20::RecordBatch>& data) {
     AFL_VERIFY(data);
     AFL_VERIFY(recordsCount);
     AFL_VERIFY(data->num_rows() <= recordsCount)("rows", data->num_rows())("count", recordsCount);
     AFL_VERIFY(data->num_columns() == 2)("count", data->num_columns());
-    AFL_VERIFY(data->column(0)->type_id() == arrow::uint32()->id())("type", data->column(0)->type()->ToString());
+    AFL_VERIFY(data->column(0)->type_id() == arrow20::uint32()->id())("type", data->column(0)->type()->ToString());
     AFL_VERIFY(data->column(1)->type_id() == Type->id())("type", Type->ToString())("ext_type", data->column(0)->type()->ToString());
     AFL_VERIFY_DEBUG(data->schema()->field(0)->name() == "index")("name", data->schema()->field(0)->name());
     if (data->num_rows()) {
-        auto* arr = static_cast<const arrow::UInt32Array*>(data->column(0).get());
+        auto* arr = static_cast<const arrow20::UInt32Array*>(data->column(0).get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
     Chunks.emplace_back(recordsCount, data, DefaultValue);
@@ -317,19 +317,19 @@ void TSparsedArray::TBuilder::AddChunk(const ui32 recordsCount, const std::share
 }
 
 void TSparsedArray::TBuilder::AddChunk(
-    const ui32 recordsCount, const std::shared_ptr<arrow::Array>& indexes, const std::shared_ptr<arrow::Array>& values) {
+    const ui32 recordsCount, const std::shared_ptr<arrow20::Array>& indexes, const std::shared_ptr<arrow20::Array>& values) {
     AFL_VERIFY(indexes);
     AFL_VERIFY(values);
     AFL_VERIFY(recordsCount);
     AFL_VERIFY(indexes->length() == values->length())("indexes", indexes->length())("values", values->length());
     AFL_VERIFY(indexes->length() <= recordsCount)("indexes", indexes->length())("count", recordsCount);
-    AFL_VERIFY(indexes->type_id() == arrow::uint32()->id())("type", indexes->type()->ToString());
+    AFL_VERIFY(indexes->type_id() == arrow20::uint32()->id())("type", indexes->type()->ToString());
     AFL_VERIFY(values->type_id() == Type->id())("type", Type->ToString())("ext_type", values->type()->ToString());
     if (indexes->length()) {
-        auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
+        auto* arr = static_cast<const arrow20::UInt32Array*>(indexes.get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
-    Chunks.emplace_back(recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
+    Chunks.emplace_back(recordsCount, arrow20::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;
     AFL_VERIFY(Chunks.size() == 1);
 }

@@ -3,8 +3,8 @@
 
 namespace NKikimr::NArrow::NTransformation {
 
-std::shared_ptr<arrow::RecordBatch> TCompositeTransformer::DoTransform(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    std::shared_ptr<arrow::RecordBatch> current = batch;
+std::shared_ptr<arrow20::RecordBatch> TCompositeTransformer::DoTransform(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
+    std::shared_ptr<arrow20::RecordBatch> current = batch;
     for (auto&& i : Transformers) {
         current = i->Transform(current);
     }

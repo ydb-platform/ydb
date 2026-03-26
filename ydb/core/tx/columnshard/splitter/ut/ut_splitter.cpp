@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
     protected:
         virtual NKikimr::NArrow::NAccessor::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
             return NKikimr::NArrow::NAccessor::TColumnSaver(
-                std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+                std::make_shared<NSerialization::TNativeSerializer>(arrow20::ipc::IpcOptions::Defaults()));
         }
 
     public:
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
             return {};
         }
         virtual std::optional<NKikimr::NArrow::NSplitter::TBatchSerializationStat> GetBatchSerializationStats(
-            const std::shared_ptr<arrow::RecordBatch>& /*rb*/) const override {
+            const std::shared_ptr<arrow20::RecordBatch>& /*rb*/) const override {
             return {};
         }
 
@@ -44,8 +44,8 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(columnId), nullptr, columnId);
         }
 
-        virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
-            return std::make_shared<arrow::Field>(GetColumnName(columnId), std::make_shared<arrow::StringType>());
+        virtual std::shared_ptr<arrow20::Field> GetField(const ui32 columnId) const override {
+            return std::make_shared<arrow20::Field>(GetColumnName(columnId), std::make_shared<arrow20::StringType>());
         }
 
         virtual ui32 GetColumnId(const std::string& columnName) const override {
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         YDB_ACCESSOR(std::optional<ui32>, ExpectedInternalSplitsCount, 0);
 
     public:
-        void Execute(std::shared_ptr<arrow::RecordBatch> batch,
+        void Execute(std::shared_ptr<arrow20::RecordBatch> batch,
             const NKikimr::NOlap::NSplitter::TSplitSettings& settings = NKikimr::NOlap::NSplitter::TSplitSettings()) {
             using namespace NKikimr::NOlap;
             NKikimr::NColumnShard::TIndexationCounters counters("test");
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
                 THashMap<ui32, std::set<ui32>> entitiesByRecordsCount;
                 ui32 pagesRestore = 0;
                 for (auto&& e : entityChunks) {
-                    const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
+                    const std::shared_ptr<arrow20::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
                     AFL_VERIFY(arr);
                     ui32 count = 0;
                     i32 idx = -1;
@@ -144,11 +144,11 @@ Y_UNIT_TEST_SUITE(Splitter) {
                         idx = idxC;
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
                         auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
-                        std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
+                        std::shared_ptr<arrow20::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
                         AFL_VERIFY(chunkedArray->num_chunks() == 1);
                         AFL_VERIFY(slice->length() == chunkedArray->length());
                         Y_ABORT_UNLESS(
-                            chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow::EqualOptions::Defaults()));
+                            chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow20::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();
                         AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
                         AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr column =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 512));
-        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(80048);
+        std::shared_ptr<arrow20::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
         TSplitTester().SetExpectBlobsCount(8).SetExpectSlicesCount(8).Execute(batch);
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr column =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 24));
-        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(80048);
+        std::shared_ptr<arrow20::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
         TSplitTester().SetExpectBlobsCount(1).SetExpectSlicesCount(8).Execute(batch);
@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr column =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 512));
-        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(4048);
+        std::shared_ptr<arrow20::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(4048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
         TSplitTester().SetExpectBlobsCount(1).SetExpectSlicesCount(1).Execute(batch);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr column =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 512));
-        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(10048);
+        std::shared_ptr<arrow20::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ column }).BuildBatch(10048);
 
         TSplitTester().SetExpectBlobsCount(1).SetExpectSlicesCount(1).Execute(batch);
     }
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr columnSmall =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field2", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 1));
-        std::shared_ptr<arrow::RecordBatch> batch =
+        std::shared_ptr<arrow20::RecordBatch> batch =
             NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ columnBig, columnSmall }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr columnSmall =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field2", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 128));
-        std::shared_ptr<arrow::RecordBatch> batch =
+        std::shared_ptr<arrow20::RecordBatch> batch =
             NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ columnBig, columnSmall }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr columnSmall =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field2", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 128));
-        std::shared_ptr<arrow::RecordBatch> batch =
+        std::shared_ptr<arrow20::RecordBatch> batch =
             NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ columnBig, columnSmall }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         NConstruction::IArrayBuilder::TPtr columnBig =
             std::make_shared<NKikimr::NArrow::NConstruction::TSimpleArrayConstructor<NKikimr::NArrow::NConstruction::TStringPoolFiller>>(
                 "field1", NKikimr::NArrow::NConstruction::TStringPoolFiller(8, 7120));
-        std::shared_ptr<arrow::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ columnBig }).BuildBatch(80048);
+        std::shared_ptr<arrow20::RecordBatch> batch = NKikimr::NArrow::NConstruction::TRecordBatchConstructor({ columnBig }).BuildBatch(80048);
         NKikimr::NColumnShard::TIndexationCounters counters("test");
 
         TSplitTester().SetExpectBlobsCount(72).SetExpectSlicesCount(8).SetExpectedInternalSplitsCount(0).SetExpectPortionsCount(8).Execute(

@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NTxInteractions {
 TIntervalPoint TIntervalPoint::From(
-    const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    const TPredicateContainer& container, const std::shared_ptr<arrow20::Schema>& pkSchema) {
     const i32 shift = [&]() {
         if (container.IsAll()) {
             return -1;
@@ -17,7 +17,7 @@ TIntervalPoint TIntervalPoint::From(
 }
 
 TIntervalPoint TIntervalPoint::To(
-    const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    const TPredicateContainer& container, const std::shared_ptr<arrow20::Schema>& pkSchema) {
     const i32 shift = [&]() {
         if (container.IsAll() || container.NumColumns() < (ui32)pkSchema->num_fields()) {
             return Max<i32>();

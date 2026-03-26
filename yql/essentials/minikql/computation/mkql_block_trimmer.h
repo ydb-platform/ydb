@@ -13,12 +13,12 @@ public:
 
     virtual ~IBlockTrimmer() = default;
 
-    virtual std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) = 0;
+    virtual std::shared_ptr<arrow20::ArrayData> Trim(const std::shared_ptr<arrow20::ArrayData>& array) = 0;
 };
 
 IBlockTrimmer::TPtr MakeBlockTrimmer(
     const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
     const NYql::NUdf::TType* type,
-    arrow::MemoryPool* pool);
+    arrow20::MemoryPool* pool);
 
 } // namespace NKikimr::NMiniKQL

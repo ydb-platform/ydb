@@ -23,7 +23,7 @@ public:
         AFL_VERIFY(Data);
     }
 
-    explicit TAccessorCollectedContainer(const arrow::Datum& data);
+    explicit TAccessorCollectedContainer(const arrow20::Datum& data);
 
     const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetData() const {
         return Data;
@@ -37,7 +37,7 @@ public:
 class TAccessorsCollection {
 private:
     THashMap<ui32, TAccessorCollectedContainer> Accessors;
-    THashMap<ui32, std::shared_ptr<arrow::Scalar>> Constants;
+    THashMap<ui32, std::shared_ptr<arrow20::Scalar>> Constants;
     std::vector<ui32> ColumnIdsSequence;
     std::shared_ptr<TColumnFilter> Filter = std::make_shared<TColumnFilter>(TColumnFilter::BuildAllowFilter());
     bool UseFilter = true;
@@ -127,19 +127,19 @@ public:
 
     void AddBatch(const std::shared_ptr<TGeneralContainer>& container, const NSSA::IColumnResolver& resolver, const bool withFilter);
 
-    TAccessorsCollection(const std::shared_ptr<arrow::RecordBatch>& data, const NSSA::IColumnResolver& resolver);
-    TAccessorsCollection(const std::shared_ptr<arrow::Table>& data, const NSSA::IColumnResolver& resolver);
+    TAccessorsCollection(const std::shared_ptr<arrow20::RecordBatch>& data, const NSSA::IColumnResolver& resolver);
+    TAccessorsCollection(const std::shared_ptr<arrow20::Table>& data, const NSSA::IColumnResolver& resolver);
 
     std::shared_ptr<TGeneralContainer> ToGeneralContainer(const NSSA::IColumnResolver* resolver = nullptr,
         const std::optional<std::set<ui32>>& columnIds = std::nullopt, const bool strictResolver = true) const;
 
-    std::shared_ptr<arrow::RecordBatch> ToBatch(const NSSA::IColumnResolver* resolver = nullptr, const bool strictResolver = true) const;
-    std::shared_ptr<arrow::Table> ToTable(const std::optional<std::set<ui32>>& columnIds = std::nullopt,
+    std::shared_ptr<arrow20::RecordBatch> ToBatch(const NSSA::IColumnResolver* resolver = nullptr, const bool strictResolver = true) const;
+    std::shared_ptr<arrow20::Table> ToTable(const std::optional<std::set<ui32>>& columnIds = std::nullopt,
         const NSSA::IColumnResolver* resolver = nullptr, const bool strictResolver = true) const;
 
     std::shared_ptr<IChunkedArray> GetConstantVerified(const ui32 columnId, const ui32 recordsCount) const;
-    const std::shared_ptr<arrow::Scalar>& GetConstantScalarVerified(const ui32 columnId) const;
-    const std::shared_ptr<arrow::Scalar>& GetConstantScalarOptional(const ui32 columnId) const;
+    const std::shared_ptr<arrow20::Scalar>& GetConstantScalarVerified(const ui32 columnId) const;
+    const std::shared_ptr<arrow20::Scalar>& GetConstantScalarOptional(const ui32 columnId) const;
 
     void Clear() {
         Accessors.clear();
@@ -155,13 +155,13 @@ public:
         return Accessors.contains(id) || Constants.contains(id);
     }
 
-    void AddCalculated(const ui32 columnId, const arrow::Datum& data);
-    void AddInput(const ui32 columnId, const arrow::Datum& data, const bool withFilter);
+    void AddCalculated(const ui32 columnId, const arrow20::Datum& data);
+    void AddInput(const ui32 columnId, const arrow20::Datum& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
     void AddVerified(const ui32 columnId, const TAccessorCollectedContainer& data, const bool withFilter);
     void Upsert(const ui32 columnId, const std::shared_ptr<IChunkedArray>& data, const bool withFilter);
 
-    void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow::Scalar>& scalar) {
+    void AddConstantVerified(const ui32 columnId, const std::shared_ptr<arrow20::Scalar>& scalar) {
         AFL_VERIFY(columnId);
         AFL_VERIFY(scalar);
         AFL_VERIFY(Constants.emplace(columnId, scalar).second);
@@ -169,12 +169,12 @@ public:
 
     class TChunksMerger {
     private:
-        std::vector<arrow::Datum> Chunks;
+        std::vector<arrow20::Datum> Chunks;
         bool Finished = false;
         bool IsScalar = false;
 
     public:
-        void AddChunk(const arrow::Datum& datum) {
+        void AddChunk(const arrow20::Datum& datum) {
             AFL_VERIFY(!Finished);
             Chunks.emplace_back(datum);
             if (datum.is_scalar()) {
@@ -182,7 +182,7 @@ public:
             }
         }
 
-        [[nodiscard]] TConclusion<arrow::Datum> Execute() {
+        [[nodiscard]] TConclusion<arrow20::Datum> Execute() {
             AFL_VERIFY(!Finished);
             Finished = true;
             if (IsScalar) {
@@ -192,7 +192,7 @@ public:
                     return TConclusionStatus::Fail("cannot merge datum as scalars");
                 }
             }
-            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            std::vector<std::shared_ptr<arrow20::Array>> chunks;
             for (auto&& i : Chunks) {
                 if (i.is_array()) {
                     chunks.emplace_back(i.make_array());
@@ -207,7 +207,7 @@ public:
             if (chunks.size() == 1) {
                 return chunks.front();
             } else {
-                auto result = arrow::ChunkedArray::Make(chunks);
+                auto result = arrow20::ChunkedArray::Make(chunks);
                 if (!result.ok()) {
                     return TConclusionStatus::Fail(result.status().message());
                 } else {
@@ -221,11 +221,11 @@ public:
     private:
         std::vector<std::shared_ptr<IChunkedArray>> ArraysOriginal;
         ui32 LastColumnId = 0;
-        std::vector<std::shared_ptr<arrow::ChunkedArray>> Arrays;
-        std::vector<arrow::Datum> Scalars;
+        std::vector<std::shared_ptr<arrow20::ChunkedArray>> Arrays;
+        std::vector<arrow20::Datum> Scalars;
 
-        std::shared_ptr<arrow::Table> Table;
-        std::vector<std::shared_ptr<arrow::Field>> Fields;
+        std::shared_ptr<arrow20::Table> Table;
+        std::vector<std::shared_ptr<arrow20::Field>> Fields;
         class TArrayAddress {
         private:
             YDB_READONLY_DEF(std::optional<ui32>, ArrayIndex);
@@ -243,7 +243,7 @@ public:
                 return result;
             }
 
-            arrow::Datum GetDatum(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<arrow::Datum>& scalars) const {
+            arrow20::Datum GetDatum(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<arrow20::Datum>& scalars) const {
                 if (ArrayIndex) {
                     AFL_VERIFY(*ArrayIndex < (ui32)batch->num_columns());
                     return batch->column_data(*ArrayIndex);
@@ -256,7 +256,7 @@ public:
         };
 
         std::vector<TArrayAddress> Addresses;
-        std::optional<arrow::TableBatchReader> TableReader;
+        std::optional<arrow20::TableBatchReader> TableReader;
         bool Started = false;
         bool Finished = false;
         bool ConstantsRead = false;
@@ -274,10 +274,10 @@ public:
             ArraysOriginal.emplace_back(arr);
             Arrays.emplace_back(arr->GetChunkedArray());
             Addresses.emplace_back(TArrayAddress::Array(Arrays.size() - 1));
-            Fields.emplace_back(std::make_shared<arrow::Field>(::ToString(Fields.size() + 1), arr->GetDataType()));
+            Fields.emplace_back(std::make_shared<arrow20::Field>(::ToString(Fields.size() + 1), arr->GetDataType()));
         }
 
-        void AddScalar(const std::shared_ptr<arrow::Scalar>& scalar) {
+        void AddScalar(const std::shared_ptr<arrow20::Scalar>& scalar) {
             AFL_VERIFY(!Started);
             Scalars.emplace_back(scalar);
             Addresses.emplace_back(TArrayAddress::Scalar(Scalars.size() - 1));
@@ -288,7 +288,7 @@ public:
             AFL_VERIFY(!Table);
             AFL_VERIFY(Arrays.size() || Scalars.size());
             if (Arrays.size()) {
-                Table = arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), Arrays);
+                Table = arrow20::Table::Make(std::make_shared<arrow20::Schema>(Fields), Arrays);
                 if (concatenate) {
                     Table = TStatusValidator::GetValid(Table->CombineChunks());
                 }
@@ -302,7 +302,7 @@ public:
             return result;
         }
 
-        std::optional<std::vector<arrow::Datum>> ReadNext() {
+        std::optional<std::vector<arrow20::Datum>> ReadNext() {
             AFL_VERIFY(Started);
             AFL_VERIFY(!Finished);
             if (Arrays.empty() && Scalars.empty()) {
@@ -318,13 +318,13 @@ public:
                 return Scalars;
             } else {
                 AFL_VERIFY(Table);
-                std::shared_ptr<arrow::RecordBatch> chunk;
+                std::shared_ptr<arrow20::RecordBatch> chunk;
                 TStatusValidator::Validate(TableReader->ReadNext(&chunk));
                 if (!chunk) {
                     Finished = true;
                     return {};
                 }
-                std::vector<arrow::Datum> columns;
+                std::vector<arrow20::Datum> columns;
                 for (auto&& i : Addresses) {
                     columns.emplace_back(i.GetDatum(chunk, Scalars));
                 }
@@ -340,7 +340,7 @@ public:
     std::vector<std::shared_ptr<IChunkedArray>> ExtractAccessors(const std::vector<ui32>& columnIds);
     std::shared_ptr<IChunkedArray> ExtractAccessorOptional(const ui32 columnId);
 
-    std::shared_ptr<arrow::Table> GetTable(const std::vector<ui32>& columnIds) const;
+    std::shared_ptr<arrow20::Table> GetTable(const std::vector<ui32>& columnIds) const;
 
     void Remove(const std::vector<ui32>& columnIds, const bool optional = false) {
         for (auto&& i : columnIds) {
@@ -386,7 +386,7 @@ public:
 
     void RemainOnly(const std::vector<ui32>& columns, const bool useAsSequence);
 
-    arrow::Datum GetDatumVerified(const ui32 columnId) const {
+    arrow20::Datum GetDatumVerified(const ui32 columnId) const {
         auto chunked = GetAccessorVerified(columnId)->GetChunkedArray();
         if (chunked->num_chunks() == 1) {
             return chunked->chunk(0);
@@ -394,7 +394,7 @@ public:
         return chunked;
     }
 
-    std::optional<arrow::Datum> GetDatumOptional(const ui32 columnId) const {
+    std::optional<arrow20::Datum> GetDatumOptional(const ui32 columnId) const {
         auto acc = GetAccessorOptional(columnId);
         if (!acc) {
             return std::nullopt;
@@ -406,7 +406,7 @@ public:
         return chunked;
     }
 
-    std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayVerified(const ui32 columnId) const {
+    std::shared_ptr<arrow20::ChunkedArray> GetChunkedArrayVerified(const ui32 columnId) const {
         return GetAccessorVerified(columnId)->GetChunkedArray();
     }
 
@@ -425,12 +425,12 @@ public:
         }
     }
 
-    std::shared_ptr<arrow::Array> GetArrayVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Array> GetArrayVerified(const ui32 columnId) const;
 
-    std::shared_ptr<arrow::Field> GetFieldVerified(const ui32 columnId) const {
+    std::shared_ptr<arrow20::Field> GetFieldVerified(const ui32 columnId) const {
         auto it = Accessors.find(columnId);
         AFL_VERIFY(it != Accessors.end());
-        return std::make_shared<arrow::Field>(::ToString(columnId), it->second->GetDataType());
+        return std::make_shared<arrow20::Field>(::ToString(columnId), it->second->GetDataType());
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {

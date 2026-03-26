@@ -344,7 +344,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
 
     void* ptr;
     if (TAllocState::IsDefaultArrowAllocatorUsed()) {
-        auto pool = arrow::default_memory_pool();
+        auto pool = arrow20::default_memory_pool();
         Y_ENSURE(pool);
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
@@ -420,7 +420,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
     Y_ENSURE(size == header->Size);
 
     if (TAllocState::IsDefaultArrowAllocatorUsed()) {
-        auto pool = arrow::default_memory_pool();
+        auto pool = arrow20::default_memory_pool();
         Y_ABORT_UNLESS(pool);
         pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         return;
@@ -464,7 +464,7 @@ void MKQLArrowUntrack(const void* mem) {
     }
 
     // NOTE: Check original pointer first and only then check for an arena page.
-    // There is a special case of class `arrow::ImportedBuffer` which is used to transfer buffers across .so boundaries (i.e. UDFs),
+    // There is a special case of class `arrow20::ImportedBuffer` which is used to transfer buffers across .so boundaries (i.e. UDFs),
     // this buffer shrinks original capacity and if it's too small it may wrongly choose the branch for arena page untracking.
     auto it = state->ArrowBuffers.find(mem);
     if (it == state->ArrowBuffers.end()) {

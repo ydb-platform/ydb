@@ -262,10 +262,10 @@ private:
         if (!jsonPathScalar) {
             return TConclusionStatus::Fail("no data for json path (cannot find parameter)");
         }
-        if (jsonPathScalar->type->id() != arrow::utf8()->id()) {
+        if (jsonPathScalar->type->id() != arrow20::utf8()->id()) {
             return TConclusionStatus::Fail("incorrect json path (have to be utf8)");
         }
-        const auto buffer = std::static_pointer_cast<arrow::StringScalar>(jsonPathScalar)->value;
+        const auto buffer = std::static_pointer_cast<arrow20::StringScalar>(jsonPathScalar)->value;
         std::string_view svPath((const char*)buffer->data(), buffer->size());
         // Here we should have the valid path (the validation is done in KQP, so do no check it here)
 

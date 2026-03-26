@@ -12,7 +12,7 @@ namespace NKikimr::NOlap {
 
 class TSchemaObjectsCache {
 private:
-    THashMap<TString, std::shared_ptr<arrow::Field>> Fields;
+    THashMap<TString, std::shared_ptr<arrow20::Field>> Fields;
     mutable ui64 AcceptionFieldsCount = 0;
     mutable TMutex FieldsMutex;
 
@@ -36,7 +36,7 @@ public:
         return *it;
     }
 
-    std::shared_ptr<arrow::Field> GetOrInsertField(const std::shared_ptr<arrow::Field>& f) {
+    std::shared_ptr<arrow20::Field> GetOrInsertField(const std::shared_ptr<arrow20::Field>& f) {
         TGuard lock(FieldsMutex);
         const TString fingerprint = f->ToString(true);
         auto it = Fields.find(fingerprint);

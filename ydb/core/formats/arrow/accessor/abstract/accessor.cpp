@@ -15,17 +15,17 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void IChunkedArray::TReader::AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const {
+void IChunkedArray::TReader::AppendPositionTo(arrow20::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const {
     auto address = GetReadChunk(position);
     AFL_VERIFY(NArrow::Append(builder, *address.GetArray(), address.GetPosition(), recordSize));
 }
 
-std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 recordIndex) const {
+std::shared_ptr<arrow20::Array> IChunkedArray::TReader::CopyRecord(const ui64 recordIndex) const {
     auto address = GetReadChunk(recordIndex);
     return NArrow::CopyRecords(address.GetArray(), { address.GetPosition() });
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
+std::shared_ptr<arrow20::ChunkedArray> IChunkedArray::Slice(const ui32 offset, const ui32 count) const {
     return GetChunkedArray(TColumnConstructionContext().SetStartIndex(offset).SetRecordsCount(count));
 }
 
@@ -91,9 +91,9 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
 
 std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter& filter) const {
     auto arr = GetChunkedArray();
-    const arrow::FieldVector fields = { std::make_shared<arrow::Field>("applied", GetDataType()) };
-    auto schema = std::make_shared<arrow::Schema>(fields);
-    auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
+    const arrow20::FieldVector fields = { std::make_shared<arrow20::Field>("applied", GetDataType()) };
+    auto schema = std::make_shared<arrow20::Schema>(fields);
+    auto table = arrow20::Table::Make(schema, { arr }, GetRecordsCount());
     AFL_VERIFY(table->num_columns() == 1);
     filter.Apply(table);
     if (table->column(0)->num_chunks() == 1) {
@@ -117,18 +117,18 @@ std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& f
     return result;
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArrayTrivial() const {
-    std::vector<std::shared_ptr<arrow::Array>> chunks;
+std::shared_ptr<arrow20::ChunkedArray> IChunkedArray::GetChunkedArrayTrivial() const {
+    std::vector<std::shared_ptr<arrow20::Array>> chunks;
     std::optional<TFullDataAddress> address;
     for (ui32 position = 0; position < GetRecordsCount();) {
         address = GetChunk(address, position);
         chunks.emplace_back(address->GetArray());
         position += address->GetArray()->length();
     }
-    return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
+    return std::make_shared<arrow20::ChunkedArray>(chunks, GetDataType());
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow20::ChunkedArray> IChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
     if (context.GetStartIndex() || context.GetRecordsCount()) {
         const ui32 start = context.GetStartIndex().value_or(0);
         const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
@@ -138,7 +138,7 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColum
     return DoGetChunkedArray(context);
 }
 
-std::shared_ptr<arrow::ChunkedArray> IChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
+std::shared_ptr<arrow20::ChunkedArray> IChunkedArray::DoGetChunkedArray(const TColumnConstructionContext& context) const {
     if (context.GetStartIndex() || context.GetRecordsCount()) {
         const ui32 start = context.GetStartIndex().value_or(0);
         const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
@@ -203,7 +203,7 @@ std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
 }
 
-std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {
+std::shared_ptr<arrow20::Array> IChunkedArray::TFullDataAddress::CopyRecord(const ui64 recordIndex) const {
     return NArrow::CopyRecords(Array, { Address.GetLocalIndex(recordIndex) });
 }
 

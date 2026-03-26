@@ -12,7 +12,7 @@ class TBuildSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitorin
 private:
     NEvWrite::TWriteData WriteData;
     const ui64 TabletId;
-    std::shared_ptr<arrow::RecordBatch> OriginalBatch;
+    std::shared_ptr<arrow20::RecordBatch> OriginalBatch;
     std::optional<std::vector<NArrow::TSerializedBatch>> BuildSlices();
     const TWritingContext Context;
     void ReplyError(const TString& message, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass);
@@ -25,7 +25,7 @@ public:
         return "Write::ConstructBlobs::Slices";
     }
 
-    TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
+    TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow20::RecordBatch>& batch,
         const TWritingContext& context)
         : WriteData(std::move(writeData))
         , TabletId(context.GetTabletId())

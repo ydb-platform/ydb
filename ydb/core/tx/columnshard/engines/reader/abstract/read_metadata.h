@@ -226,7 +226,7 @@ public:
         return RequestSnapshot;
     }
 
-    std::shared_ptr<arrow::Schema> GetReplaceKey() const {
+    std::shared_ptr<arrow20::Schema> GetReplaceKey() const {
         AFL_VERIFY(ResultIndexSchema);
         return ResultIndexSchema->GetIndexInfo().GetReplaceKey();
     }

@@ -135,7 +135,7 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         }));
 
         if (addNull) {
-            auto dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate({ArrayVariantsFull, NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1)}));
+            auto dictArray = NArrow::TStatusValidator::GetValid(arrow20::Concatenate({ArrayVariantsFull, NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1)}));
             dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictArray, NArrow::FinishBuilder(std::move(rBuilder)));
         } else {
             dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(ArrayVariantsFull, NArrow::FinishBuilder(std::move(rBuilder)));
@@ -171,18 +171,18 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         auto filtered = NArrow::TColumnFilter(std::move(mask))
                             .Apply(std::make_shared<NArrow::NAccessor::TTrivialArray>(ArrayVariantsFull))
                             ->GetChunkedArray();
-        std::shared_ptr<arrow::Array> dictArray;
+        std::shared_ptr<arrow20::Array> dictArray;
         if (!filtered || filtered->num_chunks() == 0) {
             dictArray = NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 0);
         } else {
-            arrow::ArrayVector parts;
+            arrow20::ArrayVector parts;
             for (int i = 0; i < filtered->num_chunks(); ++i) {
                 parts.push_back(filtered->chunk(i));
             }
             if (addNull) {
                 parts.push_back(NArrow::TThreadSimpleArraysCache::GetNull(ArrayVariantsFull->type(), 1));
             }
-            dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
+            dictArray = NArrow::TStatusValidator::GetValid(arrow20::Concatenate(parts));
         }
         dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictArray, NArrow::FinishBuilder(std::move(rBuilder)));
     }

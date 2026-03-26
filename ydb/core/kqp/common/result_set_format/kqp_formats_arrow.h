@@ -15,7 +15,7 @@
 
 namespace NKikimr::NKqp::NFormats {
 
-constexpr size_t MAX_VARIANT_FLATTEN_SIZE = static_cast<size_t>(arrow::UnionType::kMaxTypeCode) + 1;
+constexpr size_t MAX_VARIANT_FLATTEN_SIZE = static_cast<size_t>(arrow20::UnionType::kMaxTypeCode) + 1;
 constexpr size_t MAX_VARIANT_NESTED_SIZE = MAX_VARIANT_FLATTEN_SIZE * MAX_VARIANT_FLATTEN_SIZE;
 constexpr size_t MAX_VARIANT_DEPTH = 2;
 
@@ -30,10 +30,10 @@ constexpr size_t MAX_VARIANT_DEPTH = 2;
  * - Integer types: Int8/16/32/64, UInt8/16/32/64
  * - Floating point: Float, Double
  * - Temporal types: Date, Datetime, Timestamp, Interval (and their extended variants)
- * - String types: Utf8, Json, JsonDocument (serialized to string), DyNumber (serialized to string) -> arrow::StringType
- * - Binary types: String, Yson -> arrow::BinaryType
- * - Fixed-size binary: Decimal, Uuid -> arrow::FixedSizeBinaryType
- * - Timezone-aware: TzDate, TzDatetime, TzTimestamp -> arrow::StructType<datetimeType, arrow::StringType (serialized name of timezone)>
+ * - String types: Utf8, Json, JsonDocument (serialized to string), DyNumber (serialized to string) -> arrow20::StringType
+ * - Binary types: String, Yson -> arrow20::BinaryType
+ * - Fixed-size binary: Decimal, Uuid -> arrow20::FixedSizeBinaryType
+ * - Timezone-aware: TzDate, TzDatetime, TzTimestamp -> arrow20::StructType<datetimeType, arrow20::StringType (serialized name of timezone)>
  *
  * @tparam TFunc Callable type accepting a single template parameter (Arrow type)
  * @param typeId The MiniKQL data slot to convert
@@ -44,57 +44,57 @@ template <typename TFunc>
 bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot typeId, TFunc&& callback) {
     switch (typeId) {
         case NUdf::EDataSlot::Int8:
-            return callback.template operator()<arrow::Int8Type>();
+            return callback.template operator()<arrow20::Int8Type>();
 
         case NUdf::EDataSlot::Uint8:
         case NUdf::EDataSlot::Bool:
-            return callback.template operator()<arrow::UInt8Type>();
+            return callback.template operator()<arrow20::UInt8Type>();
 
         case NUdf::EDataSlot::Int16:
-            return callback.template operator()<arrow::Int16Type>();
+            return callback.template operator()<arrow20::Int16Type>();
 
         case NUdf::EDataSlot::Date:
         case NUdf::EDataSlot::Uint16:
-            return callback.template operator()<arrow::UInt16Type>();
+            return callback.template operator()<arrow20::UInt16Type>();
 
         case NUdf::EDataSlot::Int32:
         case NUdf::EDataSlot::Date32:
-            return callback.template operator()<arrow::Int32Type>();
+            return callback.template operator()<arrow20::Int32Type>();
 
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Uint32:
-            return callback.template operator()<arrow::UInt32Type>();
+            return callback.template operator()<arrow20::UInt32Type>();
 
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Interval64:
-            return callback.template operator()<arrow::Int64Type>();
+            return callback.template operator()<arrow20::Int64Type>();
 
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            return callback.template operator()<arrow::UInt64Type>();
+            return callback.template operator()<arrow20::UInt64Type>();
 
         case NUdf::EDataSlot::Float:
-            return callback.template operator()<arrow::FloatType>();
+            return callback.template operator()<arrow20::FloatType>();
 
         case NUdf::EDataSlot::Double:
-            return callback.template operator()<arrow::DoubleType>();
+            return callback.template operator()<arrow20::DoubleType>();
 
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::DyNumber:
         case NUdf::EDataSlot::JsonDocument:
-            return callback.template operator()<arrow::StringType>();
+            return callback.template operator()<arrow20::StringType>();
 
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
-            return callback.template operator()<arrow::BinaryType>();
+            return callback.template operator()<arrow20::BinaryType>();
 
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
-            return callback.template operator()<arrow::FixedSizeBinaryType>();
+            return callback.template operator()<arrow20::FixedSizeBinaryType>();
 
         case NUdf::EDataSlot::TzDate:
         case NUdf::EDataSlot::TzDatetime:
@@ -102,7 +102,7 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot typeId, TFunc&& callback) 
         case NUdf::EDataSlot::TzDate32:
         case NUdf::EDataSlot::TzDatetime64:
         case NUdf::EDataSlot::TzTimestamp64:
-            return callback.template operator()<arrow::StructType>();
+            return callback.template operator()<arrow20::StructType>();
     }
     return false;
 }
@@ -130,18 +130,18 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type);
  *
  * Conversion rules:
  * - Data types: mapped according to SwitchMiniKQLDataTypeToArrowType
- * - Struct/Tuple: converted to arrow::StructType
- * - List: converted to arrow::ListType
- * - Dict: converted to arrow::ListType of arrow::StructType<Key, Value>
- * - Variant: converted to arrow::DenseUnionType
+ * - Struct/Tuple: converted to arrow20::StructType
+ * - List: converted to arrow20::ListType
+ * - Dict: converted to arrow20::ListType of arrow20::StructType<Key, Value>
+ * - Variant: converted to arrow20::DenseUnionType
  * - Optional: nested optionals are flattened and represented via struct wrapping
  * - Tagged: converted to inner type
- * - Pg: converted to arrow::StringType
+ * - Pg: converted to arrow20::StringType
  *
  * @param type The MiniKQL type to convert
- * @return Shared pointer to corresponding Arrow DataType, or arrow::NullType if unsupported
+ * @return Shared pointer to corresponding Arrow DataType, or arrow20::NullType if unsupported
  */
-std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type);
+std::shared_ptr<arrow20::DataType> GetArrowType(const NMiniKQL::TType* type);
 
 /**
  * @brief Checks if a MiniKQL type can be represented in Arrow format.
@@ -171,6 +171,6 @@ bool IsArrowCompatible(const NMiniKQL::TType* type);
  * @param builder The Arrow builder to append to (must match the type)
  * @param type The MiniKQL type descriptor for the value
  */
-void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type);
+void AppendElement(NUdf::TUnboxedValue value, arrow20::ArrayBuilder* builder, const NMiniKQL::TType* type);
 
 } // namespace NKikimr::NKqp::NFormats

@@ -474,8 +474,8 @@ int Main(int argc, const char** argv)
         auto handle = program->Apply(&inputGenStream);
         auto outputGenSchema = program->MakeOutputSchema();
 
-        TVector<arrow::compute::ExecBatch> outputGenStream;
-        while (arrow::compute::ExecBatch* batch = handle->Fetch()) {
+        TVector<arrow20::compute::ExecBatch> outputGenStream;
+        while (arrow20::compute::ExecBatch* batch = handle->Fetch()) {
             outputGenStream.push_back(*batch);
         }
 
@@ -499,7 +499,7 @@ int Main(int argc, const char** argv)
             factory, {outputGenSchema}, testSql, isPgTest, repeats,
             [&](const auto& program) {
                 auto handle = program->Apply(StreamFromVector(outputGenStream));
-                while (/* arrow::compute::ExecBatch* batch = */ handle->Fetch()) {
+                while (/* arrow20::compute::ExecBatch* batch = */ handle->Fetch()) {
                 }
             });
     }

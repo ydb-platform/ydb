@@ -56,7 +56,7 @@ public:
 
 class TPortionMeta {
 private:
-    std::shared_ptr<arrow::Schema> PKSchema;
+    std::shared_ptr<arrow20::Schema> PKSchema;
     NArrow::TSimpleRowContent FirstPKRow;
     NArrow::TSimpleRowContent LastPKRow;
     YDB_READONLY_DEF(TString, TierName);
@@ -85,7 +85,7 @@ public:
 
     NArrow::TSimpleRowViewV0 IndexKeyViewStart() const;
     NArrow::TSimpleRowViewV0 IndexKeyViewEnd() const;
-    const std::shared_ptr<arrow::Schema>& GetPkSchema() const;
+    const std::shared_ptr<arrow20::Schema>& GetPkSchema() const;
 
     void ResetCompactionLevel(const ui32 level);
 

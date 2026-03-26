@@ -55,7 +55,7 @@ void THelperSchemaless::CreateTestOlapTable(TString storeOrDirName, TString sche
     ExecuteModifyScheme(op);
 }
 
-void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow::RecordBatch> batch,
+void THelperSchemaless::SendDataViaActorSystem(TString testTable, std::shared_ptr<arrow20::RecordBatch> batch,
     const Ydb::StatusIds_StatusCode& expectedStatus, const TString& expectedIssuePrefix) const {
     auto* runtime = Server.GetRuntime();
 
@@ -103,31 +103,31 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
 }
 
 
-std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.emplace_back(arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false));
-    fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
-    fields.emplace_back(arrow::field("uid", arrow::utf8(), false));
-    fields.emplace_back(arrow::field("level", arrow::int32()));
-    fields.emplace_back(arrow::field("message", arrow::utf8()));
+std::shared_ptr<arrow20::Schema> THelper::GetArrowSchema() const {
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
+    fields.emplace_back(arrow20::field("timestamp", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false));
+    fields.emplace_back(arrow20::field("resource_id", arrow20::utf8()));
+    fields.emplace_back(arrow20::field("uid", arrow20::utf8(), false));
+    fields.emplace_back(arrow20::field("level", arrow20::int32()));
+    fields.emplace_back(arrow20::field("message", arrow20::utf8()));
     if (GetWithJsonDocument()) {
-        fields.emplace_back(arrow::field("json_payload", arrow::utf8()));
+        fields.emplace_back(arrow20::field("json_payload", arrow20::utf8()));
     }
 
-    fields.emplace_back(arrow::field("new_column1", arrow::uint64()));
-    return std::make_shared<arrow::Schema>(std::move(fields));
+    fields.emplace_back(arrow20::field("new_column1", arrow20::uint64()));
+    return std::make_shared<arrow20::Schema>(std::move(fields));
 }
 
-std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
-    std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
+std::shared_ptr<arrow20::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
+    std::shared_ptr<arrow20::Schema> schema = GetArrowSchema();
 
-    arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
-    arrow::StringBuilder b2;
-    arrow::StringBuilder b3;
-    arrow::Int32Builder b4;
-    arrow::StringBuilder b5;
-    arrow::StringBuilder b6;
-    arrow::UInt64Builder b7;
+    arrow20::TimestampBuilder b1(arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool());
+    arrow20::StringBuilder b2;
+    arrow20::StringBuilder b3;
+    arrow20::Int32Builder b4;
+    arrow20::StringBuilder b5;
+    arrow20::StringBuilder b6;
+    arrow20::UInt64Builder b7;
 
     NJson::TJsonValue jsonInfo;
     jsonInfo["a"]["b"] = 1;
@@ -159,13 +159,13 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         Y_ABORT_UNLESS(b7.Append(i * 1000).ok());
     }
 
-    std::shared_ptr<arrow::TimestampArray> a1;
-    std::shared_ptr<arrow::StringArray> a2;
-    std::shared_ptr<arrow::StringArray> a3;
-    std::shared_ptr<arrow::Int32Array> a4;
-    std::shared_ptr<arrow::StringArray> a5;
-    std::shared_ptr<arrow::StringArray> a6;
-    std::shared_ptr<arrow::UInt64Array> a7;
+    std::shared_ptr<arrow20::TimestampArray> a1;
+    std::shared_ptr<arrow20::StringArray> a2;
+    std::shared_ptr<arrow20::StringArray> a3;
+    std::shared_ptr<arrow20::Int32Array> a4;
+    std::shared_ptr<arrow20::StringArray> a5;
+    std::shared_ptr<arrow20::StringArray> a6;
+    std::shared_ptr<arrow20::UInt64Array> a7;
 
     Y_ABORT_UNLESS(b1.Finish(&a1).ok());
     Y_ABORT_UNLESS(b2.Finish(&a2).ok());
@@ -176,9 +176,9 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
     Y_ABORT_UNLESS(b7.Finish(&a7).ok());
 
     if (GetWithJsonDocument()) {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7 });
+        return arrow20::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a6, a7 });
     } else {
-        return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a7 });
+        return arrow20::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5, a7 });
     }
 
 }
@@ -281,124 +281,124 @@ void THelper::CreateOlapTables(TVector<TString> tableNames /*= {"olapTable"}*/, 
 
 // Clickbench table
 
-std::shared_ptr<arrow::Schema> TCickBenchHelper::GetArrowSchema() const {
-    return std::make_shared<arrow::Schema>(
-        std::vector<std::shared_ptr<arrow::Field>> {
-        arrow::field("WatchID", arrow::int64(), false),
-            arrow::field("JavaEnable", arrow::int16(), false),
-            arrow::field("Title", arrow::utf8(), false),
-            arrow::field("GoodEvent", arrow::int16(), false),
-            arrow::field("EventTime", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false),
-            arrow::field("EventDate", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false), // TODO: Date
-            arrow::field("CounterID", arrow::int32(), false),
-            arrow::field("ClientIP", arrow::int32(), false),
-            arrow::field("RegionID", arrow::int32(), false),
-            arrow::field("UserID", arrow::int64(), false),
-            arrow::field("CounterClass", arrow::int16(), false),
-            arrow::field("OS", arrow::int16(), false),
-            arrow::field("UserAgent", arrow::int16(), false),
-            arrow::field("URL", arrow::utf8(), false),
-            arrow::field("Referer", arrow::utf8(), false),
-            arrow::field("IsRefresh", arrow::int16(), false),
-            arrow::field("RefererCategoryID", arrow::int16(), false),
-            arrow::field("RefererRegionID", arrow::int32(), false),
-            arrow::field("URLCategoryID", arrow::int16(), false),
-            arrow::field("URLRegionID", arrow::int32(), false),
-            arrow::field("ResolutionWidth", arrow::int16(), false),
-            arrow::field("ResolutionHeight", arrow::int16(), false),
-            arrow::field("ResolutionDepth", arrow::int16(), false),
-            arrow::field("FlashMajor", arrow::int16(), false),
-            arrow::field("FlashMinor", arrow::int16(), false),
-            arrow::field("FlashMinor2", arrow::utf8(), false),
-            arrow::field("NetMajor", arrow::int16(), false),
-            arrow::field("NetMinor", arrow::int16(), false),
-            arrow::field("UserAgentMajor", arrow::int16(), false),
-            arrow::field("UserAgentMinor", arrow::binary(), false),
-            arrow::field("CookieEnable", arrow::int16(), false),
-            arrow::field("JavascriptEnable", arrow::int16(), false),
-            arrow::field("IsMobile", arrow::int16(), false),
-            arrow::field("MobilePhone", arrow::int16(), false),
-            arrow::field("MobilePhoneModel", arrow::utf8(), false),
-            arrow::field("Params", arrow::utf8(), false),
-            arrow::field("IPNetworkID", arrow::int32(), false),
-            arrow::field("TraficSourceID", arrow::int16(), false),
-            arrow::field("SearchEngineID", arrow::int16(), false),
-            arrow::field("SearchPhrase", arrow::utf8(), false),
-            arrow::field("AdvEngineID", arrow::int16(), false),
-            arrow::field("IsArtifical", arrow::int16(), false),
-            arrow::field("WindowClientWidth", arrow::int16(), false),
-            arrow::field("WindowClientHeight", arrow::int16(), false),
-            arrow::field("ClientTimeZone", arrow::int16(), false),
-            arrow::field("ClientEventTime", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false),
-            arrow::field("SilverlightVersion1", arrow::int16(), false),
-            arrow::field("SilverlightVersion2", arrow::int16(), false),
-            arrow::field("SilverlightVersion3", arrow::int32(), false),
-            arrow::field("SilverlightVersion4", arrow::int16(), false),
-            arrow::field("PageCharset", arrow::utf8(), false),
-            arrow::field("CodeVersion", arrow::int32(), false),
-            arrow::field("IsLink", arrow::int16(), false),
-            arrow::field("IsDownload", arrow::int16(), false),
-            arrow::field("IsNotBounce", arrow::int16(), false),
-            arrow::field("FUniqID", arrow::int64(), false),
-            arrow::field("OriginalURL", arrow::utf8(), false),
-            arrow::field("HID", arrow::int32(), false),
-            arrow::field("IsOldCounter", arrow::int16(), false),
-            arrow::field("IsEvent", arrow::int16(), false),
-            arrow::field("IsParameter", arrow::int16(), false),
-            arrow::field("DontCountHits", arrow::int16(), false),
-            arrow::field("WithHash", arrow::int16(), false),
-            arrow::field("HitColor", arrow::binary(), false),
-            arrow::field("LocalEventTime", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false),
-            arrow::field("Age", arrow::int16(), false),
-            arrow::field("Sex", arrow::int16(), false),
-            arrow::field("Income", arrow::int16(), false),
-            arrow::field("Interests", arrow::int16(), false),
-            arrow::field("Robotness", arrow::int16(), false),
-            arrow::field("RemoteIP", arrow::int32(), false),
-            arrow::field("WindowName", arrow::int32(), false),
-            arrow::field("OpenerName", arrow::int32(), false),
-            arrow::field("HistoryLength", arrow::int16(), false),
-            arrow::field("BrowserLanguage", arrow::utf8(), false),
-            arrow::field("BrowserCountry", arrow::utf8(), false),
-            arrow::field("SocialNetwork", arrow::utf8(), false),
-            arrow::field("SocialAction", arrow::utf8(), false),
-            arrow::field("HTTPError", arrow::int16(), false),
-            arrow::field("SendTiming", arrow::int32(), false),
-            arrow::field("DNSTiming", arrow::int32(), false),
-            arrow::field("ConnectTiming", arrow::int32(), false),
-            arrow::field("ResponseStartTiming", arrow::int32(), false),
-            arrow::field("ResponseEndTiming", arrow::int32(), false),
-            arrow::field("FetchTiming", arrow::int32(), false),
-            arrow::field("SocialSourceNetworkID", arrow::int16(), false),
-            arrow::field("SocialSourcePage", arrow::utf8(), false),
-            arrow::field("ParamPrice", arrow::int64(), false),
-            arrow::field("ParamOrderID", arrow::utf8(), false),
-            arrow::field("ParamCurrency", arrow::utf8(), false),
-            arrow::field("ParamCurrencyID", arrow::int16(), false),
-            arrow::field("OpenstatServiceName", arrow::utf8(), false),
-            arrow::field("OpenstatCampaignID", arrow::utf8(), false),
-            arrow::field("OpenstatAdID", arrow::utf8(), false),
-            arrow::field("OpenstatSourceID", arrow::utf8(), false),
-            arrow::field("UTMSource", arrow::utf8(), false),
-            arrow::field("UTMMedium", arrow::utf8(), false),
-            arrow::field("UTMCampaign", arrow::utf8(), false),
-            arrow::field("UTMContent", arrow::utf8(), false),
-            arrow::field("UTMTerm", arrow::utf8(), false),
-            arrow::field("FromTag", arrow::utf8(), false),
-            arrow::field("HasGCLID", arrow::int16(), false),
-            arrow::field("RefererHash", arrow::int64(), false),
-            arrow::field("URLHash", arrow::int64(), false),
-            arrow::field("CLID", arrow::int32(), false)
+std::shared_ptr<arrow20::Schema> TCickBenchHelper::GetArrowSchema() const {
+    return std::make_shared<arrow20::Schema>(
+        std::vector<std::shared_ptr<arrow20::Field>> {
+        arrow20::field("WatchID", arrow20::int64(), false),
+            arrow20::field("JavaEnable", arrow20::int16(), false),
+            arrow20::field("Title", arrow20::utf8(), false),
+            arrow20::field("GoodEvent", arrow20::int16(), false),
+            arrow20::field("EventTime", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false),
+            arrow20::field("EventDate", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false), // TODO: Date
+            arrow20::field("CounterID", arrow20::int32(), false),
+            arrow20::field("ClientIP", arrow20::int32(), false),
+            arrow20::field("RegionID", arrow20::int32(), false),
+            arrow20::field("UserID", arrow20::int64(), false),
+            arrow20::field("CounterClass", arrow20::int16(), false),
+            arrow20::field("OS", arrow20::int16(), false),
+            arrow20::field("UserAgent", arrow20::int16(), false),
+            arrow20::field("URL", arrow20::utf8(), false),
+            arrow20::field("Referer", arrow20::utf8(), false),
+            arrow20::field("IsRefresh", arrow20::int16(), false),
+            arrow20::field("RefererCategoryID", arrow20::int16(), false),
+            arrow20::field("RefererRegionID", arrow20::int32(), false),
+            arrow20::field("URLCategoryID", arrow20::int16(), false),
+            arrow20::field("URLRegionID", arrow20::int32(), false),
+            arrow20::field("ResolutionWidth", arrow20::int16(), false),
+            arrow20::field("ResolutionHeight", arrow20::int16(), false),
+            arrow20::field("ResolutionDepth", arrow20::int16(), false),
+            arrow20::field("FlashMajor", arrow20::int16(), false),
+            arrow20::field("FlashMinor", arrow20::int16(), false),
+            arrow20::field("FlashMinor2", arrow20::utf8(), false),
+            arrow20::field("NetMajor", arrow20::int16(), false),
+            arrow20::field("NetMinor", arrow20::int16(), false),
+            arrow20::field("UserAgentMajor", arrow20::int16(), false),
+            arrow20::field("UserAgentMinor", arrow20::binary(), false),
+            arrow20::field("CookieEnable", arrow20::int16(), false),
+            arrow20::field("JavascriptEnable", arrow20::int16(), false),
+            arrow20::field("IsMobile", arrow20::int16(), false),
+            arrow20::field("MobilePhone", arrow20::int16(), false),
+            arrow20::field("MobilePhoneModel", arrow20::utf8(), false),
+            arrow20::field("Params", arrow20::utf8(), false),
+            arrow20::field("IPNetworkID", arrow20::int32(), false),
+            arrow20::field("TraficSourceID", arrow20::int16(), false),
+            arrow20::field("SearchEngineID", arrow20::int16(), false),
+            arrow20::field("SearchPhrase", arrow20::utf8(), false),
+            arrow20::field("AdvEngineID", arrow20::int16(), false),
+            arrow20::field("IsArtifical", arrow20::int16(), false),
+            arrow20::field("WindowClientWidth", arrow20::int16(), false),
+            arrow20::field("WindowClientHeight", arrow20::int16(), false),
+            arrow20::field("ClientTimeZone", arrow20::int16(), false),
+            arrow20::field("ClientEventTime", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false),
+            arrow20::field("SilverlightVersion1", arrow20::int16(), false),
+            arrow20::field("SilverlightVersion2", arrow20::int16(), false),
+            arrow20::field("SilverlightVersion3", arrow20::int32(), false),
+            arrow20::field("SilverlightVersion4", arrow20::int16(), false),
+            arrow20::field("PageCharset", arrow20::utf8(), false),
+            arrow20::field("CodeVersion", arrow20::int32(), false),
+            arrow20::field("IsLink", arrow20::int16(), false),
+            arrow20::field("IsDownload", arrow20::int16(), false),
+            arrow20::field("IsNotBounce", arrow20::int16(), false),
+            arrow20::field("FUniqID", arrow20::int64(), false),
+            arrow20::field("OriginalURL", arrow20::utf8(), false),
+            arrow20::field("HID", arrow20::int32(), false),
+            arrow20::field("IsOldCounter", arrow20::int16(), false),
+            arrow20::field("IsEvent", arrow20::int16(), false),
+            arrow20::field("IsParameter", arrow20::int16(), false),
+            arrow20::field("DontCountHits", arrow20::int16(), false),
+            arrow20::field("WithHash", arrow20::int16(), false),
+            arrow20::field("HitColor", arrow20::binary(), false),
+            arrow20::field("LocalEventTime", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false),
+            arrow20::field("Age", arrow20::int16(), false),
+            arrow20::field("Sex", arrow20::int16(), false),
+            arrow20::field("Income", arrow20::int16(), false),
+            arrow20::field("Interests", arrow20::int16(), false),
+            arrow20::field("Robotness", arrow20::int16(), false),
+            arrow20::field("RemoteIP", arrow20::int32(), false),
+            arrow20::field("WindowName", arrow20::int32(), false),
+            arrow20::field("OpenerName", arrow20::int32(), false),
+            arrow20::field("HistoryLength", arrow20::int16(), false),
+            arrow20::field("BrowserLanguage", arrow20::utf8(), false),
+            arrow20::field("BrowserCountry", arrow20::utf8(), false),
+            arrow20::field("SocialNetwork", arrow20::utf8(), false),
+            arrow20::field("SocialAction", arrow20::utf8(), false),
+            arrow20::field("HTTPError", arrow20::int16(), false),
+            arrow20::field("SendTiming", arrow20::int32(), false),
+            arrow20::field("DNSTiming", arrow20::int32(), false),
+            arrow20::field("ConnectTiming", arrow20::int32(), false),
+            arrow20::field("ResponseStartTiming", arrow20::int32(), false),
+            arrow20::field("ResponseEndTiming", arrow20::int32(), false),
+            arrow20::field("FetchTiming", arrow20::int32(), false),
+            arrow20::field("SocialSourceNetworkID", arrow20::int16(), false),
+            arrow20::field("SocialSourcePage", arrow20::utf8(), false),
+            arrow20::field("ParamPrice", arrow20::int64(), false),
+            arrow20::field("ParamOrderID", arrow20::utf8(), false),
+            arrow20::field("ParamCurrency", arrow20::utf8(), false),
+            arrow20::field("ParamCurrencyID", arrow20::int16(), false),
+            arrow20::field("OpenstatServiceName", arrow20::utf8(), false),
+            arrow20::field("OpenstatCampaignID", arrow20::utf8(), false),
+            arrow20::field("OpenstatAdID", arrow20::utf8(), false),
+            arrow20::field("OpenstatSourceID", arrow20::utf8(), false),
+            arrow20::field("UTMSource", arrow20::utf8(), false),
+            arrow20::field("UTMMedium", arrow20::utf8(), false),
+            arrow20::field("UTMCampaign", arrow20::utf8(), false),
+            arrow20::field("UTMContent", arrow20::utf8(), false),
+            arrow20::field("UTMTerm", arrow20::utf8(), false),
+            arrow20::field("FromTag", arrow20::utf8(), false),
+            arrow20::field("HasGCLID", arrow20::int16(), false),
+            arrow20::field("RefererHash", arrow20::int64(), false),
+            arrow20::field("URLHash", arrow20::int64(), false),
+            arrow20::field("CLID", arrow20::int32(), false)
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
-    std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
+std::shared_ptr<arrow20::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 begin, size_t rowCount, const ui64 tsStepUs) const {
+    std::shared_ptr<arrow20::Schema> schema = GetArrowSchema();
     UNIT_ASSERT(schema);
     UNIT_ASSERT(schema->num_fields());
 
-    std::unique_ptr<arrow::RecordBatchBuilder> builders;
-    auto res = arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rowCount, &builders);
+    std::unique_ptr<arrow20::RecordBatchBuilder> builders;
+    auto res = arrow20::RecordBatchBuilder::Make(schema, arrow20::default_memory_pool(), rowCount, &builders);
     UNIT_ASSERT(res.ok());
 
     for (i32 col = 0; col < schema->num_fields(); ++col) {
@@ -407,30 +407,30 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
         for (size_t row = 0; row < rowCount; ++row) {
             ui64 value = begin + row;
             switch (typeId) {
-                case arrow::Type::INT16: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int16Builder>(col)->Append(value).ok());
+                case arrow20::Type::INT16: {
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::Int16Builder>(col)->Append(value).ok());
                     break;
                 }
-                case arrow::Type::INT32: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int32Builder>(col)->Append(value).ok());
+                case arrow20::Type::INT32: {
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::Int32Builder>(col)->Append(value).ok());
                     break;
                 }
-                case arrow::Type::INT64: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::Int64Builder>(col)->Append(value).ok());
+                case arrow20::Type::INT64: {
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::Int64Builder>(col)->Append(value).ok());
                     break;
                 }
-                case arrow::Type::TIMESTAMP: {
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::TimestampBuilder>(col)->Append(begin + row * tsStepUs).ok());
+                case arrow20::Type::TIMESTAMP: {
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::TimestampBuilder>(col)->Append(begin + row * tsStepUs).ok());
                     break;
                 }
-                case arrow::Type::BINARY: {
+                case arrow20::Type::BINARY: {
                     auto str = ToString(value);
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::BinaryBuilder>(col)->Append(str.data(), str.size()).ok());
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::BinaryBuilder>(col)->Append(str.data(), str.size()).ok());
                     break;
                 }
-                case arrow::Type::STRING: {
+                case arrow20::Type::STRING: {
                     auto str = ToString(value);
-                    UNIT_ASSERT(builders->GetFieldAs<arrow::StringBuilder>(col)->Append(str.data(), str.size()).ok());
+                    UNIT_ASSERT(builders->GetFieldAs<arrow20::StringBuilder>(col)->Append(str.data(), str.size()).ok());
                     break;
                 }
                 default:
@@ -439,7 +439,7 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
         }
     }
 
-    std::shared_ptr<arrow::RecordBatch> batch;
+    std::shared_ptr<arrow20::RecordBatch> batch;
     UNIT_ASSERT(builders->Flush(&batch).ok());
     UNIT_ASSERT(batch);
     UNIT_ASSERT(batch->num_rows());
@@ -449,32 +449,32 @@ std::shared_ptr<arrow::RecordBatch> TCickBenchHelper::TestArrowBatch(ui64, ui64 
 
 // Table with NULLs
 
-std::shared_ptr<arrow::Schema> TTableWithNullsHelper::GetArrowSchema() const {
-    return std::make_shared<arrow::Schema>(
-        std::vector<std::shared_ptr<arrow::Field>>{
-        arrow::field("id", arrow::int32(), false),
-            arrow::field("resource_id", arrow::utf8()),
-            arrow::field("level", arrow::int32()),
-            arrow::field("binary_str", arrow::binary()),
-            arrow::field("jsonval", arrow::utf8()),
-            arrow::field("jsondoc", arrow::binary())
+std::shared_ptr<arrow20::Schema> TTableWithNullsHelper::GetArrowSchema() const {
+    return std::make_shared<arrow20::Schema>(
+        std::vector<std::shared_ptr<arrow20::Field>>{
+        arrow20::field("id", arrow20::int32(), false),
+            arrow20::field("resource_id", arrow20::utf8()),
+            arrow20::field("level", arrow20::int32()),
+            arrow20::field("binary_str", arrow20::binary()),
+            arrow20::field("jsonval", arrow20::utf8()),
+            arrow20::field("jsondoc", arrow20::binary())
     });
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch() const {
+std::shared_ptr<arrow20::RecordBatch> TTableWithNullsHelper::TestArrowBatch() const {
     return TestArrowBatch(0, 0, 10, 1);
 }
 
-std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui64 /*tsStepUs*/) const {
+std::shared_ptr<arrow20::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, ui64, size_t rowCount, const ui64 /*tsStepUs*/) const {
     rowCount = 10;
-    std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
+    std::shared_ptr<arrow20::Schema> schema = GetArrowSchema();
 
-    arrow::Int32Builder bId;
-    arrow::StringBuilder bResourceId;
-    arrow::Int32Builder bLevel;
-    arrow::BinaryBuilder bBinaryStr;
-    arrow::StringBuilder bJsonVal;
-    arrow::BinaryBuilder bJsonDoc;
+    arrow20::Int32Builder bId;
+    arrow20::StringBuilder bResourceId;
+    arrow20::Int32Builder bLevel;
+    arrow20::BinaryBuilder bBinaryStr;
+    arrow20::StringBuilder bJsonVal;
+    arrow20::BinaryBuilder bJsonDoc;
 
     for (size_t i = 1; i <= rowCount / 2; ++i) {
         Y_ABORT_UNLESS(bId.Append(i).ok());
@@ -495,12 +495,12 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
         Y_ABORT_UNLESS(bJsonDoc.Append(maybeJsonDoc.data(), maybeJsonDoc.length()).ok());
     }
 
-    std::shared_ptr<arrow::Int32Array> aId;
-    std::shared_ptr<arrow::StringArray> aResourceId;
-    std::shared_ptr<arrow::Int32Array> aLevel;
-    std::shared_ptr<arrow::BinaryArray> aBinaryStr;
-    std::shared_ptr<arrow::StringArray> aJsonVal;
-    std::shared_ptr<arrow::BinaryArray> aJsonDoc;
+    std::shared_ptr<arrow20::Int32Array> aId;
+    std::shared_ptr<arrow20::StringArray> aResourceId;
+    std::shared_ptr<arrow20::Int32Array> aLevel;
+    std::shared_ptr<arrow20::BinaryArray> aBinaryStr;
+    std::shared_ptr<arrow20::StringArray> aJsonVal;
+    std::shared_ptr<arrow20::BinaryArray> aJsonDoc;
 
     Y_ABORT_UNLESS(bId.Finish(&aId).ok());
     Y_ABORT_UNLESS(bResourceId.Finish(&aResourceId).ok());
@@ -509,7 +509,7 @@ std::shared_ptr<arrow::RecordBatch> TTableWithNullsHelper::TestArrowBatch(ui64, 
     Y_ABORT_UNLESS(bJsonVal.Finish(&aJsonVal).ok());
     Y_ABORT_UNLESS(bJsonDoc.Finish(&aJsonDoc).ok());
 
-    return arrow::RecordBatch::Make(schema, rowCount, { aId, aResourceId, aLevel, aBinaryStr, aJsonVal, aJsonDoc });
+    return arrow20::RecordBatch::Make(schema, rowCount, { aId, aResourceId, aLevel, aBinaryStr, aJsonVal, aJsonDoc });
 }
 
 }

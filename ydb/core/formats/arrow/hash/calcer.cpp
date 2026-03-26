@@ -14,41 +14,41 @@ namespace NKikimr::NArrow::NHash {
 
 namespace {
 template <class TStreamCalcer>
-void AppendFieldImpl(const std::shared_ptr<arrow::Scalar>& scalar, TStreamCalcer& hashCalcer) {
+void AppendFieldImpl(const std::shared_ptr<arrow20::Scalar>& scalar, TStreamCalcer& hashCalcer) {
     AFL_VERIFY(scalar);
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
-        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+        using TScalar = typename arrow20::TypeTraits<T>::ScalarType;
 
         auto& typedScalar = static_cast<const TScalar&>(*scalar);
-        if constexpr (arrow::has_string_view<T>()) {
+        if constexpr (arrow20::has_string_view<T>()) {
             hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.value->data()), typedScalar.value->size());
-        } else if constexpr (arrow::has_c_type<T>()) {
+        } else if constexpr (arrow20::has_c_type<T>()) {
             hashCalcer.Update(reinterpret_cast<const ui8*>(typedScalar.data()), sizeof(typedScalar.value));
         } else {
-            static_assert(arrow::is_decimal_type<T>());
+            static_assert(arrow20::is_decimal_type<T>());
         }
         return true;
     });
 }
 
 template <class TStreamCalcer>
-void AppendFieldImpl(const std::shared_ptr<arrow::Array>& array, const int row, TStreamCalcer& hashCalcer) {
+void AppendFieldImpl(const std::shared_ptr<arrow20::Array>& array, const int row, TStreamCalcer& hashCalcer) {
     NArrow::SwitchType(array->type_id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
-        using TArray = typename arrow::TypeTraits<T>::ArrayType;
+        using TArray = typename arrow20::TypeTraits<T>::ArrayType;
 
         if (!array->IsNull(row)) {
             auto& typedArray = static_cast<const TArray&>(*array);
             auto value = typedArray.GetView(row);
-            if constexpr (arrow::has_string_view<T>()) {
+            if constexpr (arrow20::has_string_view<T>()) {
                 hashCalcer.Update((const ui8*)value.data(), value.size());
-            } else if constexpr (arrow::has_c_type<T>()) {
+            } else if constexpr (arrow20::has_c_type<T>()) {
                 hashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
             } else {
-                static_assert(arrow::is_decimal_type<T>());
+                static_assert(arrow20::is_decimal_type<T>());
             }
         }
         return true;
@@ -65,21 +65,21 @@ ui64 TXX64::CalcSimple(const std::string_view data, const ui64 seed) {
     return CalcSimple(data.data(), data.size(), seed);
 }
 
-ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed) {
+ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow20::Scalar>& scalar, const ui64 seed) {
     AFL_VERIFY(scalar);
     ui64 result = 0;
     NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
         using TWrap = std::decay_t<decltype(type)>;
         using T = typename TWrap::T;
-        using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+        using TScalar = typename arrow20::TypeTraits<T>::ScalarType;
 
         auto& typedScalar = static_cast<const TScalar&>(*scalar);
-        if constexpr (arrow::has_string_view<T>()) {
+        if constexpr (arrow20::has_string_view<T>()) {
             result = CalcSimple(typedScalar.value->data(), typedScalar.value->size(), seed);
-        } else if constexpr (arrow::has_c_type<T>()) {
+        } else if constexpr (arrow20::has_c_type<T>()) {
             result = CalcSimple(typedScalar.data(), sizeof(typedScalar.value), seed);
         } else {
-            static_assert(arrow::is_decimal_type<T>());
+            static_assert(arrow20::is_decimal_type<T>());
             AFL_VERIFY(false);
         }
         return true;
@@ -87,25 +87,25 @@ ui64 TXX64::CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui
     return result;
 }
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
+void TXX64::AppendField(const std::shared_ptr<arrow20::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer) {
     AppendFieldImpl(scalar, hashCalcer);
 }
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+void TXX64::AppendField(const std::shared_ptr<arrow20::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
     AppendFieldImpl(scalar, hashCalcer);
 }
 
-void TXX64::AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
+void TXX64::AppendField(const std::shared_ptr<arrow20::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer& hashCalcer) {
     AppendFieldImpl(array, row, hashCalcer);
 }
 
 void TXX64::AppendField(
-    const std::shared_ptr<arrow::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
+    const std::shared_ptr<arrow20::Array>& array, const int row, NArrow::NHash::NXX64::TStreamStringHashCalcer_H3& hashCalcer) {
     AppendFieldImpl(array, row, hashCalcer);
 }
 
-std::optional<std::vector<ui64>> TXX64::Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns = GetColumns(batch);
+std::optional<std::vector<ui64>> TXX64::Execute(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
+    std::vector<std::shared_ptr<arrow20::Array>> columns = GetColumns(batch);
     if (columns.empty()) {
         return {};
     }
@@ -138,7 +138,7 @@ TXX64::TXX64(const std::vector<std::string>& columnNames, const ENoColumnPolicy 
     Y_ABORT_UNLESS(ColumnNames.size() >= 1);
 }
 
-ui64 TXX64::CalcHash(const std::shared_ptr<arrow::Scalar>& scalar) {
+ui64 TXX64::CalcHash(const std::shared_ptr<arrow20::Scalar>& scalar) {
     NXX64::TStreamStringHashCalcer calcer(0);
     calcer.Start();
     AppendField(scalar, calcer);

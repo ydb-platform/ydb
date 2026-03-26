@@ -16,10 +16,10 @@ namespace NKikimr::NArrow {
 
 class IFieldsConstructor {
 private:
-    virtual std::shared_ptr<arrow::Scalar> DoGetDefaultColumnElementValue(const std::string& fieldName) const = 0;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetDefaultColumnElementValue(const std::string& fieldName) const = 0;
 
 public:
-    TConclusion<std::shared_ptr<arrow::Scalar>> GetDefaultColumnElementValue(const std::shared_ptr<arrow::Field>& field, const bool force) const;
+    TConclusion<std::shared_ptr<arrow20::Scalar>> GetDefaultColumnElementValue(const std::shared_ptr<arrow20::Field>& field, const bool force) const;
 };
 
 class TGeneralContainer {
@@ -62,7 +62,7 @@ public:
     }
 
     [[nodiscard]] TConclusionStatus SyncSchemaTo(
-        const std::shared_ptr<arrow::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);
+        const std::shared_ptr<arrow20::Schema>& schema, const IFieldsConstructor* defaultFieldsConstructor, const bool forceDefaults);
 
     bool HasColumn(const std::string& name) {
         return Schema->HasField(name);
@@ -105,28 +105,28 @@ public:
         }
     };
 
-    std::shared_ptr<arrow::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
-    std::shared_ptr<arrow::Table> BuildTableOptional(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
+    std::shared_ptr<arrow20::Table> BuildTableVerified(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
+    std::shared_ptr<arrow20::Table> BuildTableOptional(const TTableConstructionContext& context = Default<TTableConstructionContext>()) const;
 
     std::shared_ptr<TGeneralContainer> BuildEmptySame() const;
 
     [[nodiscard]] TConclusionStatus MergeColumnsStrictly(const TGeneralContainer& container);
-    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data);
-    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::Array>& data);
+    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<NAccessor::IChunkedArray>& data);
+    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<arrow20::Array>& data);
 
-    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow::Field>& f, const std::shared_ptr<arrow::ChunkedArray>& data);
+    [[nodiscard]] TConclusionStatus AddField(const std::shared_ptr<arrow20::Field>& f, const std::shared_ptr<arrow20::ChunkedArray>& data);
 
     void DeleteFieldsByIndex(const std::vector<ui32>& idxs);
 
-    TGeneralContainer(const std::shared_ptr<arrow::Table>& table);
-    TGeneralContainer(const std::shared_ptr<arrow::RecordBatch>& table);
-    TGeneralContainer(const std::shared_ptr<arrow::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
+    TGeneralContainer(const std::shared_ptr<arrow20::Table>& table);
+    TGeneralContainer(const std::shared_ptr<arrow20::RecordBatch>& table);
+    TGeneralContainer(const std::shared_ptr<arrow20::Schema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
     TGeneralContainer(const std::shared_ptr<NModifier::TSchema>& schema, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
     TGeneralContainer(
-        const std::vector<std::shared_ptr<arrow::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
+        const std::vector<std::shared_ptr<arrow20::Field>>& fields, std::vector<std::shared_ptr<NAccessor::IChunkedArray>>&& columns);
 
-    arrow::Status ValidateFull() const {
-        return arrow::Status::OK();
+    arrow20::Status ValidateFull() const {
+        return arrow20::Status::OK();
     }
 
     std::shared_ptr<NAccessor::IChunkedArray> GetAccessorByNameOptional(const std::string& fieldId) const;

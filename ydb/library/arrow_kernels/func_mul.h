@@ -1,6 +1,6 @@
 #include "func_common.h"
 
-namespace cp = arrow::compute;
+namespace cp = arrow20::compute;
 
 namespace NKikimr::NKernels {
 
@@ -20,20 +20,20 @@ struct TMultiply {
     static_assert(std::is_same<decltype(uint64_t() * uint64_t()), uint64_t>::value, "");
 
     template <typename T, typename TArg0, typename TArg1>
-    static constexpr arrow::enable_if_floating_point<T> Call(cp::KernelContext*, T left, T right,
-                                                            arrow::Status*) {
+    static constexpr arrow20::enable_if_floating_point<T> Call(cp::KernelContext*, T left, T right,
+                                                            arrow20::Status*) {
         return left * right;
     }
 
     template <typename T, typename TArg0, typename TArg1>
     static constexpr std::enable_if_t<IsUnsignedInteger<T>::value && !std::is_same<T, uint16_t>::value, T>
-    Call(cp::KernelContext*, T left, T right, arrow::Status*) {
+    Call(cp::KernelContext*, T left, T right, arrow20::Status*) {
         return left * right;
     }
 
     template <typename T, typename TArg0, typename TArg1>
     static constexpr std::enable_if_t<IsSignedInteger<T>::value && !std::is_same<T, int16_t>::value, T>
-    Call(cp::KernelContext*, T left, T right, arrow::Status*) {
+    Call(cp::KernelContext*, T left, T right, arrow20::Status*) {
         return ToUnsigned(left) * ToUnsigned(right);
     }
 
@@ -42,13 +42,13 @@ struct TMultiply {
     // behaviour). Therefore we first cast to 32 bit unsigned integers where overflow is
     // well defined.
     template <typename T, typename TArg0, typename TArg1>
-    static constexpr arrow::enable_if_same<T, int16_t, T> Call(cp::KernelContext*, int16_t left,
-                                                                int16_t right, arrow::Status*) {
+    static constexpr arrow20::enable_if_same<T, int16_t, T> Call(cp::KernelContext*, int16_t left,
+                                                                int16_t right, arrow20::Status*) {
         return static_cast<uint32_t>(left) * static_cast<uint32_t>(right);
     }
     template <typename T, typename TArg0, typename TArg1>
-    static constexpr arrow::enable_if_same<T, uint16_t, T> Call(cp::KernelContext*, uint16_t left,
-                                                                uint16_t right, arrow::Status*) {
+    static constexpr arrow20::enable_if_same<T, uint16_t, T> Call(cp::KernelContext*, uint16_t left,
+                                                                uint16_t right, arrow20::Status*) {
         return static_cast<uint32_t>(left) * static_cast<uint32_t>(right);
     }
 };

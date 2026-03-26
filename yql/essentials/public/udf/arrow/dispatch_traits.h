@@ -179,15 +179,15 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             case NUdf::EDataSlot::Double:
                 return MakeFixedSizeArrowTraitsImpl<TTraits, double>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::String:
-                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional, type, std::forward<TArgs>(args)...);
+                return MakeStringArrowTraitsImpl<TTraits, arrow20::BinaryType, NUdf::EDataSlot::String>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::Yson:
-                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional, type, std::forward<TArgs>(args)...);
+                return MakeStringArrowTraitsImpl<TTraits, arrow20::BinaryType, NUdf::EDataSlot::Yson>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::JsonDocument:
-                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional, type, std::forward<TArgs>(args)...);
+                return MakeStringArrowTraitsImpl<TTraits, arrow20::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::Utf8:
-                return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional, type, std::forward<TArgs>(args)...);
+                return MakeStringArrowTraitsImpl<TTraits, arrow20::StringType, NUdf::EDataSlot::Utf8>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::Json:
-                return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional, type, std::forward<TArgs>(args)...);
+                return MakeStringArrowTraitsImpl<TTraits, arrow20::StringType, NUdf::EDataSlot::Json>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::TzDate:
                 return MakeTzDateArrowTraitsImpl<TTraits, TTzDate>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::TzDatetime:

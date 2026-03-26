@@ -159,7 +159,7 @@ NKikimr::TConclusionStatus TConsistencySharding64::DoOnAfterModification() {
     return TConclusionStatus::Success();
 }
 
-THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+THashMap<ui64, std::vector<ui32>> TConsistencySharding64::MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
     std::vector<ui64> hashes = MakeHashes(batch);
 
     if (!SpecialShardingInfo) {

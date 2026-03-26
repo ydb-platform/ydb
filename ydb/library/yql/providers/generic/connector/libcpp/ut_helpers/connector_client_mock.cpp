@@ -161,11 +161,11 @@ namespace NYql::NConnector::NTest {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
-        return arrow::RecordBatch::Make(
-            std::make_shared<arrow::Schema>(arrow::FieldVector()),
+    std::shared_ptr<arrow20::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount) {
+        return arrow20::RecordBatch::Make(
+            std::make_shared<arrow20::Schema>(arrow20::FieldVector()),
             static_cast<i64>(rowsCount),
-            std::vector<std::shared_ptr<arrow::Array>>());
+            std::vector<std::shared_ptr<arrow20::Array>>());
     }
 
 } // namespace NYql::NConnector::NTest

@@ -141,7 +141,7 @@ public:
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
-        ui32 rows = NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        ui32 rows = NKikimr::NMiniKQL::TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         Packer.AddWideItem(values, width);
         for (ui32 i = 0; i < width; ++i) {
             values[i] = {};

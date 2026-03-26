@@ -17,15 +17,15 @@ extern "C" uint8_t GetBitmapScalarValue(const NYql::NUdf::TUnboxedValuePod data)
 
 namespace NKikimr::NMiniKQL {
 
-arrow::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow::MemoryPool& pool);
-arrow::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow::MemoryPool& pool);
-arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool);
+arrow20::Datum ConvertScalar(TType* type, const NUdf::TUnboxedValuePod& value, arrow20::MemoryPool& pool);
+arrow20::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow20::MemoryPool& pool);
+arrow20::Datum MakeArrayFromScalar(const arrow20::Scalar& scalar, size_t len, TType* type, arrow20::MemoryPool& pool);
 
-arrow::ValueDescr ToValueDescr(TType* type);
-std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types);
+arrow20::ValueDescr ToValueDescr(TType* type);
+std::vector<arrow20::ValueDescr> ToValueDescr(const TVector<TType*>& types);
 
-std::vector<arrow::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
-arrow::compute::OutputType ConvertToOutputType(TType* output);
+std::vector<arrow20::compute::InputType> ConvertToInputTypes(const TVector<TType*>& argTypes);
+arrow20::compute::OutputType ConvertToOutputType(TType* output);
 
 NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
 
@@ -37,9 +37,9 @@ public:
                    TComputationNodePtrVector&& argsNodes,
                    const TVector<TType*>& argsTypes,
                    TType* outputType,
-                   const arrow::compute::ScalarKernel& kernel,
-                   std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
-                   const arrow::compute::FunctionOptions* functionOptions = nullptr);
+                   const arrow20::compute::ScalarKernel& kernel,
+                   std::shared_ptr<arrow20::compute::ScalarKernel> kernelHolder = {},
+                   const arrow20::compute::FunctionOptions* functionOptions = nullptr);
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const;
 
@@ -48,8 +48,8 @@ private:
     public:
         explicit TArrowNode(const TBlockFuncNode* parent);
         TStringBuf GetKernelName() const final;
-        const arrow::compute::ScalarKernel& GetArrowKernel() const final;
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const final;
+        const arrow20::compute::ScalarKernel& GetArrowKernel() const final;
+        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const final;
         const IComputationNode* GetArgument(ui32 index) const final;
 
     private:
@@ -61,9 +61,9 @@ private:
         using TComputationValue::TComputationValue;
 
         TState(TMemoryUsageInfo* memInfo,
-               const arrow::compute::FunctionOptions* options,
-               const arrow::compute::ScalarKernel& kernel,
-               const std::vector<arrow::ValueDescr>& argsValuesDescr,
+               const arrow20::compute::FunctionOptions* options,
+               const arrow20::compute::ScalarKernel& kernel,
+               const std::vector<arrow20::ValueDescr>& argsValuesDescr,
                TComputationContext& ctx)
             : TComputationValue(memInfo)
             , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
@@ -75,9 +75,9 @@ private:
             }
         }
 
-        arrow::compute::ExecContext ExecContext;
-        arrow::compute::KernelContext KernelContext;
-        std::unique_ptr<arrow::compute::KernelState> State;
+        arrow20::compute::ExecContext ExecContext;
+        arrow20::compute::KernelContext KernelContext;
+        std::unique_ptr<arrow20::compute::KernelState> State;
     };
 
     void RegisterDependencies() const final;
@@ -89,13 +89,13 @@ private:
     NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
     const ui32 StateIndex_;
     const TComputationNodePtrVector ArgsNodes_;
-    const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+    const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
     const TVector<TType*> ArgTypes_;
-    arrow::ValueDescr OutValueDescr_;
+    arrow20::ValueDescr OutValueDescr_;
     const TType* const OutputType_ = nullptr;
-    const arrow::compute::ScalarKernel& Kernel_;
-    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder_;
-    const arrow::compute::FunctionOptions* const Options_;
+    const arrow20::compute::ScalarKernel& Kernel_;
+    const std::shared_ptr<arrow20::compute::ScalarKernel> KernelHolder_;
+    const arrow20::compute::FunctionOptions* const Options_;
     const bool ScalarOutput_;
     const TString Name_;
 };
@@ -109,8 +109,8 @@ struct TBlockState: public TComputationValue<TBlockState> {
     NUdf::TUnboxedValue* Pointer = nullptr;
 
     TUnboxedValueVector Values;
-    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
-    std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
+    std::vector<std::deque<std::shared_ptr<arrow20::ArrayData>>> Deques;
+    std::vector<std::shared_ptr<arrow20::ArrayData>> Arrays;
 
     ui64 BlockLengthIndex = 0;
 

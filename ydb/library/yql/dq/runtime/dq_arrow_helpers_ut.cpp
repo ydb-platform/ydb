@@ -100,15 +100,15 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     }
 }
 
-ui64 GetScalarDatumSize(const arrow::Datum& datum) {
+ui64 GetScalarDatumSize(const arrow20::Datum& datum) {
     UNIT_ASSERT_C(datum.is_scalar(), "Expected scalar datum");
-    return NUdf::GetSizeOfArrayDataInBytes(*ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1))->data());
+    return NUdf::GetSizeOfArrayDataInBytes(*ARROW_RESULT(arrow20::MakeArrayFromScalar(*datum.scalar(), 1))->data());
 }
 
 struct TBlockColumn {
     using TPtr = std::shared_ptr<TBlockColumn>;
 
-    arrow::Datum Datum;
+    arrow20::Datum Datum;
     TBlockType* Type;
     std::unique_ptr<IBlockReader> BlockReader;
     ui64 Size = 0;
@@ -599,7 +599,7 @@ struct TTestContext {
             result.BlockReader = MakeBlockReader(TTypeInfoHelper(), result.Type->GetItemType());
             result.Size = result.BlockReader->GetDataWeight(*result.Datum.array());
         } else {
-            result.Datum = arrow::Datum(std::make_shared<TScalar>(scalarFiller()));
+            result.Datum = arrow20::Datum(std::make_shared<TScalar>(scalarFiller()));
             result.Size = GetScalarDatumSize(result.Datum);
         }
 
@@ -608,15 +608,15 @@ struct TTestContext {
 
     TBlockColumn::TPtr CreateStringBlockColumn(std::optional<ui64> numberRows) {
         NConstruction::TStringPoolFiller stringGenerator(8, 512);
-        return CreateBlockColumn<char*, arrow::StringScalar>(numberRows, stringGenerator, [&]() {
-            return arrow::StringScalar(stringGenerator.GetValue(0).to_string());
+        return CreateBlockColumn<char*, arrow20::StringScalar>(numberRows, stringGenerator, [&]() {
+            return arrow20::StringScalar(stringGenerator.GetValue(0).to_string());
         });
     }
 
     TBlockColumn::TPtr CreateIntBlockColumn(std::optional<ui64> numberRows) {
-        NConstruction::TIntSeqFiller<arrow::Int32Type> intGenerator;
-        return CreateBlockColumn<i32, arrow::Int32Scalar>(numberRows, intGenerator, [&]() {
-            return arrow::Int32Scalar(intGenerator.GetValue(0));
+        NConstruction::TIntSeqFiller<arrow20::Int32Type> intGenerator;
+        return CreateBlockColumn<i32, arrow20::Int32Scalar>(numberRows, intGenerator, [&]() {
+            return arrow20::Int32Scalar(intGenerator.GetValue(0));
         });
     }
 
@@ -638,7 +638,7 @@ struct TTestContext {
             columnTypes.emplace_back(column->Type);
         }
 
-        auto lengtDatum = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(numberRows));
+        auto lengtDatum = arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(numberRows));
         result.ScalarsSize += GetScalarDatumSize(lengtDatum);
         result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum)));
         columnTypes.emplace_back(TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv), TBlockType::EShape::Scalar, TypeEnv));
@@ -791,18 +791,18 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
 
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 3);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT64);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT64);
         UNIT_ASSERT(static_cast<ui64>(structArray->field(0)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(1)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(2)->length()) == values.size());
-        auto binaryArray = static_pointer_cast<arrow::BinaryArray>(structArray->field(0));
-        auto int32Array = static_pointer_cast<arrow::Int32Array>(structArray->field(1));
-        auto uint64Array = static_pointer_cast<arrow::UInt64Array>(structArray->field(2));
+        auto binaryArray = static_pointer_cast<arrow20::BinaryArray>(structArray->field(0));
+        auto int32Array = static_pointer_cast<arrow20::Int32Array>(structArray->field(1));
+        auto uint64Array = static_pointer_cast<arrow20::UInt64Array>(structArray->field(2));
         auto index = 0;
         for (const auto& value: values) {
             auto stringValue = value.GetElement(0);
@@ -832,18 +832,18 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         UNIT_ASSERT(array->ValidateFull().ok());
 
         UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 3);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::INT8);
-        UNIT_ASSERT(structArray->field(2)->type_id() == arrow::Type::UINT8);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow20::Type::INT8);
+        UNIT_ASSERT(structArray->field(2)->type_id() == arrow20::Type::UINT8);
         UNIT_ASSERT(static_cast<ui64>(structArray->field(0)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(1)->length()) == values.size());
         UNIT_ASSERT(static_cast<ui64>(structArray->field(2)->length()) == values.size());
-        auto boolArray = static_pointer_cast<arrow::UInt8Array>(structArray->field(0));
-        auto int8Array = static_pointer_cast<arrow::Int8Array>(structArray->field(1));
-        auto uint8Array = static_pointer_cast<arrow::UInt8Array>(structArray->field(2));
+        auto boolArray = static_pointer_cast<arrow20::UInt8Array>(structArray->field(0));
+        auto int8Array = static_pointer_cast<arrow20::Int8Array>(structArray->field(1));
+        auto uint8Array = static_pointer_cast<arrow20::UInt8Array>(structArray->field(2));
         auto index = 0;
         for (const auto& value: values) {
             auto boolValue = value.GetElement(0).Get<bool>();
@@ -871,12 +871,12 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, listType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
 
         UNIT_ASSERT(listArray->num_fields() == 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::STRING);
-        auto jsonArray = static_pointer_cast<arrow::StringArray>(listArray->values());
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::STRING);
+        auto jsonArray = static_pointer_cast<arrow20::StringArray>(listArray->values());
         auto index = 0;
         auto innerIndex = 0;
         for (const auto& value: values) {
@@ -904,13 +904,13 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, listType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::LIST);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::LIST);
 
-        auto listArray = static_pointer_cast<arrow::ListArray>(array);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(array);
         UNIT_ASSERT(listArray->num_fields() == 1);
-        UNIT_ASSERT(listArray->value_type()->id() == arrow::Type::INT32);
+        UNIT_ASSERT(listArray->value_type()->id() == arrow20::Type::INT32);
 
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(listArray->values());
+        auto i32Array = static_pointer_cast<arrow20::Int32Array>(listArray->values());
         auto index = 0;
         auto innerIndex = 0;
         for (const auto& value: values) {
@@ -946,19 +946,19 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
 
         UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::FIXED_SIZE_BINARY);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+        auto ysonArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow20::FixedSizeBinaryArray>(unionArray->field(2));
+        auto floatArray = static_pointer_cast<arrow20::FloatArray>(unionArray->field(3));
 
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
@@ -969,7 +969,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT(valueArrow == valueInner);
             } else {
-                arrow::util::string_view viewArrow;
+                arrow20::util::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {
@@ -996,24 +996,24 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(structArray->field(0));
 
         UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::FIXED_SIZE_BINARY);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+        auto ysonArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow20::FixedSizeBinaryArray>(unionArray->field(2));
+        auto floatArray = static_pointer_cast<arrow20::FloatArray>(unionArray->field(3));
 
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
@@ -1032,7 +1032,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT(valueArrow == valueInner);
             } else {
-                arrow::util::string_view viewArrow;
+                arrow20::util::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {
@@ -1059,28 +1059,28 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
+        auto firstStructArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(firstStructArray->num_fields() == 1);
-        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow20::Type::STRUCT);
 
-        auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
+        auto secondStructArray = static_pointer_cast<arrow20::StructArray>(firstStructArray->field(0));
         UNIT_ASSERT(secondStructArray->num_fields() == 1);
-        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(secondStructArray->field(0));
 
         UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::BINARY);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::FIXED_SIZE_BINARY);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+        auto ysonArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(0));
+        auto jsonDocArray = static_pointer_cast<arrow20::BinaryArray>(unionArray->field(1));
+        auto uuidArray = static_pointer_cast<arrow20::FixedSizeBinaryArray>(unionArray->field(2));
+        auto floatArray = static_pointer_cast<arrow20::FloatArray>(unionArray->field(3));
 
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
                 auto valueInner = value.GetVariantItem().Get<float>();
                 UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
             } else {
-                arrow::util::string_view viewArrow;
+                arrow20::util::string_view viewArrow;
                 if (value.GetVariantIndex() == 0) {
                     viewArrow = ysonArray->GetView(fieldIndex);
                 } else if (value.GetVariantIndex() == 1) {
@@ -1131,20 +1131,20 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::DENSE_UNION);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
 
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
-        auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
-        auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
-        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(unionArray->field(4));
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow20::Type::UINT32);
+        auto boolArray = static_pointer_cast<arrow20::UInt8Array>(unionArray->field(0));
+        auto i16Array = static_pointer_cast<arrow20::Int16Array>(unionArray->field(1));
+        auto ui16Array = static_pointer_cast<arrow20::UInt16Array>(unionArray->field(2));
+        auto i32Array = static_pointer_cast<arrow20::Int32Array>(unionArray->field(3));
+        auto ui32Array = static_pointer_cast<arrow20::UInt32Array>(unionArray->field(4));
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
             UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
@@ -1189,24 +1189,24 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(structArray->num_fields() == 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(structArray->field(0));
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
-        auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
-        auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
-        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(unionArray->field(4));
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow20::Type::UINT32);
+        auto boolArray = static_pointer_cast<arrow20::UInt8Array>(unionArray->field(0));
+        auto i16Array = static_pointer_cast<arrow20::Int16Array>(unionArray->field(1));
+        auto ui16Array = static_pointer_cast<arrow20::UInt16Array>(unionArray->field(2));
+        auto i32Array = static_pointer_cast<arrow20::Int32Array>(unionArray->field(3));
+        auto ui32Array = static_pointer_cast<arrow20::UInt32Array>(unionArray->field(4));
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
             if (!value) {
@@ -1259,28 +1259,28 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
 
-        auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
+        auto firstStructArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT(firstStructArray->num_fields() == 1);
-        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow20::Type::STRUCT);
 
-        auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
+        auto secondStructArray = static_pointer_cast<arrow20::StructArray>(firstStructArray->field(0));
         UNIT_ASSERT(secondStructArray->num_fields() == 1);
-        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow20::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(secondStructArray->field(0));
         UNIT_ASSERT(unionArray->num_fields() == 5);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::UINT8);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::INT16);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::UINT16);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::INT32);
-        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow::Type::UINT32);
-        auto boolArray = static_pointer_cast<arrow::UInt8Array>(unionArray->field(0));
-        auto i16Array = static_pointer_cast<arrow::Int16Array>(unionArray->field(1));
-        auto ui16Array = static_pointer_cast<arrow::UInt16Array>(unionArray->field(2));
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(unionArray->field(3));
-        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(unionArray->field(4));
+        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow20::Type::UINT8);
+        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow20::Type::INT16);
+        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow20::Type::UINT16);
+        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow20::Type::INT32);
+        UNIT_ASSERT(unionArray->field(4)->type_id() == arrow20::Type::UINT32);
+        auto boolArray = static_pointer_cast<arrow20::UInt8Array>(unionArray->field(0));
+        auto i16Array = static_pointer_cast<arrow20::Int16Array>(unionArray->field(1));
+        auto ui16Array = static_pointer_cast<arrow20::UInt16Array>(unionArray->field(2));
+        auto i32Array = static_pointer_cast<arrow20::Int32Array>(unionArray->field(3));
+        auto ui32Array = static_pointer_cast<arrow20::UInt32Array>(unionArray->field(4));
         for (ui64 index = 0; index < values.size(); ++index) {
             auto value = values[index];
             if (!value.HasValue()) {
@@ -1338,26 +1338,26 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         auto array = NArrow::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
 
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
-        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(array->type_id() == arrow20::Type::STRUCT);
+        auto wrapArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_VALUES_EQUAL(wrapArray->num_fields(), 2);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(wrapArray->length()), values.size());
 
-        UNIT_ASSERT(wrapArray->field(0)->type_id() == arrow::Type::MAP);
-        auto mapArray = static_pointer_cast<arrow::MapArray>(wrapArray->field(0));
+        UNIT_ASSERT(wrapArray->field(0)->type_id() == arrow20::Type::MAP);
+        auto mapArray = static_pointer_cast<arrow20::MapArray>(wrapArray->field(0));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(mapArray->length()), values.size());
 
-        UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow::Type::UINT64);
-        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
+        UNIT_ASSERT(wrapArray->field(1)->type_id() == arrow20::Type::UINT64);
+        auto customArray = static_pointer_cast<arrow20::UInt64Array>(wrapArray->field(1));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(customArray->length()), values.size());
 
         UNIT_ASSERT_VALUES_EQUAL(mapArray->num_fields(), 1);
 
-        UNIT_ASSERT(mapArray->keys()->type_id() == arrow::Type::STRING);
-        auto utf8Array = static_pointer_cast<arrow::StringArray>(mapArray->keys());
+        UNIT_ASSERT(mapArray->keys()->type_id() == arrow20::Type::STRING);
+        auto utf8Array = static_pointer_cast<arrow20::StringArray>(mapArray->keys());
 
-        UNIT_ASSERT(mapArray->items()->type_id() == arrow::Type::INT64);
-        auto intervalArray = static_pointer_cast<arrow::Int64Array>(mapArray->items());
+        UNIT_ASSERT(mapArray->items()->type_id() == arrow20::Type::INT64);
+        auto intervalArray = static_pointer_cast<arrow20::Int64Array>(mapArray->items());
 
         ui64 index = 0;
         for (const auto& value: values) {
@@ -1383,34 +1383,34 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         auto array = NArrow::MakeArray(values, dictType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::STRUCT);
+        UNIT_ASSERT_EQUAL(array->type_id(), arrow20::Type::STRUCT);
 
-        auto wrapArray = static_pointer_cast<arrow::StructArray>(array);
+        auto wrapArray = static_pointer_cast<arrow20::StructArray>(array);
         UNIT_ASSERT_EQUAL(wrapArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(wrapArray->field(0)->type_id(), arrow::Type::LIST);
+        UNIT_ASSERT_EQUAL(wrapArray->field(0)->type_id(), arrow20::Type::LIST);
 
-        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
-        auto listArray = static_pointer_cast<arrow::ListArray>(wrapArray->field(0));
+        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow20::Type::UINT64);
+        auto listArray = static_pointer_cast<arrow20::ListArray>(wrapArray->field(0));
         UNIT_ASSERT_EQUAL(static_cast<ui64>(listArray->length()), values.size());
 
-        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow::Type::UINT64);
-        auto customArray = static_pointer_cast<arrow::UInt64Array>(wrapArray->field(1));
+        UNIT_ASSERT_EQUAL(wrapArray->field(1)->type_id(), arrow20::Type::UINT64);
+        auto customArray = static_pointer_cast<arrow20::UInt64Array>(wrapArray->field(1));
         UNIT_ASSERT_EQUAL(static_cast<ui64>(customArray->length()), values.size());
 
-        UNIT_ASSERT_EQUAL(listArray->value_type()->id(), arrow::Type::STRUCT);
-        auto structArray = static_pointer_cast<arrow::StructArray>(listArray->values());
+        UNIT_ASSERT_EQUAL(listArray->value_type()->id(), arrow20::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow20::StructArray>(listArray->values());
 
         UNIT_ASSERT_EQUAL(listArray->num_fields(), 1);
         UNIT_ASSERT_EQUAL(structArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(structArray->field(0)->type_id(), arrow::Type::DOUBLE);
-        UNIT_ASSERT_EQUAL(structArray->field(1)->type_id(), arrow::Type::STRUCT);
-        auto keysArray = static_pointer_cast<arrow::DoubleArray>(structArray->field(0));
-        auto itemsArray = static_pointer_cast<arrow::StructArray>(structArray->field(1));
+        UNIT_ASSERT_EQUAL(structArray->field(0)->type_id(), arrow20::Type::DOUBLE);
+        UNIT_ASSERT_EQUAL(structArray->field(1)->type_id(), arrow20::Type::STRUCT);
+        auto keysArray = static_pointer_cast<arrow20::DoubleArray>(structArray->field(0));
+        auto itemsArray = static_pointer_cast<arrow20::StructArray>(structArray->field(1));
         UNIT_ASSERT_EQUAL(itemsArray->num_fields(), 2);
-        UNIT_ASSERT_EQUAL(itemsArray->field(0)->type_id(), arrow::Type::INT32);
-        UNIT_ASSERT_EQUAL(itemsArray->field(1)->type_id(), arrow::Type::UINT32);
-        auto i32Array = static_pointer_cast<arrow::Int32Array>(itemsArray->field(0));
-        auto ui32Array = static_pointer_cast<arrow::UInt32Array>(itemsArray->field(1));
+        UNIT_ASSERT_EQUAL(itemsArray->field(0)->type_id(), arrow20::Type::INT32);
+        UNIT_ASSERT_EQUAL(itemsArray->field(1)->type_id(), arrow20::Type::UINT32);
+        auto i32Array = static_pointer_cast<arrow20::Int32Array>(itemsArray->field(0));
+        auto ui32Array = static_pointer_cast<arrow20::UInt32Array>(itemsArray->field(1));
 
         ui64 index = 0;
         for (const auto& value: values) {
@@ -1441,11 +1441,11 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
 
         auto index = 0;
         for (auto value: values) {
-            std::shared_ptr<arrow::Array> currentArray = array;
+            std::shared_ptr<arrow20::Array> currentArray = array;
             int depth = 0;
 
-            while (currentArray->type()->id() == arrow::Type::STRUCT) {
-                auto structArray = static_pointer_cast<arrow::StructArray>(currentArray);
+            while (currentArray->type()->id() == arrow20::Type::STRUCT) {
+                auto structArray = static_pointer_cast<arrow20::StructArray>(currentArray);
                 UNIT_ASSERT_EQUAL(structArray->num_fields(), 1);
 
                 if (structArray->IsNull(index)) {
@@ -1455,7 +1455,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
                 ++depth;
 
                 auto childArray = structArray->field(0);
-                if (childArray->type()->id() == arrow::Type::DENSE_UNION) {
+                if (childArray->type()->id() == arrow20::Type::DENSE_UNION) {
                     break;
                 }
 
@@ -1468,8 +1468,8 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
             }
 
             if (value.HasValue()) {
-                if (currentArray->type()->id() == arrow::Type::INT32) {
-                    UNIT_ASSERT_EQUAL(value.Get<i32>(), static_pointer_cast<arrow::Int32Array>(currentArray)->Value(index));
+                if (currentArray->type()->id() == arrow20::Type::INT32) {
+                    UNIT_ASSERT_EQUAL(value.Get<i32>(), static_pointer_cast<arrow20::Int32Array>(currentArray)->Value(index));
                 } else {
                     UNIT_ASSERT(!currentArray->IsNull(index));
                 }
@@ -1493,13 +1493,13 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         auto array = NArrow::MakeArray(values, variantType);
         UNIT_ASSERT(array->ValidateFull().ok());
         UNIT_ASSERT_EQUAL(static_cast<ui64>(array->length()), values.size());
-        UNIT_ASSERT_EQUAL(array->type_id(), arrow::Type::DENSE_UNION);
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
-        ui32 numberOfGroups = (numberOfTypes - 1) / arrow::UnionType::kMaxTypeCode + 1;
+        UNIT_ASSERT_EQUAL(array->type_id(), arrow20::Type::DENSE_UNION);
+        auto unionArray = static_pointer_cast<arrow20::DenseUnionArray>(array);
+        ui32 numberOfGroups = (numberOfTypes - 1) / arrow20::UnionType::kMaxTypeCode + 1;
         UNIT_ASSERT_EQUAL(numberOfGroups, static_cast<ui32>(unionArray->num_fields()));
         ui32 typesInArrow = 0;
         for (auto i = 0 ; i < unionArray->num_fields(); ++i) {
-            UNIT_ASSERT_EQUAL(unionArray->field(i)->type_id(), arrow::Type::DENSE_UNION);
+            UNIT_ASSERT_EQUAL(unionArray->field(i)->type_id(), arrow20::Type::DENSE_UNION);
             typesInArrow += unionArray->field(i)->num_fields();
         }
         UNIT_ASSERT_EQUAL(numberOfTypes, typesInArrow);
@@ -1719,9 +1719,9 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
 }
 
 Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
-    void ValidateSplit(const TBlockValue& initialItem, ui64 numberParts, ui64 sizeLimit, const std::vector<std::vector<arrow::Datum>>& splittedItems) {
+    void ValidateSplit(const TBlockValue& initialItem, ui64 numberParts, ui64 sizeLimit, const std::vector<std::vector<arrow20::Datum>>& splittedItems) {
         UNIT_ASSERT_VALUES_EQUAL(splittedItems.size(), numberParts);
-        const ui64 numberRows = TArrowBlock::From(initialItem.Values.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 numberRows = TArrowBlock::From(initialItem.Values.back()).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         const ui64 expectedSplittedSize = numberRows / numberParts;
         const ui64 width = initialItem.Type->GetElementsCount();
 
@@ -1732,7 +1732,7 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
             UNIT_ASSERT_VALUES_EQUAL_C(width, splittedBatch.size(), batchSuffix);
             UNIT_ASSERT_C(splittedBatch.back().is_scalar(), batchSuffix);
 
-            const auto splittedSize = splittedBatch.back().scalar_as<arrow::UInt64Scalar>().value;
+            const auto splittedSize = splittedBatch.back().scalar_as<arrow20::UInt64Scalar>().value;
             UNIT_ASSERT_VALUES_EQUAL_C(splittedSize, expectedSplittedSize, batchSuffix);
 
             ui64 itemSize = 0;

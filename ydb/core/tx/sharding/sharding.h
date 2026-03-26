@@ -19,7 +19,7 @@ public:
     using TFactory = NObjectFactory::TObjectFactory<IGranuleShardingLogic, TString>;
 
 private:
-    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow::Table>& table) const = 0;
+    virtual std::shared_ptr<NArrow::TColumnFilter> DoGetFilter(const std::shared_ptr<arrow20::Table>& table) const = 0;
     virtual std::set<TString> DoGetColumnNames() const = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const TProto& proto) = 0;
@@ -28,12 +28,12 @@ public:
     IGranuleShardingLogic() = default;
     virtual ~IGranuleShardingLogic() = default;
 
-    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow::Table>& table) const {
+    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow20::Table>& table) const {
         return DoGetFilter(table);
     }
 
-    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow::RecordBatch>& rb) const {
-        return DoGetFilter(NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches({ rb })));
+    std::shared_ptr<NArrow::TColumnFilter> GetFilter(const std::shared_ptr<arrow20::RecordBatch>& rb) const {
+        return DoGetFilter(NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches({ rb })));
     }
     std::set<TString> GetColumnNames() const {
         return DoGetColumnNames();
@@ -308,10 +308,10 @@ public:
 
     NKikimrSchemeOp::TColumnTableSharding SerializeToProto() const;
 
-    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
+    virtual THashMap<ui64, std::vector<ui32>> MakeSharding(const std::shared_ptr<arrow20::RecordBatch>& batch) const = 0;
 
-    THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch, arrow::MemoryPool* memoryPool = arrow::default_memory_pool());
-    TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit);
+    THashMap<ui64, std::shared_ptr<arrow20::RecordBatch>> SplitByShardsToArrowBatches(const std::shared_ptr<arrow20::RecordBatch>& batch, arrow20::MemoryPool* memoryPool = arrow20::default_memory_pool());
+    TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> SplitByShards(const std::shared_ptr<arrow20::RecordBatch>& batch, const ui64 chunkBytesLimit);
 
     virtual TString DebugString() const;
 

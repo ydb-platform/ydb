@@ -1,11 +1,11 @@
 #pragma once
 
-namespace arrow::compute {
+namespace arrow20::compute {
     class FunctionRegistry;
     class ExecContext;
 }
 
 namespace NKikimr::NArrow::NSSA {
-    arrow::compute::FunctionRegistry* GetCustomFunctionRegistry();
-    arrow::compute::ExecContext* GetCustomExecContext();
+    arrow20::compute::FunctionRegistry* GetCustomFunctionRegistry();
+    arrow20::compute::ExecContext* GetCustomExecContext();
 }

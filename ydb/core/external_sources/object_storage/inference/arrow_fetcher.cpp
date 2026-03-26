@@ -101,7 +101,7 @@ public:
             data = std::move(*decompressedData);
         }
 
-        std::shared_ptr<arrow::io::RandomAccessFile> file;
+        std::shared_ptr<arrow20::io::RandomAccessFile> file;
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
@@ -237,9 +237,9 @@ private:
 #endif
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
-        auto chunker = arrow::csv::MakeChunker(options);
-        std::shared_ptr<arrow::Buffer> whole, partial;
+    std::shared_ptr<arrow20::io::RandomAccessFile> CleanupCsvFile(const TString& data, const TRequest& request, const arrow20::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
+        auto chunker = arrow20::csv::MakeChunker(options);
+        std::shared_ptr<arrow20::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
         if (!arrowData) {
             return nullptr;
@@ -256,11 +256,11 @@ private:
             return nullptr;
         }
 
-        return std::make_shared<arrow::io::BufferReader>(std::move(whole));
+        return std::make_shared<arrow20::io::BufferReader>(std::move(whole));
     }
 
     void HandleMetadataSizeRequest(const TString& data, TRequest request, const NActors::TActorContext& ctx) {
-        uint32_t metadataSize = arrow::BitUtil::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
+        uint32_t metadataSize = arrow20::BitUtil::FromLittleEndian<uint32_t>(ReadUnaligned<uint32_t>(data.data()));
 
         if (metadataSize > 10_MB) {
             auto error = MakeError(
@@ -283,24 +283,24 @@ private:
         RequestPartialFile(std::move(localRequest), ctx, request.From - metadataSize, request.To + 4);
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+    std::shared_ptr<arrow20::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = BuildBufferFromData(data, request, ctx);
         if (!arrowData) {
             return nullptr;
         }
-        return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
+        return std::make_shared<arrow20::io::BufferReader>(std::move(arrowData));
     }
 
-    std::shared_ptr<arrow::io::RandomAccessFile> CleanupJsonFile(const TString& data, const TRequest& request, const arrow::json::ParseOptions& options, const NActors::TActorContext& ctx) {
-        auto chunker = arrow::json::MakeChunker(options);
-        std::shared_ptr<arrow::Buffer> whole, partial;
+    std::shared_ptr<arrow20::io::RandomAccessFile> CleanupJsonFile(const TString& data, const TRequest& request, const arrow20::json::ParseOptions& options, const NActors::TActorContext& ctx) {
+        auto chunker = arrow20::json::MakeChunker(options);
+        std::shared_ptr<arrow20::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
         if (!arrowData) {
             return nullptr;
         }
 
         if (Config_->Format == EFileFormat::JsonList) {
-            auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);
+            auto empty = std::make_shared<arrow20::Buffer>(nullptr, 0);
             int64_t count = 1;
             auto status = chunker->ProcessSkip(empty, arrowData, false, &count, &whole);
             
@@ -329,12 +329,12 @@ private:
             return nullptr;
         }
 
-        return std::make_shared<arrow::io::BufferReader>(std::move(whole));
+        return std::make_shared<arrow20::io::BufferReader>(std::move(whole));
     }
 
-    std::shared_ptr<arrow::Buffer> BuildBufferFromData(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
-        auto dataBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
-        arrow::BufferBuilder builder;
+    std::shared_ptr<arrow20::Buffer> BuildBufferFromData(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
+        auto dataBuffer = std::make_shared<arrow20::Buffer>(nullptr, 0);
+        arrow20::BufferBuilder builder;
         auto buildRes = builder.Append(data.data(), data.size());
         if (!buildRes.ok()) {
             auto error = MakeError(

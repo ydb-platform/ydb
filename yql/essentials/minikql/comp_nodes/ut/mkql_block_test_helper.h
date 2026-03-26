@@ -71,7 +71,7 @@ template <typename U>
 inline constexpr bool IsPairWithFuzz =
     TIsPairWithFuzz<std::remove_cvref_t<U>>::value;
 
-arrow::Datum ConvertDatumToArrowFormat(arrow::Datum datum, arrow::MemoryPool& pool);
+arrow20::Datum ConvertDatumToArrowFormat(arrow20::Datum datum, arrow20::MemoryPool& pool);
 
 class TSingularVoid {
 public:
@@ -267,8 +267,8 @@ public:
 
             auto resultValue = Setup_.BuildGraph(binaryOp(Setup_, leftNode, rightNode))->GetValue();
             auto expectedValue = Setup_.BuildGraph(expectedNode)->GetValue();
-            auto outDatum = ConvertDatumToArrowFormat(TArrowBlock::From(resultValue).GetDatum(), *arrow::default_memory_pool());
-            auto expectedDatum = ConvertDatumToArrowFormat(TArrowBlock::From(expectedValue).GetDatum(), *arrow::default_memory_pool());
+            auto outDatum = ConvertDatumToArrowFormat(TArrowBlock::From(resultValue).GetDatum(), *arrow20::default_memory_pool());
+            auto expectedDatum = ConvertDatumToArrowFormat(TArrowBlock::From(expectedValue).GetDatum(), *arrow20::default_memory_pool());
 
             UNIT_ASSERT_EQUAL_C(outDatum, expectedDatum, "Expected : " << DatumToString(expectedDatum) << "\n but got : " << DatumToString(outDatum));
         }
@@ -286,8 +286,8 @@ public:
             auto resultValue = Setup_.BuildGraph(unaryOp(Setup_, node))->GetValue();
             auto expectedValue = Setup_.BuildGraph(expectedNode)->GetValue();
 
-            auto outDatum = ConvertDatumToArrowFormat(TArrowBlock::From(resultValue).GetDatum(), *arrow::default_memory_pool());
-            auto expectedDatum = ConvertDatumToArrowFormat(TArrowBlock::From(expectedValue).GetDatum(), *arrow::default_memory_pool());
+            auto outDatum = ConvertDatumToArrowFormat(TArrowBlock::From(resultValue).GetDatum(), *arrow20::default_memory_pool());
+            auto expectedDatum = ConvertDatumToArrowFormat(TArrowBlock::From(expectedValue).GetDatum(), *arrow20::default_memory_pool());
 
             UNIT_ASSERT_EQUAL_C(outDatum, expectedDatum, "\nExpected : " << DatumToString(expectedDatum) << "\nBut got : " << DatumToString(outDatum));
         }
@@ -339,7 +339,7 @@ private:
 
     TComputationNodeFactory GetNodeTestFactory();
 
-    TString DatumToString(arrow::Datum datum);
+    TString DatumToString(arrow20::Datum datum);
 
     TRuntimeNode MaterializeBlockStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream, ui64 fuzzId);
 

@@ -76,8 +76,8 @@ public:
     }
 
     template <class TDataContainer>
-    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const arrow::Schema& keySchema,
-        const arrow::Schema& dataSchema, const std::vector<std::string>& versionColumnNames, const ui64 sourceId,
+    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter, const arrow20::Schema& keySchema,
+        const arrow20::Schema& dataSchema, const std::vector<std::string>& versionColumnNames, const ui64 sourceId,
         const TIterationOrder& order = TIterationOrder::Forward(0))
         : ControlPointFlag(false)
         , KeyColumns(batch, 0, keySchema.field_names(), dataSchema.field_names(), order.GetIsReversed())

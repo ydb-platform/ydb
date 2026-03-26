@@ -35,7 +35,7 @@ void TMergedBuilder::FlushData() {
     auto stats = statsBuilder.Finish();
     TColumnsData cData(stats, std::make_shared<NArrow::TGeneralContainer>(stats.BuildColumnsSchema()->fields(), std::move(arrays)));
     Result.emplace_back(
-        std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow::binary(), RecordIndex, Settings));
+        std::make_shared<TSubColumnsArray>(std::move(cData), std::move(portionOthersData), arrow20::binary(), RecordIndex, Settings));
     Initialize();
 }
 

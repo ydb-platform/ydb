@@ -1461,7 +1461,7 @@ public:
         TInputBuf& buf,
         const TMkqlIOSpecs& specs,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        arrow::MemoryPool* pool
+        arrow20::MemoryPool* pool
     )
         : TMkqlReaderImpl::TDecoder(buf, specs, holderFactory)
         , Specs_(specs)
@@ -1499,7 +1499,7 @@ public:
             }
             items[i] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
         }
-        items[BlockSizeStructIndex_] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        items[BlockSizeStructIndex_] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow20::Datum(static_cast<uint64_t>(chunkLen)));
         RowIndex_ = chunkRowIndex;
 
         Chunks_.pop_front();
@@ -1508,7 +1508,7 @@ public:
 
     bool ReadNext() {
         if (!StreamReader_) {
-            auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
+            auto streamReaderResult = arrow20::ipc::RecordBatchStreamReader::Open(InputStream_.get());
             if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
                 // Workaround for YT-23495
                 return false;
@@ -1529,7 +1529,7 @@ public:
             }
         }
 
-        std::shared_ptr<arrow::RecordBatch> batch;
+        std::shared_ptr<arrow20::RecordBatch> batch;
         ARROW_OK(StreamReader_->ReadNext(&batch));
         if (!batch) {
             if (InputStream_->EOSReached()) {
@@ -1550,36 +1550,36 @@ public:
         auto rowIndices = batch->GetColumnByName("$row_index");
         YQL_ENSURE(rowIndices || decoder.Dynamic || Specs_.IsTableContent_);
 
-        arrow::compute::ExecContext execContext(Pool_);
-        std::vector<arrow::Datum> convertedBatch(decoder.StructSize);
+        arrow20::compute::ExecContext execContext(Pool_);
+        std::vector<arrow20::Datum> convertedBatch(decoder.StructSize);
         for (size_t i = 0; i < inputFields.size(); i++) {
             auto batchColumn = batch->GetColumnByName(inputFields[i].Name);
             if (!batchColumn) {
-                arrow::Datum convertedColumn;
+                arrow20::Datum convertedColumn;
 
                 if (decoder.FillSysColumnPath == inputFields[i].StructIndex) {
                     auto tableName = Specs_.TableNames.at(TableIndex_).AsStringRef();
-                    auto tableNameScalar = arrow::BinaryScalar(std::make_shared<arrow::Buffer>(reinterpret_cast<const uint8_t*>(tableName.Data()), tableName.Size()));
-                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(tableNameScalar, batch->num_rows(), Pool_));
+                    auto tableNameScalar = arrow20::BinaryScalar(std::make_shared<arrow20::Buffer>(reinterpret_cast<const uint8_t*>(tableName.Data()), tableName.Size()));
+                    convertedColumn = ARROW_RESULT(arrow20::MakeArrayFromScalar(tableNameScalar, batch->num_rows(), Pool_));
 
                 } else if (decoder.FillSysColumnRecord == inputFields[i].StructIndex || decoder.FillSysColumnNum == inputFields[i].StructIndex) {
                     if (rowIndices) {
-                        auto addFirst = ARROW_RESULT(arrow::compute::Cast(rowIndices, arrow::uint64(), arrow::compute::CastOptions::Safe(), &execContext));
-                        auto addSecond = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(1));
-                        convertedColumn = ARROW_RESULT(arrow::compute::Add(addFirst, addSecond, arrow::compute::ArithmeticOptions(), &execContext));
+                        auto addFirst = ARROW_RESULT(arrow20::compute::Cast(rowIndices, arrow20::uint64(), arrow20::compute::CastOptions::Safe(), &execContext));
+                        auto addSecond = arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(1));
+                        convertedColumn = ARROW_RESULT(arrow20::compute::Add(addFirst, addSecond, arrow20::compute::ArithmeticOptions(), &execContext));
 
                         if (decoder.FillSysColumnNum == inputFields[i].StructIndex) {
-                            auto addThird = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
-                            convertedColumn = ARROW_RESULT(arrow::compute::Add(convertedColumn, addThird, arrow::compute::ArithmeticOptions(), &execContext));
+                            auto addThird = arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(Specs_.TableOffsets.at(TableIndex_)));
+                            convertedColumn = ARROW_RESULT(arrow20::compute::Add(convertedColumn, addThird, arrow20::compute::ArithmeticOptions(), &execContext));
                         }
                     } else {
-                        convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt64Scalar(0), batch->num_rows(), Pool_));
+                        convertedColumn = ARROW_RESULT(arrow20::MakeArrayFromScalar(arrow20::UInt64Scalar(0), batch->num_rows(), Pool_));
                     }
                 } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
-                    convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
+                    convertedColumn = ARROW_RESULT(arrow20::MakeArrayFromScalar(arrow20::UInt32Scalar(TableIndex_), batch->num_rows()));
                 } else if (decoder.FillBlockStructSize == inputFields[i].StructIndex) {
                     // Actual value will be specified later
-                    convertedColumn = arrow::Datum(static_cast<uint64_t>(0));
+                    convertedColumn = arrow20::Datum(static_cast<uint64_t>(0));
                 } else if (inputFields[i].StructIndex == Max<ui32>()) {
                     // Input field won't appear in the result
                     continue;
@@ -1595,10 +1595,10 @@ public:
         }
 
         // index of the first row in the block
-        ui64 blockRowIndex = rowIndices ? std::dynamic_pointer_cast<arrow::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value : 0;
+        ui64 blockRowIndex = rowIndices ? std::dynamic_pointer_cast<arrow20::Int64Scalar>(ARROW_RESULT(rowIndices->GetScalar(0)))->value : 0;
 
         NUdf::TArgsDechunker dechunker(std::move(convertedBatch));
-        std::vector<arrow::Datum> chunk;
+        std::vector<arrow20::Datum> chunk;
         ui64 chunkLen = 0;
         while (dechunker.Next(chunk, chunkLen)) {
             Chunks_.emplace_back(rowIndices ? blockRowIndex : 0, chunkLen, std::move(chunk));
@@ -1633,15 +1633,15 @@ public:
 
 private:
     std::unique_ptr<TInputBufArrowInputStream> InputStream_;
-    std::shared_ptr<arrow::ipc::RecordBatchStreamReader> StreamReader_;
+    std::shared_ptr<arrow20::ipc::RecordBatchStreamReader> StreamReader_;
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
 
-    TDeque<std::tuple<ui64, ui64, std::vector<arrow::Datum>>> Chunks_;
+    TDeque<std::tuple<ui64, ui64, std::vector<arrow20::Datum>>> Chunks_;
 
     size_t BlockSizeStructIndex_ = 0;
 
     const TMkqlIOSpecs& Specs_;
-    arrow::MemoryPool* Pool_;
+    arrow20::MemoryPool* Pool_;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2160,13 +2160,13 @@ private:
 
 class TArrowEncoder: public TMkqlWriterImpl::TEncoder {
 public:
-    TArrowEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, arrow::MemoryPool* pool)
+    TArrowEncoder(TOutputBuf& buf, const TMkqlIOSpecs& specs, size_t tableIndex, arrow20::MemoryPool* pool)
         : TMkqlWriterImpl::TEncoder(buf, specs)
     {
         PrepareSchemaAndColumnConverters(Specs_.Outputs[tableIndex].RowType, pool);
 
         OutputStream_ = std::make_unique<TOutputBufArrowOutputStream>(buf);
-        StreamWriter_ = ARROW_RESULT(arrow::ipc::MakeStreamWriter(OutputStream_.get(), Schema_));
+        StreamWriter_ = ARROW_RESULT(arrow20::ipc::MakeStreamWriter(OutputStream_.get(), Schema_));
     }
 
     void EncodeNext(const NUdf::TUnboxedValuePod) final {
@@ -2176,20 +2176,20 @@ public:
     void EncodeNext(const NUdf::TUnboxedValuePod* row) final {
         auto blockSize = GetBlockCount(row[Schema_->num_fields()]);
 
-        std::vector<std::shared_ptr<arrow::ArrayData>> columns;
+        std::vector<std::shared_ptr<arrow20::ArrayData>> columns;
         for (int i = 0; i < Schema_->num_fields(); i++) {
             auto& datum = NKikimr::NMiniKQL::TArrowBlock::From(row[i]).GetDatum();
             auto convertedArray = ColumnConverters_[i]->Convert(datum.array());
             columns.emplace_back(std::move(convertedArray));
         }
 
-        auto recordBatch = arrow::RecordBatch::Make(Schema_, blockSize, std::move(columns));
+        auto recordBatch = arrow20::RecordBatch::Make(Schema_, blockSize, std::move(columns));
         ARROW_OK(StreamWriter_->WriteRecordBatch(*recordBatch));
     }
 
 private:
-    void PrepareSchemaAndColumnConverters(TStructType* rowType, arrow::MemoryPool* pool) {
-        std::vector<std::shared_ptr<arrow::Field>> arrowFields;
+    void PrepareSchemaAndColumnConverters(TStructType* rowType, arrow20::MemoryPool* pool) {
+        std::vector<std::shared_ptr<arrow20::Field>> arrowFields;
         for (size_t i = 0; i < rowType->GetMembersCount(); i++) {
             auto name = rowType->GetMemberName(i);
             auto fieldType = rowType->GetMemberType(i);
@@ -2199,16 +2199,16 @@ private:
             ColumnConverters_.emplace_back(std::move(columnConverter));
         }
 
-        Schema_ = arrow::schema(std::move(arrowFields));
+        Schema_ = arrow20::schema(std::move(arrowFields));
     }
 
 private:
-    std::shared_ptr<arrow::Schema> Schema_;
+    std::shared_ptr<arrow20::Schema> Schema_;
 
     std::vector<IYtOutputColumnConverter::TPtr> ColumnConverters_;
 
     std::unique_ptr<TOutputBufArrowOutputStream> OutputStream_;
-    std::shared_ptr<arrow::ipc::RecordBatchWriter> StreamWriter_;
+    std::shared_ptr<arrow20::ipc::RecordBatchWriter> StreamWriter_;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

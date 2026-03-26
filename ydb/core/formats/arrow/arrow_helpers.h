@@ -45,44 +45,44 @@ std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val
     }
     return idxRight;
 }
-arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo);
-arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId);
+arrow20::Result<std::shared_ptr<arrow20::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo);
+arrow20::Result<std::shared_ptr<arrow20::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId);
 
-arrow::Result<arrow::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns,  const std::set<std::string>& notNullColumns = {});
-arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns = {});
+arrow20::Result<arrow20::FieldVector> MakeArrowFields(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns,  const std::set<std::string>& notNullColumns = {});
+arrow20::Result<std::shared_ptr<arrow20::Schema>> MakeArrowSchema(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns = {});
 
-std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str);
+std::shared_ptr<arrow20::Schema> DeserializeSchema(const TString& str);
 
-TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options);
-TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch);
+TString SerializeBatch(const std::shared_ptr<arrow20::RecordBatch>& batch, const arrow20::ipc::IpcWriteOptions& options);
+TString SerializeBatchNoCompression(const std::shared_ptr<arrow20::RecordBatch>& batch);
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob,
-                                                     const std::shared_ptr<arrow::Schema>& schema);
+std::shared_ptr<arrow20::RecordBatch> DeserializeBatch(const TString& blob,
+                                                     const std::shared_ptr<arrow20::Schema>& schema);
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const bool andUnique);
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const std::shared_ptr<arrow::Schema>& sortingKey,
+std::shared_ptr<arrow20::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, const bool andUnique);
+std::shared_ptr<arrow20::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow20::Array>>& sortingKey, const bool andUnique);
+bool IsSorted(const std::shared_ptr<arrow20::RecordBatch>& batch,
+    const std::shared_ptr<arrow20::Schema>& sortingKey,
     bool desc = false);
-bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey,
+bool IsSortedAndUnique(const std::shared_ptr<arrow20::RecordBatch>& batch,
+                       const std::shared_ptr<arrow20::Schema>& sortingKey,
                        bool desc = false);
-void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
-                       const std::shared_ptr<arrow::Schema>& sortingKey,
-                       std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
+void DedupSortedBatch(const std::shared_ptr<arrow20::RecordBatch>& batch,
+                       const std::shared_ptr<arrow20::Schema>& sortingKey,
+                       std::vector<std::shared_ptr<arrow20::RecordBatch>>& out);
 
-[[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
-[[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(
-    const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
-[[nodiscard]] std::shared_ptr<arrow::ChunkedArray> ReallocateArray(
-    const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
-[[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow20::RecordBatch> ReallocateBatch(std::shared_ptr<arrow20::RecordBatch> original);
+[[nodiscard]] std::shared_ptr<arrow20::Table> ReallocateBatch(
+    const std::shared_ptr<arrow20::Table>& original, arrow20::MemoryPool* pool = arrow20::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow20::ChunkedArray> ReallocateArray(
+    const std::shared_ptr<arrow20::ChunkedArray>& original, arrow20::MemoryPool* pool = arrow20::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow20::Array> ReallocateArray(const std::shared_ptr<arrow20::Array>& arr, arrow20::MemoryPool* pool = arrow20::default_memory_pool());
 
-std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+std::vector<std::shared_ptr<arrow20::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow20::Array>>& columns);
 
-std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+std::shared_ptr<arrow20::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow20::Array>>& columns);
 
 
 }

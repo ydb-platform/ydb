@@ -30,7 +30,7 @@ ArrowBlockInputFormat::ArrowBlockInputFormat(ReadBuffer & in_, const Block & hea
 Chunk ArrowBlockInputFormat::generate()
 {
     Chunk res;
-    arrow::Result<std::shared_ptr<arrow::RecordBatch>> batch_result;
+    arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> batch_result;
 
     if (stream)
     {
@@ -56,7 +56,7 @@ Chunk ArrowBlockInputFormat::generate()
         throw ParsingException(ErrorCodes::CANNOT_READ_ALL_DATA,
             "Error while reading batch of Arrow data: {}", batch_result.status().ToString());
 
-    auto table_result = arrow::Table::FromRecordBatches({*batch_result});
+    auto table_result = arrow20::Table::FromRecordBatches({*batch_result});
     if (!table_result.ok())
         throw ParsingException(ErrorCodes::CANNOT_READ_ALL_DATA,
             "Error while reading batch of Arrow data: {}", table_result.status().ToString());
@@ -81,11 +81,11 @@ void ArrowBlockInputFormat::resetParser()
 
 void ArrowBlockInputFormat::prepareReader()
 {
-    std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<arrow20::Schema> schema;
 
     if (stream)
     {
-        auto stream_reader_status = arrow::ipc::RecordBatchStreamReader::Open(std::make_unique<ArrowInputStreamFromReadBuffer>(in));
+        auto stream_reader_status = arrow20::ipc::RecordBatchStreamReader::Open(std::make_unique<ArrowInputStreamFromReadBuffer>(in));
         if (!stream_reader_status.ok())
             throw Exception(ErrorCodes::UNKNOWN_EXCEPTION,
                 "Error while opening a table: {}", stream_reader_status.status().ToString());
@@ -94,7 +94,7 @@ void ArrowBlockInputFormat::prepareReader()
     }
     else
     {
-        auto file_reader_status = arrow::ipc::RecordBatchFileReader::Open(asArrowFile(in));
+        auto file_reader_status = arrow20::ipc::RecordBatchFileReader::Open(asArrowFile(in));
         if (!file_reader_status.ok())
             throw Exception(ErrorCodes::UNKNOWN_EXCEPTION,
                 "Error while opening a table: {}", file_reader_status.status().ToString());

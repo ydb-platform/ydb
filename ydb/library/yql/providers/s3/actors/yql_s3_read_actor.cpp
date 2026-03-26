@@ -130,7 +130,7 @@
 #define THROW_ARROW_NOT_OK(code, status)                               \
     do                                                                 \
     {                                                                  \
-        if (::arrow::Status _s = (status); !_s.ok())                   \
+        if (::arrow20::Status _s = (status); !_s.ok())                   \
             ythrow TCodeLineException(code) << _s.ToString(); \
     } while (false)
 
@@ -153,7 +153,7 @@ struct TS3ReadError : public yexception {
     using yexception::yexception;
 };
 
-void ThrowParquetNotOk(arrow::Status status) {
+void ThrowParquetNotOk(arrow20::Status status) {
     if (!status.ok()) {
         throw parquet::ParquetException(status.ToString());
     }
@@ -174,7 +174,7 @@ struct TReadSpec {
     ui64 ParallelDownloadCount = 0;
     std::unordered_map<TStringBuf, TType*, THash<TStringBuf>> RowSpec;
     NDB::ColumnsWithTypeAndName CHColumns;
-    std::shared_ptr<arrow::Schema> ArrowSchema;
+    std::shared_ptr<arrow20::Schema> ArrowSchema;
     NDB::FormatSettings Settings;
     // It's very important to keep here std::string instead of TString 
     // because of the cast from TString to std::string is using the MutRef (it isn't thread-safe).
@@ -277,34 +277,34 @@ class TS3ReadCoroImpl : public TActorCoroImpl, public TSourceErrorHandler {
     static constexpr ui64 MAX_ERROR_TEXT_SIZE = 256_KB;
 
 public:
-    class THttpRandomAccessFile : public arrow::io::RandomAccessFile {
+    class THttpRandomAccessFile : public arrow20::io::RandomAccessFile {
     public:
         THttpRandomAccessFile(TS3ReadCoroImpl* coro, size_t fileSize) : Coro(coro), FileSize(fileSize) {
         }
 
         // has no meaning and use
-        arrow::Result<int64_t> GetSize() override { return FileSize; }
-        arrow::Result<int64_t> Tell() const override { return InnerPos; }
-        arrow::Status Seek(int64_t position) override { InnerPos = position; return {}; }
-        arrow::Status Close() override { return {}; }
+        arrow20::Result<int64_t> GetSize() override { return FileSize; }
+        arrow20::Result<int64_t> Tell() const override { return InnerPos; }
+        arrow20::Status Seek(int64_t position) override { InnerPos = position; return {}; }
+        arrow20::Status Close() override { return {}; }
         bool closed() const override { return false; }
         // must not be used currently
-        arrow::Result<int64_t> Read(int64_t, void*) override {
+        arrow20::Result<int64_t> Read(int64_t, void*) override {
             Y_ABORT_UNLESS(0);
-            return arrow::Result<int64_t>();
+            return arrow20::Result<int64_t>();
         }
-        arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t) override {
+        arrow20::Result<std::shared_ptr<arrow20::Buffer>> Read(int64_t) override {
             Y_ABORT_UNLESS(0);
-            return arrow::Result<std::shared_ptr<arrow::Buffer>>();
+            return arrow20::Result<std::shared_ptr<arrow20::Buffer>>();
         }
         // useful ones
-        arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext&, int64_t position, int64_t nbytes) override {
-            return arrow::Future<std::shared_ptr<arrow::Buffer>>::MakeFinished(ReadAt(position, nbytes));
+        arrow20::Future<std::shared_ptr<arrow20::Buffer>> ReadAsync(const arrow20::io::IOContext&, int64_t position, int64_t nbytes) override {
+            return arrow20::Future<std::shared_ptr<arrow20::Buffer>>::MakeFinished(ReadAt(position, nbytes));
         }
-        arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
+        arrow20::Result<std::shared_ptr<arrow20::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
             return Coro->ReadAt(position, nbytes);
         }
-        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& readRanges) override {
+        arrow20::Status WillNeed(const std::vector<arrow20::io::ReadRange>& readRanges) override {
             return Coro->WillNeed(readRanges);
         }
 
@@ -314,43 +314,43 @@ public:
         int64_t InnerPos = 0;
     };
 
-    class TRandomAccessFileTrafficCounter : public arrow::io::RandomAccessFile {
+    class TRandomAccessFileTrafficCounter : public arrow20::io::RandomAccessFile {
     public:
-        TRandomAccessFileTrafficCounter(TS3ReadCoroImpl* coro, std::shared_ptr<arrow::io::RandomAccessFile> impl)
+        TRandomAccessFileTrafficCounter(TS3ReadCoroImpl* coro, std::shared_ptr<arrow20::io::RandomAccessFile> impl)
             : Coro(coro), Impl(impl) {
         }
-        arrow::Result<int64_t> GetSize() override { return Impl->GetSize(); }
-        virtual arrow::Result<int64_t> Tell() const override { return Impl->Tell(); }
-        virtual arrow::Status Seek(int64_t position) override { return Impl->Seek(position); }
-        virtual arrow::Status Close() override { return Impl->Close(); }
+        arrow20::Result<int64_t> GetSize() override { return Impl->GetSize(); }
+        virtual arrow20::Result<int64_t> Tell() const override { return Impl->Tell(); }
+        virtual arrow20::Status Seek(int64_t position) override { return Impl->Seek(position); }
+        virtual arrow20::Status Close() override { return Impl->Close(); }
         virtual bool closed() const override { return Impl->closed(); }
-        arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override {
+        arrow20::Result<int64_t> Read(int64_t nbytes, void* buffer) override {
             auto result = Impl->Read(nbytes, buffer);
             Coro->IngressBytes += nbytes;
             return result;
         }
-        arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override {
+        arrow20::Result<std::shared_ptr<arrow20::Buffer>> Read(int64_t nbytes) override {
             auto result = Impl->Read(nbytes);
             Coro->IngressBytes += nbytes;
             return result;
         }
-        arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
+        arrow20::Result<std::shared_ptr<arrow20::Buffer>> ReadAt(int64_t position, int64_t nbytes) override {
             auto result = Impl->ReadAt(position, nbytes);
             Coro->IngressBytes += nbytes;
             return result;
         }
-        arrow::Future<std::shared_ptr<arrow::Buffer>> ReadAsync(const arrow::io::IOContext& ctx, int64_t position, int64_t nbytes) override {
+        arrow20::Future<std::shared_ptr<arrow20::Buffer>> ReadAsync(const arrow20::io::IOContext& ctx, int64_t position, int64_t nbytes) override {
             auto result = Impl->ReadAsync(ctx, position, nbytes);
             Coro->IngressBytes += nbytes;
             return result;
         }
-        arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& ranges) override {
+        arrow20::Status WillNeed(const std::vector<arrow20::io::ReadRange>& ranges) override {
             return Impl->WillNeed(ranges);
         }
 
     private:
         TS3ReadCoroImpl *const Coro;
-        std::shared_ptr<arrow::io::RandomAccessFile> Impl;
+        std::shared_ptr<arrow20::io::RandomAccessFile> Impl;
     };
 
     class TCoroReadBuffer : public NDB::ReadBuffer {
@@ -575,7 +575,7 @@ public:
         return result;
     }
 
-    arrow::Status WillNeed(const std::vector<arrow::io::ReadRange>& readRanges) {
+    arrow20::Status WillNeed(const std::vector<arrow20::io::ReadRange>& readRanges) {
         if (readRanges.empty()) { // select count(*) case
             if (CurrentRowGroupIndex) {
                 ReadyRowGroups.push(*CurrentRowGroupIndex);
@@ -623,7 +623,7 @@ public:
         }
     }
 
-    arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
+    arrow20::Result<std::shared_ptr<arrow20::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
         LOG_CORO_D("ReadAt STARTED [" << position << "-" << nbytes << "]");
         TEvS3Provider::TReadRange range { .Offset = position, .Length = nbytes };
         auto& cache = GetOrCreate(range);
@@ -642,7 +642,7 @@ public:
 
         LOG_CORO_D("ReadAt FINISHED [" << position << "-" << nbytes << "] #" << data.size());
 
-        return arrow::Buffer::FromString(data);
+        return arrow20::Buffer::FromString(data);
     }
 
     void RunCoroBlockArrowParserOverHttp() {
@@ -650,12 +650,12 @@ public:
 
         ui64 readerCount = 1;
 
-        std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
+        std::vector<std::unique_ptr<parquet::arrow20::FileReader>> readers;
 
-        parquet::arrow::FileReaderBuilder builder;
-        builder.memory_pool(arrow::default_memory_pool());
+        parquet::arrow20::FileReaderBuilder builder;
+        builder.memory_pool(arrow20::default_memory_pool());
         parquet::ArrowReaderProperties properties;
-        properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
+        properties.set_cache_options(arrow20::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
 
@@ -670,7 +670,7 @@ public:
         ui64 numGroups = hasPredicate ? matchedRowGroups.size() : readers[0]->num_row_groups();
 
         if (numGroups) {
-            std::shared_ptr<arrow::Schema> schema;
+            std::shared_ptr<arrow20::Schema> schema;
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
@@ -757,7 +757,7 @@ public:
                 auto readyReaderIndex = RowGroupReaderIndex[readyGroupIndex];
                 RowGroupReaderIndex.erase(readyGroupIndex);
 
-                std::shared_ptr<arrow::Table> table;
+                std::shared_ptr<arrow20::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
@@ -767,10 +767,10 @@ public:
                 ui64 decodedBytes = 0;
                 ReadInflightSize.erase(readyGroupIndex);
 
-                auto reader = std::make_unique<arrow::TableBatchReader>(*table);
+                auto reader = std::make_unique<arrow20::TableBatchReader>(*table);
 
-                std::shared_ptr<arrow::RecordBatch> batch;
-                arrow::Status status;
+                std::shared_ptr<arrow20::RecordBatch> batch;
+                arrow20::Status status;
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
@@ -816,21 +816,21 @@ public:
     void RunCoroBlockArrowParserOverFile() {
         LOG_CORO_D("RunCoroBlockArrowParserOverFile");
 
-        std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =
+        std::shared_ptr<arrow20::io::RandomAccessFile> arrowFile =
             std::make_shared<TRandomAccessFileTrafficCounter>(this,
-                arrow::io::ReadableFile::Open((Url + Path).substr(7), arrow::default_memory_pool()).ValueOrDie()
+                arrow20::io::ReadableFile::Open((Url + Path).substr(7), arrow20::default_memory_pool()).ValueOrDie()
             );
-        std::unique_ptr<parquet::arrow::FileReader> fileReader;
-        parquet::arrow::FileReaderBuilder builder;
-        builder.memory_pool(arrow::default_memory_pool());
+        std::unique_ptr<parquet::arrow20::FileReader> fileReader;
+        parquet::arrow20::FileReaderBuilder builder;
+        builder.memory_pool(arrow20::default_memory_pool());
         parquet::ArrowReaderProperties properties;
-        properties.set_cache_options(arrow::io::CacheOptions::LazyDefaults());
+        properties.set_cache_options(arrow20::io::CacheOptions::LazyDefaults());
         properties.set_pre_buffer(true);
         builder.properties(properties);
         ThrowParquetNotOk(builder.Open(arrowFile));
         ThrowParquetNotOk(builder.Build(&fileReader));
 
-        std::shared_ptr<arrow::Schema> schema;
+        std::shared_ptr<arrow20::Schema> schema;
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
@@ -848,15 +848,15 @@ public:
                 StartCycleCount = GetCycleCountFast();
             }
 
-            std::shared_ptr<arrow::Table> table;
+            std::shared_ptr<arrow20::Table> table;
             ui64 ingressBytes = IngressBytes;
             ThrowParquetNotOk(fileReader->ReadRowGroup(group, columnIndices, &table));
             ui64 downloadedBytes = IngressBytes - ingressBytes;
-            auto reader = std::make_unique<arrow::TableBatchReader>(*table);
+            auto reader = std::make_unique<arrow20::TableBatchReader>(*table);
 
             ui64 decodedBytes = 0;
-            std::shared_ptr<arrow::RecordBatch> batch;
-            ::arrow::Status status;
+            std::shared_ptr<arrow20::RecordBatch> batch;
+            ::arrow20::Status status;
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
@@ -1621,7 +1621,7 @@ private:
         {}
 
         NDB::Block Block;
-        std::shared_ptr<arrow::RecordBatch> Batch;
+        std::shared_ptr<arrow20::RecordBatch> Batch;
         size_t PathInd;
     };
 
@@ -1656,10 +1656,10 @@ private:
                 NUdf::TUnboxedValue* structItems = nullptr;
                 auto structObj = ArrowRowContainerCache.NewArray(HolderFactory, 1 + batch.num_columns(), structItems);
                 for (int i = 0; i < batch.num_columns(); ++i) {
-                    structItems[ReadSpec->ColumnReorder[i]] = HolderFactory.CreateArrowBlock(arrow::Datum(batch.column_data(i)));
+                    structItems[ReadSpec->ColumnReorder[i]] = HolderFactory.CreateArrowBlock(arrow20::Datum(batch.column_data(i)));
                 }
 
-                structItems[ReadSpec->BlockLengthPosition] = HolderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch.num_rows())));
+                structItems[ReadSpec->BlockLengthPosition] = HolderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(batch.num_rows())));
                 value = structObj;
             } else {
                 value = HolderFactory.Create<TBoxedBlock>(Blocks.front().Block);
@@ -2256,7 +2256,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         }
         if (readSpec->Arrow) {
             fileSizeLimit = cfg.BlockFileSizeLimit;
-            arrow::SchemaBuilder builder;
+            arrow20::SchemaBuilder builder;
             auto extraStructType = static_cast<TStructType*>(pb->NewStructType(structType, BlockLengthColumnName,
                 pb->NewBlockType(pb->NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar)));
 
@@ -2268,12 +2268,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                 }
 
                 auto memberType = extraStructType->GetMemberType(i);
-                std::shared_ptr<arrow::DataType> dataType;
+                std::shared_ptr<arrow20::DataType> dataType;
 
                 YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
                 THROW_ARROW_NOT_OK(
                     NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                    builder.AddField(std::make_shared<arrow::Field>(std::string(memberName), dataType, memberType->IsOptional()))
+                    builder.AddField(std::make_shared<arrow20::Field>(std::string(memberName), dataType, memberType->IsOptional()))
                 );
                 readSpec->ColumnReorder.push_back(i);
                 readSpec->RowSpec.emplace(memberName, memberType);

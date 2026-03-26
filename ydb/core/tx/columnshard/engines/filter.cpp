@@ -9,18 +9,18 @@ namespace NKikimr::NOlap {
 template <class TArrayView>
 class TChunkedArrayIterator {
 private:
-    const arrow::ArrayVector* Chunks;
+    const arrow20::ArrayVector* Chunks;
     const typename TArrayView::value_type* RawView;
-    arrow::ArrayVector::const_iterator CurrentChunkIt;
+    arrow20::ArrayVector::const_iterator CurrentChunkIt;
     ui32 CurrentChunkPosition = 0;
 public:
-    TChunkedArrayIterator(const std::shared_ptr<arrow::ChunkedArray>& chunks)
+    TChunkedArrayIterator(const std::shared_ptr<arrow20::ChunkedArray>& chunks)
     {
         AFL_VERIFY(!!chunks);
         Chunks = &chunks->chunks();
         AFL_VERIFY(Chunks->size());
         CurrentChunkIt = Chunks->begin();
-        Y_ABORT_UNLESS(chunks->type()->id() == arrow::TypeTraits<typename TArrayView::TypeClass>::type_singleton()->id());
+        Y_ABORT_UNLESS(chunks->type()->id() == arrow20::TypeTraits<typename TArrayView::TypeClass>::type_singleton()->id());
         if (IsValid()) {
             RawView = std::static_pointer_cast<TArrayView>(*CurrentChunkIt)->raw_values();
         }
@@ -51,11 +51,11 @@ public:
 class TTableSnapshotGetter {
 private:
     const TSnapshot Snapshot;
-    mutable TChunkedArrayIterator<arrow::UInt64Array> Steps;
-    mutable TChunkedArrayIterator<arrow::UInt64Array> Ids;
+    mutable TChunkedArrayIterator<arrow20::UInt64Array> Steps;
+    mutable TChunkedArrayIterator<arrow20::UInt64Array> Ids;
     mutable i64 CurrentIdx = -1;
 public:
-    TTableSnapshotGetter(const std::shared_ptr<arrow::ChunkedArray>& steps, const std::shared_ptr<arrow::ChunkedArray>& ids, const TSnapshot& snapshot)
+    TTableSnapshotGetter(const std::shared_ptr<arrow20::ChunkedArray>& steps, const std::shared_ptr<arrow20::ChunkedArray>& ids, const TSnapshot& snapshot)
         : Snapshot(snapshot)
         , Steps(steps)
         , Ids(ids)
@@ -88,27 +88,27 @@ NArrow::TColumnFilter MakeSnapshotFilterImpl(const std::shared_ptr<TData>& batch
     return result;
 }
 
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::Table>& batch,
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow20::Table>& batch,
     const TSnapshot& snapshot) {
     return MakeSnapshotFilterImpl<TTableSnapshotGetter>(batch, snapshot);
 }
 
 class TSnapshotGetter {
 private:
-    const arrow::UInt64Array::value_type* RawSteps;
-    const arrow::UInt64Array::value_type* RawIds;
+    const arrow20::UInt64Array::value_type* RawSteps;
+    const arrow20::UInt64Array::value_type* RawIds;
     const TSnapshot Snapshot;
 public:
-    TSnapshotGetter(std::shared_ptr<arrow::Array> steps, std::shared_ptr<arrow::Array> ids, const TSnapshot& snapshot)
+    TSnapshotGetter(std::shared_ptr<arrow20::Array> steps, std::shared_ptr<arrow20::Array> ids, const TSnapshot& snapshot)
         : Snapshot(snapshot)
     {
         Y_ABORT_UNLESS(steps);
         Y_ABORT_UNLESS(ids);
         Y_ABORT_UNLESS(steps->length() == ids->length());
-        Y_ABORT_UNLESS(steps->type() == arrow::uint64());
-        Y_ABORT_UNLESS(ids->type() == arrow::uint64());
-        RawSteps = std::static_pointer_cast<arrow::UInt64Array>(steps)->raw_values();
-        RawIds = std::static_pointer_cast<arrow::UInt64Array>(ids)->raw_values();
+        Y_ABORT_UNLESS(steps->type() == arrow20::uint64());
+        Y_ABORT_UNLESS(ids->type() == arrow20::uint64());
+        RawSteps = std::static_pointer_cast<arrow20::UInt64Array>(steps)->raw_values();
+        RawIds = std::static_pointer_cast<arrow20::UInt64Array>(ids)->raw_values();
     }
 
     bool operator[](const ui32 idx) const {
@@ -116,7 +116,7 @@ public:
     }
 };
 
-NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow::RecordBatch>& batch,
+NArrow::TColumnFilter MakeSnapshotFilter(const std::shared_ptr<arrow20::RecordBatch>& batch,
                                      const TSnapshot& snapshot) {
     return MakeSnapshotFilterImpl<TSnapshotGetter>(batch, snapshot);
 }

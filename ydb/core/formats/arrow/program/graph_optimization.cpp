@@ -440,8 +440,8 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         }
         auto constProc = nodePath->GetProcessorAs<TConstProcessor>();
         TString path;
-        if (constProc->GetScalarConstant()->type->id() == arrow::utf8()->id() ||
-            constProc->GetScalarConstant()->type->id() == arrow::binary()->id()) {
+        if (constProc->GetScalarConstant()->type->id() == arrow20::utf8()->id() ||
+            constProc->GetScalarConstant()->type->id() == arrow20::binary()->id()) {
             path = NAccessor::NSubColumns::ToSubcolumnName(constProc->GetScalarConstant()->ToString());
         } else {
             return std::nullopt;
@@ -624,9 +624,9 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         NArrow::SwitchType(scalar->type->id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
-            using TScalar = typename arrow::TypeTraits<T>::ScalarType;
+            using TScalar = typename arrow20::TypeTraits<T>::ScalarType;
             auto& typedScalar = static_cast<const TScalar&>(*scalar);
-            if constexpr (arrow::has_c_type<T>()) {
+            if constexpr (arrow20::has_c_type<T>()) {
                 doOptimize = (typedScalar.value == 0);
             }
             return true;

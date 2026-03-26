@@ -42,14 +42,14 @@ protected:
         return TLocalDataAddress(nullptr, 0, 0);
     }
 
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 /*index*/) const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetScalar(const ui32 /*index*/) const override {
         AFL_VERIFY(false)("problem", "cannot use method");
         return nullptr;
     }
     virtual std::optional<ui64> DoGetRawSize() const override {
         return {};
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetMaxScalar() const override {
         AFL_VERIFY(false);
         return nullptr;
     }
@@ -57,7 +57,7 @@ protected:
         AFL_VERIFY(false);
         return {};
     }
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
+    virtual std::shared_ptr<arrow20::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {
             AFL_VERIFY(false);
             return nullptr;

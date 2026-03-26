@@ -4,7 +4,7 @@
 
 namespace NKikimr::NFormats {
 
-arrow::Result<TArrowCSV> TArrowCSVScheme::Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns) {
+arrow20::Result<TArrowCSV> TArrowCSVScheme::Create(const TVector<std::pair<TString, NScheme::TTypeInfo>>& columns, bool header, const std::set<std::string>& notNullColumns) {
     TVector<TString> errors;
     TColummns convertedColumns;
     convertedColumns.reserve(columns.size());
@@ -31,7 +31,7 @@ arrow::Result<TArrowCSV> TArrowCSVScheme::Create(const TVector<std::pair<TString
         convertedColumns.emplace_back(columnInfo);
     }
     if (!errors.empty()) {
-        return arrow::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
+        return arrow20::Status::TypeError(ErrorPrefix() + "columns errors: " + JoinSeq("; ", errors));
     }
     return TArrowCSVScheme(convertedColumns, header, notNullColumns);
 }

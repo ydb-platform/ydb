@@ -16,7 +16,7 @@ TString TPredicateContainer::DebugString() const {
     }
 }
 
-int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const {
+int TPredicateContainer::MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow20::Scalar>& s) const {
     if (!Object) {
         return 1;
     }

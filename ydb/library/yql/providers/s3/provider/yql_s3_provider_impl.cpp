@@ -51,7 +51,7 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
             }
             return false;
         }
-        if (std::shared_ptr<arrow::DataType> arrowType; !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
+        if (std::shared_ptr<arrow20::DataType> arrowType; !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
             if (useblockSink) {
                 error = TStringBuilder() << "Field '" << item->GetName() << "' has data type " << FormatType(unpackedType) << ", it does not supported for block sink";
             }

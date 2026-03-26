@@ -20,7 +20,7 @@ public:
     {}
 
     bool Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NKikimr::NEvWrite::IPayloadReader& payload);
-    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() override;
+    virtual TConclusion<std::shared_ptr<arrow20::RecordBatch>> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
         Y_ABORT_UNLESS(OriginalDataSize);
@@ -47,7 +47,7 @@ public:
     {}
 
     bool ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto);
-    virtual TConclusion<std::shared_ptr<arrow::RecordBatch>> ExtractBatch() override;
+    virtual TConclusion<std::shared_ptr<arrow20::RecordBatch>> ExtractBatch() override;
     ui64 GetSchemaVersion() const override;
     ui64 GetSize() const override {
         Y_ABORT_UNLESS(OriginalDataSize);
@@ -56,7 +56,7 @@ public:
 
 private:
     NOlap::ISnapshotSchema::TPtr IndexSchema;
-    std::shared_ptr<arrow::Schema> ArrowSchema;
+    std::shared_ptr<arrow20::Schema> ArrowSchema;
     TString IncomingData;
 };
 

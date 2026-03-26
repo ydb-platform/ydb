@@ -19,7 +19,7 @@ public:
 
     bool IsEmpty() const;
 
-    bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    bool IsPointRange(const std::shared_ptr<arrow20::Schema>& pkSchema) const;
 
     const TPredicateContainer& GetPredicateFrom() const {
         return PredicateFrom;

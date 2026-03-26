@@ -20,37 +20,37 @@ namespace NMiniKQL {
 
 namespace {
 
-using arrow::internal::Bitmap;
+using arrow20::internal::Bitmap;
 
-std::shared_ptr<arrow::Buffer> CopyBitmap(arrow::MemoryPool* pool, const std::shared_ptr<arrow::Buffer>& bitmap, int64_t offset, int64_t len) {
-    std::shared_ptr<arrow::Buffer> result = bitmap;
+std::shared_ptr<arrow20::Buffer> CopyBitmap(arrow20::MemoryPool* pool, const std::shared_ptr<arrow20::Buffer>& bitmap, int64_t offset, int64_t len) {
+    std::shared_ptr<arrow20::Buffer> result = bitmap;
     if (bitmap && offset != 0) {
-        result = ARROW_RESULT(arrow::AllocateBitmap(len, pool));
-        arrow::internal::CopyBitmap(bitmap->data(), offset, len, result->mutable_data(), 0);
+        result = ARROW_RESULT(arrow20::AllocateBitmap(len, pool));
+        arrow20::internal::CopyBitmap(bitmap->data(), offset, len, result->mutable_data(), 0);
     }
     return result;
 }
 
-std::shared_ptr<arrow::Buffer> CopySparseBitmap(arrow::MemoryPool* pool, const std::shared_ptr<arrow::Buffer>& bitmap, int64_t offset, int64_t len) {
-    std::shared_ptr<arrow::Buffer> result = bitmap;
+std::shared_ptr<arrow20::Buffer> CopySparseBitmap(arrow20::MemoryPool* pool, const std::shared_ptr<arrow20::Buffer>& bitmap, int64_t offset, int64_t len) {
+    std::shared_ptr<arrow20::Buffer> result = bitmap;
     if (bitmap && offset != 0) {
-        result = ARROW_RESULT(arrow::AllocateBuffer(len, pool));
+        result = ARROW_RESULT(arrow20::AllocateBuffer(len, pool));
         std::memcpy(result->mutable_data(), bitmap->data() + offset, len);
     }
     return result;
 }
 
-arrow::Datum MakeNullArray(arrow::MemoryPool* pool, int64_t len) {
-    std::shared_ptr<arrow::Array> arr = ARROW_RESULT(arrow::MakeArrayOfNull(arrow::uint8(), len, pool));
+arrow20::Datum MakeNullArray(arrow20::MemoryPool* pool, int64_t len) {
+    std::shared_ptr<arrow20::Array> arr = ARROW_RESULT(arrow20::MakeArrayOfNull(arrow20::uint8(), len, pool));
     return arr;
 }
 
-bool IsAllEqualsTo(const arrow::Datum& datum, bool value) {
+bool IsAllEqualsTo(const arrow20::Datum& datum, bool value) {
     if (datum.null_count() != 0) {
         return false;
     }
     if (datum.is_scalar()) {
-        return (datum.scalar_as<arrow::UInt8Scalar>().value & 1u) == value;
+        return (datum.scalar_as<arrow20::UInt8Scalar>().value & 1u) == value;
     }
     size_t len = datum.array()->length;
     size_t popCnt = GetSparseBitmapPopCount(datum.array()->GetValues<ui8>(1), len);
@@ -59,12 +59,12 @@ bool IsAllEqualsTo(const arrow::Datum& datum, bool value) {
 
 class TAndBlockExec {
 public:
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
         if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
             *res = CalcScalarScalar(firstDatum, secondDatum);
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
         if (IsAllEqualsTo(firstDatum, false)) {
             // false AND ... = false
@@ -75,7 +75,7 @@ public:
                 *res = MakeFalseArray(ctx->memory_pool(), secondDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (IsAllEqualsTo(secondDatum, false)) {
@@ -86,28 +86,28 @@ public:
                 *res = MakeFalseArray(ctx->memory_pool(), firstDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (firstDatum.is_scalar()) {
-            ui8 value = firstDatum.scalar_as<arrow::UInt8Scalar>().value & 1u;
+            ui8 value = firstDatum.scalar_as<arrow20::UInt8Scalar>().value & 1u;
             bool valid = firstDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, secondDatum.array());
         } else if (secondDatum.is_scalar()) {
-            ui8 value = secondDatum.scalar_as<arrow::UInt8Scalar>().value & 1u;
+            ui8 value = secondDatum.scalar_as<arrow20::UInt8Scalar>().value & 1u;
             bool valid = secondDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, firstDatum.array());
         } else {
             *res = CalcArrayArray(ctx->memory_pool(), firstDatum.array(), secondDatum.array());
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
-    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
-        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
-        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+    arrow20::Datum CalcScalarScalar(const arrow20::Datum& firstDatum, const arrow20::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow20::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow20::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
             bool result = bool((first.value & second.value) & 1u);
@@ -129,7 +129,7 @@ private:
         }
     }
 
-    arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow::ArrayData>& arr) const {
+    arrow20::Datum CalcScalarArray(arrow20::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow20::ArrayData>& arr) const {
         bool first_true = valid && value;
         bool first_false = valid && !value;
 
@@ -143,17 +143,17 @@ private:
 
         // scalar is null -> result is valid _only_ if arr[i] == false
         // bitmap = bitmap and not data[i]
-        std::shared_ptr<arrow::Buffer> bitmap = ARROW_RESULT(arrow::AllocateBitmap(arr->length, pool));
+        std::shared_ptr<arrow20::Buffer> bitmap = ARROW_RESULT(arrow20::AllocateBitmap(arr->length, pool));
         CompressSparseBitmapNegate(bitmap->mutable_data(), arr->GetValues<ui8>(1), arr->length);
         if (arr->buffers[0]) {
-            bitmap = ARROW_RESULT(arrow::internal::BitmapAnd(pool, arr->GetValues<ui8>(0, 0), arr->offset, bitmap->data(), 0, arr->length, 0));
+            bitmap = ARROW_RESULT(arrow20::internal::BitmapAnd(pool, arr->GetValues<ui8>(0, 0), arr->offset, bitmap->data(), 0, arr->length, 0));
         }
-        std::shared_ptr<arrow::Buffer> data = CopySparseBitmap(pool, arr->buffers[1], arr->offset, arr->length);
-        return arrow::ArrayData::Make(arr->type, arr->length, {bitmap, data});
+        std::shared_ptr<arrow20::Buffer> data = CopySparseBitmap(pool, arr->buffers[1], arr->offset, arr->length);
+        return arrow20::ArrayData::Make(arr->type, arr->length, {bitmap, data});
     }
 
-    arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
-                                const std::shared_ptr<arrow::ArrayData>& arr2) const {
+    arrow20::Datum CalcArrayArray(arrow20::MemoryPool* pool, const std::shared_ptr<arrow20::ArrayData>& arr1,
+                                const std::shared_ptr<arrow20::ArrayData>& arr2) const {
         Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto buf1 = arr1->buffers[0];
         auto buf2 = arr2->buffers[0];
@@ -161,11 +161,11 @@ private:
         const int64_t offset2 = arr2->offset;
         const int64_t length = arr1->length;
 
-        std::shared_ptr<arrow::Buffer> bitmap;
+        std::shared_ptr<arrow20::Buffer> bitmap;
         if (buf1 || buf2) {
-            bitmap = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
-            auto first = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
-            auto second = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
+            bitmap = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
+            auto first = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
+            auto second = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
             CompressSparseBitmap(first->mutable_data(), arr1->GetValues<ui8>(1), length);
             CompressSparseBitmap(second->mutable_data(), arr2->GetValues<ui8>(1), length);
 
@@ -211,20 +211,20 @@ private:
                 });
             }
         }
-        std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(length, pool));
+        std::shared_ptr<arrow20::Buffer> data = ARROW_RESULT(arrow20::AllocateBuffer(length, pool));
         AndSparseBitmaps(data->mutable_data(), arr1->GetValues<ui8>(1), arr2->GetValues<ui8>(1), length);
-        return arrow::ArrayData::Make(arr1->type, length, {bitmap, data});
+        return arrow20::ArrayData::Make(arr1->type, length, {bitmap, data});
     }
 };
 
 class TOrBlockExec {
 public:
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
         if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
             *res = CalcScalarScalar(firstDatum, secondDatum);
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
         if (IsAllEqualsTo(firstDatum, true)) {
             // true OR ... = true
@@ -235,7 +235,7 @@ public:
                 *res = MakeTrueArray(ctx->memory_pool(), secondDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (IsAllEqualsTo(secondDatum, true)) {
@@ -246,28 +246,28 @@ public:
                 *res = MakeTrueArray(ctx->memory_pool(), firstDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (firstDatum.is_scalar()) {
-            ui8 value = firstDatum.scalar_as<arrow::UInt8Scalar>().value;
+            ui8 value = firstDatum.scalar_as<arrow20::UInt8Scalar>().value;
             bool valid = firstDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, secondDatum.array());
         } else if (secondDatum.is_scalar()) {
-            ui8 value = secondDatum.scalar_as<arrow::UInt8Scalar>().value;
+            ui8 value = secondDatum.scalar_as<arrow20::UInt8Scalar>().value;
             bool valid = secondDatum.scalar()->is_valid;
             *res = CalcScalarArray(ctx->memory_pool(), value, valid, firstDatum.array());
         } else {
             *res = CalcArrayArray(ctx->memory_pool(), firstDatum.array(), secondDatum.array());
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
-    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
-        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
-        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+    arrow20::Datum CalcScalarScalar(const arrow20::Datum& firstDatum, const arrow20::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow20::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow20::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
             bool result = bool((first.value | second.value) & 1u);
@@ -289,7 +289,7 @@ private:
         }
     }
 
-    arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow::ArrayData>& arr) const {
+    arrow20::Datum CalcScalarArray(arrow20::MemoryPool* pool, ui8 value, bool valid, const std::shared_ptr<arrow20::ArrayData>& arr) const {
         bool first_true = valid && value;
         bool first_false = valid && !value;
 
@@ -303,17 +303,17 @@ private:
 
         // scalar is null -> result is valid _only_ if arr[i] == true
         // bitmap = bitmap and data[i]
-        std::shared_ptr<arrow::Buffer> bitmap = ARROW_RESULT(arrow::AllocateBitmap(arr->length, pool));
+        std::shared_ptr<arrow20::Buffer> bitmap = ARROW_RESULT(arrow20::AllocateBitmap(arr->length, pool));
         CompressSparseBitmap(bitmap->mutable_data(), arr->GetValues<ui8>(1), arr->length);
         if (arr->buffers[0]) {
-            bitmap = ARROW_RESULT(arrow::internal::BitmapAnd(pool, arr->GetValues<ui8>(0, 0), arr->offset, bitmap->data(), 0, arr->length, 0));
+            bitmap = ARROW_RESULT(arrow20::internal::BitmapAnd(pool, arr->GetValues<ui8>(0, 0), arr->offset, bitmap->data(), 0, arr->length, 0));
         }
-        std::shared_ptr<arrow::Buffer> data = CopySparseBitmap(pool, arr->buffers[1], arr->offset, arr->length);
-        return arrow::ArrayData::Make(arr->type, arr->length, {bitmap, data});
+        std::shared_ptr<arrow20::Buffer> data = CopySparseBitmap(pool, arr->buffers[1], arr->offset, arr->length);
+        return arrow20::ArrayData::Make(arr->type, arr->length, {bitmap, data});
     }
 
-    arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
-                                const std::shared_ptr<arrow::ArrayData>& arr2) const {
+    arrow20::Datum CalcArrayArray(arrow20::MemoryPool* pool, const std::shared_ptr<arrow20::ArrayData>& arr1,
+                                const std::shared_ptr<arrow20::ArrayData>& arr2) const {
         Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto buf1 = arr1->buffers[0];
         auto buf2 = arr2->buffers[0];
@@ -321,11 +321,11 @@ private:
         const int64_t offset2 = arr2->offset;
         const int64_t length = arr1->length;
 
-        std::shared_ptr<arrow::Buffer> bitmap;
+        std::shared_ptr<arrow20::Buffer> bitmap;
         if (buf1 || buf2) {
-            bitmap = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
-            auto first = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
-            auto second = ARROW_RESULT(arrow::AllocateBitmap(length, pool));
+            bitmap = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
+            auto first = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
+            auto second = ARROW_RESULT(arrow20::AllocateBitmap(length, pool));
             CompressSparseBitmap(first->mutable_data(), arr1->GetValues<ui8>(1), length);
             CompressSparseBitmap(second->mutable_data(), arr2->GetValues<ui8>(1), length);
 
@@ -371,20 +371,20 @@ private:
                 });
             }
         }
-        std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(length, pool));
+        std::shared_ptr<arrow20::Buffer> data = ARROW_RESULT(arrow20::AllocateBuffer(length, pool));
         OrSparseBitmaps(data->mutable_data(), arr1->GetValues<ui8>(1), arr2->GetValues<ui8>(1), length);
-        return arrow::ArrayData::Make(arr1->type, length, {bitmap, data});
+        return arrow20::ArrayData::Make(arr1->type, length, {bitmap, data});
     }
 };
 
 class TXorBlockExec {
 public:
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         auto firstDatum = batch.values[0];
         auto secondDatum = batch.values[1];
         if (firstDatum.is_scalar() && secondDatum.is_scalar()) {
             *res = CalcScalarScalar(firstDatum, secondDatum);
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
         if (firstDatum.null_count() == firstDatum.length()) {
             if (firstDatum.is_array()) {
@@ -393,7 +393,7 @@ public:
                 *res = MakeNullArray(ctx->memory_pool(), secondDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (secondDatum.null_count() == secondDatum.length()) {
@@ -403,26 +403,26 @@ public:
                 *res = MakeNullArray(ctx->memory_pool(), firstDatum.length());
             }
 
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
 
         if (firstDatum.is_scalar()) {
-            ui8 value = firstDatum.scalar_as<arrow::UInt8Scalar>().value;
+            ui8 value = firstDatum.scalar_as<arrow20::UInt8Scalar>().value;
             *res = CalcScalarArray(ctx->memory_pool(), value, secondDatum.array());
         } else if (secondDatum.is_scalar()) {
-            ui8 value = secondDatum.scalar_as<arrow::UInt8Scalar>().value;
+            ui8 value = secondDatum.scalar_as<arrow20::UInt8Scalar>().value;
             *res = CalcScalarArray(ctx->memory_pool(), value, firstDatum.array());
         } else {
             *res = CalcArrayArray(ctx->memory_pool(), firstDatum.array(), secondDatum.array());
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
-    arrow::Datum CalcScalarScalar(const arrow::Datum& firstDatum, const arrow::Datum& secondDatum) const {
-        const auto& first = firstDatum.scalar_as<arrow::UInt8Scalar>();
-        const auto& second = secondDatum.scalar_as<arrow::UInt8Scalar>();
+    arrow20::Datum CalcScalarScalar(const arrow20::Datum& firstDatum, const arrow20::Datum& secondDatum) const {
+        const auto& first = firstDatum.scalar_as<arrow20::UInt8Scalar>();
+        const auto& second = secondDatum.scalar_as<arrow20::UInt8Scalar>();
 
         if (first.is_valid && second.is_valid) {
             bool result = bool((first.value ^ second.value) & 1u);
@@ -432,15 +432,15 @@ private:
         return first.is_valid ? secondDatum : firstDatum;
     }
 
-    arrow::Datum CalcScalarArray(arrow::MemoryPool* pool, ui8 value, const std::shared_ptr<arrow::ArrayData>& arr) const {
-        std::shared_ptr<arrow::Buffer> bitmap = CopyBitmap(pool, arr->buffers[0], arr->offset, arr->length);
-        std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(arr->length, pool));
+    arrow20::Datum CalcScalarArray(arrow20::MemoryPool* pool, ui8 value, const std::shared_ptr<arrow20::ArrayData>& arr) const {
+        std::shared_ptr<arrow20::Buffer> bitmap = CopyBitmap(pool, arr->buffers[0], arr->offset, arr->length);
+        std::shared_ptr<arrow20::Buffer> data = ARROW_RESULT(arrow20::AllocateBuffer(arr->length, pool));
         XorSparseBitmapScalar(data->mutable_data(), value, arr->GetValues<ui8>(1), arr->length);
-        return arrow::ArrayData::Make(arr->type, arr->length, {bitmap, data});
+        return arrow20::ArrayData::Make(arr->type, arr->length, {bitmap, data});
     }
 
-    arrow::Datum CalcArrayArray(arrow::MemoryPool* pool, const std::shared_ptr<arrow::ArrayData>& arr1,
-                                const std::shared_ptr<arrow::ArrayData>& arr2) const {
+    arrow20::Datum CalcArrayArray(arrow20::MemoryPool* pool, const std::shared_ptr<arrow20::ArrayData>& arr1,
+                                const std::shared_ptr<arrow20::ArrayData>& arr2) const {
         Y_ABORT_UNLESS(arr1->length == arr2->length);
         auto b1 = arr1->buffers[0];
         auto b2 = arr2->buffers[0];
@@ -448,26 +448,26 @@ private:
         const int64_t offset2 = arr2->offset;
         const int64_t length = arr1->length;
 
-        std::shared_ptr<arrow::Buffer> bitmap;
+        std::shared_ptr<arrow20::Buffer> bitmap;
         if (b1 && b2) {
-            bitmap = ARROW_RESULT(arrow::internal::BitmapAnd(pool, b1->data(), offset1, b2->data(), offset2, length, 0));
+            bitmap = ARROW_RESULT(arrow20::internal::BitmapAnd(pool, b1->data(), offset1, b2->data(), offset2, length, 0));
         } else {
             bitmap = CopyBitmap(pool, b1 ? b1 : b2, b1 ? offset1 : offset2, length);
         }
-        std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(length, pool));
+        std::shared_ptr<arrow20::Buffer> data = ARROW_RESULT(arrow20::AllocateBuffer(length, pool));
         XorSparseBitmaps(data->mutable_data(), arr1->GetValues<ui8>(1), arr2->GetValues<ui8>(1), length);
-        return arrow::ArrayData::Make(arr1->type, length, {bitmap, data});
+        return arrow20::ArrayData::Make(arr1->type, length, {bitmap, data});
     }
 };
 
 class TNotBlockExec {
 public:
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         const auto& input = batch.values[0];
         if (input.is_scalar()) {
-            const auto& arg = input.scalar_as<arrow::UInt8Scalar>();
+            const auto& arg = input.scalar_as<arrow20::UInt8Scalar>();
             *res = arg.is_valid ? MakeScalarDatum(bool(~arg.value & 1u)) : input;
-            return arrow::Status::OK();
+            return arrow20::Status::OK();
         }
         MKQL_ENSURE(input.is_array(), "Expected array");
         const auto& arr = *input.array();
@@ -475,27 +475,27 @@ public:
             *res = input;
         } else {
             auto bitmap = CopyBitmap(ctx->memory_pool(), arr.buffers[0], arr.offset, arr.length);
-            std::shared_ptr<arrow::Buffer> data = ARROW_RESULT(arrow::AllocateBuffer(arr.length, ctx->memory_pool()));
+            std::shared_ptr<arrow20::Buffer> data = ARROW_RESULT(arrow20::AllocateBuffer(arr.length, ctx->memory_pool()));
             ;
             NegateSparseBitmap(data->mutable_data(), arr.GetValues<ui8>(1), arr.length);
-            *res = arrow::ArrayData::Make(arr.type, arr.length, {bitmap, data});
+            *res = arrow20::ArrayData::Make(arr.type, arr.length, {bitmap, data});
         }
 
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 };
 
 template <typename TExec>
-std::shared_ptr<arrow::compute::ScalarKernel> MakeKernel(const TVector<TType*>& argTypes, TType* resultType) {
-    std::shared_ptr<arrow::DataType> returnArrowType;
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeKernel(const TVector<TType*>& argTypes, TType* resultType) {
+    std::shared_ptr<arrow20::DataType> returnArrowType;
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TExec>();
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                 [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                      return exec->Exec(ctx, batch, res);
                                                                  });
 
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;
 }
 
@@ -516,7 +516,7 @@ IComputationNode* WrapBlockLogical(std::string_view name, TCallable& callable, c
     TComputationNodePtrVector argsNodes = {compute1, compute2};
     TVector<TType*> argsTypes = {callable.GetInput(0).GetStaticType(), callable.GetInput(1).GetStaticType()};
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel;
+    std::shared_ptr<arrow20::compute::ScalarKernel> kernel;
     if (name == "And") {
         kernel = MakeKernel<TAndBlockExec>(argsTypes, callable.GetType()->GetReturnType());
     } else if (name == "Or") {

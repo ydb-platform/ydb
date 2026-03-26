@@ -24,7 +24,7 @@ ParquetBlockOutputFormat::ParquetBlockOutputFormat(WriteBuffer & out_, const Blo
 void ParquetBlockOutputFormat::consume(Chunk chunk)
 {
     const size_t columns_num = chunk.getNumColumns();
-    std::shared_ptr<arrow::Table> arrow_table;
+    std::shared_ptr<arrow20::Table> arrow_table;
 
     if (!ch_column_to_arrow_column)
     {
@@ -43,9 +43,9 @@ void ParquetBlockOutputFormat::consume(Chunk chunk)
         builder.compression(parquet::Compression::SNAPPY);
 #endif
         auto props = builder.build();
-        auto status = parquet::arrow::FileWriter::Open(
+        auto status = parquet::arrow20::FileWriter::Open(
             *arrow_table->schema(),
-            arrow::default_memory_pool(),
+            arrow20::default_memory_pool(),
             sink,
             props, /*parquet::default_writer_properties(),*/
             &file_writer);

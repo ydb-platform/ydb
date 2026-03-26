@@ -497,8 +497,8 @@ TSerializedTableRange MakeTestRange(
 
 namespace NKikimr::NColumnShard {
 class TTableUpdatesBuilder {
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-    std::shared_ptr<arrow::Schema> Schema;
+    std::vector<std::unique_ptr<arrow20::ArrayBuilder>> Builders;
+    std::shared_ptr<arrow20::Schema> Schema;
     ui32 RowsCount = 0;
 
 public:
@@ -525,27 +525,27 @@ public:
             Y_ABORT_UNLESS(NArrow::SwitchType(type->id(), [&](const auto& t) {
                 using TWrap = std::decay_t<decltype(t)>;
                 using T = typename TWrap::T;
-                using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
+                using TBuilder = typename arrow20::TypeTraits<typename TWrap::T>::BuilderType;
 
                 AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("T", typeid(T).name());
 
                 auto& typedBuilder = static_cast<TBuilder&>(*builder);
                 if constexpr (std::is_arithmetic<TData>::value) {
-                    if constexpr (arrow::has_c_type<T>::value) {
+                    if constexpr (arrow20::has_c_type<T>::value) {
                         using CType = typename T::c_type;
                         Y_ABORT_UNLESS(typedBuilder.Append((CType)data).ok());
                         return true;
                     }
                 }
                 if constexpr (std::is_same<TData, std::string>::value) {
-                    if constexpr (arrow::has_string_view<T>::value && arrow::is_parameter_free_type<T>::value) {
+                    if constexpr (arrow20::has_string_view<T>::value && arrow20::is_parameter_free_type<T>::value) {
                         Y_ABORT_UNLESS(typedBuilder.Append(data.data(), data.size()).ok());
                         return true;
                     }
                 }
 
                 if constexpr (std::is_same<TData, NYdb::TDecimalValue>::value) {
-                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                    if constexpr (std::is_same<T, arrow20::FixedSizeBinaryType>::value) {
                         char bytes[NScheme::FSB_SIZE] = {0};
                         for (i32 i = 0; i < 8; ++i) {
                             bytes[i] = (data.Low_ >> (i << 3)) & 0xFF;
@@ -558,7 +558,7 @@ public:
                 }
 
                 if constexpr (std::is_same<TData, NYdb::TUuidValue>::value) {
-                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                    if constexpr (std::is_same<T, arrow20::FixedSizeBinaryType>::value) {
                         Y_ABORT_UNLESS(typedBuilder.Append(data.Buf_.Bytes).ok());
                         return true;
                     }
@@ -577,13 +577,13 @@ public:
         }
     };
 
-    TTableUpdatesBuilder(std::shared_ptr<arrow::Schema> schema)
+    TTableUpdatesBuilder(std::shared_ptr<arrow20::Schema> schema)
         : Schema(schema) {
         Builders = NArrow::MakeBuilders(schema);
         Y_ABORT_UNLESS(Builders.size() == schema->fields().size());
     }
 
-    TTableUpdatesBuilder(arrow::Result<std::shared_ptr<arrow::Schema>> schema) {
+    TTableUpdatesBuilder(arrow20::Result<std::shared_ptr<arrow20::Schema>> schema) {
         UNIT_ASSERT_C(schema.ok(), schema.status().ToString());
         Schema = schema.ValueUnsafe();
         Builders = NArrow::MakeBuilders(Schema);
@@ -595,15 +595,15 @@ public:
         return TRowBuilder(0, *this);
     }
 
-    std::shared_ptr<arrow::RecordBatch> BuildArrow() {
-        TVector<std::shared_ptr<arrow::Array>> columns;
+    std::shared_ptr<arrow20::RecordBatch> BuildArrow() {
+        TVector<std::shared_ptr<arrow20::Array>> columns;
         columns.reserve(Builders.size());
         for (auto&& builder : Builders) {
             auto arrayDataRes = builder->Finish();
             Y_ABORT_UNLESS(arrayDataRes.ok());
             columns.push_back(*arrayDataRes);
         }
-        return arrow::RecordBatch::Make(Schema, RowsCount, columns);
+        return arrow20::RecordBatch::Make(Schema, RowsCount, columns);
     }
 };
 
@@ -626,6 +626,6 @@ struct TestTableDescription {
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
 
-std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
+std::shared_ptr<arrow20::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);
 }   // namespace NKikimr::NColumnShard

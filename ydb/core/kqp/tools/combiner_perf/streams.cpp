@@ -113,8 +113,8 @@ struct TUpdateMapFromBlocks<TMapImpl, ui64>
         UNIT_ASSERT(datumKey.is_array());
         UNIT_ASSERT(datumValue.is_array());
 
-        const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
-        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+        const auto ui64keys = datumKey.template array_as<arrow20::UInt64Array>();
+        const auto ui64values = datumValue.template array_as<arrow20::UInt64Array>();
         UNIT_ASSERT(!!ui64keys);
         UNIT_ASSERT(!!ui64values);
         UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
@@ -140,13 +140,13 @@ struct TUpdateMapFromBlocks<TMapImpl, std::string>
         UNIT_ASSERT(datumKey.is_arraylike());
         UNIT_ASSERT(datumValue.is_array());
 
-        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+        const auto ui64values = datumValue.template array_as<arrow20::UInt64Array>();
         UNIT_ASSERT(!!ui64values);
 
         int64_t valueOffset = 0;
 
         for (const auto& chunk : datumKey.chunks()) {
-            auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
+            auto* barray = dynamic_cast<arrow20::BinaryArray*>(chunk.get());
             UNIT_ASSERT(barray != nullptr);
             for (int64_t i = 0; i < barray->length(); ++i) {
                 auto key = barray->GetString(i);

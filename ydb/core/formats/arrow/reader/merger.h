@@ -8,7 +8,7 @@
 namespace NKikimr::NArrow::NMerger {
 
 template <typename T>
-concept MergeResultBuilder = requires(const T& constT, T& mutT, const std::shared_ptr<arrow::Schema>& schema, const TBatchIterator& cursor) {
+concept MergeResultBuilder = requires(const T& constT, T& mutT, const std::shared_ptr<arrow20::Schema>& schema, const TBatchIterator& cursor) {
     { constT.IsBufferExhausted() } -> std::same_as<bool>;
     { constT.ValidateDataSchema(schema) } -> std::same_as<void>;
     { mutT.AddRecord(cursor) } -> std::same_as<void>;
@@ -22,8 +22,8 @@ private:
 #endif
     bool PossibleSameVersionFlag = true;
 
-    std::shared_ptr<arrow::Schema> SortSchema;
-    std::shared_ptr<arrow::Schema> DataSchema;
+    std::shared_ptr<arrow20::Schema> SortSchema;
+    std::shared_ptr<arrow20::Schema> DataSchema;
     const bool Reverse;
     const std::vector<std::string> VersionColumnNames;
     std::optional<TCursor> MaxVersion;
@@ -124,7 +124,7 @@ private:
     }
 
 public:
-    TMergePartialStream(std::shared_ptr<arrow::Schema> sortSchema, std::shared_ptr<arrow::Schema> dataSchema, const bool reverse,
+    TMergePartialStream(std::shared_ptr<arrow20::Schema> sortSchema, std::shared_ptr<arrow20::Schema> dataSchema, const bool reverse,
         const std::vector<std::string>& versionColumnNames, const std::optional<TCursor>& maxVersion, const std::optional<TCursor>& minUncommittedVersion)
         : SortSchema(sortSchema)
         , DataSchema(dataSchema)
@@ -175,7 +175,7 @@ public:
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
-        static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
+        static const arrow20::Schema emptySchema = arrow20::Schema(arrow20::FieldVector());
         TBatchIterator iterator(batch, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, VersionColumnNames,
             sourceId, TIterationOrder(Reverse, order.GetStart()));
         if (MaxVersion) {
@@ -195,10 +195,10 @@ public:
             Y_UNUSED(DrainCurrentPosition(&builder, nullptr, nullptr));
         }
     }
-    std::shared_ptr<arrow::Table> SingleSourceDrain(
+    std::shared_ptr<arrow20::Table> SingleSourceDrain(
         const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr);
-    std::vector<std::shared_ptr<arrow::RecordBatch>> DrainAllParts(
-        const TIntervalPositions& positions, const std::vector<std::shared_ptr<arrow::Field>>& resultFields);
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> DrainAllParts(
+        const TIntervalPositions& positions, const std::vector<std::shared_ptr<arrow20::Field>>& resultFields);
 
     template <MergeResultBuilder TBuilder>
     bool DrainToControlPoint(TBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr) {

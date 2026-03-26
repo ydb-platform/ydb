@@ -169,39 +169,39 @@ public:
         return *this;
     }
 
-    TConclusion<TContainerWithIndexes<arrow::RecordBatch>> AdaptIncomingToDestinationExt(const std::shared_ptr<arrow::RecordBatch>& incoming,
+    TConclusion<TContainerWithIndexes<arrow20::RecordBatch>> AdaptIncomingToDestinationExt(const std::shared_ptr<arrow20::RecordBatch>& incoming,
         const TSchemaLiteView& dstSchema, const std::function<TConclusionStatus(const ui32, const i32)>& checker,
         const std::function<i32(const std::string&)>& nameResolver) const;
 
-    std::shared_ptr<arrow::RecordBatch> Extract(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);
-    std::shared_ptr<arrow::Table> Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames);
-    std::shared_ptr<arrow::Table> Extract(
-        const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns);
-    std::shared_ptr<arrow::RecordBatch> Extract(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow::Field>>& columns);
-    std::shared_ptr<arrow::RecordBatch> Extract(const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames);
-    std::shared_ptr<arrow::Table> Extract(const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames);
+    std::shared_ptr<arrow20::RecordBatch> Extract(
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::string>& columnNames);
+    std::shared_ptr<arrow20::Table> Extract(const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::string>& columnNames);
+    std::shared_ptr<arrow20::Table> Extract(
+        const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::shared_ptr<arrow20::Field>>& columns);
+    std::shared_ptr<arrow20::RecordBatch> Extract(
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::shared_ptr<arrow20::Field>>& columns);
+    std::shared_ptr<arrow20::RecordBatch> Extract(const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<TString>& columnNames);
+    std::shared_ptr<arrow20::Table> Extract(const std::shared_ptr<arrow20::Table>& incoming, const std::vector<TString>& columnNames);
 
     TConclusion<TSchemaSubset> BuildSequentialSubset(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const NArrow::TSchemaLiteView& dstSchema);
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const NArrow::TSchemaLiteView& dstSchema);
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> Adapt(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset = nullptr);
-    TConclusion<std::shared_ptr<arrow::Table>> Adapt(
-        const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<arrow::Schema>& dstSchema, TSchemaSubset* subset = nullptr);
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> Adapt(const std::shared_ptr<arrow::RecordBatch>& incoming,
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> Adapt(
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::shared_ptr<arrow20::Schema>& dstSchema, TSchemaSubset* subset = nullptr);
+    TConclusion<std::shared_ptr<arrow20::Table>> Adapt(
+        const std::shared_ptr<arrow20::Table>& incoming, const std::shared_ptr<arrow20::Schema>& dstSchema, TSchemaSubset* subset = nullptr);
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> Adapt(const std::shared_ptr<arrow20::RecordBatch>& incoming,
         const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset = nullptr);
-    TConclusion<std::shared_ptr<arrow::Table>> Adapt(
-        const std::shared_ptr<arrow::Table>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset = nullptr);
+    TConclusion<std::shared_ptr<arrow20::Table>> Adapt(
+        const std::shared_ptr<arrow20::Table>& incoming, const std::shared_ptr<NArrow::TSchemaLite>& dstSchema, TSchemaSubset* subset = nullptr);
 
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> Reorder(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<std::string>& columnNames);
-    TConclusion<std::shared_ptr<arrow::Table>> Reorder(
-        const std::shared_ptr<arrow::Table>& incoming, const std::vector<std::string>& columnNames);
-    TConclusion<std::shared_ptr<arrow::RecordBatch>> Reorder(
-        const std::shared_ptr<arrow::RecordBatch>& incoming, const std::vector<TString>& columnNames);
-    TConclusion<std::shared_ptr<arrow::Table>> Reorder(const std::shared_ptr<arrow::Table>& incoming, const std::vector<TString>& columnNames);
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> Reorder(
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<std::string>& columnNames);
+    TConclusion<std::shared_ptr<arrow20::Table>> Reorder(
+        const std::shared_ptr<arrow20::Table>& incoming, const std::vector<std::string>& columnNames);
+    TConclusion<std::shared_ptr<arrow20::RecordBatch>> Reorder(
+        const std::shared_ptr<arrow20::RecordBatch>& incoming, const std::vector<TString>& columnNames);
+    TConclusion<std::shared_ptr<arrow20::Table>> Reorder(const std::shared_ptr<arrow20::Table>& incoming, const std::vector<TString>& columnNames);
 };
 
 }   // namespace NKikimr::NArrow

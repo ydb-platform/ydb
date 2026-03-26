@@ -8,10 +8,10 @@
 #include <thread>
 #include <vector>
 
-std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> table) {
-    std::shared_ptr<arrow::RecordBatch> batch;
+std::shared_ptr<arrow20::RecordBatch> ExtractBatch(std::shared_ptr<arrow20::Table> table) {
+    std::shared_ptr<arrow20::RecordBatch> batch;
 
-    arrow::TableBatchReader reader(*table);
+    arrow20::TableBatchReader reader(*table);
     auto result = reader.Next();
     Y_ABORT_UNLESS(result.ok());
     batch = *result;
@@ -20,20 +20,20 @@ std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> t
     return batch;
 }
 
-std::shared_ptr<arrow::Schema> MakeFullSchema() {
-    std::vector<std::shared_ptr<arrow::Field>> fields = {
-        arrow::field("id1", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), false),
-        arrow::field("id2", arrow::utf8(), false),
-        arrow::field("id3", arrow::uint64(), false),
+std::shared_ptr<arrow20::Schema> MakeFullSchema() {
+    std::vector<std::shared_ptr<arrow20::Field>> fields = {
+        arrow20::field("id1", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), false),
+        arrow20::field("id2", arrow20::utf8(), false),
+        arrow20::field("id3", arrow20::uint64(), false),
     };
 
-    return std::make_shared<arrow::Schema>(std::move(fields));
+    return std::make_shared<arrow20::Schema>(std::move(fields));
 }
 
 void PrintUsage() {
     std::cerr << "usage: ./memory_tests <N> <1|2|3> [sleep_time_sec]" << std::endl;
     std::cerr << " 1 - NKikimr::NArrow::TSimpleRow>" << std::endl;
-    std::cerr << " 2 - arrow::RecordBatch>" << std::endl;
+    std::cerr << " 2 - arrow20::RecordBatch>" << std::endl;
     std::cerr << " 3 - NKikimr::NArrow::NMerger::TSortableBatchPosition>" << std::endl;
 }
 
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     }
 
     std::vector<std::shared_ptr<NKikimr::NArrow::TSimpleRow>> simpleRows;
-    std::vector<std::shared_ptr<arrow::RecordBatch>> recordBatches;
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> recordBatches;
     std::vector<std::shared_ptr<NKikimr::NArrow::NMerger::TSortableBatchPosition>> sortableBatchPositions;
 
     switch (TYPE) {
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
             simpleRows.reserve(N + 2);
             break;
         case 2:
-            std::cout << "Generating " << N << " arrow::RecordBatch" << std::endl;
+            std::cout << "Generating " << N << " arrow20::RecordBatch" << std::endl;
             recordBatches.reserve(N + 2);
             break;
         case 3:
@@ -91,34 +91,34 @@ int main(int argc, char** argv) {
     auto schema = MakeFullSchema();
     auto start = std::chrono::high_resolution_clock::now();
     for (auto i : std::ranges::views::iota(0ll, N)) {
-        arrow::TimestampBuilder id1_B = arrow::TimestampBuilder(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
+        arrow20::TimestampBuilder id1_B = arrow20::TimestampBuilder(arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool());
         if (!id1_B.Append(i * 123123123ull).ok()) {
             return -6;
         }
-        std::shared_ptr<arrow::TimestampArray> id1_A;
+        std::shared_ptr<arrow20::TimestampArray> id1_A;
         if (!id1_B.Finish(&id1_A).ok()) {
             return -7;
         }
 
-        arrow::StringBuilder id2_B;
+        arrow20::StringBuilder id2_B;
         if (!id2_B.Append(std::to_string(i * 123123123ull)).ok()) {
             return -8;
         }
-        std::shared_ptr<arrow::StringArray> id2_A;
+        std::shared_ptr<arrow20::StringArray> id2_A;
         if (!id2_B.Finish(&id2_A).ok()) {
             return -9;
         }
 
-        arrow::UInt64Builder id3_B;
+        arrow20::UInt64Builder id3_B;
         if (!id3_B.Append(i * 123123123ull).ok()) {
             return -10;
         }
-        std::shared_ptr<arrow::UInt64Array> id3_A;
+        std::shared_ptr<arrow20::UInt64Array> id3_A;
         if (!id3_B.Finish(&id3_A).ok()) {
             return -11;
         }
 
-        std::shared_ptr<arrow::Table> table = arrow::Table::Make(schema, {id1_A, id2_A, id3_A});
+        std::shared_ptr<arrow20::Table> table = arrow20::Table::Make(schema, {id1_A, id2_A, id3_A});
 
         switch (TYPE) {
             case 1:

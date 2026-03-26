@@ -18,10 +18,10 @@ public:
     IInputStream& operator = (const IInputStream&) = delete;
     virtual ~IInputStream() = default;
 
-    virtual std::shared_ptr<arrow::Schema> Schema() const = 0;
+    virtual std::shared_ptr<arrow20::Schema> Schema() const = 0;
     bool IsCancelled() const { return Cancelled; }
 
-    std::shared_ptr<arrow::RecordBatch> Read() {
+    std::shared_ptr<arrow20::RecordBatch> Read() {
         if (auto res = ReadImpl()) {
             return res;
         }
@@ -51,7 +51,7 @@ protected:
     std::atomic<bool> Cancelled{false};
 
 private:
-    virtual std::shared_ptr<arrow::RecordBatch> ReadImpl() = 0;
+    virtual std::shared_ptr<arrow20::RecordBatch> ReadImpl() = 0;
     virtual void StartImpl() {}
     virtual void FinishImpl() {}
 

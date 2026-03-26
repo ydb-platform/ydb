@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         std::string row("{\"ho1111\": 1}");
         auto res = NBinaryJson::SerializeToBinaryJson(row, false);
         if (std::holds_alternative<TString>(res)) {
-            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+            UNIT_ASSERT_C(false, arrow20::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
         }
 
         std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         std::string row("{\"ho1111\": 1}");
         auto res = NBinaryJson::SerializeToBinaryJson(row, false);
         if (std::holds_alternative<TString>(res)) {
-            UNIT_ASSERT_C(false, arrow::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
+            UNIT_ASSERT_C(false, arrow20::Status::SerializationError("Cannot serialize json (", std::get<TString>(res), "): ", row).message());
         }
 
         std::string Col2Val(std::get<NBinaryJson::TBinaryJson>(res).Data(), std::get<NBinaryJson::TBinaryJson>(res).Size());

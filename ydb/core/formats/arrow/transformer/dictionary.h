@@ -9,7 +9,7 @@ public:
         return "DICT_PACK";
     }
 protected:
-    virtual std::shared_ptr<arrow::RecordBatch> DoTransform(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual std::shared_ptr<arrow20::RecordBatch> DoTransform(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
     virtual TString DoDebugString() const override {
         return "type=DICT_PACK;";
     }
@@ -28,7 +28,7 @@ public:
         return "DICT_UNPACK";
     }
 protected:
-    virtual std::shared_ptr<arrow::RecordBatch> DoTransform(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual std::shared_ptr<arrow20::RecordBatch> DoTransform(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
     virtual TString DoDebugString() const override {
         return "type=DICT_UNPACK;";
     }

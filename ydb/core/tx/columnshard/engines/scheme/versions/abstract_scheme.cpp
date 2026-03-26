@@ -19,7 +19,7 @@
 
 namespace NKikimr::NOlap {
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
+std::shared_ptr<arrow20::Field> ISnapshotSchema::GetFieldByIndex(const int index) const {
     auto schema = GetSchema();
     if (!schema || index < 0 || index >= schema->num_fields()) {
         return nullptr;
@@ -27,13 +27,13 @@ std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndex(const int index) 
     return schema->field(index);
 }
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
+std::shared_ptr<arrow20::Field> ISnapshotSchema::GetFieldByIndexVerified(const int index) const {
     auto schema = GetSchema();
     AFL_VERIFY(!!schema && index >= 0 && index < schema->num_fields());
     return schema->field(index);
 }
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
+std::shared_ptr<arrow20::Field> ISnapshotSchema::GetFieldByColumnIdOptional(const ui32 columnId) const {
     return GetFieldByIndex(GetFieldIndex(columnId));
 }
 
@@ -79,8 +79,8 @@ TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> ISnapshotSchema::Normali
     return result;
 }
 
-TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::PrepareForModification(
-    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
+TConclusion<NArrow::TContainerWithIndexes<arrow20::RecordBatch>> ISnapshotSchema::PrepareForModification(
+    const std::shared_ptr<arrow20::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const {
     if (!incomingBatch) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "DeserializeBatch() failed");
         return TConclusionStatus::Fail("incorrect incoming batch");
@@ -96,7 +96,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
 #endif
 
     NArrow::TSchemaLiteView dstSchema = GetIndexInfo().ArrowSchema();
-    std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+    std::vector<std::shared_ptr<arrow20::Array>> pkColumns;
     pkColumns.resize(GetIndexInfo().GetReplaceKey()->num_fields());
     ui32 pkColumnsCount = 0;
     const auto pred = [&](const ui32 incomingIdx, const i32 targetIdx) {
@@ -186,7 +186,7 @@ ui32 ISnapshotSchema::GetColumnId(const std::string& columnName) const {
     return *id;
 }
 
-std::shared_ptr<arrow::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
+std::shared_ptr<arrow20::Field> ISnapshotSchema::GetFieldByColumnIdVerified(const ui32 columnId) const {
     auto result = GetFieldByColumnIdOptional(columnId);
     AFL_VERIFY(result)("event", "unknown_column")("column_id", columnId)("schema", DebugString());
     return result;
@@ -217,8 +217,8 @@ std::vector<std::string> ISnapshotSchema::GetPKColumnNames() const {
     return GetIndexInfo().GetReplaceKey()->field_names();
 }
 
-std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow::Schema>& existsSchema) const {
-    std::vector<std::shared_ptr<arrow::Field>> result;
+std::vector<std::shared_ptr<arrow20::Field>> ISnapshotSchema::GetAbsentFields(const std::shared_ptr<arrow20::Schema>& existsSchema) const {
+    std::vector<std::shared_ptr<arrow20::Field>> result;
     for (auto&& f : GetIndexInfo().ArrowSchema()) {
         if (!existsSchema->GetFieldByName(f->name())) {
             result.emplace_back(f);
@@ -227,7 +227,7 @@ std::vector<std::shared_ptr<arrow::Field>> ISnapshotSchema::GetAbsentFields(cons
     return result;
 }
 
-TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow::Field>>& fields) const {
+TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::shared_ptr<arrow20::Field>>& fields) const {
     for (auto&& i : fields) {
         const ui32 colId = GetColumnIdVerified(i->name());
         auto defaultValue = GetExternalDefaultValueVerified(colId);
@@ -238,9 +238,9 @@ TConclusionStatus ISnapshotSchema::CheckColumnsDefault(const std::vector<std::sh
     return TConclusionStatus::Success();
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
+TConclusion<std::shared_ptr<arrow20::RecordBatch>> ISnapshotSchema::BuildDefaultBatch(
     const NArrow::TSchemaLiteView& schema, const ui32 rowsCount, const bool force) const {
-    std::vector<std::shared_ptr<arrow::Array>> columns;
+    std::vector<std::shared_ptr<arrow20::Array>> columns;
     for (auto&& i : schema) {
         const ui32 columnId = GetColumnIdVerified(i->name());
         auto defaultValue = GetExternalDefaultValueVerified(columnId);
@@ -253,14 +253,14 @@ TConclusion<std::shared_ptr<arrow::RecordBatch>> ISnapshotSchema::BuildDefaultBa
         }
         columns.emplace_back(NArrow::TThreadSimpleArraysCache::Get(i->type(), defaultValue, rowsCount));
     }
-    return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector(schema.begin(), schema.end())), rowsCount, columns);
+    return arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(arrow20::FieldVector(schema.begin(), schema.end())), rowsCount, columns);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
+std::shared_ptr<arrow20::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const std::string& columnName) const {
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnName);
 }
 
-std::shared_ptr<arrow::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
+std::shared_ptr<arrow20::Scalar> ISnapshotSchema::GetExternalDefaultValueVerified(const ui32 columnId) const {
     return GetIndexInfo().GetColumnExternalDefaultValueVerified(columnId);
 }
 
@@ -274,7 +274,7 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
     if (schemas.size() <= 1) {
         return {};
     }
-    std::map<ui32, std::shared_ptr<arrow::Scalar>> defaults;
+    std::map<ui32, std::shared_ptr<arrow20::Scalar>> defaults;
     for (auto& [_, blobSchema] : schemas) {
         for (auto&& columnId : blobSchema->GetIndexInfo().GetColumnIds(true)) {
             if (result.contains(columnId)) {
@@ -303,22 +303,22 @@ std::set<ui32> ISnapshotSchema::GetColumnsWithDifferentDefaults(
 
 class TSchemaIterator {
 private:
-    std::vector<std::shared_ptr<arrow::Field>> Fields;
-    std::vector<std::shared_ptr<arrow::Field>>::const_iterator Current;
+    std::vector<std::shared_ptr<arrow20::Field>> Fields;
+    std::vector<std::shared_ptr<arrow20::Field>>::const_iterator Current;
 
 public:
     bool IsValid() const {
         return Current != Fields.end();
     }
 
-    const std::shared_ptr<arrow::Field>& GetValue() const {
+    const std::shared_ptr<arrow20::Field>& GetValue() const {
         AFL_VERIFY(IsValid());
         return *Current;
     }
 };
 
 TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
-    const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
+    const std::shared_ptr<arrow20::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());
     auto itIncoming = incomingBatch->schema()->fields().begin();

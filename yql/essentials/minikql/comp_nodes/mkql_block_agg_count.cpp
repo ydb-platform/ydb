@@ -16,7 +16,7 @@ struct TState {
 class TColumnBuilder: public IAggColumnBuilder {
 public:
     TColumnBuilder(ui64 size, TComputationContext& ctx)
-        : Builder_(TTypeInfoHelper(), arrow::uint64(), ctx.ArrowMemoryPool, size)
+        : Builder_(TTypeInfoHelper(), arrow20::uint64(), ctx.ArrowMemoryPool, size)
         , Ctx_(ctx)
     {
     }
@@ -138,7 +138,7 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             MKQL_ENSURE(datum.scalar()->is_valid, "Expected not null");
-            typedState->Count_ += datum.scalar_as<arrow::UInt64Scalar>().value;
+            typedState->Count_ += datum.scalar_as<arrow20::UInt64Scalar>().value;
         } else {
             const auto& array = datum.array();
             auto ptr = array->GetValues<ui64>(1);

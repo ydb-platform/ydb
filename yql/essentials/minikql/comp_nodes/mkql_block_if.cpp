@@ -21,24 +21,24 @@ public:
         TArrowNode(const TBlockIfScalarWrapper* parent)
             : Parent_(parent)
             , ArgsValuesDescr_(ToValueDescr(parent->ArgsTypes))
-            , Kernel_(ConvertToInputTypes(parent->ArgsTypes), ConvertToOutputType(parent->ResultType), [parent](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+            , Kernel_(ConvertToInputTypes(parent->ArgsTypes), ConvertToOutputType(parent->ResultType), [parent](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                 *res = parent->CalculateImpl(MakeDatumProvider(batch.values[0]), MakeDatumProvider(batch.values[1]), MakeDatumProvider(batch.values[2]), *ctx->memory_pool());
-                return arrow::Status::OK();
+                return arrow20::Status::OK();
             })
         {
-            Kernel_.null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
-            Kernel_.mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+            Kernel_.null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+            Kernel_.mem_allocation = arrow20::compute::MemAllocation::NO_PREALLOCATE;
         }
 
         TStringBuf GetKernelName() const final {
             return "If";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow20::compute::ScalarKernel& GetArrowKernel() const {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow20::ValueDescr>& GetArgsDesc() const {
             return ArgsValuesDescr_;
         }
 
@@ -57,8 +57,8 @@ public:
 
     private:
         const TBlockIfScalarWrapper* Parent_;
-        const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
-        arrow::compute::ScalarKernel Kernel_;
+        const std::vector<arrow20::ValueDescr> ArgsValuesDescr_;
+        arrow20::compute::ScalarKernel Kernel_;
     };
     friend class TArrowNode;
 
@@ -80,8 +80,8 @@ public:
         return std::make_unique<TArrowNode>(this);
     }
 
-    arrow::Datum CalculateImpl(const TDatumProvider& predProv, const TDatumProvider& thenProv, const TDatumProvider& elseProv,
-                               arrow::MemoryPool& memoryPool) const {
+    arrow20::Datum CalculateImpl(const TDatumProvider& predProv, const TDatumProvider& thenProv, const TDatumProvider& elseProv,
+                               arrow20::MemoryPool& memoryPool) const {
         auto predValue = predProv();
 
         const bool predScalarValue = GetPrimitiveScalarValue<bool>(*predValue.scalar());
@@ -95,11 +95,11 @@ public:
         auto otherDatum = predScalarValue ? elseProv() : thenProv();
         MKQL_ENSURE(otherDatum.is_arraylike(), "Expecting array");
 
-        std::shared_ptr<arrow::Scalar> resultScalar = result.scalar();
+        std::shared_ptr<arrow20::Scalar> resultScalar = result.scalar();
 
-        TVector<std::shared_ptr<arrow::ArrayData>> resultArrays;
+        TVector<std::shared_ptr<arrow20::ArrayData>> resultArrays;
         auto itemType = AS_TYPE(TBlockType, ResultType)->GetItemType();
-        ForEachArrayData(otherDatum, [&](const std::shared_ptr<arrow::ArrayData>& otherData) {
+        ForEachArrayData(otherDatum, [&](const std::shared_ptr<arrow20::ArrayData>& otherData) {
             auto chunk = MakeArrayFromScalar(*resultScalar, otherData->length, itemType, memoryPool);
             ForEachArrayData(chunk, [&](const auto& array) {
                 resultArrays.push_back(array);
@@ -138,13 +138,13 @@ public:
     {
     }
 
-    arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
-        arrow::Datum predDatum = batch.values[0];
-        arrow::Datum thenDatum = batch.values[1];
-        arrow::Datum elseDatum = batch.values[2];
+    arrow20::Status Exec(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
+        arrow20::Datum predDatum = batch.values[0];
+        arrow20::Datum thenDatum = batch.values[1];
+        arrow20::Datum elseDatum = batch.values[2];
 
         TBlockItem thenItem;
-        const arrow::ArrayData* thenArray = nullptr;
+        const arrow20::ArrayData* thenArray = nullptr;
         if constexpr (ThenIsScalar) {
             thenItem = ThenReader->GetScalarItem(*thenDatum.scalar());
         } else {
@@ -153,7 +153,7 @@ public:
         }
 
         TBlockItem elseItem;
-        const arrow::ArrayData* elseArray = nullptr;
+        const arrow20::ArrayData* elseArray = nullptr;
         if constexpr (ElseIsScalar) {
             elseItem = ElseReader->GetScalarItem(*elseDatum.scalar());
         } else {
@@ -162,7 +162,7 @@ public:
         }
 
         MKQL_ENSURE(predDatum.is_array(), "Expecting array");
-        const std::shared_ptr<arrow::ArrayData>& pred = predDatum.array();
+        const std::shared_ptr<arrow20::ArrayData>& pred = predDatum.array();
 
         const size_t len = pred->length;
         auto builder = MakeArrayBuilder(TTypeInfoHelper(), Type, *ctx->memory_pool(), len, nullptr);
@@ -181,7 +181,7 @@ public:
             builder->Add(TBlockItem{low, high});
         }
         *res = builder->Build(true);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
 private:
@@ -191,16 +191,16 @@ private:
 };
 
 template <bool ThenIsScalar, bool ElseIsScalar>
-std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockIfKernel(const TVector<TType*>& argTypes, TType* resultType) {
+std::shared_ptr<arrow20::compute::ScalarKernel> MakeBlockIfKernel(const TVector<TType*>& argTypes, TType* resultType) {
     using TExec = TIfBlockExec<ThenIsScalar, ElseIsScalar>;
 
     auto exec = std::make_shared<TExec>(AS_TYPE(TBlockType, resultType)->GetItemType());
-    auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    auto kernel = std::make_shared<arrow20::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
+                                                                 [exec](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                                                                      return exec->Exec(ctx, batch, res);
                                                                  });
 
-    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->null_handling = arrow20::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;
 }
 
@@ -237,7 +237,7 @@ IComputationNode* WrapBlockIf(TCallable& callable, const TComputationNodeFactory
 
     TComputationNodePtrVector argsNodes = {predCompute, thenCompute, elseCompute};
 
-    std::shared_ptr<arrow::compute::ScalarKernel> kernel;
+    std::shared_ptr<arrow20::compute::ScalarKernel> kernel;
     if (thenIsScalar && elseIsScalar) {
         kernel = MakeBlockIfKernel<true, true>(argsTypes, thenType);
     } else if (thenIsScalar && !elseIsScalar) {

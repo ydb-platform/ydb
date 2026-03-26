@@ -77,17 +77,17 @@ std::string_view TDictStats::GetColumnName(const ui32 index) const {
     return std::string_view(view.data(), view.size());
 }
 
-TDictStats::TDictStats(const std::shared_ptr<arrow::RecordBatch>& original)
+TDictStats::TDictStats(const std::shared_ptr<arrow20::RecordBatch>& original)
     : Original(original) {
     AFL_VERIFY(Original->num_columns() == 4)("count", Original->num_columns());
-    AFL_VERIFY(Original->column(0)->type()->id() == arrow::binary()->id());
-    AFL_VERIFY(Original->column(1)->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Original->column(2)->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Original->column(3)->type()->id() == arrow::uint8()->id());
-    DataNames = std::static_pointer_cast<arrow::StringArray>(Original->column(0));
-    DataRecordsCount = std::static_pointer_cast<arrow::UInt32Array>(Original->column(1));
-    DataSize = std::static_pointer_cast<arrow::UInt32Array>(Original->column(2));
-    AccessorType = std::static_pointer_cast<arrow::UInt8Array>(Original->column(3));
+    AFL_VERIFY(Original->column(0)->type()->id() == arrow20::binary()->id());
+    AFL_VERIFY(Original->column(1)->type()->id() == arrow20::uint32()->id());
+    AFL_VERIFY(Original->column(2)->type()->id() == arrow20::uint32()->id());
+    AFL_VERIFY(Original->column(3)->type()->id() == arrow20::uint8()->id());
+    DataNames = std::static_pointer_cast<arrow20::StringArray>(Original->column(0));
+    DataRecordsCount = std::static_pointer_cast<arrow20::UInt32Array>(Original->column(1));
+    DataSize = std::static_pointer_cast<arrow20::UInt32Array>(Original->column(2));
+    AccessorType = std::static_pointer_cast<arrow20::UInt8Array>(Original->column(3));
 }
 
 TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex) const {
@@ -130,14 +130,14 @@ IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {
 TDictStats::TBuilder::TBuilder() {
     Builders = NArrow::MakeBuilders(GetStatsSchema());
     AFL_VERIFY(Builders.size() == 4);
-    AFL_VERIFY(Builders[0]->type()->id() == arrow::binary()->id());
-    AFL_VERIFY(Builders[1]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[2]->type()->id() == arrow::uint32()->id());
-    AFL_VERIFY(Builders[3]->type()->id() == arrow::uint8()->id());
-    Names = static_cast<arrow::StringBuilder*>(Builders[0].get());
-    Records = static_cast<arrow::UInt32Builder*>(Builders[1].get());
-    DataSize = static_cast<arrow::UInt32Builder*>(Builders[2].get());
-    AccessorType = static_cast<arrow::UInt8Builder*>(Builders[3].get());
+    AFL_VERIFY(Builders[0]->type()->id() == arrow20::binary()->id());
+    AFL_VERIFY(Builders[1]->type()->id() == arrow20::uint32()->id());
+    AFL_VERIFY(Builders[2]->type()->id() == arrow20::uint32()->id());
+    AFL_VERIFY(Builders[3]->type()->id() == arrow20::uint8()->id());
+    Names = static_cast<arrow20::StringBuilder*>(Builders[0].get());
+    Records = static_cast<arrow20::UInt32Builder*>(Builders[1].get());
+    DataSize = static_cast<arrow20::UInt32Builder*>(Builders[2].get());
+    AccessorType = static_cast<arrow20::UInt8Builder*>(Builders[3].get());
 }
 
 void TDictStats::TBuilder::Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType) {
@@ -164,7 +164,7 @@ void TDictStats::TBuilder::Add(
 TDictStats TDictStats::TBuilder::Finish() {
     AFL_VERIFY(Builders.size());
     auto arrays = NArrow::Finish(std::move(Builders));
-    return TDictStats(arrow::RecordBatch::Make(GetStatsSchema(), RecordsCount, std::move(arrays)));
+    return TDictStats(arrow20::RecordBatch::Make(GetStatsSchema(), RecordsCount, std::move(arrays)));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

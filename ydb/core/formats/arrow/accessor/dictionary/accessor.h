@@ -13,8 +13,8 @@ namespace NKikimr::NArrow::NAccessor {
 class TDictionaryArray: public IChunkedArray {
 private:
     using TBase = IChunkedArray;
-    std::shared_ptr<arrow::Array> ArrayDictionary;
-    std::shared_ptr<arrow::Array> ArrayPositions;
+    std::shared_ptr<arrow20::Array> ArrayDictionary;
+    std::shared_ptr<arrow20::Array> ArrayPositions;
 
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const override {
         visitor(ArrayDictionary);
@@ -28,10 +28,10 @@ protected:
     }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const override;
-    virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetScalar(const ui32 index) const override {
         return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(GetIndexImpl(index)));
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual std::shared_ptr<arrow20::Scalar> DoGetMaxScalar() const override;
     virtual TMinMax DoGetMinMaxScalars() const override;
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override;
     virtual ui32 DoGetNullsCount() const override {
@@ -41,7 +41,7 @@ protected:
         return NArrow::GetArrayDataSize(ArrayDictionary) + NArrow::GetArrayDataSize(ArrayPositions);
     }
 
-    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow20::Scalar>& value) const override {
         if (ArrayDictionary->length() == 1) {
             value = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(0));
             return true;
@@ -61,15 +61,15 @@ public:
         ArrayPositions = NArrow::ReallocateArray(ArrayPositions);
     }
 
-    const std::shared_ptr<arrow::Array>& GetDictionary() const {
+    const std::shared_ptr<arrow20::Array>& GetDictionary() const {
         return ArrayDictionary;
     }
 
-    const std::shared_ptr<arrow::Array>& GetPositions() const {
+    const std::shared_ptr<arrow20::Array>& GetPositions() const {
         return ArrayPositions;
     }
 
-    TDictionaryArray(const std::shared_ptr<arrow::Array>& dictionary, const std::shared_ptr<arrow::Array>& positions)
+    TDictionaryArray(const std::shared_ptr<arrow20::Array>& dictionary, const std::shared_ptr<arrow20::Array>& positions)
         : TBase(TValidator::CheckNotNull(positions)->length(), EType::Dictionary, dictionary->type())
         , ArrayDictionary(dictionary)
         , ArrayPositions(positions)

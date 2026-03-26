@@ -46,7 +46,7 @@ private:
     static TFactory::TRegistrator<THashByColumns> Registrator;
     static TFactory::TRegistrator<THashByColumns> RegistratorDeprecated;
 protected:
-    virtual std::vector<ui64> DoExtractIndex(const std::shared_ptr<arrow::RecordBatch>& batch) const override;
+    virtual std::vector<ui64> DoExtractIndex(const std::shared_ptr<arrow20::RecordBatch>& batch) const override;
     virtual bool DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
     virtual NJson::TJsonValue DoSerializeToJson() const override;
 public:

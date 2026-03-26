@@ -17,7 +17,7 @@ private:
     class TIterator {
     private:
         TStringBuf Values;
-        const std::vector<std::shared_ptr<arrow::Field>>& Schema;
+        const std::vector<std::shared_ptr<arrow20::Field>>& Schema;
         ui32 FieldIndex = 0;
         bool IsFinishedFlag = false;
         bool StartedFlag = false;
@@ -27,7 +27,7 @@ private:
         TConclusionStatus InitCurrentData();
 
     public:
-        TIterator(const TStringBuf values, const std::shared_ptr<arrow::Schema>& schema)
+        TIterator(const TStringBuf values, const std::shared_ptr<arrow20::Schema>& schema)
             : Values(values)
             , Schema(schema->fields()) {
         }
@@ -77,7 +77,7 @@ private:
     };
 
     template <class TActor>
-    [[nodiscard]] TConclusionStatus Scan(const std::shared_ptr<arrow::Schema>& schema, TActor& actor) const {
+    [[nodiscard]] TConclusionStatus Scan(const std::shared_ptr<arrow20::Schema>& schema, TActor& actor) const {
         TIterator it(Values, schema);
         auto startConclusion = it.Start();
         if (startConclusion.IsFail()) {
@@ -108,12 +108,12 @@ public:
             return false;
         }
     };
-    [[nodiscard]] TConclusionStatus Validate(const std::shared_ptr<arrow::Schema>& schema) const {
+    [[nodiscard]] TConclusionStatus Validate(const std::shared_ptr<arrow20::Schema>& schema) const {
         TActorValidator actorValidation;
         return Scan(schema, actorValidation);
     }
 
-    [[nodiscard]] bool DoValidate(const std::shared_ptr<arrow::Schema>& schema) const {
+    [[nodiscard]] bool DoValidate(const std::shared_ptr<arrow20::Schema>& schema) const {
         TActorValidator actorValidation;
         auto conclusion = Scan(schema, actorValidation);
         if (conclusion.IsFail()) {
@@ -122,7 +122,7 @@ public:
         return !conclusion.IsFail();
     }
 
-    static TString BuildString(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex);
+    static TString BuildString(const std::shared_ptr<arrow20::RecordBatch>& batch, const ui32 recordIndex);
 
     class TWriter {
     private:
@@ -158,10 +158,10 @@ public:
     };
 
     [[nodiscard]] TConclusionStatus AddToBuilders(
-        const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const std::shared_ptr<arrow::Schema>& schema) const;
+        const std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders, const std::shared_ptr<arrow20::Schema>& schema) const;
     [[nodiscard]] TConclusion<std::partial_ordering> Compare(
-        const TSimpleRowViewV0& item, const std::shared_ptr<arrow::Schema>& schema, const std::optional<ui32> columnsCount = {}) const;
-    [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow::Schema>& schema) const;
+        const TSimpleRowViewV0& item, const std::shared_ptr<arrow20::Schema>& schema, const std::optional<ui32> columnsCount = {}) const;
+    [[nodiscard]] TConclusion<TString> DebugString(const std::shared_ptr<arrow20::Schema>& schema) const;
 
     template <class T>
     class TGetValueActor {
@@ -179,15 +179,15 @@ public:
             if (!data) {
                 return true;
             }
-            if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+            if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
                 if constexpr (std::is_same_v<T, std::string_view>) {
                     Result = std::string_view(data, size);
                     return true;
                 }
                 AFL_VERIFY(false);
             }
-            if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow::HalfFloatType, typename TWrap::T>()) {
-                using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
+            if constexpr (arrow20::has_c_type<typename TWrap::T>() && !std::is_base_of<arrow20::HalfFloatType, typename TWrap::T>()) {
+                using CType = typename arrow20::TypeTraits<typename TWrap::T>::CType;
                 if constexpr (std::is_same_v<T, CType>) {
                     Result = *(CType*)(data);
                     return true;
@@ -202,7 +202,7 @@ public:
     };
 
     template <class T>
-    TConclusion<std::optional<T>> GetValue(const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const {
+    TConclusion<std::optional<T>> GetValue(const ui32 columnIndex, const std::shared_ptr<arrow20::Schema>& schema) const {
         TGetValueActor<T> resultActor(columnIndex);
         auto conclusion = Scan(schema, resultActor);
         if (conclusion.IsFail()) {
@@ -211,7 +211,7 @@ public:
         return resultActor.GetResult();
     }
 
-    TConclusion<std::shared_ptr<arrow::Scalar>> GetScalar(const ui32 columnIndex, const std::shared_ptr<arrow::Schema>& schema) const;
+    TConclusion<std::shared_ptr<arrow20::Scalar>> GetScalar(const ui32 columnIndex, const std::shared_ptr<arrow20::Schema>& schema) const;
 };
 
 }   // namespace NKikimr::NArrow

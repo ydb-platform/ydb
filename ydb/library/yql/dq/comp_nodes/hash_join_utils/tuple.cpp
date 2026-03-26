@@ -308,11 +308,11 @@ TTupleLayoutFallback::TTupleLayoutFallback(
 
     /// if layout contains varsize keys or null byte of 8 cols is not enough
     if (KeyColumnsFixedNum != KeyColumnsNum || KeyColumnsNum > 8 ||
-        !arrow::BitUtil::IsPowerOf2(uint64_t(KeyColumnsSize)) ||
+        !arrow20::BitUtil::IsPowerOf2(uint64_t(KeyColumnsSize)) ||
         KeyColumnsSize > (1 << 4)) {
         KeySizeTag_ = 5;
     } else {
-        KeySizeTag_ = arrow::BitUtil::CountTrailingZeros(KeyColumnsSize);
+        KeySizeTag_ = arrow20::BitUtil::CountTrailingZeros(KeyColumnsSize);
     }
 
     BitmaskOffset = currOffset;

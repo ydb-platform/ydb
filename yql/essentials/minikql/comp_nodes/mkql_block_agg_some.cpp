@@ -15,7 +15,7 @@ namespace {
 
 using TGenericState = NUdf::TUnboxedValuePod;
 
-void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64 row, IBlockReader& reader,
+void PushValueToState(TGenericState* typedState, const arrow20::Datum& datum, ui64 row, IBlockReader& reader,
                       IBlockItemConverter& converter, TComputationContext& ctx)
 {
     if (datum.is_scalar()) {

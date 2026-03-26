@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
     }
 
     Y_UNIT_TEST(SlicesDef) {
-        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(std::make_shared<arrow::StringScalar>("aaa"), 10, 0);
+        TSparsedArray::TSparsedBuilder<arrow20::StringType> builder(std::make_shared<arrow20::StringScalar>("aaa"), 10, 0);
         builder.AddRecord(5, "abc5");
         builder.AddRecord(6, "abcd6");
         builder.AddRecord(8, "abcde8");
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
     }
 
     Y_UNIT_TEST(SlicesNull) {
-        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 10, 0);
+        TSparsedArray::TSparsedBuilder<arrow20::StringType> builder(nullptr, 10, 0);
         builder.AddRecord(5, "abc5");
         builder.AddRecord(6, "abcd6");
         builder.AddRecord(8, "abcde8");
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
         }
     }
     Y_UNIT_TEST(FiltersDef) {
-        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 10, 0);
+        TSparsedArray::TSparsedBuilder<arrow20::StringType> builder(nullptr, 10, 0);
         builder.AddRecord(5, "abc5");
         builder.AddRecord(6, "abcd6");
         builder.AddRecord(8, "abcde8");

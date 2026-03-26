@@ -106,8 +106,8 @@ public:
 
 class TMergingChunkContext {
 private:
-    std::shared_ptr<arrow::UInt16Array> IdxArray;
-    std::shared_ptr<arrow::UInt32Array> RecordIdxArray;
+    std::shared_ptr<arrow20::UInt16Array> IdxArray;
+    std::shared_ptr<arrow20::UInt32Array> RecordIdxArray;
     std::optional<std::vector<TSourceReverseRemap>> ReverseIndexes;
 
 public:
@@ -142,7 +142,7 @@ public:
         return IdxArray->length();
     }
 
-    TMergingChunkContext(const std::shared_ptr<arrow::RecordBatch>& pkAndAddresses);
+    TMergingChunkContext(const std::shared_ptr<arrow20::RecordBatch>& pkAndAddresses);
 
     class TView {
     private:
@@ -150,8 +150,8 @@ public:
         YDB_READONLY(ui32, Offset, 0);
         YDB_READONLY(ui32, Size, 0);
 
-        std::shared_ptr<arrow::UInt16Array> IdxArray;
-        std::shared_ptr<arrow::UInt32Array> RecordIdxArray;
+        std::shared_ptr<arrow20::UInt16Array> IdxArray;
+        std::shared_ptr<arrow20::UInt32Array> RecordIdxArray;
 
     public:
         TString DebugString() const {
@@ -179,14 +179,14 @@ public:
             , Size(size) {
             AFL_VERIFY(offset + size <= Owner->GetRecordsCount());
             AFL_VERIFY(size);
-            IdxArray = std::static_pointer_cast<arrow::UInt16Array>(Owner->IdxArray->Slice(offset, size));
-            RecordIdxArray = std::static_pointer_cast<arrow::UInt32Array>(Owner->RecordIdxArray->Slice(offset, size));
+            IdxArray = std::static_pointer_cast<arrow20::UInt16Array>(Owner->IdxArray->Slice(offset, size));
+            RecordIdxArray = std::static_pointer_cast<arrow20::UInt32Array>(Owner->RecordIdxArray->Slice(offset, size));
         }
 
-        const arrow::UInt16Array& GetIdxArray() const {
+        const arrow20::UInt16Array& GetIdxArray() const {
             return *IdxArray;
         }
-        const arrow::UInt32Array& GetRecordIdxArray() const {
+        const arrow20::UInt32Array& GetRecordIdxArray() const {
             return *RecordIdxArray;
         }
     };
@@ -362,10 +362,10 @@ public:
 
     static inline const TString PortionIdFieldName = "$$__portion_id";
     static inline const TString PortionRecordIndexFieldName = "$$__portion_record_idx";
-    static inline const std::shared_ptr<arrow::Field> PortionIdField =
-        std::make_shared<arrow::Field>(PortionIdFieldName, std::make_shared<arrow::UInt16Type>());
-    static inline const std::shared_ptr<arrow::Field> PortionRecordIndexField =
-        std::make_shared<arrow::Field>(PortionRecordIndexFieldName, std::make_shared<arrow::UInt32Type>());
+    static inline const std::shared_ptr<arrow20::Field> PortionIdField =
+        std::make_shared<arrow20::Field>(PortionIdFieldName, std::make_shared<arrow20::UInt16Type>());
+    static inline const std::shared_ptr<arrow20::Field> PortionRecordIndexField =
+        std::make_shared<arrow20::Field>(PortionRecordIndexFieldName, std::make_shared<arrow20::UInt32Type>());
 
     IColumnMerger(const TColumnMergeContext& context)
         : Context(context) {

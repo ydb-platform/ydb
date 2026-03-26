@@ -77,7 +77,7 @@ NUdf::TUnboxedValuePod SliceBlockList(
     NUdf::TUnboxedValuePod blockList,
     size_t width)
 {
-    auto* pool = arrow::default_memory_pool();
+    auto* pool = arrow20::default_memory_pool();
 
     NUdf::TUnboxedValue iterator = blockList.GetListIterator();
     NUdf::TUnboxedValue current;
@@ -88,7 +88,7 @@ NUdf::TUnboxedValuePod SliceBlockList(
         auto blockCountUV = current.GetElement(width);
         ui64 blockCount =
             TArrowBlock::From(blockCountUV).GetDatum()
-                .scalar_as<arrow::UInt64Scalar>().value;
+                .scalar_as<arrow20::UInt64Scalar>().value;
 
         if (blockCount == 0) {
             newList = newList.Append(std::move(current));
@@ -106,20 +106,20 @@ NUdf::TUnboxedValuePod SliceBlockList(
             auto arrData = datum.array();
             Y_ABORT_UNLESS(arrData->offset == 0);
 
-            auto arr = arrow::MakeArray(arrData);
+            auto arr = arrow20::MakeArray(arrData);
 
-            auto nullScalar = arrow::MakeNullScalar(arr->type());
-            auto prefixArr = ARROW_RESULT(arrow::MakeArrayFromScalar(*nullScalar, 1, pool));
+            auto nullScalar = arrow20::MakeNullScalar(arr->type());
+            auto prefixArr = ARROW_RESULT(arrow20::MakeArrayFromScalar(*nullScalar, 1, pool));
 
-            std::shared_ptr<arrow::Array> concatArr;
+            std::shared_ptr<arrow20::Array> concatArr;
             {
-                arrow::ArrayVector parts{prefixArr, arr};
-                concatArr = ARROW_RESULT(arrow::Concatenate(parts, pool));
+                arrow20::ArrayVector parts{prefixArr, arr};
+                concatArr = ARROW_RESULT(arrow20::Concatenate(parts, pool));
             }
 
             auto sliced = concatArr->Slice(1, arr->length())->data();
 
-            items[i] = holderFactory.CreateArrowBlock(arrow::Datum(std::move(sliced)));
+            items[i] = holderFactory.CreateArrowBlock(arrow20::Datum(std::move(sliced)));
         }
 
         items[width] = MakeBlockCount(holderFactory, blockCount);

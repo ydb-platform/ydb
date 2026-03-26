@@ -26,41 +26,41 @@ private:
     bool WithConversion_;
 
     template <typename TArray>
-    TCell MakeCellFromValue(const std::shared_ptr<arrow::Array>& column, i64 row) {
+    TCell MakeCellFromValue(const std::shared_ptr<arrow20::Array>& column, i64 row) {
         auto array = std::static_pointer_cast<TArray>(column);
         return TCell::Make(array->Value(row));
     }
 
     template <typename TArray>
-    TCell MakeCellFromView(const std::shared_ptr<arrow::Array>& column, i64 row) {
+    TCell MakeCellFromView(const std::shared_ptr<arrow20::Array>& column, i64 row) {
         auto array = std::static_pointer_cast<TArray>(column);
         auto data = array->GetView(row);
         return TCell(data.data(), data.size());
     }
 
     template <typename TArrayType>
-    TCell MakeCell(const std::shared_ptr<arrow::Array>& column, i64 row) {
+    TCell MakeCell(const std::shared_ptr<arrow20::Array>& column, i64 row) {
         return MakeCellFromValue<TArrayType>(column, row);
     }
 
     template <>
-    TCell MakeCell<arrow::BinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
-        return MakeCellFromView<arrow::BinaryArray>(column, row);
+    TCell MakeCell<arrow20::BinaryArray>(const std::shared_ptr<arrow20::Array>& column, i64 row) {
+        return MakeCellFromView<arrow20::BinaryArray>(column, row);
     }
 
     template <>
-    TCell MakeCell<arrow::StringArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
-        return MakeCellFromView<arrow::StringArray>(column, row);
+    TCell MakeCell<arrow20::StringArray>(const std::shared_ptr<arrow20::Array>& column, i64 row) {
+        return MakeCellFromView<arrow20::StringArray>(column, row);
     }
 
     template <>
-    TCell MakeCell<arrow::Decimal128Array>(const std::shared_ptr<arrow::Array>& column, i64 row) {
-        return MakeCellFromView<arrow::Decimal128Array>(column, row);
+    TCell MakeCell<arrow20::Decimal128Array>(const std::shared_ptr<arrow20::Array>& column, i64 row) {
+        return MakeCellFromView<arrow20::Decimal128Array>(column, row);
     }
 
     template <>
-    TCell MakeCell<arrow::FixedSizeBinaryArray>(const std::shared_ptr<arrow::Array>& column, i64 row) {
-        return MakeCellFromView<arrow::FixedSizeBinaryArray>(column, row);
+    TCell MakeCell<arrow20::FixedSizeBinaryArray>(const std::shared_ptr<arrow20::Array>& column, i64 row) {
+        return MakeCellFromView<arrow20::FixedSizeBinaryArray>(column, row);
     }
 
 public:
@@ -80,12 +80,12 @@ public:
         , WithConversion_(withConversion) {
     }
 
-    bool Process(const arrow::RecordBatch& batch, TString& errorMessage);
+    bool Process(const arrow20::RecordBatch& batch, TString& errorMessage);
 };
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> ConvertColumns(const std::shared_ptr<arrow20::RecordBatch>& batch,
     const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert, const bool allowInfDouble = false);
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> InplaceConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+arrow20::Result<std::shared_ptr<arrow20::RecordBatch>> InplaceConvertColumns(const std::shared_ptr<arrow20::RecordBatch>& batch,
     const THashMap<TString, NScheme::TTypeInfo>& columnsToConvert);
 
 } // namespace NKikimr::NArrow

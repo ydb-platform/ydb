@@ -7,7 +7,7 @@
 #include <Processors/Formats/IInputFormat.h>
 #include <Formats/FormatSettings.h>
 
-namespace arrow::adapters::orc { class ORCFileReader; }
+namespace arrow20::adapters::orc { class ORCFileReader; }
 
 namespace NDB
 {
@@ -30,7 +30,7 @@ private:
 
     // TODO: check that this class implements every part of its parent
 
-    std::unique_ptr<arrow::adapters::orc::ORCFileReader> file_reader;
+    std::unique_ptr<arrow20::adapters::orc::ORCFileReader> file_reader;
 
     std::unique_ptr<ArrowColumnToCHColumn> arrow_column_to_ch_column;
 

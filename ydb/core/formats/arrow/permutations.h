@@ -11,14 +11,14 @@ namespace NKikimr::NArrow {
 
 class THashConstructor {
 public:
-    static bool BuildHashUI64(std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
-    static bool BuildHashUI64(std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+    static bool BuildHashUI64(std::shared_ptr<arrow20::Table>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
+    static bool BuildHashUI64(std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::string>& fieldNames, const std::string& hashFieldName);
 
 };
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique);
+std::shared_ptr<arrow20::UInt64Array> MakeSortPermutation(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, const bool andUnique);
 
-std::shared_ptr<arrow::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow::Array>>& columns, const bool andUnique);
+std::shared_ptr<arrow20::UInt64Array> MakeSortPermutation(const std::vector<std::shared_ptr<arrow20::Array>>& columns, const bool andUnique);
 
 }   // namespace NKikimr::NArrow

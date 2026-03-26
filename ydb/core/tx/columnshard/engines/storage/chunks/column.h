@@ -12,8 +12,8 @@ private:
     TString Data;
     TColumnRecord Record;
     TSimpleColumnInfo ColumnInfo;
-    std::shared_ptr<arrow::Scalar> First;
-    std::shared_ptr<arrow::Scalar> Last;
+    std::shared_ptr<arrow20::Scalar> First;
+    std::shared_ptr<arrow20::Scalar> Last;
 protected:
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplitImpl(const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
     virtual const TString& DoGetData() const override {
@@ -31,10 +31,10 @@ protected:
     virtual TSimpleChunkMeta DoBuildSimpleChunkMeta() const override {
         return Record.GetMeta();
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetFirstScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetFirstScalar() const override {
         return First;
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
+    virtual std::shared_ptr<arrow20::Scalar> DoGetLastScalar() const override {
         return Last;
     }
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;

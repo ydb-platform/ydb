@@ -55,20 +55,20 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
 
     auto mkLikeOptions = [&](bool ignoreCase) {
         if (arguments.size() != 2 || !Constants.contains(arguments[1].GetColumnId())) {
-            return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
+            return std::shared_ptr<arrow20::compute::MatchSubstringOptions>();
         }
         auto patternScalar = Constants[arguments[1].GetColumnId()];
-        if (!arrow::is_base_binary_like(patternScalar->type->id())) {
-            return std::shared_ptr<arrow::compute::MatchSubstringOptions>();
+        if (!arrow20::is_base_binary_like(patternScalar->type->id())) {
+            return std::shared_ptr<arrow20::compute::MatchSubstringOptions>();
         }
         arguments.pop_back();
-        auto& pattern = static_cast<arrow::BaseBinaryScalar&>(*patternScalar).value;
-        return std::make_shared<arrow::compute::MatchSubstringOptions>(pattern->ToString(), ignoreCase);
+        auto& pattern = static_cast<arrow20::BaseBinaryScalar&>(*patternScalar).value;
+        return std::make_shared<arrow20::compute::MatchSubstringOptions>(pattern->ToString(), ignoreCase);
     };
 
-    auto mkCastOptions = [](std::shared_ptr<arrow::DataType> dataType) {
+    auto mkCastOptions = [](std::shared_ptr<arrow20::DataType> dataType) {
         // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
-        auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
+        auto castOpts = std::make_shared<arrow20::compute::CastOptions>(false);
         castOpts->to_type = dataType;
         return castOpts;
     };
@@ -158,30 +158,30 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         case TId::FUNC_MATH_DIVIDE:
             return std::make_shared<TSimpleFunction>(EOperation::Divide);
         case TId::FUNC_CAST_TO_INT8:
-            return std::make_shared<TSimpleFunction>(EOperation::CastInt8, mkCastOptions(std::make_shared<arrow::Int8Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastInt8, mkCastOptions(std::make_shared<arrow20::Int8Type>()));
         case TId::FUNC_CAST_TO_BOOLEAN:
-            return std::make_shared<TSimpleFunction>(EOperation::CastBoolean, mkCastOptions(std::make_shared<arrow::BooleanType>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastBoolean, mkCastOptions(std::make_shared<arrow20::BooleanType>()));
         case TId::FUNC_CAST_TO_INT16:
-            return std::make_shared<TSimpleFunction>(EOperation::CastInt16, mkCastOptions(std::make_shared<arrow::Int16Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastInt16, mkCastOptions(std::make_shared<arrow20::Int16Type>()));
         case TId::FUNC_CAST_TO_INT32:
-            return std::make_shared<TSimpleFunction>(EOperation::CastInt32, mkCastOptions(std::make_shared<arrow::Int32Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastInt32, mkCastOptions(std::make_shared<arrow20::Int32Type>()));
         case TId::FUNC_CAST_TO_INT64:
-            return std::make_shared<TSimpleFunction>(EOperation::CastInt64, mkCastOptions(std::make_shared<arrow::Int64Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastInt64, mkCastOptions(std::make_shared<arrow20::Int64Type>()));
         case TId::FUNC_CAST_TO_UINT8:
-            return std::make_shared<TSimpleFunction>(EOperation::CastUInt8, mkCastOptions(std::make_shared<arrow::UInt8Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastUInt8, mkCastOptions(std::make_shared<arrow20::UInt8Type>()));
         case TId::FUNC_CAST_TO_UINT16:
-            return std::make_shared<TSimpleFunction>(EOperation::CastUInt16, mkCastOptions(std::make_shared<arrow::UInt16Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastUInt16, mkCastOptions(std::make_shared<arrow20::UInt16Type>()));
         case TId::FUNC_CAST_TO_UINT32:
-            return std::make_shared<TSimpleFunction>(EOperation::CastUInt32, mkCastOptions(std::make_shared<arrow::UInt32Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastUInt32, mkCastOptions(std::make_shared<arrow20::UInt32Type>()));
         case TId::FUNC_CAST_TO_UINT64:
-            return std::make_shared<TSimpleFunction>(EOperation::CastUInt64, mkCastOptions(std::make_shared<arrow::UInt64Type>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastUInt64, mkCastOptions(std::make_shared<arrow20::UInt64Type>()));
         case TId::FUNC_CAST_TO_FLOAT:
-            return std::make_shared<TSimpleFunction>(EOperation::CastFloat, mkCastOptions(std::make_shared<arrow::FloatType>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastFloat, mkCastOptions(std::make_shared<arrow20::FloatType>()));
         case TId::FUNC_CAST_TO_DOUBLE:
-            return std::make_shared<TSimpleFunction>(EOperation::CastDouble, mkCastOptions(std::make_shared<arrow::DoubleType>()));
+            return std::make_shared<TSimpleFunction>(EOperation::CastDouble, mkCastOptions(std::make_shared<arrow20::DoubleType>()));
         case TId::FUNC_CAST_TO_TIMESTAMP:
             return std::make_shared<TSimpleFunction>(
-                EOperation::CastTimestamp, mkCastOptions(std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO)));
+                EOperation::CastTimestamp, mkCastOptions(std::make_shared<arrow20::TimestampType>(arrow20::TimeUnit::MICRO)));
         case TId::FUNC_CAST_TO_BINARY:
         case TId::FUNC_CAST_TO_FIXED_SIZE_BINARY:
         case TId::FUNC_UNSPECIFIED:
@@ -197,40 +197,40 @@ TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MakeConstant(
 
     switch (constant.GetValueCase()) {
         case TId::kBool:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::BooleanScalar>(constant.GetBool()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::BooleanScalar>(constant.GetBool()), name.GetColumnId());
         case TId::kInt8:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int8Scalar>(i8(constant.GetInt8())), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::Int8Scalar>(i8(constant.GetInt8())), name.GetColumnId());
         case TId::kUint8:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt8Scalar>(ui8(constant.GetUint8())), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::UInt8Scalar>(ui8(constant.GetUint8())), name.GetColumnId());
         case TId::kInt16:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int16Scalar>(i16(constant.GetInt16())), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::Int16Scalar>(i16(constant.GetInt16())), name.GetColumnId());
         case TId::kUint16:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt16Scalar>(ui16(constant.GetUint16())), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::UInt16Scalar>(ui16(constant.GetUint16())), name.GetColumnId());
         case TId::kInt32:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int32Scalar>(constant.GetInt32()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::Int32Scalar>(constant.GetInt32()), name.GetColumnId());
         case TId::kUint32:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt32Scalar>(constant.GetUint32()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::UInt32Scalar>(constant.GetUint32()), name.GetColumnId());
         case TId::kInt64:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(constant.GetInt64()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::Int64Scalar>(constant.GetInt64()), name.GetColumnId());
         case TId::kUint64:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::UInt64Scalar>(constant.GetUint64()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::UInt64Scalar>(constant.GetUint64()), name.GetColumnId());
         case TId::kFloat:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::FloatScalar>(constant.GetFloat()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::FloatScalar>(constant.GetFloat()), name.GetColumnId());
         case TId::kDouble:
-            return std::make_shared<TConstProcessor>(std::make_shared<arrow::DoubleScalar>(constant.GetDouble()), name.GetColumnId());
+            return std::make_shared<TConstProcessor>(std::make_shared<arrow20::DoubleScalar>(constant.GetDouble()), name.GetColumnId());
         case TId::kTimestamp:
             return std::make_shared<TConstProcessor>(
-                std::make_shared<arrow::TimestampScalar>(constant.GetTimestamp(), arrow::timestamp(arrow::TimeUnit::MICRO)), name.GetColumnId());
+                std::make_shared<arrow20::TimestampScalar>(constant.GetTimestamp(), arrow20::timestamp(arrow20::TimeUnit::MICRO)), name.GetColumnId());
         case TId::kBytes: {
             TString str = constant.GetBytes();
             return std::make_shared<TConstProcessor>(
-                std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)str.data(), str.size()), arrow::binary()),
+                std::make_shared<arrow20::BinaryScalar>(std::make_shared<arrow20::Buffer>((const ui8*)str.data(), str.size()), arrow20::binary()),
                 name.GetColumnId());
         }
         case TId::kText: {
             TString str = constant.GetText();
             return std::make_shared<TConstProcessor>(
-                std::make_shared<arrow::StringScalar>(std::string(str.data(), str.size())), name.GetColumnId());
+                std::make_shared<arrow20::StringScalar>(std::string(str.data(), str.size())), name.GetColumnId());
         }
         case TId::VALUE_NOT_SET:
             break;
@@ -283,7 +283,7 @@ TConclusion<NAggregation::EAggregate> TProgramBuilder::GetAggregationType(
 }
 
 TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MaterializeParameter(const TColumnInfo& name,
-    const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow::RecordBatch>& parameterValues) const {
+    const NKikimrSSA::TProgram::TParameter& parameter, const std::shared_ptr<arrow20::RecordBatch>& parameterValues) const {
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
     if (!column || column->length() != 1) {
@@ -293,7 +293,7 @@ TConclusion<std::shared_ptr<TConstProcessor>> TProgramBuilder::MaterializeParame
 }
 
 TConclusionStatus TProgramBuilder::ReadAssign(
-    const NKikimrSSA::TProgram::TAssignment& assign, const std::shared_ptr<arrow::RecordBatch>& parameterValues) {
+    const NKikimrSSA::TProgram::TAssignment& assign, const std::shared_ptr<arrow20::RecordBatch>& parameterValues) {
     using TId = NKikimrSSA::TProgram::TAssignment;
 
     const TColumnInfo columnName = GetColumnInfo(assign.GetColumn());

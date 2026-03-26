@@ -21,11 +21,11 @@ protected:
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
 
-    bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow::Scalar>& requestValue,
+    bool Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_ptr<arrow20::Scalar>& requestValue,
         const NArrow::NSSA::TIndexCheckOperation& op) const;
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat,
-        const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
+        const std::shared_ptr<arrow20::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const override;
 
     NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;
 
@@ -45,8 +45,8 @@ public:
             return false;
         }
         auto typedId = (*dataTypeResult)->id();
-        return (arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId)) &&
-               !(typedId == arrow::Type::TIMESTAMP /*not supported yet, see https://github.com/ydb-platform/ydb/issues/35699 */);
+        return (arrow20::is_primitive(typedId) || arrow20::is_base_binary_like(typedId)) &&
+               !(typedId == arrow20::Type::TIMESTAMP /*not supported yet, see https://github.com/ydb-platform/ydb/issues/35699 */);
     }
 
     virtual TString GetClassName() const override {

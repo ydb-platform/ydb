@@ -85,11 +85,11 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
         }
         case EKernelFlavor::Ideal: {
             if (fixed) {
-                execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                execFunc = [](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                     size_t length = batch.values[0].length();
-                    // NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
-                    NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow::default_memory_pool());
-                    NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow::default_memory_pool());
+                    // NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *arrow20::default_memory_pool(), length);
+                    NUdf::TTypedBufferBuilder<ui64> dataBuilder(arrow20::default_memory_pool());
+                    NUdf::TTypedBufferBuilder<ui8> nullBuilder(arrow20::default_memory_pool());
                     dataBuilder.Reserve(length);
                     nullBuilder.Reserve(length);
                     auto out = dataBuilder.MutableData();
@@ -118,19 +118,19 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
                         }
                     }
 
-                    std::shared_ptr<arrow::Buffer> nulls;
+                    std::shared_ptr<arrow20::Buffer> nulls;
                     nulls = nullBuilder.Finish();
-                    nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow::default_memory_pool());
-                    std::shared_ptr<arrow::Buffer> data = dataBuilder.Finish();
+                    nulls = NUdf::MakeDenseBitmap(nulls->data(), length, arrow20::default_memory_pool());
+                    std::shared_ptr<arrow20::Buffer> data = dataBuilder.Finish();
 
-                    *res = arrow::ArrayData::Make(arrow::uint64(), length, {data, nulls});
-                    return arrow::Status::OK();
+                    *res = arrow20::ArrayData::Make(arrow20::uint64(), length, {data, nulls});
+                    return arrow20::Status::OK();
                 };
             } else {
-                execFunc = [](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                execFunc = [](arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) {
                     size_t length = batch.values[0].length();
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
-                    NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+                    NUdf::TStringArrayBuilder<arrow20::BinaryType, true, NUdf::EPgStringType::None> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
                     const auto& array = *batch.values[0].array();
                     for (size_t i = 0; i < length; ++i) {
                         auto item = reader.GetItem(array, i);
@@ -145,7 +145,7 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
                     }
 
                     *res = builder.Build(true);
-                    return arrow::Status::OK();
+                    return arrow20::Status::OK();
                 };
             };
 
@@ -154,8 +154,8 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
     }
 
     Y_ENSURE(execFunc);
-    arrow::compute::ExecContext execContent;
-    arrow::compute::KernelContext kernelCtx(&execContent);
+    arrow20::compute::ExecContext execContent;
+    arrow20::compute::KernelContext kernelCtx(&execContent);
     TPgKernelState state;
     kernelCtx.SetState(&state);
     FmgrInfo finfo;
@@ -182,17 +182,17 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
 #else
     const size_t N = 1000;
 #endif
-    std::vector<arrow::Datum> batchArgs;
+    std::vector<arrow20::Datum> batchArgs;
     if (fixed) {
-        arrow::UInt64Builder builder;
+        arrow20::UInt64Builder builder;
         ARROW_OK(builder.Reserve(N));
         for (size_t i = 0; i < N; ++i) {
             builder.UnsafeAppend(i);
         }
 
-        std::shared_ptr<arrow::ArrayData> out;
+        std::shared_ptr<arrow20::ArrayData> out;
         ARROW_OK(builder.FinishInternal(&out));
-        arrow::Datum arg1(out), arg2;
+        arrow20::Datum arg1(out), arg2;
         if (constArg) {
             Cout << "with const arg\n";
             arg2 = NKikimr::NMiniKQL::MakeScalarDatum<ui64>(0);
@@ -203,7 +203,7 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
         batchArgs.push_back(arg1);
         batchArgs.push_back(arg2);
     } else {
-        arrow::BinaryBuilder builder;
+        arrow20::BinaryBuilder builder;
         ARROW_OK(builder.Reserve(N));
         for (size_t i = 0; i < N; ++i) {
             std::string s(sizeof(void*) + VARHDRSZ + 500, 'A' + i % 26);
@@ -213,19 +213,19 @@ void PgFuncImpl(EKernelFlavor flavor, bool constArg, bool fixed) {
             ARROW_OK(builder.Append(s));
         }
 
-        std::shared_ptr<arrow::ArrayData> out;
+        std::shared_ptr<arrow20::ArrayData> out;
         ARROW_OK(builder.FinishInternal(&out));
-        arrow::Datum arg1(out);
+        arrow20::Datum arg1(out);
         batchArgs.push_back(arg1);
     }
 
-    arrow::compute::ExecBatch batch(std::move(batchArgs), N);
+    arrow20::compute::ExecBatch batch(std::move(batchArgs), N);
 
     {
         Cout << "begin...\n";
         TSimpleTimer timer;
         for (size_t count = 0; count < (fixed ? 10000 : 1000); ++count) {
-            arrow::Datum res;
+            arrow20::Datum res;
             ARROW_OK(execFunc(&kernelCtx, batch, &res));
             Y_ENSURE(res.length() == N);
         }

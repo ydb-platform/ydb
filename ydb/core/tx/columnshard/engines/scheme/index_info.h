@@ -22,11 +22,11 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 
-namespace arrow {
+namespace arrow20 {
 class Array;
 class Field;
 class Schema;
-}   // namespace arrow
+}   // namespace arrow20
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -94,24 +94,24 @@ private:
     ui64 Version = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
-    std::shared_ptr<arrow::Schema> PrimaryKey;
+    std::shared_ptr<arrow20::Schema> PrimaryKey;
     NArrow::NSerialization::TSerializerContainer DefaultSerializer = NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
 
     TIndexInfo(const ui64 presetId)
         : PresetId(presetId) {
     }
 
-    static std::shared_ptr<arrow::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-        std::shared_ptr<arrow::DataType> arrowType;
+    static std::shared_ptr<arrow20::Field> BuildArrowField(const NTable::TColumn& column, const std::shared_ptr<TSchemaObjectsCache>& cache) {
+        std::shared_ptr<arrow20::DataType> arrowType;
 
         if (column.PType.GetTypeId() == NScheme::NTypeIds::Decimal) {
-            arrowType = arrow::fixed_size_binary(16);
+            arrowType = arrow20::fixed_size_binary(16);
         } else {
             auto result = NArrow::GetArrowType(column.PType);
             AFL_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
-        auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
+        auto f = std::make_shared<arrow20::Field>(column.Name, arrowType, !column.NotNull);
         if (cache) {
             return cache->GetOrInsertField(f);
         } else {
@@ -193,7 +193,7 @@ public:
         return PresetId.GetPresetId();
     }
 
-    static std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(
+    static std::vector<std::shared_ptr<arrow20::Field>> MakeArrowFields(
         const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache);
 
     const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
@@ -202,7 +202,7 @@ public:
         return MetadataManagerConstructor;
     }
 
-    TConclusion<std::shared_ptr<arrow::Array>> BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const;
+    TConclusion<std::shared_ptr<arrow20::Array>> BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const;
 
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
         AFL_VERIFY(colIndex < ColumnFeatures.size());
@@ -218,9 +218,9 @@ public:
         return GetColumnFeaturesVerified(colId).GetIsNullable();
     }
 
-    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
-    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
-    std::shared_ptr<arrow::Scalar> GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const;
+    std::shared_ptr<arrow20::Scalar> GetColumnExternalDefaultValueVerified(const std::string& colName) const;
+    std::shared_ptr<arrow20::Scalar> GetColumnExternalDefaultValueVerified(const ui32 colId) const;
+    std::shared_ptr<arrow20::Scalar> GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const;
 
     const std::optional<TString>& GetScanReaderPolicyName() const {
         return ScanReaderPolicyName;
@@ -312,11 +312,11 @@ public:
 
     std::optional<ui32> GetColumnIndexOptional(const ui32 id) const;
     ui32 GetColumnIndexVerified(const ui32 id) const;
-    std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
-    std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
-    std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
-    std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
-    std::shared_ptr<arrow::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;
+    std::shared_ptr<arrow20::Field> GetColumnFieldOptional(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Field> GetColumnFieldVerified(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Schema> GetColumnSchema(const ui32 columnId) const;
+    std::shared_ptr<arrow20::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
+    std::shared_ptr<arrow20::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;
     TColumnSaver GetColumnSaver(const ui32 columnId) const;
     virtual const std::shared_ptr<TColumnLoader>& GetColumnLoaderOptional(const ui32 columnId) const override;
     std::optional<std::string> GetColumnNameOptional(const ui32 columnId) const {
@@ -427,20 +427,20 @@ public:
         return PKColumnIds[0];
     }
 
-    std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
+    std::shared_ptr<arrow20::Schema> GetReplaceKeyPrefix(const ui32 size) const {
         AFL_VERIFY(size);
         AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
         if (size == (ui32)PrimaryKey->num_fields()) {
             return PrimaryKey;
         } else {
-            std::vector<std::shared_ptr<arrow::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
-            return std::make_shared<arrow::Schema>(std::move(fields));
+            std::vector<std::shared_ptr<arrow20::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
+            return std::make_shared<arrow20::Schema>(std::move(fields));
         }
     }
-    const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
+    const std::shared_ptr<arrow20::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }
-    const std::shared_ptr<arrow::Schema>& GetPrimaryKey() const {
+    const std::shared_ptr<arrow20::Schema>& GetPrimaryKey() const {
         return PrimaryKey;
     }
 
@@ -469,7 +469,7 @@ public:
     }
 };
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
+std::shared_ptr<arrow20::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids,
     const std::shared_ptr<TSchemaObjectsCache>& cache = nullptr);
 
 /// Extracts columns with the specific ids from the schema.

@@ -113,46 +113,46 @@ namespace NYql::NConnector::NTest {
     // Returns field for schema and array with data.
     // Designed for call with MakeRecordBatch function.
     template <class TArrowBuilderType, class TColDataType>
-    std::tuple<std::shared_ptr<arrow::Field>, std::shared_ptr<arrow::Array>>
+    std::tuple<std::shared_ptr<arrow20::Field>, std::shared_ptr<arrow20::Array>>
     MakeArray(const TString& columnName,
               const std::vector<TColDataType>& input,
-              std::shared_ptr<arrow::DataType> dataType) {
+              std::shared_ptr<arrow20::DataType> dataType) {
         TArrowBuilderType builder;
-        UNIT_ASSERT_EQUAL(builder.AppendValues(input), arrow::Status::OK());
-        std::shared_ptr<arrow::Array> columnData;
-        UNIT_ASSERT_EQUAL(builder.Finish(&columnData), arrow::Status::OK());
-        auto field = arrow::field(columnName, std::move(dataType));
+        UNIT_ASSERT_EQUAL(builder.AppendValues(input), arrow20::Status::OK());
+        std::shared_ptr<arrow20::Array> columnData;
+        UNIT_ASSERT_EQUAL(builder.Finish(&columnData), arrow20::Status::OK());
+        auto field = arrow20::field(columnName, std::move(dataType));
         return {std::move(field), std::move(columnData)};
     }
 
     // Make record batch with the only column.
     template <class TArrowBuilderType, class TColDataType>
-    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(
+    std::shared_ptr<arrow20::RecordBatch> MakeRecordBatch(
         const TString& columnName,
         const std::vector<TColDataType>& input,
-        std::shared_ptr<arrow::DataType> dataType) {
+        std::shared_ptr<arrow20::DataType> dataType) {
         auto [field, columnData] = MakeArray<TArrowBuilderType, TColDataType>(columnName, input, dataType);
-        auto schema = arrow::schema({field});
-        return arrow::RecordBatch::Make(schema, columnData->length(), {columnData});
+        auto schema = arrow20::schema({field});
+        return arrow20::RecordBatch::Make(schema, columnData->length(), {columnData});
     }
 
     template <class T>
-    concept TFieldAndArray = std::is_same_v<T, std::tuple<std::shared_ptr<arrow::Field>, std::shared_ptr<arrow::Array>>>;
+    concept TFieldAndArray = std::is_same_v<T, std::tuple<std::shared_ptr<arrow20::Field>, std::shared_ptr<arrow20::Array>>>;
 
     // Make record batch from several results of MakeArray calls with different params.
     template <TFieldAndArray... TArrayFieldTuple>
-    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(const TArrayFieldTuple&... fields) {
-        auto schema = arrow::schema({std::get<0>(fields)...});
-        std::vector<std::shared_ptr<arrow::Array>> data = {std::get<1>(fields)...};
+    std::shared_ptr<arrow20::RecordBatch> MakeRecordBatch(const TArrayFieldTuple&... fields) {
+        auto schema = arrow20::schema({std::get<0>(fields)...});
+        std::vector<std::shared_ptr<arrow20::Array>> data = {std::get<1>(fields)...};
         UNIT_ASSERT(data.size());
         for (const auto& d : data) {
             UNIT_ASSERT_VALUES_EQUAL(d->length(), data[0]->length());
         }
-        return arrow::RecordBatch::Make(schema, data[0]->length(), std::move(data));
+        return arrow20::RecordBatch::Make(schema, data[0]->length(), std::move(data));
     }
 
     // Make record batch with schema with no columns
-    std::shared_ptr<arrow::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount);
+    std::shared_ptr<arrow20::RecordBatch> MakeEmptyRecordBatch(size_t rowsCount);
 
     template <class T>
     void SetSimpleValue(const T& value, Ydb::TypedValue* proto, bool optional = false);
@@ -829,7 +829,7 @@ namespace NYql::NConnector::NTest {
             }
 
             TBuilder& AddResponse(
-                const std::shared_ptr<arrow::RecordBatch>& recordBatch,
+                const std::shared_ptr<arrow20::RecordBatch>& recordBatch,
                 const NApi::TError& error) {
                 NKikimr::NArrow::NSerialization::TSerializerContainer ser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer();
                 auto& response = this->Result_->Responses().emplace_back();

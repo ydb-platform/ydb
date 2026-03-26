@@ -38,14 +38,14 @@ enum class AggFunctionId {
     //AGG_TOP_SUM = 16,
     AGG_NUM_ROWS = 17,
 };
-struct GroupByOptions: public arrow::compute::ScalarAggregateOptions {
+struct GroupByOptions: public arrow20::compute::ScalarAggregateOptions {
     struct Assign {
         AggFunctionId function = AggFunctionId::AGG_UNSPECIFIED;
         std::string result_column;
         std::vector<std::string> arguments;
     };
 
-    std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<arrow20::Schema> schema;
     std::vector<Assign> assigns;
     bool has_nullable_key = true;
 };
@@ -90,8 +90,8 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
     funcOpts.has_nullable_key = false;
 
-    std::vector<arrow::Datum> batch;
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<arrow20::Datum> batch;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     std::set<ui32> fieldsUsage;
     for (auto& key : AggregationKeys) {
         AFL_VERIFY(fieldsUsage.emplace(key.GetColumnId()).second);
@@ -100,7 +100,7 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
         funcOpts.assigns.emplace_back(CH::GroupByOptions::Assign{ .result_column = ::ToString(key.GetColumnId()) });
 
         if (!funcOpts.has_nullable_key) {
-            arrow::Datum res = batch.back();
+            arrow20::Datum res = batch.back();
             if (res.is_array()) {
                 funcOpts.has_nullable_key = res.array()->MayHaveNulls();
             } else {
@@ -130,9 +130,9 @@ TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor:
         }
     }
 
-    funcOpts.schema = std::make_shared<arrow::Schema>(fields);
+    funcOpts.schema = std::make_shared<arrow20::Schema>(fields);
 
-    auto gbRes = arrow::compute::CallFunction(GetHouseGroupByName(), batch, &funcOpts, GetCustomExecContext());
+    auto gbRes = arrow20::compute::CallFunction(GetHouseGroupByName(), batch, &funcOpts, GetCustomExecContext());
     if (!gbRes.ok()) {
         return TConclusionStatus::Fail(gbRes.status().ToString());
     }
@@ -195,13 +195,13 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
     return TConclusionStatus::Success();
 }
 
-TConclusion<arrow::Datum> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
+TConclusion<arrow20::Datum> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     if (context.GetColumns().size() == 0 && AggregationType == NAggregation::EAggregate::NumRows) {
         auto rc = resources.GetRecordsCountActualOptional();
         if (!rc) {
             return TConclusionStatus::Fail("resources hasn't info about records count actual");
         } else {
-            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(*rc));
+            return arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(*rc));
         }
     } else {
         return TBase::Call(context, resources);
@@ -215,8 +215,8 @@ private:
     const EAggregate AggregationType;
     virtual TConclusionStatus DoExecute(
         const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, TAccessorsCollection& collectionResult) const override {
-        std::vector<const arrow::Scalar*> scalars;
-        std::optional<arrow::Type::type> type;
+        std::vector<const arrow20::Scalar*> scalars;
+        std::optional<arrow20::Type::type> type;
         for (auto&& i : sources) {
             AFL_VERIFY(i);
             const auto& scalar = i->GetConstantScalarVerified(ColumnInfo.GetColumnId());
@@ -324,10 +324,10 @@ private:
     const std::vector<TColumnChainInfo> KeyColumns;
     const std::vector<TColumnAggregationInfo> Aggregations;
 
-    TConclusion<std::shared_ptr<arrow::Array>> BuildColumn(const ui32 keysCount, const TColumnAggregationInfo& aggr,
+    TConclusion<std::shared_ptr<arrow20::Array>> BuildColumn(const ui32 keysCount, const TColumnAggregationInfo& aggr,
         const std::vector<std::unique_ptr<TAccessorsCollection>>& sources, const std::vector<std::vector<ui32>>& decoder) const {
         std::vector<const IChunkedArray*> arrays;
-        std::optional<arrow::Type::type> type;
+        std::optional<arrow20::Type::type> type;
         for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
             auto& source = sources[sourceIdx];
             const auto& acc = source->GetAccessorVerified(aggr.GetColumnInfo().GetColumnId());
@@ -339,7 +339,7 @@ private:
                 AFL_VERIFY(*type == acc->GetDataType()->id());
             }
         }
-        std::shared_ptr<arrow::Array> arrResult;
+        std::shared_ptr<arrow20::Array> arrResult;
         TString errorMessage;
         if (!NArrow::SwitchType(*type, [&](const auto& type) {
                 using TWrap = std::decay_t<decltype(type)>;
@@ -416,11 +416,11 @@ private:
             countCapacity *= 2;
             AFL_VERIFY(countCapacity < (1llu << 30));
         }
-        std::deque<std::vector<std::shared_ptr<arrow::Array>>> arraysStorage;
+        std::deque<std::vector<std::shared_ptr<arrow20::Array>>> arraysStorage;
         std::vector<std::vector<ui32>> decoder;
         decoder.resize(sources.size());
-        std::vector<std::unique_ptr<arrow::ArrayBuilder>> keyBuilders;
-        std::vector<arrow::Type::type> types;
+        std::vector<std::unique_ptr<arrow20::ArrayBuilder>> keyBuilders;
+        std::vector<arrow20::Type::type> types;
         types.resize(KeyColumns.size());
         keyBuilders.resize(KeyColumns.size());
         ui32 keysCount = 0;
@@ -429,7 +429,7 @@ private:
             for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
                 auto& source = sources[sourceIdx];
                 AFL_VERIFY(source);
-                arraysStorage.emplace_back(std::vector<std::shared_ptr<arrow::Array>>());
+                arraysStorage.emplace_back(std::vector<std::shared_ptr<arrow20::Array>>());
                 auto& keyArrays = arraysStorage.back();
                 ui32 cIdx = 0;
                 std::optional<ui32> count;

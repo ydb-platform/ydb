@@ -133,8 +133,8 @@ TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) 
     TIndexInfo indexInfo = TIndexInfo::BuildDefault(1, TTestStoragesManager::GetInstance(), columns, pkIds);
     
     // Create a minimal schema with special columns
-    const auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector(
-        { std::make_shared<arrow::Field>("pk", arrow::uint64()) }));
+    const auto schema = std::make_shared<arrow20::Schema>(arrow20::FieldVector(
+        { std::make_shared<arrow20::Field>("pk", arrow20::uint64()) }));
     
     // Create a batch with special columns
     auto batch = NArrow::MakeEmptyBatch(schema, 1);

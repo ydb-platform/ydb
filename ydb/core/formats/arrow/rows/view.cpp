@@ -17,10 +17,10 @@ bool TSimpleRow::operator==(const TSimpleRow& item) const {
     return (*this <=> item) == std::partial_ordering::equivalent;
 }
 
-std::shared_ptr<arrow::RecordBatch> TSimpleRow::ToBatch() const {
+std::shared_ptr<arrow20::RecordBatch> TSimpleRow::ToBatch() const {
     auto builders = NArrow::MakeBuilders(Schema);
     AddToBuilders(builders).Validate();
-    return arrow::RecordBatch::Make(Schema, 1, FinishBuilders(std::move(builders)));
+    return arrow20::RecordBatch::Make(Schema, 1, FinishBuilders(std::move(builders)));
 }
 
 std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, const ui32 columnsCount) const {
@@ -47,7 +47,7 @@ NMerger::TSortableBatchPosition TSimpleRow::BuildSortablePosition(const bool rev
     return NMerger::TSortableBatchPosition(ToBatch(), 0, reverse);
 }
 
-TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema) const {
+TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow20::Schema>& schema) const {
     return TSimpleRow(Data, schema);
 }
 

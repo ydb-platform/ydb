@@ -10,8 +10,8 @@ Y_UNIT_TEST_SUITE(Dictionary) {
 
     using namespace NKikimr::NArrow;
 
-    ui64 Test(NConstruction::IArrayBuilder::TPtr column, const arrow::ipc::IpcWriteOptions& options, const ui32 bSize) {
-        std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
+    ui64 Test(NConstruction::IArrayBuilder::TPtr column, const arrow20::ipc::IpcWriteOptions& options, const ui32 bSize) {
+        std::shared_ptr<arrow20::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
         const TString data = NSerialization::TNativeSerializer(options).SerializeFull(batch);
         auto deserializedBatch = *NSerialization::TNativeSerializer().Deserialize(data);
         Y_ABORT_UNLESS(!!deserializedBatch);
@@ -29,19 +29,19 @@ Y_UNIT_TEST_SUITE(Dictionary) {
         const ui32 BatchSize;
         const ui32 PoolSize;
         const ui32 StrLen;
-        const arrow::Compression::type Codec;
+        const arrow20::Compression::type Codec;
         const bool Dict;
-        arrow::ipc::IpcWriteOptions Options = arrow::ipc::IpcWriteOptions::Defaults();
+        arrow20::ipc::IpcWriteOptions Options = arrow20::ipc::IpcWriteOptions::Defaults();
         YDB_READONLY(ui64, Result, 0);
     public:
-        TTestConfig(const ui32 batchSize, const ui32 poolSize, const ui32 strLen, const arrow::Compression::type codec, const bool dict)
+        TTestConfig(const ui32 batchSize, const ui32 poolSize, const ui32 strLen, const arrow20::Compression::type codec, const bool dict)
             : BatchSize(batchSize)
             , PoolSize(poolSize)
             , StrLen(strLen)
             , Codec(codec)
             , Dict(dict)
         {
-            Options.codec = *arrow::util::Codec::Create(Codec);
+            Options.codec = *arrow20::util::Codec::Create(Codec);
             NConstruction::IArrayBuilder::TPtr column;
             if (Dict) {
                 column = std::make_shared<NConstruction::TDictionaryArrayConstructor<NConstruction::TStringPoolFiller>>(
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(Dictionary) {
     }
 
     Y_UNIT_TEST(Simple) {
-        const std::vector<arrow::Compression::type> codecs = { arrow::Compression::UNCOMPRESSED, arrow::Compression::LZ4_FRAME, arrow::Compression::ZSTD };
+        const std::vector<arrow20::Compression::type> codecs = { arrow20::Compression::UNCOMPRESSED, arrow20::Compression::LZ4_FRAME, arrow20::Compression::ZSTD };
         std::vector<TTestConfig> configs;
         std::map<TString, std::map<TString, double>> testResults;
         for (auto&& codec : codecs) {
@@ -135,10 +135,10 @@ Y_UNIT_TEST_SUITE(Dictionary) {
     }
 
     Y_UNIT_TEST(ComparePayloadAndFull) {
-        const std::vector<arrow::Compression::type> codecs = { arrow::Compression::UNCOMPRESSED, arrow::Compression::LZ4_FRAME, };
+        const std::vector<arrow20::Compression::type> codecs = { arrow20::Compression::UNCOMPRESSED, arrow20::Compression::LZ4_FRAME, };
         for (auto&& codec : codecs) {
-            arrow::ipc::IpcWriteOptions options = arrow::ipc::IpcWriteOptions::Defaults();
-            options.codec = *arrow::util::Codec::Create(codec);
+            arrow20::ipc::IpcWriteOptions options = arrow20::ipc::IpcWriteOptions::Defaults();
+            options.codec = *arrow20::util::Codec::Create(codec);
             Cerr << (options.codec ? options.codec->name() : "NO_CODEC") << Endl;
             for (auto bSize : { 1000, 10000, 100000 }) {
                 Cerr << "--" << bSize << Endl;
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(Dictionary) {
                             NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
                                 "field", NConstruction::TStringPoolFiller(pSize, strLen)
                             );
-                            std::shared_ptr<arrow::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
+                            std::shared_ptr<arrow20::RecordBatch> batch = NConstruction::TRecordBatchConstructor({ column }).BuildBatch(bSize);
                             const TString dataFull = NSerialization::TNativeSerializer(options).SerializeFull(batch);
                             const TString dataPayload = NSerialization::TNativeSerializer(options).SerializePayload(batch);
                             bytesFull = dataFull.size();

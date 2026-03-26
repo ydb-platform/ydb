@@ -30,11 +30,11 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, "No shards to write to");
     }
 
-    std::shared_ptr<arrow::RecordBatch> batch;
+    std::shared_ptr<arrow20::RecordBatch> batch;
     if (data.HasDeserializedBatch()) {
         batch = data.GetDeserializedBatch();
     } else {
-        std::shared_ptr<arrow::Schema> arrowScheme = ExtractArrowSchema(scheme);
+        std::shared_ptr<arrow20::Schema> arrowScheme = ExtractArrowSchema(scheme);
         batch = NArrow::DeserializeBatch(data.GetSerializedData(), arrowScheme);
         if (!batch) {
             return TYdbConclusionStatus::Fail(
@@ -58,7 +58,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
 }
 
 NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::SplitImpl(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
     Y_ABORT_UNLESS(batch);
 
     auto split = sharding->SplitByShards(batch, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
@@ -81,7 +81,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     return TYdbConclusionStatus::Success();
 }
 
-std::shared_ptr<arrow::Schema> TColumnShardShardsSplitter::ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+std::shared_ptr<arrow20::Schema> TColumnShardShardsSplitter::ExtractArrowSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
     TVector<std::pair<TString, NScheme::TTypeInfo>> columns;
     for (auto& col : schema.GetColumns()) {
         Y_ABORT_UNLESS(col.HasTypeId());

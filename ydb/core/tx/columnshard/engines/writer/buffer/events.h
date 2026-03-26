@@ -15,12 +15,12 @@ class TEvAddInsertedDataToBuffer
     : public NActors::TEventLocal<TEvAddInsertedDataToBuffer, NColumnShard::TEvPrivate::EEv::EvWritingPortionsAddDataToBuffer> {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
-    YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow::RecordBatch>, RecordBatch);
+    YDB_READONLY_DEF(NArrow::TContainerWithIndexes<arrow20::RecordBatch>, RecordBatch);
     YDB_READONLY_DEF(std::shared_ptr<NOlap::TWritingContext>, Context);
 
 public:
     explicit TEvAddInsertedDataToBuffer(const std::shared_ptr<NEvWrite::TWriteData>& writeData,
-        const NArrow::TContainerWithIndexes<arrow::RecordBatch>& recordBatch, const std::shared_ptr<NOlap::TWritingContext>& context)
+        const NArrow::TContainerWithIndexes<arrow20::RecordBatch>& recordBatch, const std::shared_ptr<NOlap::TWritingContext>& context)
         : WriteData(writeData)
         , RecordBatch(recordBatch)
         , Context(context) {

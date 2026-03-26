@@ -62,7 +62,7 @@ struct TMockConnectorReadSplitsSettings {
     std::vector<TColumn> Columns;
     ui64 NumberReadSplits;
     bool ValidateReadSplitsArgs = true;
-    std::function<std::shared_ptr<arrow::RecordBatch>()> ResultFactory;
+    std::function<std::shared_ptr<arrow20::RecordBatch>()> ResultFactory;
 };
 
 class TStreamingTestFixture : public NUnitTest::TBaseFixture {
@@ -3063,8 +3063,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .NumberReadSplits = 2,
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        MakeArray<arrow20::BinaryBuilder>("fqdn", fqdnColumn, arrow20::binary()),
+                        MakeArray<arrow20::BinaryBuilder>("payload", payloadColumn, arrow20::binary())
                     );
                 }
             });
@@ -3158,7 +3158,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .Columns = columns,
                 .NumberReadSplits = 4, // Read from ydb source is not deduplicated because spilling is disabled for streaming queries
                 .ResultFactory = [&]() {
-                    return MakeRecordBatch(MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()));
+                    return MakeRecordBatch(MakeArray<arrow20::BinaryBuilder>("fqdn", fqdnColumn, arrow20::binary()));
                 }
             });
         }
@@ -3265,8 +3265,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                             : std::vector<std::string>{"P4", "P5", "P6"};
 
                         return MakeRecordBatch(
-                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                            MakeArray<arrow20::BinaryBuilder>("fqdn", fqdnColumn, arrow20::binary()),
+                            MakeArray<arrow20::BinaryBuilder>("payload", payloadColumn, arrow20::binary())
                         );
                     }
                 });
@@ -4198,8 +4198,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .ValidateReadSplitsArgs = false,
                 .ResultFactory = [&]() {
                     return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        MakeArray<arrow20::BinaryBuilder>("fqdn", fqdnColumn, arrow20::binary()),
+                        MakeArray<arrow20::BinaryBuilder>("payload", payloadColumn, arrow20::binary())
                     );
                 }
             });

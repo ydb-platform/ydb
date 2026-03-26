@@ -179,7 +179,7 @@ public:
 
 class TSchemaColumnResolver: public IColumnResolver {
 private:
-    std::shared_ptr<arrow::Schema> Schema;
+    std::shared_ptr<arrow20::Schema> Schema;
 
 public:
     virtual TString GetColumnName(ui32 id, bool required = true) const override {
@@ -204,7 +204,7 @@ public:
         AFL_VERIFY(false);
         return TColumnInfo::Generated(0, "");
     }
-    TSchemaColumnResolver(const std::shared_ptr<arrow::Schema>& schema)
+    TSchemaColumnResolver(const std::shared_ptr<arrow20::Schema>& schema)
         : Schema(schema)
     {
     }

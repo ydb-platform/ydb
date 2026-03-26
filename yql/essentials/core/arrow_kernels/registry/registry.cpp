@@ -58,7 +58,7 @@ public:
         return Topology_->Items.size() - 3;
     }
 
-    const arrow::compute::ScalarKernel* GetKernel(ui32 index) const {
+    const arrow20::compute::ScalarKernel* GetKernel(ui32 index) const {
         MKQL_ENSURE(index < Topology_->Items.size() - 3, "Bad kernel index");
         return &Topology_->Items[index].Node->GetArrowKernel();
     }
@@ -76,16 +76,16 @@ private:
 };
 } // namespace
 
-std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> LoadKernels(const TString& serialized,
+std::vector<std::shared_ptr<const arrow20::compute::ScalarKernel>> LoadKernels(const TString& serialized,
                                                                              const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
                                                                              const NKikimr::NMiniKQL::TComputationNodeFactory& nodeFactory,
                                                                              TLangVersion langver) {
     auto loader = std::make_shared<TLoader>();
     loader->Init(serialized, functionRegistry, nodeFactory, langver);
-    std::vector<std::shared_ptr<const arrow::compute::ScalarKernel>> ret(loader->GetKernelsCount());
-    auto deleter = [loader](const arrow::compute::ScalarKernel*) {};
+    std::vector<std::shared_ptr<const arrow20::compute::ScalarKernel>> ret(loader->GetKernelsCount());
+    auto deleter = [loader](const arrow20::compute::ScalarKernel*) {};
     for (ui32 i = 0; i < ret.size(); ++i) {
-        ret[i] = std::shared_ptr<const arrow::compute::ScalarKernel>(loader->GetKernel(ret.size() - 1 - i), deleter);
+        ret[i] = std::shared_ptr<const arrow20::compute::ScalarKernel>(loader->GetKernel(ret.size() - 1 - i), deleter);
     }
 
     return ret;

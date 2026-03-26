@@ -23,7 +23,7 @@ public:
         : Data(data) {
     }
 
-    TSimpleRow Build(const std::shared_ptr<arrow::Schema>& schema) const;
+    TSimpleRow Build(const std::shared_ptr<arrow20::Schema>& schema) const;
     ui64 GetMemorySize() const {
         return Data.capacity();
     }
@@ -38,7 +38,7 @@ class TSortableBatchPosition;
 class TSimpleRow {
 private:
     YDB_READONLY_DEF(TString, Data);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
+    YDB_READONLY_DEF(std::shared_ptr<arrow20::Schema>, Schema);
 
 public:
     TSimpleRowContent GetContent() const {
@@ -55,15 +55,15 @@ public:
 
     NMerger::TSortableBatchPosition BuildSortablePosition(const bool reverse = false) const;
 
-    TSimpleRow(const std::shared_ptr<arrow::RecordBatch>& batch, const ui32 recordIndex) {
+    TSimpleRow(const std::shared_ptr<arrow20::RecordBatch>& batch, const ui32 recordIndex) {
         AFL_VERIFY(batch);
         Schema = batch->schema();
         Data = TSimpleRowViewV0::BuildString(batch, recordIndex);
         AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));
     }
 
-    std::shared_ptr<arrow::RecordBatch> ToBatch() const;
-    [[nodiscard]] TConclusionStatus AddToBuilders(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
+    std::shared_ptr<arrow20::RecordBatch> ToBatch() const;
+    [[nodiscard]] TConclusionStatus AddToBuilders(const std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders) const {
         return TSimpleRowViewV0(Data).AddToBuilders(builders, Schema);
     }
 
@@ -78,7 +78,7 @@ public:
         return GetValue<T>(fIndex);
     }
 
-    std::shared_ptr<arrow::Scalar> GetScalar(const ui32 columnIndex) const {
+    std::shared_ptr<arrow20::Scalar> GetScalar(const ui32 columnIndex) const {
         return TSimpleRowViewV0(Data).GetScalar(columnIndex, Schema).DetachResult();
     }
 
@@ -101,7 +101,7 @@ public:
         return *result;
     }
 
-    TSimpleRow(const TString& data, const std::shared_ptr<arrow::Schema>& schema)
+    TSimpleRow(const TString& data, const std::shared_ptr<arrow20::Schema>& schema)
         : Data(data)
         , Schema(schema) {
         AFL_VERIFY_DEBUG(TSimpleRowViewV0(Data).DoValidate(Schema));

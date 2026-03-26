@@ -1,24 +1,24 @@
 #include "ut_common.h"
 
-namespace cp = ::arrow::compute;
+namespace cp = ::arrow20::compute;
 using cp::internal::applicator::ScalarBinary;
 using cp::internal::applicator::ScalarUnary;
 
 
 namespace NKikimr::NKernels {
 
-const std::vector<std::shared_ptr<arrow::DataType>> nonPrimitiveTypes = {
-    arrow::list(arrow::utf8()),
-    arrow::list(arrow::int64()),
-    arrow::large_list(arrow::large_utf8()),
-    arrow::fixed_size_list(arrow::utf8(), 3),
-    arrow::fixed_size_list(arrow::int64(), 4),
-    arrow::dictionary(arrow::int32(), arrow::utf8())
+const std::vector<std::shared_ptr<arrow20::DataType>> nonPrimitiveTypes = {
+    arrow20::list(arrow20::utf8()),
+    arrow20::list(arrow20::int64()),
+    arrow20::large_list(arrow20::large_utf8()),
+    arrow20::fixed_size_list(arrow20::utf8(), 3),
+    arrow20::fixed_size_list(arrow20::int64(), 4),
+    arrow20::dictionary(arrow20::int32(), arrow20::utf8())
 };
 
-const std::vector<std::shared_ptr<arrow::DataType>> decimalTypes = {
-    arrow::decimal128(12, 2),
-    arrow::decimal256(12, 2)
+const std::vector<std::shared_ptr<arrow20::DataType>> decimalTypes = {
+    arrow20::decimal128(12, 2),
+    arrow20::decimal256(12, 2)
 };
 
 
@@ -41,7 +41,7 @@ std::shared_ptr<TArray<TType>> GenerateTestArray(int64_t sz) {
     std::srand(std::time(nullptr));
     TBuilder<TType> builder;
     std::shared_ptr<TArray<TType>> res;
-    arrow::Status st;
+    arrow20::Status st;
     UNIT_ASSERT(builder.Reserve(sz).ok());
     for (int64_t i = 0; i < sz; ++i) {
         UNIT_ASSERT(builder.Append(MakeRandomNum<typename TType::c_type>()).ok());
@@ -50,23 +50,23 @@ std::shared_ptr<TArray<TType>> GenerateTestArray(int64_t sz) {
     return res;
 }
 
-void TestWrongTypeUnary(const std::string& func_name, std::shared_ptr<arrow::DataType> type, cp::ExecContext* exc = nullptr) {
-    auto res = arrow::compute::CallFunction(func_name, {arrow::MakeArrayOfNull(type, 1).ValueOrDie()}, exc);
+void TestWrongTypeUnary(const std::string& func_name, std::shared_ptr<arrow20::DataType> type, cp::ExecContext* exc = nullptr) {
+    auto res = arrow20::compute::CallFunction(func_name, {arrow20::MakeArrayOfNull(type, 1).ValueOrDie()}, exc);
     UNIT_ASSERT_EQUAL(res.ok(), false);
 }
 
-void TestWrongTypeBinary(const std::string& func_name, std::shared_ptr<arrow::DataType> type0,
-                                                       std::shared_ptr<arrow::DataType> type1,
+void TestWrongTypeBinary(const std::string& func_name, std::shared_ptr<arrow20::DataType> type0,
+                                                       std::shared_ptr<arrow20::DataType> type1,
                                                        cp::ExecContext* exc = nullptr) {
-    auto res = arrow::compute::CallFunction(func_name, {arrow::MakeArrayOfNull(type0, 1).ValueOrDie(),
-                                                        arrow::MakeArrayOfNull(type1, 1).ValueOrDie()},
+    auto res = arrow20::compute::CallFunction(func_name, {arrow20::MakeArrayOfNull(type0, 1).ValueOrDie(),
+                                                        arrow20::MakeArrayOfNull(type1, 1).ValueOrDie()},
                                                         exc);
     UNIT_ASSERT_EQUAL(res.ok(), false);
 }
 
-std::shared_ptr<arrow::Array> MakeBooleanArray(const std::vector<bool>& arr) {
-    arrow::BooleanBuilder builder;
-    std::shared_ptr<arrow::BooleanArray> res;
+std::shared_ptr<arrow20::Array> MakeBooleanArray(const std::vector<bool>& arr) {
+    arrow20::BooleanBuilder builder;
+    std::shared_ptr<arrow20::BooleanArray> res;
     UNIT_ASSERT(builder.Reserve(arr.size()).ok());
     for (size_t i = 0; i < arr.size(); ++i) {
         UNIT_ASSERT(builder.Append(arr[i]).ok());
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(ArrowAbsTest) {
         for (auto type : cp::internal::SignedIntTypes()) {
             auto arg0 = NumVecToArray(type, {-32, -12, 54});
             auto expected = NumVecToArray(type, {32, 12, 54});
-            auto res = arrow::compute::CallFunction("abs", {arg0});
+            auto res = arrow20::compute::CallFunction("abs", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(ArrowAbsTest) {
         for (auto type : cp::internal::UnsignedIntTypes()) {
             auto arg0 = NumVecToArray(type, {32, 12, 54});
             auto expected = NumVecToArray(type, {32, 12, 54});
-            auto res = arrow::compute::CallFunction("abs", {arg0});
+            auto res = arrow20::compute::CallFunction("abs", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -98,16 +98,16 @@ Y_UNIT_TEST_SUITE(ArrowAbsTest) {
         for (auto type : cp::internal::FloatingPointTypes()) {
             auto arg0 = NumVecToArray(type, {-32.4, -12.3, 54.7});
             auto expected = NumVecToArray(type, {32.4, 12.3, 54.7});
-            auto res = arrow::compute::CallFunction("abs", {arg0});
+            auto res = arrow20::compute::CallFunction("abs", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
 
     Y_UNIT_TEST(AbsNull) {
         for (auto type : cp::internal::IntTypes()) {
-            auto arg0 = arrow::MakeArrayOfNull(type, 3).ValueOrDie();
-            auto expected = arrow::MakeArrayOfNull(type, 3).ValueOrDie();
-            auto res = arrow::compute::CallFunction("abs", {arg0});
+            auto arg0 = arrow20::MakeArrayOfNull(type, 3).ValueOrDie();
+            auto expected = arrow20::MakeArrayOfNull(type, 3).ValueOrDie();
+            auto res = arrow20::compute::CallFunction("abs", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(ArrowNegateTest) {
         for (auto type : cp::internal::SignedIntTypes()) {
             auto arg0 = NumVecToArray(type, {-32, -12, 54});
             auto expected = NumVecToArray(type, {32, 12, -54});
-            auto res = arrow::compute::CallFunction("negate", {arg0});
+            auto res = arrow20::compute::CallFunction("negate", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(ArrowNegateTest) {
         for (auto type : cp::internal::FloatingPointTypes()) {
             auto arg0 = NumVecToArray(type, {-32.4, -12.3, 54.7});
             auto expected = NumVecToArray(type, {32.4, 12.3, -54.7});
-            auto res = arrow::compute::CallFunction("negate", {arg0});
+            auto res = arrow20::compute::CallFunction("negate", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -164,9 +164,9 @@ Y_UNIT_TEST_SUITE(ArrowNegateTest) {
 
     Y_UNIT_TEST(NegateNull) {
         for (auto type : cp::internal::SignedIntTypes()) {
-            auto arg0 = arrow::MakeArrayOfNull(type, 3).ValueOrDie();
-            auto expected = arrow::MakeArrayOfNull(type, 3).ValueOrDie();
-            auto res = arrow::compute::CallFunction("negate", {arg0});
+            auto arg0 = arrow20::MakeArrayOfNull(type, 3).ValueOrDie();
+            auto expected = arrow20::MakeArrayOfNull(type, 3).ValueOrDie();
+            auto res = arrow20::compute::CallFunction("negate", {arg0});
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -180,17 +180,17 @@ Y_UNIT_TEST_SUITE(GcdTest) {
             auto arg0 = NumVecToArray(type, {32, 12});
             auto arg1 = NumVecToArray(type, {24, 10});
             auto expected = NumVecToArray(type, {8, 2});
-            auto res = arrow::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
 
     Y_UNIT_TEST(GcdNull) {
         for (auto type : cp::internal::IntTypes()) {
-            auto arg0 = arrow::MakeArrayOfNull(type, 2).ValueOrDie();
+            auto arg0 = arrow20::MakeArrayOfNull(type, 2).ValueOrDie();
             auto arg1 = NumVecToArray(type, {24, 10});
-            auto expected = arrow::MakeArrayOfNull(type, 2).ValueOrDie();
-            auto res = arrow::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
+            auto expected = arrow20::MakeArrayOfNull(type, 2).ValueOrDie();
+            auto res = arrow20::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(GcdTest) {
             for (auto type1 : cp::internal::IntTypes()) {
                 auto arg0 = NumVecToArray(type0, {32, 12});
                 auto arg1 = NumVecToArray(type1, {16, 10});
-                auto res = arrow::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
+                auto res = arrow20::compute::CallFunction(TGreatestCommonDivisor::Name, {arg0, arg1}, GetCustomExecContext());
                 auto expected = NumVecToArray(res->type(), {16, 2});
                 UNIT_ASSERT(res->Equals(expected));
             }
@@ -241,17 +241,17 @@ Y_UNIT_TEST_SUITE(LcmTest) {
             auto arg0 = NumVecToArray(type, {6, 12});
             auto arg1 = NumVecToArray(type, {3, 10});
             auto expected = NumVecToArray(type, {6, 60});
-            auto res = arrow::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
 
     Y_UNIT_TEST(LcmNull) {
         for (auto type : cp::internal::IntTypes()) {
-            auto arg0 = arrow::MakeArrayOfNull(type, 2).ValueOrDie();
+            auto arg0 = arrow20::MakeArrayOfNull(type, 2).ValueOrDie();
             auto arg1 = NumVecToArray(type, {24, 10});
-            auto expected = arrow::MakeArrayOfNull(type, 2).ValueOrDie();
-            auto res = arrow::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
+            auto expected = arrow20::MakeArrayOfNull(type, 2).ValueOrDie();
+            auto res = arrow20::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(LcmTest) {
             for (auto type1 : cp::internal::IntTypes()) {
                 auto arg0 = NumVecToArray(type0, {6, 12});
                 auto arg1 = NumVecToArray(type1, {3, 10});
-                auto res = arrow::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
+                auto res = arrow20::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
                 auto expected = NumVecToArray(res->type(), {6, 60});
                 UNIT_ASSERT(res->Equals(expected));
             }
@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(LcmTest) {
         for (auto type : cp::internal::IntTypes()) {
             auto arg0 = NumVecToArray(type, {0, 16});
             auto arg1 = NumVecToArray(type, {0, 5});
-            auto res = arrow::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TLeastCommonMultiple::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(!res.ok());
         }
     }
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(ModuloTest) {
             auto arg0 = NumVecToArray(type, {10, 16});
             auto arg1 = NumVecToArray(type, {3, 5});
             auto expected = NumVecToArray(type, {1, 1});
-            auto res = arrow::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(ModuloTest) {
             auto arg0 = NumVecToArray(type, {10.2234, 16.2347});
             auto arg1 = NumVecToArray(type, {3.22343, 5.4234});
             auto expected = NumVecToArray(type, {1, 1});
-            auto res = arrow::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(ModuloTest) {
         for (auto type : cp::internal::NumericTypes()) {
             auto arg0 = NumVecToArray(type, {10.2234, 16.2347});
             auto arg1 = NumVecToArray(type, {0, 5.4234});
-            auto res = arrow::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TModulo::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(!res.ok());
         }
     }
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(ModuloOrZeroTest) {
             auto arg0 = NumVecToArray(type, {10, 16});
             auto arg1 = NumVecToArray(type, {6, 0});
             auto expected = NumVecToArray(type, {4, 0});
-            auto res = arrow::compute::CallFunction(TModuloOrZero::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TModuloOrZero::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(ModuloOrZeroTest) {
             auto arg0 = NumVecToArray(type, {10.2234, 16.2347});
             auto arg1 = NumVecToArray(type, {0.23, 5.4234});
             auto expected = NumVecToArray(type, {0, 1});
-            auto res = arrow::compute::CallFunction(TModuloOrZero::Name, {arg0, arg1}, GetCustomExecContext());
+            auto res = arrow20::compute::CallFunction(TModuloOrZero::Name, {arg0, arg1}, GetCustomExecContext());
             UNIT_ASSERT(res->Equals(expected));
         }
     }

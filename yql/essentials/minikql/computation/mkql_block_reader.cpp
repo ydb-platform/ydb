@@ -314,15 +314,15 @@ struct TConverterTraits {
             return std::make_unique<TFixedSize<ui64, true>>();
         } else {
             if (desc.Typelen == -1) {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Text>>();
+                auto ret = std::make_unique<TStrings<arrow20::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Text>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             } else if (desc.Typelen == -2) {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::CString>>();
+                auto ret = std::make_unique<TStrings<arrow20::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::CString>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             } else {
-                auto ret = std::make_unique<TStrings<arrow::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Fixed>>();
+                auto ret = std::make_unique<TStrings<arrow20::BinaryType, true, NUdf::EDataSlot::String, NUdf::EPgStringType::Fixed>>();
                 ret->SetPgBuilder(pgBuilder, desc.TypeId, desc.Typelen);
                 return ret;
             }

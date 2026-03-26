@@ -32,32 +32,32 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-arrow::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
-                              const std::vector<arrow::Datum>& argDatums, arrow::compute::ExecContext& execContext) {
+arrow20::Datum ExecuteOneKernel(const IArrowKernelComputationNode* kernelNode,
+                              const std::vector<arrow20::Datum>& argDatums, arrow20::compute::ExecContext& execContext) {
     const auto& kernel = kernelNode->GetArrowKernel();
-    arrow::compute::KernelContext kernelContext(&execContext);
-    std::unique_ptr<arrow::compute::KernelState> state;
+    arrow20::compute::KernelContext kernelContext(&execContext);
+    std::unique_ptr<arrow20::compute::KernelState> state;
     if (kernel.init) {
         state = ARROW_RESULT(kernel.init(&kernelContext, {&kernel, kernelNode->GetArgsDesc(), nullptr}));
         kernelContext.SetState(state.get());
     }
 
-    auto executor = arrow::compute::detail::KernelExecutor::MakeScalar();
+    auto executor = arrow20::compute::detail::KernelExecutor::MakeScalar();
     ARROW_OK(executor->Init(&kernelContext, {&kernel, kernelNode->GetArgsDesc(), nullptr}));
-    auto listener = std::make_shared<arrow::compute::detail::DatumAccumulator>();
+    auto listener = std::make_shared<arrow20::compute::detail::DatumAccumulator>();
     ARROW_OK(executor->Execute(argDatums, listener.get()));
     return executor->WrapResults(argDatums, listener->values());
 }
 
-void ExecuteAllKernels(std::vector<arrow::Datum>& datums, const TArrowKernelsTopology* topology, arrow::compute::ExecContext& execContext) {
+void ExecuteAllKernels(std::vector<arrow20::Datum>& datums, const TArrowKernelsTopology* topology, arrow20::compute::ExecContext& execContext) {
     for (ui32 i = 0; i < topology->Items.size(); ++i) {
-        std::vector<arrow::Datum> argDatums;
+        std::vector<arrow20::Datum> argDatums;
         argDatums.reserve(topology->Items[i].Inputs.size());
         for (auto j : topology->Items[i].Inputs) {
             argDatums.emplace_back(datums[j]);
         }
 
-        arrow::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
+        arrow20::Datum output = ExecuteOneKernel(topology->Items[i].Node.get(), argDatums, execContext);
         datums[i + topology->InputArgsCount] = output;
     }
 }
@@ -400,7 +400,7 @@ Y_UNIT_TEST(TestScalar) {
     const auto graph = setup.BuildGraph(dataAfterBlocks);
     const auto value = graph->GetValue();
     UNIT_ASSERT(value.HasValue() && value.IsBoxed());
-    UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow::UInt64Scalar>().value, testValue);
+    UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(value).GetDatum().scalar_as<arrow20::UInt64Scalar>().value, testValue);
 }
 
 template <auto Type, typename ArrowType>
@@ -415,10 +415,10 @@ void TestContainerForStringType() {
 }
 
 Y_UNIT_TEST(TestStringTypesHasAppropriateContainer) {
-    TestContainerForStringType<NUdf::EDataSlot::Utf8, arrow::StringScalar>();
-    TestContainerForStringType<NUdf::EDataSlot::Json, arrow::StringScalar>();
-    TestContainerForStringType<NUdf::EDataSlot::Yson, arrow::BinaryScalar>();
-    TestContainerForStringType<NUdf::EDataSlot::String, arrow::BinaryScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Utf8, arrow20::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Json, arrow20::StringScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::Yson, arrow20::BinaryScalar>();
+    TestContainerForStringType<NUdf::EDataSlot::String, arrow20::BinaryScalar>();
 }
 
 Y_UNIT_TEST_LLVM(TestReplicateScalar) {
@@ -798,12 +798,12 @@ Y_UNIT_TEST(Simple) {
     const std::vector<ui32> expectedInputs2{{3, 1}};
     UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Inputs, expectedInputs2);
 
-    arrow::compute::ExecContext execContext;
+    arrow20::compute::ExecContext execContext;
     const size_t blockSize = 100000;
-    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    std::vector<arrow20::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt8Builder builder1(execContext.memory_pool());
-        arrow::UInt64Builder builder2(execContext.memory_pool()), builder3(execContext.memory_pool());
+        arrow20::UInt8Builder builder1(execContext.memory_pool());
+        arrow20::UInt64Builder builder2(execContext.memory_pool()), builder3(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         ARROW_OK(builder3.Reserve(blockSize));
@@ -813,11 +813,11 @@ Y_UNIT_TEST(Simple) {
             builder3.UnsafeAppend(3 * i);
         }
 
-        std::shared_ptr<arrow::ArrayData> data1;
+        std::shared_ptr<arrow20::ArrayData> data1;
         ARROW_OK(builder1.FinishInternal(&data1));
-        std::shared_ptr<arrow::ArrayData> data2;
+        std::shared_ptr<arrow20::ArrayData> data2;
         ARROW_OK(builder2.FinishInternal(&data2));
-        std::shared_ptr<arrow::ArrayData> data3;
+        std::shared_ptr<arrow20::ArrayData> data3;
         ARROW_OK(builder3.FinishInternal(&data3));
         datums[0] = data1;
         datums[1] = data2;
@@ -856,11 +856,11 @@ Y_UNIT_TEST(WithScalars) {
     const std::vector<ui32> expectedInputs2{{2, 0, 1}};
     UNIT_ASSERT_VALUES_EQUAL(topology->Items[1].Inputs, expectedInputs2);
 
-    arrow::compute::ExecContext execContext;
+    arrow20::compute::ExecContext execContext;
     const size_t blockSize = 100000;
-    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    std::vector<arrow20::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow20::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -868,9 +868,9 @@ Y_UNIT_TEST(WithScalars) {
             builder2.UnsafeAppend(3 * i);
         }
 
-        std::shared_ptr<arrow::ArrayData> data1;
+        std::shared_ptr<arrow20::ArrayData> data1;
         ARROW_OK(builder1.FinishInternal(&data1));
-        std::shared_ptr<arrow::ArrayData> data2;
+        std::shared_ptr<arrow20::ArrayData> data2;
         ARROW_OK(builder2.FinishInternal(&data2));
         datums[0] = data1;
         datums[1] = data2;
@@ -910,17 +910,17 @@ Y_UNIT_TEST(Udf) {
     const std::vector<ui32> expectedInputs1{0};
     UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
 
-    arrow::compute::ExecContext execContext;
+    arrow20::compute::ExecContext execContext;
     const size_t blockSize = 10000;
-    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    std::vector<arrow20::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::Int32Builder builder1(execContext.memory_pool());
+        arrow20::Int32Builder builder1(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
             builder1.UnsafeAppend(i);
         }
 
-        std::shared_ptr<arrow::ArrayData> data1;
+        std::shared_ptr<arrow20::ArrayData> data1;
         ARROW_OK(builder1.FinishInternal(&data1));
         datums[0] = data1;
     }
@@ -955,11 +955,11 @@ Y_UNIT_TEST(ScalarApply) {
     const std::vector<ui32> expectedInputs1{{0, 1}};
     UNIT_ASSERT_VALUES_EQUAL(topology->Items[0].Inputs, expectedInputs1);
 
-    arrow::compute::ExecContext execContext;
+    arrow20::compute::ExecContext execContext;
     const size_t blockSize = 100000;
-    std::vector<arrow::Datum> datums(topology->InputArgsCount + topology->Items.size());
+    std::vector<arrow20::Datum> datums(topology->InputArgsCount + topology->Items.size());
     {
-        arrow::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
+        arrow20::UInt64Builder builder1(execContext.memory_pool()), builder2(execContext.memory_pool());
         ARROW_OK(builder1.Reserve(blockSize));
         ARROW_OK(builder2.Reserve(blockSize));
         for (size_t i = 0; i < blockSize; ++i) {
@@ -967,9 +967,9 @@ Y_UNIT_TEST(ScalarApply) {
             builder2.UnsafeAppend(2 * i);
         }
 
-        std::shared_ptr<arrow::ArrayData> data1;
+        std::shared_ptr<arrow20::ArrayData> data1;
         ARROW_OK(builder1.FinishInternal(&data1));
-        std::shared_ptr<arrow::ArrayData> data2;
+        std::shared_ptr<arrow20::ArrayData> data2;
         ARROW_OK(builder2.FinishInternal(&data2));
         datums[0] = data1;
         datums[1] = data2;

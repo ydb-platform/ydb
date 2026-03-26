@@ -99,7 +99,7 @@ std::vector<std::string> TIndexInfo::GetColumnSTLNames(const bool withSpecial) c
 
 NArrow::TSchemaLiteView TIndexInfo::ArrowSchema() const {
     const auto& schema = ArrowSchemaWithSpecials();
-    return std::span<const std::shared_ptr<arrow::Field>>(schema->fields().begin(), schema->fields().end() - SpecialColumnsCount);
+    return std::span<const std::shared_ptr<arrow20::Field>>(schema->fields().begin(), schema->fields().end() - SpecialColumnsCount);
 }
 
 const std::shared_ptr<NArrow::TSchemaLite>& TIndexInfo::ArrowSchemaWithSpecials() const {
@@ -164,7 +164,7 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const ui32 id) const {
     }
 }
 
-std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 columnId) const {
+std::shared_ptr<arrow20::Field> TIndexInfo::GetColumnFieldOptional(const ui32 columnId) const {
     const std::optional<ui32> index = GetColumnIndexOptional(columnId);
     if (!index) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "incorrect_column_id");
@@ -173,24 +173,24 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
 }
 
-std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
+std::shared_ptr<arrow20::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
     AFL_VERIFY(!!result)("column_id", columnId);
     return result;
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
+std::shared_ptr<arrow20::Schema> TIndexInfo::GetColumnsSchema(const std::set<ui32>& columnIds) const {
     AFL_VERIFY(columnIds.size());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     for (auto&& i : columnIds) {
         fields.emplace_back(GetColumnFieldVerified(i));
     }
-    return std::make_shared<arrow::Schema>(fields);
+    return std::make_shared<arrow20::Schema>(fields);
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
+std::shared_ptr<arrow20::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIdxs) const {
     AFL_VERIFY(columnIdxs.size());
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     std::optional<ui32> predColumnIdx;
     for (auto&& i : columnIdxs) {
         if (predColumnIdx) {
@@ -199,10 +199,10 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnsSchemaByOrderedIndexes(cons
         predColumnIdx = i;
         fields.emplace_back(ArrowSchemaWithSpecials()->GetFieldByIndexVerified(i));
     }
-    return std::make_shared<arrow::Schema>(fields);
+    return std::make_shared<arrow20::Schema>(fields);
 }
 
-std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
+std::shared_ptr<arrow20::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) const {
     return GetColumnsSchema({ columnId });
 }
 
@@ -364,9 +364,9 @@ std::optional<TIndexInfo> TIndexInfo::BuildFromProto(const TSchemaDiffView& diff
     return TIndexInfo(prevSchema, diff, operators, cache);
 }
 
-std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
+std::vector<std::shared_ptr<arrow20::Field>> TIndexInfo::MakeArrowFields(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     for (const ui32 id : ids) {
         AFL_VERIFY(!TIndexInfo::IsSpecialColumn(id));
         auto it = columns.find(id);
@@ -378,9 +378,9 @@ std::vector<std::shared_ptr<arrow::Field>> TIndexInfo::MakeArrowFields(
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(
+std::shared_ptr<arrow20::Schema> MakeArrowSchema(
     const NTable::TScheme::TTableSchema::TColumns& columns, const std::vector<ui32>& ids, const std::shared_ptr<TSchemaObjectsCache>& cache) {
-    return std::make_shared<arrow::Schema>(TIndexInfo::MakeArrowFields(columns, ids, cache));
+    return std::make_shared<arrow20::Schema>(TIndexInfo::MakeArrowFields(columns, ids, cache));
 }
 
 void TIndexInfo::InitializeCaches(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns,
@@ -441,12 +441,12 @@ const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& TIndexIn
     return CompactionPlannerConstructor;
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const std::string& colName) const {
+std::shared_ptr<arrow20::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const std::string& colName) const {
     const ui32 columnId = GetColumnIdVerified(colName);
     return GetColumnExternalDefaultValueVerified(columnId);
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const ui32 columnId) const {
+std::shared_ptr<arrow20::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified(const ui32 columnId) const {
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
@@ -540,7 +540,7 @@ std::shared_ptr<NKikimr::NOlap::TColumnFeatures> TIndexInfo::BuildDefaultColumnF
     }
 }
 
-std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const {
+std::shared_ptr<arrow20::Scalar> TIndexInfo::GetColumnExternalDefaultValueByIndexVerified(const ui32 colIndex) const {
     AFL_VERIFY(colIndex < ColumnFeatures.size())("index", colIndex)("size", ColumnFeatures.size());
     return ColumnFeatures[colIndex]->GetDefaultValue().GetValue();
 }
@@ -550,7 +550,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
     : PresetId(original.PresetId)
 {
     {
-        std::vector<std::shared_ptr<arrow::Field>> fields;
+        std::vector<std::shared_ptr<arrow20::Field>> fields;
         const auto addFromOriginal = [&](const ui32 index) {
             AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size());
             const ui32 originalColId = original.SchemaColumnIdsWithSpecials[index];
@@ -678,7 +678,7 @@ TIndexInfo TIndexInfo::BuildDefault(const ui64 presetId) {
     return result;
 }
 
-TConclusion<std::shared_ptr<arrow::Array>> TIndexInfo::BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
+TConclusion<std::shared_ptr<arrow20::Array>> TIndexInfo::BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const {
     auto defaultValue = GetColumnExternalDefaultValueByIndexVerified(fieldIndex);
     auto f = ArrowSchemaWithSpecials()->GetFieldByIndexVerified(fieldIndex);
     if (!defaultValue && !IsNullableVerifiedByIndex(fieldIndex)) {

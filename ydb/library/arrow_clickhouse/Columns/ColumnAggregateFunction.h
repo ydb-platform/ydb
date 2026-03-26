@@ -13,7 +13,7 @@
 namespace CH
 {
 
-class DataTypeAggregateFunction final : public arrow::ExtensionType
+class DataTypeAggregateFunction final : public arrow20::ExtensionType
 {
 public:
     static constexpr const char * FAMILY_NAME = "aggregate_function";
@@ -21,7 +21,7 @@ public:
     DataTypeAggregateFunction(const AggregateFunctionPtr & function_,
                               const DataTypes & argument_types_,
                               const Array & parameters_)
-        : arrow::ExtensionType(arrow::uint64())
+        : arrow20::ExtensionType(arrow20::uint64())
         , function(function_)
         , argument_types(argument_types_)
         , parameters(parameters_)
@@ -29,14 +29,14 @@ public:
 
     std::string extension_name() const override { return FAMILY_NAME; }
 
-    bool ExtensionEquals(const arrow::ExtensionType& other) const override
+    bool ExtensionEquals(const arrow20::ExtensionType& other) const override
     {
         return extension_name() != other.extension_name(); // TODO
     }
 
-    std::shared_ptr<arrow::Array> MakeArray(std::shared_ptr<arrow::ArrayData> data) const override;
+    std::shared_ptr<arrow20::Array> MakeArray(std::shared_ptr<arrow20::ArrayData> data) const override;
 
-    virtual arrow::Result<std::shared_ptr<arrow::DataType>> Deserialize(std::shared_ptr<arrow::DataType> /*storage_type*/,
+    virtual arrow20::Result<std::shared_ptr<arrow20::DataType>> Deserialize(std::shared_ptr<arrow20::DataType> /*storage_type*/,
                                                                         const std::string& /*serialized_data*/) const override
     {
         return std::make_shared<DataTypeAggregateFunction>(AggregateFunctionPtr{}, DataTypes{}, Array{}); // TODO
@@ -76,7 +76,7 @@ private:
   *  specifying which individual values should be destroyed and which ones should not.
   * Clearly, this method would have a substantially non-zero price.
   */
-class ColumnAggregateFunction final : public arrow::ExtensionArray
+class ColumnAggregateFunction final : public arrow20::ExtensionArray
 {
 private:
 #if 0
@@ -95,53 +95,53 @@ private:
 
 public:
     ColumnAggregateFunction(const std::shared_ptr<DataTypeAggregateFunction> & data_type)
-        : arrow::ExtensionArray(data_type, *arrow::MakeArrayOfNull(arrow::uint64(), 0))
+        : arrow20::ExtensionArray(data_type, *arrow20::MakeArrayOfNull(arrow20::uint64(), 0))
         , func(data_type->getFunction())
     {}
 
-    explicit ColumnAggregateFunction(const std::shared_ptr<arrow::ArrayData>& data)
-        : arrow::ExtensionArray(data)
+    explicit ColumnAggregateFunction(const std::shared_ptr<arrow20::ArrayData>& data)
+        : arrow20::ExtensionArray(data)
         , func(std::static_pointer_cast<DataTypeAggregateFunction>(data->type)->getFunction())
     {}
 
     ~ColumnAggregateFunction() override;
 
-    const arrow::UInt64Array & getData() const { return static_cast<arrow::UInt64Array &>(*storage()); }
+    const arrow20::UInt64Array & getData() const { return static_cast<arrow20::UInt64Array &>(*storage()); }
     const AggregateDataPtr * rawData() const { return reinterpret_cast<const AggregateDataPtr *>(getData().raw_values()); }
 };
 
 
-class MutableColumnAggregateFunction final : public arrow::ArrayBuilder
+class MutableColumnAggregateFunction final : public arrow20::ArrayBuilder
 {
 public:
     MutableColumnAggregateFunction(const std::shared_ptr<DataTypeAggregateFunction> & data_type_,
-                                   arrow::MemoryPool* pool = arrow::default_memory_pool())
-        : arrow::ArrayBuilder(pool)
+                                   arrow20::MemoryPool* pool = arrow20::default_memory_pool())
+        : arrow20::ArrayBuilder(pool)
         , data_type(data_type_)
-        , builder(std::make_shared<arrow::UInt64Builder>(pool))
+        , builder(std::make_shared<arrow20::UInt64Builder>(pool))
     {}
 
-    std::shared_ptr<arrow::DataType> type() const override { return data_type; }
+    std::shared_ptr<arrow20::DataType> type() const override { return data_type; }
 
-    arrow::Status AppendNull() override { return arrow::Status(arrow::StatusCode::NotImplemented, __FUNCTION__); }
-    arrow::Status AppendNulls(int64_t) override { return arrow::Status(arrow::StatusCode::NotImplemented, __FUNCTION__); }
-    arrow::Status AppendEmptyValue() override { return arrow::Status(arrow::StatusCode::NotImplemented, __FUNCTION__); }
-    arrow::Status AppendEmptyValues(int64_t) override { return arrow::Status(arrow::StatusCode::NotImplemented, __FUNCTION__); }
+    arrow20::Status AppendNull() override { return arrow20::Status(arrow20::StatusCode::NotImplemented, __FUNCTION__); }
+    arrow20::Status AppendNulls(int64_t) override { return arrow20::Status(arrow20::StatusCode::NotImplemented, __FUNCTION__); }
+    arrow20::Status AppendEmptyValue() override { return arrow20::Status(arrow20::StatusCode::NotImplemented, __FUNCTION__); }
+    arrow20::Status AppendEmptyValues(int64_t) override { return arrow20::Status(arrow20::StatusCode::NotImplemented, __FUNCTION__); }
 
-    arrow::Status FinishInternal(std::shared_ptr<arrow::ArrayData>* out) override
+    arrow20::Status FinishInternal(std::shared_ptr<arrow20::ArrayData>* out) override
     {
         auto array = *builder->Finish();
         *out = array->data()->Copy();
         (*out)->type = data_type;
         // TODO: add arenas
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::UInt64Builder & getData() { return *builder; }
+    arrow20::UInt64Builder & getData() { return *builder; }
 
 private:
     std::shared_ptr<DataTypeAggregateFunction> data_type;
-    std::shared_ptr<arrow::UInt64Builder> builder;
+    std::shared_ptr<arrow20::UInt64Builder> builder;
 };
 
 }

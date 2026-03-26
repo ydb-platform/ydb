@@ -5,7 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace {
 
-std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBufferAndResize(size_t size, arrow::MemoryPool* pool) {
+std::unique_ptr<arrow20::ResizableBuffer> AllocateResizableBufferAndResize(size_t size, arrow20::MemoryPool* pool) {
     auto result = NYql::NUdf::AllocateResizableBuffer(size, pool);
     ARROW_OK(result->Resize(size));
     return result;
@@ -13,44 +13,44 @@ std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBufferAndResize(size_t 
 
 } // namespace
 template <typename T>
-arrow::compute::InputType GetPrimitiveInputArrowType(bool tz) {
-    return arrow::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow::ValueDescr::ANY);
+arrow20::compute::InputType GetPrimitiveInputArrowType(bool tz) {
+    return arrow20::compute::InputType(AddTzType(tz, GetPrimitiveDataType<T>()), arrow20::ValueDescr::ANY);
 }
 
 template <typename T>
-arrow::compute::OutputType GetPrimitiveOutputArrowType(bool tz) {
-    return arrow::compute::OutputType(AddTzType(tz, GetPrimitiveDataType<T>()));
+arrow20::compute::OutputType GetPrimitiveOutputArrowType(bool tz) {
+    return arrow20::compute::OutputType(AddTzType(tz, GetPrimitiveDataType<T>()));
 }
 
-template arrow::compute::InputType GetPrimitiveInputArrowType<bool>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<i8>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<ui8>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<i16>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<ui16>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<i32>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<ui32>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<i64>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<ui64>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<float>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<double>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<char*>(bool tz);
-template arrow::compute::InputType GetPrimitiveInputArrowType<NYql::NUdf::TUtf8>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<bool>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<i8>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<ui8>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<i16>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<ui16>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<i32>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<ui32>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<i64>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<ui64>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<float>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<double>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<char*>(bool tz);
+template arrow20::compute::InputType GetPrimitiveInputArrowType<NYql::NUdf::TUtf8>(bool tz);
 
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<bool>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<i8>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<ui8>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<i16>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<ui16>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<i32>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<ui32>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<i64>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<ui64>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<float>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<double>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<char*>(bool tz);
-template arrow::compute::OutputType GetPrimitiveOutputArrowType<NYql::NUdf::TUtf8>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<bool>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<i8>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<ui8>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<i16>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<ui16>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<i32>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<ui32>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<i64>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<ui64>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<float>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<double>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<char*>(bool tz);
+template arrow20::compute::OutputType GetPrimitiveOutputArrowType<NYql::NUdf::TUtf8>(bool tz);
 
-arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot) {
+arrow20::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot) {
     switch (slot) {
         case NUdf::EDataSlot::Bool:
             return GetPrimitiveInputArrowType<bool>();
@@ -113,7 +113,7 @@ arrow::compute::InputType GetPrimitiveInputArrowType(NUdf::EDataSlot slot) {
     }
 }
 
-arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot) {
+arrow20::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot) {
     switch (slot) {
         case NUdf::EDataSlot::Bool:
             return GetPrimitiveOutputArrowType<bool>();
@@ -176,32 +176,32 @@ arrow::compute::OutputType GetPrimitiveOutputArrowType(NUdf::EDataSlot slot) {
     }
 }
 
-std::shared_ptr<arrow::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow::DataType>& type) {
+std::shared_ptr<arrow20::DataType> AddTzType(bool addTz, const std::shared_ptr<arrow20::DataType>& type) {
     if (!addTz) {
         return type;
     }
 
-    std::vector<std::shared_ptr<arrow::Field>> fields{
-        std::make_shared<arrow::Field>("datetime", type, false),
-        std::make_shared<arrow::Field>("timezoneId", arrow::uint16(), false)};
+    std::vector<std::shared_ptr<arrow20::Field>> fields{
+        std::make_shared<arrow20::Field>("datetime", type, false),
+        std::make_shared<arrow20::Field>("timezoneId", arrow20::uint16(), false)};
 
-    return std::make_shared<arrow::StructType>(fields);
+    return std::make_shared<arrow20::StructType>(fields);
 }
 
-std::shared_ptr<arrow::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow::DataType>& type) {
+std::shared_ptr<arrow20::DataType> AddTzType(EPropagateTz propagateTz, const std::shared_ptr<arrow20::DataType>& type) {
     return AddTzType(propagateTz != EPropagateTz::None, type);
 }
 
-std::shared_ptr<arrow::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow::Scalar>& value) {
+std::shared_ptr<arrow20::Scalar> ExtractTz(bool isTz, const std::shared_ptr<arrow20::Scalar>& value) {
     if (!isTz) {
         return value;
     }
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*value);
+    const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*value);
     return structScalar.value[0];
 }
 
-std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow::ArrayData>& value) {
+std::shared_ptr<arrow20::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arrow20::ArrayData>& value) {
     if (!isTz) {
         return value;
     }
@@ -209,87 +209,87 @@ std::shared_ptr<arrow::ArrayData> ExtractTz(bool isTz, const std::shared_ptr<arr
     return value->child_data[0];
 }
 
-std::shared_ptr<arrow::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow::Scalar>& input,
-                                      const std::shared_ptr<arrow::Scalar>& value) {
+std::shared_ptr<arrow20::Scalar> WithTz(bool propagateTz, const std::shared_ptr<arrow20::Scalar>& input,
+                                      const std::shared_ptr<arrow20::Scalar>& value) {
     if (!propagateTz) {
         return value;
     }
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input);
+    const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*input);
     auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(arrow::StructScalar::ValueType{value, tzId}, input->type);
+    return std::make_shared<arrow20::StructScalar>(arrow20::StructScalar::ValueType{value, tzId}, input->type);
 }
 
-std::shared_ptr<arrow::Scalar> WithTz(EPropagateTz propagateTz,
-                                      const std::shared_ptr<arrow::Scalar>& input1,
-                                      const std::shared_ptr<arrow::Scalar>& input2,
-                                      const std::shared_ptr<arrow::Scalar>& value) {
+std::shared_ptr<arrow20::Scalar> WithTz(EPropagateTz propagateTz,
+                                      const std::shared_ptr<arrow20::Scalar>& input1,
+                                      const std::shared_ptr<arrow20::Scalar>& input2,
+                                      const std::shared_ptr<arrow20::Scalar>& value) {
     if (propagateTz == EPropagateTz::None) {
         return value;
     }
 
-    const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(
+    const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(
         propagateTz == EPropagateTz::FromLeft
             ? *input1
             : *input2);
     const auto tzId = structScalar.value[1];
-    return std::make_shared<arrow::StructScalar>(
-        arrow::StructScalar::ValueType{value, tzId},
+    return std::make_shared<arrow20::StructScalar>(
+        arrow20::StructScalar::ValueType{value, tzId},
         propagateTz == EPropagateTz::FromLeft ? input1->type : input2->type);
 }
 
-std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, bool propagateTz,
-                                             const std::shared_ptr<arrow::ArrayData>& input, arrow::MemoryPool* pool,
-                                             size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType) {
+std::shared_ptr<arrow20::ArrayData> CopyTzImpl(const std::shared_ptr<arrow20::ArrayData>& res, bool propagateTz,
+                                             const std::shared_ptr<arrow20::ArrayData>& input, arrow20::MemoryPool* pool,
+                                             size_t sizeOf, const std::shared_ptr<arrow20::DataType>& outputType) {
     if (!propagateTz) {
         return res;
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
+    std::shared_ptr<arrow20::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
+    res->child_data.push_back(arrow20::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
     res->child_data.push_back(input->child_data[1]);
     return res->child_data[0];
 }
 
-std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
-                                             const std::shared_ptr<arrow::ArrayData>& input1,
-                                             const std::shared_ptr<arrow::Scalar>& input2,
-                                             arrow::MemoryPool* pool,
-                                             size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType) {
+std::shared_ptr<arrow20::ArrayData> CopyTzImpl(const std::shared_ptr<arrow20::ArrayData>& res, EPropagateTz propagateTz,
+                                             const std::shared_ptr<arrow20::ArrayData>& input1,
+                                             const std::shared_ptr<arrow20::Scalar>& input2,
+                                             arrow20::MemoryPool* pool,
+                                             size_t sizeOf, const std::shared_ptr<arrow20::DataType>& outputType) {
     if (propagateTz == EPropagateTz::None) {
         return res;
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
+    std::shared_ptr<arrow20::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
+    res->child_data.push_back(arrow20::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
     if (propagateTz == EPropagateTz::FromLeft) {
         res->child_data.push_back(input1->child_data[1]);
     } else {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input2);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*input2);
+        auto tzId = ARROW_RESULT(arrow20::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
         res->child_data.push_back(tzId);
     }
 
     return res->child_data[0];
 }
 
-std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
-                                             const std::shared_ptr<arrow::Scalar>& input1,
-                                             const std::shared_ptr<arrow::ArrayData>& input2,
-                                             arrow::MemoryPool* pool,
-                                             size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType) {
+std::shared_ptr<arrow20::ArrayData> CopyTzImpl(const std::shared_ptr<arrow20::ArrayData>& res, EPropagateTz propagateTz,
+                                             const std::shared_ptr<arrow20::Scalar>& input1,
+                                             const std::shared_ptr<arrow20::ArrayData>& input2,
+                                             arrow20::MemoryPool* pool,
+                                             size_t sizeOf, const std::shared_ptr<arrow20::DataType>& outputType) {
     if (propagateTz == EPropagateTz::None) {
         return res;
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
+    std::shared_ptr<arrow20::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
+    res->child_data.push_back(arrow20::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
     if (propagateTz == EPropagateTz::FromLeft) {
-        const auto& structScalar = arrow::internal::checked_cast<const arrow::StructScalar&>(*input1);
-        auto tzId = ARROW_RESULT(arrow::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
+        const auto& structScalar = arrow20::internal::checked_cast<const arrow20::StructScalar&>(*input1);
+        auto tzId = ARROW_RESULT(arrow20::MakeArrayFromScalar(*structScalar.value[1], res->length, pool))->data();
         res->child_data.push_back(tzId);
     } else {
         res->child_data.push_back(input2->child_data[1]);
@@ -298,18 +298,18 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
     return res->child_data[0];
 }
 
-std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayData>& res, EPropagateTz propagateTz,
-                                             const std::shared_ptr<arrow::ArrayData>& input1,
-                                             const std::shared_ptr<arrow::ArrayData>& input2,
-                                             arrow::MemoryPool* pool,
-                                             size_t sizeOf, const std::shared_ptr<arrow::DataType>& outputType) {
+std::shared_ptr<arrow20::ArrayData> CopyTzImpl(const std::shared_ptr<arrow20::ArrayData>& res, EPropagateTz propagateTz,
+                                             const std::shared_ptr<arrow20::ArrayData>& input1,
+                                             const std::shared_ptr<arrow20::ArrayData>& input2,
+                                             arrow20::MemoryPool* pool,
+                                             size_t sizeOf, const std::shared_ptr<arrow20::DataType>& outputType) {
     if (propagateTz == EPropagateTz::None) {
         return res;
     }
 
     Y_ENSURE(res->child_data.empty());
-    std::shared_ptr<arrow::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
-    res->child_data.push_back(arrow::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
+    std::shared_ptr<arrow20::Buffer> buffer(AllocateResizableBufferAndResize(sizeOf * res->length, pool));
+    res->child_data.push_back(arrow20::ArrayData::Make(outputType, res->length, {nullptr, buffer}));
     if (propagateTz == EPropagateTz::FromLeft) {
         res->child_data.push_back(input1->child_data[1]);
     } else {
@@ -320,18 +320,18 @@ std::shared_ptr<arrow::ArrayData> CopyTzImpl(const std::shared_ptr<arrow::ArrayD
 }
 
 TPlainKernel::TPlainKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
-                           NUdf::TDataTypeId returnType, std::unique_ptr<arrow::compute::ScalarKernel>&& arrowKernel,
+                           NUdf::TDataTypeId returnType, std::unique_ptr<arrow20::compute::ScalarKernel>&& arrowKernel,
                            TKernel::ENullMode nullMode)
     : TKernel(family, argTypes, returnType, nullMode)
     , ArrowKernel(std::move(arrowKernel))
 {
 }
 
-const arrow::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
+const arrow20::compute::ScalarKernel& TPlainKernel::GetArrowKernel() const {
     return *ArrowKernel;
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
+std::shared_ptr<arrow20::compute::ScalarKernel> TPlainKernel::MakeArrowKernel(const TVector<TType*>&, TType*) const {
     ythrow yexception() << "Unsupported kernel";
 }
 
@@ -347,11 +347,11 @@ TDecimalKernel::TDecimalKernel(const TKernelFamily& family, const std::vector<NU
 {
 }
 
-const arrow::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
+const arrow20::compute::ScalarKernel& TDecimalKernel::GetArrowKernel() const {
     ythrow yexception() << "Unsupported kernel";
 }
 
-std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {
+std::shared_ptr<arrow20::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const {
     MKQL_ENSURE(argTypes.size() == 2, "Require 2 arguments");
     MKQL_ENSURE(argTypes[0]->GetKind() == TType::EKind::Block, "Require block");
     MKQL_ENSURE(argTypes[1]->GetKind() == TType::EKind::Block, "Require block");
@@ -373,17 +373,17 @@ std::shared_ptr<arrow::compute::ScalarKernel> TDecimalKernel::MakeArrowKernel(co
     ui8 precision = decimalType1->GetParams().first;
     MKQL_ENSURE(precision >= 1 && precision <= 35, TStringBuilder() << "Wrong precision: " << (int)precision);
 
-    auto k = std::make_shared<arrow::compute::ScalarKernel>(
-        std::vector<arrow::compute::InputType>{
+    auto k = std::make_shared<arrow20::compute::ScalarKernel>(
+        std::vector<arrow20::compute::InputType>{
             GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal),
             GetPrimitiveInputArrowType(NUdf::EDataSlot::Decimal)},
         GetPrimitiveOutputArrowType(*dataResultType->GetDataSlot()),
         Exec);
-    k->null_handling = arrow::compute::NullHandling::INTERSECTION;
-    k->init = [precision](arrow::compute::KernelContext*, const arrow::compute::KernelInitArgs&) {
+    k->null_handling = arrow20::compute::NullHandling::INTERSECTION;
+    k->init = [precision](arrow20::compute::KernelContext*, const arrow20::compute::KernelInitArgs&) {
         auto state = std::make_unique<TDecimalKernel::TKernelState>();
         state->Precision = precision;
-        return arrow::Result(std::move(state));
+        return arrow20::Result(std::move(state));
     };
 
     return k;
@@ -399,21 +399,21 @@ void AddUnaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::ED
     auto returnType = NUdf::GetDataTypeInfo(res).TypeId;
     std::vector<NUdf::TDataTypeId> argTypes({type1});
 
-    auto k = std::make_unique<arrow::compute::ScalarKernel>(
-        std::vector<arrow::compute::InputType>{
+    auto k = std::make_unique<arrow20::compute::ScalarKernel>(
+        std::vector<arrow20::compute::InputType>{
             GetPrimitiveInputArrowType(arg1)},
         GetPrimitiveOutputArrowType(res),
         exec);
 
     switch (nullMode) {
         case TKernel::ENullMode::Default:
-            k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+            k->null_handling = arrow20::compute::NullHandling::INTERSECTION;
             break;
         case TKernel::ENullMode::AlwaysNull:
-            k->null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+            k->null_handling = arrow20::compute::NullHandling::COMPUTED_PREALLOCATE;
             break;
         case TKernel::ENullMode::AlwaysNotNull:
-            k->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+            k->null_handling = arrow20::compute::NullHandling::OUTPUT_NOT_NULL;
             break;
     }
 
@@ -427,8 +427,8 @@ void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::E
     auto returnType = NUdf::GetDataTypeInfo(res).TypeId;
     std::vector<NUdf::TDataTypeId> argTypes({type1, type2});
 
-    auto k = std::make_unique<arrow::compute::ScalarKernel>(
-        std::vector<arrow::compute::InputType>{
+    auto k = std::make_unique<arrow20::compute::ScalarKernel>(
+        std::vector<arrow20::compute::InputType>{
             GetPrimitiveInputArrowType(arg1),
             GetPrimitiveInputArrowType(arg2)},
         GetPrimitiveOutputArrowType(res),
@@ -436,13 +436,13 @@ void AddBinaryKernelImpl(TKernelFamilyBase& owner, NUdf::EDataSlot arg1, NUdf::E
 
     switch (nullMode) {
         case TKernel::ENullMode::Default:
-            k->null_handling = arrow::compute::NullHandling::INTERSECTION;
+            k->null_handling = arrow20::compute::NullHandling::INTERSECTION;
             break;
         case TKernel::ENullMode::AlwaysNull:
-            k->null_handling = arrow::compute::NullHandling::COMPUTED_PREALLOCATE;
+            k->null_handling = arrow20::compute::NullHandling::COMPUTED_PREALLOCATE;
             break;
         case TKernel::ENullMode::AlwaysNotNull:
-            k->null_handling = arrow::compute::NullHandling::OUTPUT_NOT_NULL;
+            k->null_handling = arrow20::compute::NullHandling::OUTPUT_NOT_NULL;
             break;
     }
 

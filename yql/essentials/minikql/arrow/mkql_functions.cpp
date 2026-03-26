@@ -12,62 +12,62 @@
 
 namespace NKikimr::NMiniKQL {
 
-bool ConvertInputArrowType(TType* blockType, arrow::ValueDescr& descr) {
+bool ConvertInputArrowType(TType* blockType, arrow20::ValueDescr& descr) {
     auto asBlockType = AS_TYPE(TBlockType, blockType);
-    descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow::ValueDescr::SCALAR : arrow::ValueDescr::ARRAY;
+    descr.shape = asBlockType->GetShape() == TBlockType::EShape::Scalar ? arrow20::ValueDescr::SCALAR : arrow20::ValueDescr::ARRAY;
     return ConvertArrowType(asBlockType->GetItemType(), descr.type);
 }
 
-class TOutputTypeVisitor: public arrow::TypeVisitor {
+class TOutputTypeVisitor: public arrow20::TypeVisitor {
 public:
     explicit TOutputTypeVisitor(TTypeEnvironment& env)
         : Env_(env)
     {
     }
 
-    arrow::Status Visit(const arrow::BooleanType&) override {
+    arrow20::Status Visit(const arrow20::BooleanType&) override {
         SetDataType(NUdf::EDataSlot::Bool);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::Int8Type&) override {
+    arrow20::Status Visit(const arrow20::Int8Type&) override {
         SetDataType(NUdf::EDataSlot::Int8);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::UInt8Type&) override {
+    arrow20::Status Visit(const arrow20::UInt8Type&) override {
         SetDataType(NUdf::EDataSlot::Uint8);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::Int16Type&) override {
+    arrow20::Status Visit(const arrow20::Int16Type&) override {
         SetDataType(NUdf::EDataSlot::Int16);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::UInt16Type&) override {
+    arrow20::Status Visit(const arrow20::UInt16Type&) override {
         SetDataType(NUdf::EDataSlot::Uint16);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::Int32Type&) override {
+    arrow20::Status Visit(const arrow20::Int32Type&) override {
         SetDataType(NUdf::EDataSlot::Int32);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::UInt32Type&) override {
+    arrow20::Status Visit(const arrow20::UInt32Type&) override {
         SetDataType(NUdf::EDataSlot::Uint32);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::Int64Type&) override {
+    arrow20::Status Visit(const arrow20::Int64Type&) override {
         SetDataType(NUdf::EDataSlot::Int64);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::UInt64Type&) override {
+    arrow20::Status Visit(const arrow20::UInt64Type&) override {
         SetDataType(NUdf::EDataSlot::Uint64);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     TType* GetType() const {
@@ -84,13 +84,13 @@ private:
     TType* Type_ = nullptr;
 };
 
-bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std::vector<arrow::ValueDescr>& values,
+bool ConvertOutputArrowType(const arrow20::compute::OutputType& outType, const std::vector<arrow20::ValueDescr>& values,
                             bool optional, TType*& outputType, TTypeEnvironment& env) {
-    arrow::ValueDescr::Shape shape;
-    std::shared_ptr<arrow::DataType> dataType;
+    arrow20::ValueDescr::Shape shape;
+    std::shared_ptr<arrow20::DataType> dataType;
 
-    auto execContext = arrow::compute::ExecContext();
-    auto kernelContext = arrow::compute::KernelContext(&execContext);
+    auto execContext = arrow20::compute::ExecContext();
+    auto kernelContext = arrow20::compute::KernelContext(&execContext);
     auto descrRes = outType.Resolve(&kernelContext, values);
     if (!descrRes.ok()) {
         return false;
@@ -111,10 +111,10 @@ bool ConvertOutputArrowType(const arrow::compute::OutputType& outType, const std
     }
 
     switch (shape) {
-        case arrow::ValueDescr::SCALAR:
+        case arrow20::ValueDescr::SCALAR:
             outputType = TBlockType::Create(itemType, TBlockType::EShape::Scalar, env);
             return true;
-        case arrow::ValueDescr::ARRAY:
+        case arrow20::ValueDescr::ARRAY:
             outputType = TBlockType::Create(itemType, TBlockType::EShape::Many, env);
             return true;
         default:
@@ -175,7 +175,7 @@ bool FindArrowFunction(TStringBuf name, const TArrayRef<TType*>& inputTypes, TTy
 }
 
 bool HasArrowCast(TType* from, TType* to) {
-    std::shared_ptr<arrow::DataType> fromArrowType, toArrowType;
+    std::shared_ptr<arrow20::DataType> fromArrowType, toArrowType;
     if (!ConvertArrowType(from, fromArrowType)) {
         return false;
     }
@@ -184,7 +184,7 @@ bool HasArrowCast(TType* from, TType* to) {
         return false;
     }
 
-    return arrow::compute::CanCast(*fromArrowType, *toArrowType);
+    return arrow20::compute::CanCast(*fromArrowType, *toArrowType);
 }
 
 } // namespace NKikimr::NMiniKQL

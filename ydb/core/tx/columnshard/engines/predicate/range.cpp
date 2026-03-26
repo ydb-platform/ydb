@@ -27,7 +27,7 @@ bool TPKRangeFilter::IsEmpty() const {
     return PredicateFrom.IsAll() && PredicateTo.IsAll();
 }
 
-bool TPKRangeFilter::IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+bool TPKRangeFilter::IsPointRange(const std::shared_ptr<arrow20::Schema>& pkSchema) const {
     if (PredicateFrom.IsAll() || PredicateTo.IsAll()) {
         return false;
     }

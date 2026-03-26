@@ -20,11 +20,11 @@ class TDictStats {
 private:
     using TJsonPathAccessorTriePtr = std::shared_ptr<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>;
 
-    std::shared_ptr<arrow::RecordBatch> Original;
-    std::shared_ptr<arrow::BinaryArray> DataNames;
-    std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
-    std::shared_ptr<arrow::UInt32Array> DataSize;
-    std::shared_ptr<arrow::UInt8Array> AccessorType;
+    std::shared_ptr<arrow20::RecordBatch> Original;
+    std::shared_ptr<arrow20::BinaryArray> DataNames;
+    std::shared_ptr<arrow20::UInt32Array> DataRecordsCount;
+    std::shared_ptr<arrow20::UInt32Array> DataSize;
+    std::shared_ptr<arrow20::UInt8Array> AccessorType;
     TJsonPathAccessorTriePtr CachedJsonPathAccessorTrie;
 
     TJsonPathAccessorTriePtr GenerateJsonPathAccessorTrie() const {
@@ -144,11 +144,11 @@ public:
 
     class TBuilder: TNonCopyable {
     private:
-        std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-        arrow::BinaryBuilder* Names;
-        arrow::UInt32Builder* Records;
-        arrow::UInt32Builder* DataSize;
-        arrow::UInt8Builder* AccessorType;
+        std::vector<std::unique_ptr<arrow20::ArrayBuilder>> Builders;
+        arrow20::BinaryBuilder* Names;
+        arrow20::UInt32Builder* Records;
+        arrow20::UInt32Builder* DataSize;
+        arrow20::UInt8Builder* AccessorType;
 
         std::optional<TString> LastKeyName;
         ui32 RecordsCount = 0;
@@ -164,19 +164,19 @@ public:
         return TBuilder();
     }
 
-    std::shared_ptr<arrow::Schema> BuildColumnsSchema() const {
-        arrow::FieldVector fields;
+    std::shared_ptr<arrow20::Schema> BuildColumnsSchema() const {
+        arrow20::FieldVector fields;
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto view = DataNames->GetView(i);
-            fields.emplace_back(std::make_shared<arrow::Field>(std::string(view.data(), view.size()), arrow::binary()));
+            fields.emplace_back(std::make_shared<arrow20::Field>(std::string(view.data(), view.size()), arrow20::binary()));
         }
-        return std::make_shared<arrow::Schema>(fields);
+        return std::make_shared<arrow20::Schema>(fields);
     }
 
-    std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
+    std::shared_ptr<arrow20::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), arrow::binary());
+        return std::make_shared<arrow20::Field>(std::string(name.data(), name.size()), arrow20::binary());
     }
 
     TRTStats GetRTStats(const ui32 index) const {
@@ -203,16 +203,16 @@ public:
     ui32 GetColumnRecordsCount(const ui32 index) const;
     ui32 GetColumnSize(const ui32 index) const;
 
-    static std::shared_ptr<arrow::Schema> GetStatsSchema() {
-        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
-            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
-            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };
-        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
+    static std::shared_ptr<arrow20::Schema> GetStatsSchema() {
+        static arrow20::FieldVector fields = { std::make_shared<arrow20::Field>("name", arrow20::binary()),
+            std::make_shared<arrow20::Field>("count", arrow20::uint32()), std::make_shared<arrow20::Field>("size", arrow20::uint32()),
+            std::make_shared<arrow20::Field>("accessor_type", arrow20::uint8()) };
+        static std::shared_ptr<arrow20::Schema> result = std::make_shared<arrow20::Schema>(fields);
         return result;
     }
 
     bool IsSparsed(const ui32 columnIndex, const ui32 recordsCount, const TSettings& settings) const;
-    TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
+    TDictStats(const std::shared_ptr<arrow20::RecordBatch>& original);
 };
 
 class TSplittedColumns {

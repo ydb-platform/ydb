@@ -81,7 +81,7 @@ namespace {
     void TestName##Execute(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
 
 template <typename T>
-arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::vector<TMaybe<T>>& array, size_t offset) {
+arrow20::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::vector<TMaybe<T>>& array, size_t offset) {
     auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, nullptr);
     for (size_t i = 0; i < offset; i++) {
         if (array[0]) {
@@ -99,9 +99,9 @@ arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, std::ve
         }
     };
 
-    arrow::Datum resultArray = rightArrayBuilder->Build(/*finish=*/true);
+    arrow20::Datum resultArray = rightArrayBuilder->Build(/*finish=*/true);
     resultArray.array()->offset += offset;
-    resultArray.array()->null_count = arrow::kUnknownNullCount;
+    resultArray.array()->null_count = arrow20::kUnknownNullCount;
     resultArray.array()->length -= offset;
     return resultArray;
 }
@@ -155,12 +155,12 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
         rightType = leftType;
     }
     TTypeInfoHelper typeInfoHelper;
-    arrow::Datum leftOperand = GenerateArray(typeInfoHelper, leftType, left, leftOffset);
+    arrow20::Datum leftOperand = GenerateArray(typeInfoHelper, leftType, left, leftOffset);
 
-    arrow::compute::ExecContext execCtx;
-    arrow::compute::KernelContext ctx(&execCtx);
+    arrow20::compute::ExecContext execCtx;
+    arrow20::compute::KernelContext ctx(&execCtx);
 
-    arrow::Datum rightOperand;
+    arrow20::Datum rightOperand;
     if constexpr (rightTypeShape == ERightOperandType::SCALAR) {
         rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
     } else if constexpr (rightTypeShape == ERightOperandType::OPTIONAL_SCALAR) {
@@ -173,7 +173,7 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
     } else {
         rightOperand = GenerateArray(typeInfoHelper, rightType, right, rightOffset);
     }
-    // Reset bitmap that responses for nullability of arrow::ArrayData.
+    // Reset bitmap that responses for nullability of arrow20::ArrayData.
     // If all elements are not null then we have two options:
     // 1. All bitmask elements are set to 1.
     // 2. There is no bitmask at all.
@@ -181,10 +181,10 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
     if (rightOperand.is_array() && resetNullBitmapWhenAllNotNull && rightOperand.array()->GetNullCount() == 0) {
         rightOperand.array()->buffers[0] = nullptr;
     }
-    auto bi = arrow::compute::detail::ExecBatchIterator::Make({leftOperand, rightOperand}, 1000).ValueOrDie();
-    arrow::compute::ExecBatch batch;
+    auto bi = arrow20::compute::detail::ExecBatchIterator::Make({leftOperand, rightOperand}, 1000).ValueOrDie();
+    arrow20::compute::ExecBatch batch;
     UNIT_ASSERT(bi->Next(&batch));
-    arrow::Datum out;
+    arrow20::Datum out;
     // This graph will never be executed. We need it only to extrace coalesce arrow kernel.
     auto graph = setup.BuildGraph(
         setup.PgmBuilder->BlockCoalesce(
@@ -193,7 +193,7 @@ void TestBlockCoalesceForVector(InputOptionalVector<T> left,
     auto kernel = GetArrowKernel(graph.Get());
     // kernel is exectly coalesce kernel.
     Y_ENSURE(kernel->GetArrowKernel().exec(&ctx, batch, &out).ok());
-    arrow::Datum expectedArrowArray = GenerateArray(typeInfoHelper, rightType, expected, 0);
+    arrow20::Datum expectedArrowArray = GenerateArray(typeInfoHelper, rightType, expected, 0);
     UNIT_ASSERT_EQUAL_C(out, expectedArrowArray, "Expected : " << expectedArrowArray.make_array()->ToString() << "\n but got : " << out.make_array()->ToString());
 }
 

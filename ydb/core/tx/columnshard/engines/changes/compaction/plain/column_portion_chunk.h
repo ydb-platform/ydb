@@ -14,8 +14,8 @@ namespace NKikimr::NOlap::NCompaction {
 class TColumnPortion: public TColumnPortionResult {
 private:
     using TBase = TColumnPortionResult;
-    std::unique_ptr<arrow::ArrayBuilder> Builder;
-    std::shared_ptr<arrow::DataType> Type;
+    std::unique_ptr<arrow20::ArrayBuilder> Builder;
+    std::shared_ptr<arrow20::DataType> Type;
     const TColumnMergeContext& Context;
     YDB_READONLY(ui64, CurrentChunkRawSize, 0);
     double PredictedPackedBytes = 0;
@@ -33,7 +33,7 @@ public:
 
     bool FlushBuffer();
 
-    ui32 AppendSlice(const std::shared_ptr<arrow::Array>& a, const ui32 startIndex, const ui32 length);
+    ui32 AppendSlice(const std::shared_ptr<arrow20::Array>& a, const ui32 startIndex, const ui32 length);
 };
 
 }   // namespace NKikimr::NOlap::NCompaction

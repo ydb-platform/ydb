@@ -169,8 +169,8 @@ TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> TProgramCo
     return std::move(collection);
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TProgramContainer::ApplyProgram(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
+TConclusion<std::shared_ptr<arrow20::RecordBatch>> TProgramContainer::ApplyProgram(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const {
     auto resources = std::make_unique<NArrow::NAccessor::TAccessorsCollection>(batch, resolver);
     auto status = ApplyProgram(std::move(resources), std::make_shared<NArrow::NSSA::TFakeDataSource>());
     if (status.IsFail()) {

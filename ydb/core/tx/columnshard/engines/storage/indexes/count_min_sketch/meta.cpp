@@ -23,17 +23,17 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             for (auto&& array : cArray->chunks()) {
                 NArrow::SwitchType(array->type_id(), [&](const auto& type) {
                     using TWrap = std::decay_t<decltype(type)>;
-                    using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
+                    using TArray = typename arrow20::TypeTraits<typename TWrap::T>::ArrayType;
 
                     const TArray& arrTyped = static_cast<const TArray&>(*array);
-                    if constexpr (arrow::has_c_type<typename TWrap::T>()) {
+                    if constexpr (arrow20::has_c_type<typename TWrap::T>()) {
                         for (int64_t i = 0; i < arrTyped.length(); ++i) {
                             auto cell = TCell::Make(arrTyped.Value(i));
                             sketch->Count(cell.Data(), cell.Size());
                         }
                         return true;
                     }
-                    if constexpr (arrow::has_string_view<typename TWrap::T>()) {
+                    if constexpr (arrow20::has_string_view<typename TWrap::T>()) {
                         for (int64_t i = 0; i < arrTyped.length(); ++i) {
                             auto view = arrTyped.GetView(i);
                             sketch->Count(view.data(), view.size());

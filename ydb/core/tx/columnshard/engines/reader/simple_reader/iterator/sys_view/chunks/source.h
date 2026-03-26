@@ -35,7 +35,7 @@ private:
     virtual bool DoStartFetchingAccessor(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) override;
 
-    virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
+    virtual std::shared_ptr<arrow20::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);

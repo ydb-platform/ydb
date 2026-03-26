@@ -12,12 +12,12 @@ NArrow::TSimpleRow TSchemaAdapter::GetPKSimpleRow(const NColumnShard::TSchemeSha
     return NArrow::TSimpleRow(writer.Finish(), GetPKSchema());
 }
 
-const std::shared_ptr<arrow::Schema>& TSchemaAdapter::GetPKSchema() {
-    static std::shared_ptr<arrow::Schema> schema = []() {
-        arrow::FieldVector fields = {
-            std::make_shared<arrow::Field>("PathId", arrow::uint64()),
-            std::make_shared<arrow::Field>("TabletId", arrow::uint64()) };
-        return std::make_shared<arrow::Schema>(std::move(fields));
+const std::shared_ptr<arrow20::Schema>& TSchemaAdapter::GetPKSchema() {
+    static std::shared_ptr<arrow20::Schema> schema = []() {
+        arrow20::FieldVector fields = {
+            std::make_shared<arrow20::Field>("PathId", arrow20::uint64()),
+            std::make_shared<arrow20::Field>("TabletId", arrow20::uint64()) };
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }();
     return schema;
 }

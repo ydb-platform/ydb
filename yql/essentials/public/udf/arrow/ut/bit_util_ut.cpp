@@ -9,7 +9,7 @@ using namespace NYql::NUdf;
 
 namespace {
 void PerformTest(const ui8* testData, size_t offset, size_t length) {
-    std::vector<ui8> copied(arrow::BitUtil::BytesForBits(length) + 1, 0);
+    std::vector<ui8> copied(arrow20::BitUtil::BytesForBits(length) + 1, 0);
     CopyDenseBitmap(copied.data(), testData, offset, length);
 
     std::vector<ui8> origSparse(length), copiedSparse(length);

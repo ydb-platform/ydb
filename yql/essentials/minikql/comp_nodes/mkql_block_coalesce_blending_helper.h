@@ -21,7 +21,7 @@ Y_FORCE_INLINE bool GetBit(const ui8* bitMask, size_t offset) {
     if constexpr (isScalar || !isOptional) {
         return true;
     } else {
-        return arrow::BitUtil::GetBit(bitMask, offset);
+        return arrow20::BitUtil::GetBit(bitMask, offset);
     }
 }
 
@@ -30,20 +30,20 @@ Y_FORCE_INLINE void SetBitTo(ui8* bitMask, size_t offset, bool bit_value) {
     if constexpr (!isOptional) {
         return;
     } else {
-        arrow::BitUtil::SetBitTo(bitMask, offset, bit_value);
+        arrow20::BitUtil::SetBitTo(bitMask, offset, bit_value);
     }
 }
 
 template <typename TType>
-TType* GetScalar(const arrow::Datum& datum) {
-    auto& buffer = arrow::internal::checked_cast<arrow::internal::PrimitiveScalarBase&>(*datum.scalar());
+TType* GetScalar(const arrow20::Datum& datum) {
+    auto& buffer = arrow20::internal::checked_cast<arrow20::internal::PrimitiveScalarBase&>(*datum.scalar());
     return static_cast<TType*>(buffer.mutable_data());
 };
 
 template <typename TType>
 class TDatumStorageView {
 public:
-    explicit TDatumStorageView(const arrow::Datum& datum)
+    explicit TDatumStorageView(const arrow20::Datum& datum)
         : Datum_(datum)
     {
     }
@@ -82,7 +82,7 @@ public:
     }
 
 private:
-    const arrow::Datum& Datum_;
+    const arrow20::Datum& Datum_;
 };
 
 template <typename TType, bool rightIsScalar, bool rightHasBitmask>
@@ -97,7 +97,7 @@ void CoalesceByOneElement(size_t elements,
                           size_t outOffset,
                           ui8* outBitMask) {
     for (size_t i = 0; i < elements; i++) {
-        if (arrow::BitUtil::GetBit(leftBitMask, i + leftOffset)) {
+        if (arrow20::BitUtil::GetBit(leftBitMask, i + leftOffset)) {
             out[i + outOffset] = left[i + leftOffset];
             SetBitTo<rightHasBitmask>(outBitMask, i + outOffset, true);
         } else {

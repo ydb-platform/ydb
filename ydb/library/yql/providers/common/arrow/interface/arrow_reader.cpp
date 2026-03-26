@@ -20,7 +20,7 @@ TArrowFileDesc::TArrowFileDesc(
 }
 
 IArrowReader::TSchemaResponse::TSchemaResponse(
-    std::shared_ptr<arrow::Schema> schema,
+    std::shared_ptr<arrow20::Schema> schema,
     int numRowGroups,
     std::shared_ptr<TArrowFileCookie> cookie
 ) 

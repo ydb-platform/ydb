@@ -60,7 +60,7 @@ private:
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
-        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -120,7 +120,7 @@ public:
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
-    std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
+    std::shared_ptr<arrow20::RecordBatch> GetLastPK() const {
         return Finish.BuildSortingCursor().ExtractSortingPosition(Finish.GetSortFields());
     }
     void IncIntervalsCount() {

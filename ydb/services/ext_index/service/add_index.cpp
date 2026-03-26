@@ -46,7 +46,7 @@ void TIndexUpsertActor::Bootstrap() {
     std::shared_ptr<NTxProxy::TUploadTypes> types = std::make_shared<NTxProxy::TUploadTypes>();
     std::vector<std::pair<TString, NScheme::TTypeInfo>> yqlTypes;
 
-    std::vector<std::shared_ptr<arrow::Array>> pkColumns;
+    std::vector<std::shared_ptr<arrow20::Array>> pkColumns;
     for (auto&& i : PKFields) {
         auto f = Data->schema()->GetFieldByName(i);
         if (!f) {

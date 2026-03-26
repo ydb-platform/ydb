@@ -116,39 +116,39 @@ struct TDataRow {
             //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
     }
 
-    static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
-        std::vector<std::shared_ptr<arrow::Field>> fields = {
-            arrow::field("bool", arrow::uint8()),
-            arrow::field("i8", arrow::int8()),
-            arrow::field("i16", arrow::int16()),
-            arrow::field("i32", arrow::int32()),
-            arrow::field("i64", arrow::int64()),
-            arrow::field("ui8", arrow::uint8()),
-            arrow::field("ui16", arrow::uint16()),
-            arrow::field("ui32", arrow::uint32()),
-            arrow::field("ui64", arrow::uint64()),
-            arrow::field("f32", arrow::float32()),
-            arrow::field("f64", arrow::float64()),
-            arrow::field("string", arrow::binary()),
-            arrow::field("utf8", arrow::utf8()),
-            arrow::field("json", arrow::utf8()),
-            arrow::field("yson", arrow::binary()),
-            arrow::field("date", arrow::uint16()),
-            arrow::field("datetime", arrow::uint32()),
-            arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("json_doc", arrow::binary()),
-            arrow::field("pgint2", arrow::int16()),
-            arrow::field("pgint4", arrow::int32()),
-            arrow::field("pgint8", arrow::int64()),
-            arrow::field("pgfloat4", arrow::float32()),
-            arrow::field("pgfloat8", arrow::float64()),
-            arrow::field("pgbytea", arrow::binary()),
-            arrow::field("pgtext", arrow::utf8()),
-            //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
+    static std::shared_ptr<arrow20::Schema> MakeArrowSchema() {
+        std::vector<std::shared_ptr<arrow20::Field>> fields = {
+            arrow20::field("bool", arrow20::uint8()),
+            arrow20::field("i8", arrow20::int8()),
+            arrow20::field("i16", arrow20::int16()),
+            arrow20::field("i32", arrow20::int32()),
+            arrow20::field("i64", arrow20::int64()),
+            arrow20::field("ui8", arrow20::uint8()),
+            arrow20::field("ui16", arrow20::uint16()),
+            arrow20::field("ui32", arrow20::uint32()),
+            arrow20::field("ui64", arrow20::uint64()),
+            arrow20::field("f32", arrow20::float32()),
+            arrow20::field("f64", arrow20::float64()),
+            arrow20::field("string", arrow20::binary()),
+            arrow20::field("utf8", arrow20::utf8()),
+            arrow20::field("json", arrow20::utf8()),
+            arrow20::field("yson", arrow20::binary()),
+            arrow20::field("date", arrow20::uint16()),
+            arrow20::field("datetime", arrow20::uint32()),
+            arrow20::field("ts", arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO)),
+            arrow20::field("ival", arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO)),
+            arrow20::field("json_doc", arrow20::binary()),
+            arrow20::field("pgint2", arrow20::int16()),
+            arrow20::field("pgint4", arrow20::int32()),
+            arrow20::field("pgint8", arrow20::int64()),
+            arrow20::field("pgfloat4", arrow20::float32()),
+            arrow20::field("pgfloat8", arrow20::float64()),
+            arrow20::field("pgbytea", arrow20::binary()),
+            arrow20::field("pgtext", arrow20::utf8()),
+            //arrow20::field("dec", arrow20::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
-        return std::make_shared<arrow::Schema>(std::move(fields));
+        return std::make_shared<arrow20::Schema>(std::move(fields));
     }
 
     static std::vector<std::pair<TString, TTypeInfo>> MakeYdbSchema() {
@@ -232,7 +232,7 @@ struct TDataRow {
     }
 };
 
-std::shared_ptr<arrow::Array> GetColumn(const arrow::RecordBatch& batch, int i) {
+std::shared_ptr<arrow20::Array> GetColumn(const arrow20::RecordBatch& batch, int i) {
     return batch.column(i);
 }
 
@@ -240,37 +240,37 @@ template <typename T>
 std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     std::vector<TDataRow> rows;
 
-    auto arbool = std::static_pointer_cast<arrow::BooleanArray>(GetColumn(*table, 0));
-    auto ari8 = std::static_pointer_cast<arrow::Int8Array>(GetColumn(*table, 1));
-    auto ari16 = std::static_pointer_cast<arrow::Int16Array>(GetColumn(*table, 2));
-    auto ari32 = std::static_pointer_cast<arrow::Int32Array>(GetColumn(*table, 3));
-    auto ari64 = std::static_pointer_cast<arrow::Int64Array>(GetColumn(*table, 4));
-    auto aru8 = std::static_pointer_cast<arrow::UInt8Array>(GetColumn(*table, 5));
-    auto aru16 = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 6));
-    auto aru32 = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 7));
-    auto aru64 = std::static_pointer_cast<arrow::UInt64Array>(GetColumn(*table, 8));
-    auto arf32 = std::static_pointer_cast<arrow::FloatArray>(GetColumn(*table, 9));
-    auto arf64 = std::static_pointer_cast<arrow::DoubleArray>(GetColumn(*table, 10));
+    auto arbool = std::static_pointer_cast<arrow20::BooleanArray>(GetColumn(*table, 0));
+    auto ari8 = std::static_pointer_cast<arrow20::Int8Array>(GetColumn(*table, 1));
+    auto ari16 = std::static_pointer_cast<arrow20::Int16Array>(GetColumn(*table, 2));
+    auto ari32 = std::static_pointer_cast<arrow20::Int32Array>(GetColumn(*table, 3));
+    auto ari64 = std::static_pointer_cast<arrow20::Int64Array>(GetColumn(*table, 4));
+    auto aru8 = std::static_pointer_cast<arrow20::UInt8Array>(GetColumn(*table, 5));
+    auto aru16 = std::static_pointer_cast<arrow20::UInt16Array>(GetColumn(*table, 6));
+    auto aru32 = std::static_pointer_cast<arrow20::UInt32Array>(GetColumn(*table, 7));
+    auto aru64 = std::static_pointer_cast<arrow20::UInt64Array>(GetColumn(*table, 8));
+    auto arf32 = std::static_pointer_cast<arrow20::FloatArray>(GetColumn(*table, 9));
+    auto arf64 = std::static_pointer_cast<arrow20::DoubleArray>(GetColumn(*table, 10));
 
-    auto arstr = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 11));
-    auto arutf = std::static_pointer_cast<arrow::StringArray>(GetColumn(*table, 12));
-    auto arj = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 13));
-    auto ary = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 14));
+    auto arstr = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 11));
+    auto arutf = std::static_pointer_cast<arrow20::StringArray>(GetColumn(*table, 12));
+    auto arj = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 13));
+    auto ary = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 14));
 
-    auto ard = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 15));
-    auto ardt = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 16));
-    auto arts = std::static_pointer_cast<arrow::TimestampArray>(GetColumn(*table, 17));
-    auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
+    auto ard = std::static_pointer_cast<arrow20::UInt16Array>(GetColumn(*table, 15));
+    auto ardt = std::static_pointer_cast<arrow20::UInt32Array>(GetColumn(*table, 16));
+    auto arts = std::static_pointer_cast<arrow20::TimestampArray>(GetColumn(*table, 17));
+    auto arival = std::static_pointer_cast<arrow20::DurationArray>(GetColumn(*table, 18));
 
-    auto arjd = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 19));
-    auto arpgi2 = std::static_pointer_cast<arrow::Int16Array>(GetColumn(*table, 20));
-    auto arpgi4 = std::static_pointer_cast<arrow::Int32Array>(GetColumn(*table, 21));
-    auto arpgi8 = std::static_pointer_cast<arrow::Int64Array>(GetColumn(*table, 22));
-    auto arpgf4 = std::static_pointer_cast<arrow::FloatArray>(GetColumn(*table, 23));
-    auto arpgf8 = std::static_pointer_cast<arrow::DoubleArray>(GetColumn(*table, 24));
-    auto arpgb = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 25));
-    auto arpgt = std::static_pointer_cast<arrow::StringArray>(GetColumn(*table, 26));
-    //auto ardec = std::static_pointer_cast<arrow::Decimal128Array>(GetColumn(*table, 19));
+    auto arjd = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 19));
+    auto arpgi2 = std::static_pointer_cast<arrow20::Int16Array>(GetColumn(*table, 20));
+    auto arpgi4 = std::static_pointer_cast<arrow20::Int32Array>(GetColumn(*table, 21));
+    auto arpgi8 = std::static_pointer_cast<arrow20::Int64Array>(GetColumn(*table, 22));
+    auto arpgf4 = std::static_pointer_cast<arrow20::FloatArray>(GetColumn(*table, 23));
+    auto arpgf8 = std::static_pointer_cast<arrow20::DoubleArray>(GetColumn(*table, 24));
+    auto arpgb = std::static_pointer_cast<arrow20::BinaryArray>(GetColumn(*table, 25));
+    auto arpgt = std::static_pointer_cast<arrow20::StringArray>(GetColumn(*table, 26));
+    //auto ardec = std::static_pointer_cast<arrow20::Decimal128Array>(GetColumn(*table, 19));
 
     for (int64_t i = 0; i < table->num_rows(); ++i) {
         //ui64 dec[2];
@@ -295,9 +295,9 @@ class TDataRowTableBuilder
 {
 public:
     TDataRowTableBuilder()
-        : Bts(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        , Bival(arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
+        : Bts(arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool())
+        , Bival(arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO), arrow20::default_memory_pool())
+        //, Bdec(arrow20::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow20::default_memory_pool())
     {}
 
     void AddRow(const TDataRow& row) {
@@ -334,38 +334,38 @@ public:
         //UNIT_ASSERT(Bdec.Append((const char *)&row.Decimal).ok());
     }
 
-    std::shared_ptr<arrow::Table> Finish() {
-        std::shared_ptr<arrow::BooleanArray> arbool;
-        std::shared_ptr<arrow::Int8Array> ari8;
-        std::shared_ptr<arrow::Int16Array> ari16;
-        std::shared_ptr<arrow::Int32Array> ari32;
-        std::shared_ptr<arrow::Int64Array> ari64;
-        std::shared_ptr<arrow::UInt8Array> aru8;
-        std::shared_ptr<arrow::UInt16Array> aru16;
-        std::shared_ptr<arrow::UInt32Array> aru32;
-        std::shared_ptr<arrow::UInt64Array> aru64;
-        std::shared_ptr<arrow::FloatArray> arf32;
-        std::shared_ptr<arrow::DoubleArray> arf64;
+    std::shared_ptr<arrow20::Table> Finish() {
+        std::shared_ptr<arrow20::BooleanArray> arbool;
+        std::shared_ptr<arrow20::Int8Array> ari8;
+        std::shared_ptr<arrow20::Int16Array> ari16;
+        std::shared_ptr<arrow20::Int32Array> ari32;
+        std::shared_ptr<arrow20::Int64Array> ari64;
+        std::shared_ptr<arrow20::UInt8Array> aru8;
+        std::shared_ptr<arrow20::UInt16Array> aru16;
+        std::shared_ptr<arrow20::UInt32Array> aru32;
+        std::shared_ptr<arrow20::UInt64Array> aru64;
+        std::shared_ptr<arrow20::FloatArray> arf32;
+        std::shared_ptr<arrow20::DoubleArray> arf64;
 
-        std::shared_ptr<arrow::BinaryArray> arstr;
-        std::shared_ptr<arrow::StringArray> arutf;
-        std::shared_ptr<arrow::BinaryArray> arj;
-        std::shared_ptr<arrow::BinaryArray> ary;
+        std::shared_ptr<arrow20::BinaryArray> arstr;
+        std::shared_ptr<arrow20::StringArray> arutf;
+        std::shared_ptr<arrow20::BinaryArray> arj;
+        std::shared_ptr<arrow20::BinaryArray> ary;
 
-        std::shared_ptr<arrow::UInt16Array> ard;
-        std::shared_ptr<arrow::UInt32Array> ardt;
-        std::shared_ptr<arrow::TimestampArray> arts;
-        std::shared_ptr<arrow::DurationArray> arival;
+        std::shared_ptr<arrow20::UInt16Array> ard;
+        std::shared_ptr<arrow20::UInt32Array> ardt;
+        std::shared_ptr<arrow20::TimestampArray> arts;
+        std::shared_ptr<arrow20::DurationArray> arival;
 
-        std::shared_ptr<arrow::BinaryArray> arjd;
-        std::shared_ptr<arrow::Int16Array> arpgi2;
-        std::shared_ptr<arrow::Int32Array> arpgi4;
-        std::shared_ptr<arrow::Int64Array> arpgi8;
-        std::shared_ptr<arrow::FloatArray> arpgf4;
-        std::shared_ptr<arrow::DoubleArray> arpgf8;
-        std::shared_ptr<arrow::BinaryArray> arpgb;
-        std::shared_ptr<arrow::StringArray> arpgt;
-        //std::shared_ptr<arrow::Decimal128Array> ardec;
+        std::shared_ptr<arrow20::BinaryArray> arjd;
+        std::shared_ptr<arrow20::Int16Array> arpgi2;
+        std::shared_ptr<arrow20::Int32Array> arpgi4;
+        std::shared_ptr<arrow20::Int64Array> arpgi8;
+        std::shared_ptr<arrow20::FloatArray> arpgf4;
+        std::shared_ptr<arrow20::DoubleArray> arpgf8;
+        std::shared_ptr<arrow20::BinaryArray> arpgb;
+        std::shared_ptr<arrow20::StringArray> arpgt;
+        //std::shared_ptr<arrow20::Decimal128Array> ardec;
 
         UNIT_ASSERT(Bbool.Finish(&arbool).ok());
         UNIT_ASSERT(Bi8.Finish(&ari8).ok());
@@ -399,8 +399,8 @@ public:
         UNIT_ASSERT(Bpgt.Finish(&arpgt).ok());
         //UNIT_ASSERT(Bdec.Finish(&ardec).ok());
 
-        std::shared_ptr<arrow::Schema> schema = TDataRow::MakeArrowSchema();
-        return arrow::Table::Make(schema, {
+        std::shared_ptr<arrow20::Schema> schema = TDataRow::MakeArrowSchema();
+        return arrow20::Table::Make(schema, {
             arbool,
             ari8, ari16, ari32, ari64,
             aru8, aru16, aru32, aru64,
@@ -413,7 +413,7 @@ public:
         });
     }
 
-    static std::shared_ptr<arrow::Table> Build(const std::vector<struct TDataRow>& rows) {
+    static std::shared_ptr<arrow20::Table> Build(const std::vector<struct TDataRow>& rows) {
         TDataRowTableBuilder builder;
         for (const TDataRow& row : rows) {
             builder.AddRow(row);
@@ -422,37 +422,37 @@ public:
     }
 
 private:
-    arrow::BooleanBuilder Bbool;
-    arrow::Int8Builder Bi8;
-    arrow::Int16Builder Bi16;
-    arrow::Int32Builder Bi32;
-    arrow::Int64Builder Bi64;
-    arrow::UInt8Builder Bu8;
-    arrow::UInt16Builder Bu16;
-    arrow::UInt32Builder Bu32;
-    arrow::UInt64Builder Bu64;
-    arrow::FloatBuilder Bf32;
-    arrow::DoubleBuilder Bf64;
-    arrow::BinaryBuilder Bstr;
-    arrow::StringBuilder Butf;
-    arrow::BinaryBuilder Bj;
-    arrow::BinaryBuilder By;
-    arrow::UInt16Builder Bd;
-    arrow::UInt32Builder Bdt;
-    arrow::TimestampBuilder Bts;
-    arrow::DurationBuilder Bival;
-    arrow::BinaryBuilder Bjd;
-    arrow::Int16Builder Bpgi2;
-    arrow::Int32Builder Bpgi4;
-    arrow::Int64Builder Bpgi8;
-    arrow::FloatBuilder Bpgf4;
-    arrow::DoubleBuilder Bpgf8;
-    arrow::BinaryBuilder Bpgb;
-    arrow::StringBuilder Bpgt;
-    //arrow::Decimal128Builder Bdec;
+    arrow20::BooleanBuilder Bbool;
+    arrow20::Int8Builder Bi8;
+    arrow20::Int16Builder Bi16;
+    arrow20::Int32Builder Bi32;
+    arrow20::Int64Builder Bi64;
+    arrow20::UInt8Builder Bu8;
+    arrow20::UInt16Builder Bu16;
+    arrow20::UInt32Builder Bu32;
+    arrow20::UInt64Builder Bu64;
+    arrow20::FloatBuilder Bf32;
+    arrow20::DoubleBuilder Bf64;
+    arrow20::BinaryBuilder Bstr;
+    arrow20::StringBuilder Butf;
+    arrow20::BinaryBuilder Bj;
+    arrow20::BinaryBuilder By;
+    arrow20::UInt16Builder Bd;
+    arrow20::UInt32Builder Bdt;
+    arrow20::TimestampBuilder Bts;
+    arrow20::DurationBuilder Bival;
+    arrow20::BinaryBuilder Bjd;
+    arrow20::Int16Builder Bpgi2;
+    arrow20::Int32Builder Bpgi4;
+    arrow20::Int64Builder Bpgi8;
+    arrow20::FloatBuilder Bpgf4;
+    arrow20::DoubleBuilder Bpgf8;
+    arrow20::BinaryBuilder Bpgb;
+    arrow20::StringBuilder Bpgt;
+    //arrow20::Decimal128Builder Bdec;
 };
 
-std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TDataRow>& rows) {
+std::shared_ptr<arrow20::RecordBatch> VectorToBatch(const std::vector<struct TDataRow>& rows) {
     TString err;
     NArrow::TArrowBatchBuilder batchBuilder;
     batchBuilder.Start(TDataRow::MakeYdbSchema(), 0, 0, err);
@@ -481,7 +481,7 @@ std::vector<TDataRow> TestRows() {
     return rows;
 }
 
-std::shared_ptr<arrow::Table> MakeTable1000() {
+std::shared_ptr<arrow20::Table> MakeTable1000() {
     TDataRowTableBuilder builder;
 
     for (int i = 0; i < 1000; ++i) {
@@ -504,28 +504,28 @@ std::shared_ptr<arrow::Table> MakeTable1000() {
     return *tres;
 }
 
-std::shared_ptr<arrow::Table> Shuffle(std::shared_ptr<arrow::Table> table) {
-    std::vector<arrow::UInt64Builder::value_type> shuffle(1000);
+std::shared_ptr<arrow20::Table> Shuffle(std::shared_ptr<arrow20::Table> table) {
+    std::vector<arrow20::UInt64Builder::value_type> shuffle(1000);
     for (int i = 0; i < 1000; ++i) {
         shuffle[i] = i;
     }
     ShuffleRange(shuffle);
 
-    arrow::UInt64Builder builder;
+    arrow20::UInt64Builder builder;
     UNIT_ASSERT(builder.AppendValues(&shuffle[0], shuffle.size()).ok());
 
-    std::shared_ptr<arrow::UInt64Array> permutation;
+    std::shared_ptr<arrow20::UInt64Array> permutation;
     UNIT_ASSERT(builder.Finish(&permutation).ok());
 
-    auto res = arrow::compute::Take(table, permutation);
+    auto res = arrow20::compute::Take(table, permutation);
     UNIT_ASSERT(res.ok());
     return (*res).table();
 }
 
-std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> table) {
-    std::shared_ptr<arrow::RecordBatch> batch;
+std::shared_ptr<arrow20::RecordBatch> ExtractBatch(std::shared_ptr<arrow20::Table> table) {
+    std::shared_ptr<arrow20::RecordBatch> batch;
 
-    arrow::TableBatchReader reader(*table);
+    arrow20::TableBatchReader reader(*table);
     auto result = reader.Next();
     Y_ABORT_UNLESS(result.ok());
     batch = *result;
@@ -534,7 +534,7 @@ std::shared_ptr<arrow::RecordBatch> ExtractBatch(std::shared_ptr<arrow::Table> t
     return batch;
 }
 
-std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::RecordBatch>& batch, ui64 snap) {
+std::shared_ptr<arrow20::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow20::RecordBatch>& batch, ui64 snap) {
     auto snapColumn = NArrow::MakeUI64Array(snap, batch->num_rows());
     auto result = batch->AddColumn(batch->num_columns(), "snap", snapColumn);
     Y_ABORT_UNLESS(result.ok());
@@ -542,13 +542,13 @@ std::shared_ptr<arrow::RecordBatch> AddSnapColumn(const std::shared_ptr<arrow::R
 }
 
 NArrow::NMerger::TCursor MakeSingleUi64CellTableCursor(const TString& columnName, ui64 value) {
-    std::shared_ptr<arrow::Table> table =
-        arrow::Table::Make(arrow::schema({ arrow::field(columnName, arrow::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
+    std::shared_ptr<arrow20::Table> table =
+        arrow20::Table::Make(arrow20::schema({ arrow20::field(columnName, arrow20::uint64()) }), { NArrow::MakeUI64Array(value, 1) });
 
     return NArrow::NMerger::TCursor{table, 0, {columnName}};
 }
 
-THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow::UInt64Array>& array) {
+THashMap<ui64, ui32> CountValues(const std::shared_ptr<arrow20::UInt64Array>& array) {
     THashMap<ui64, ui32> out;
     for (int i = 0; i < array->length(); ++i) {
         ui64 val = array->Value(i);
@@ -561,10 +561,10 @@ ui32 RestoreValue(ui32 a, ui32 b, ui32 c) {
     return ui32(a) * 100 + b * 10 + c;
 }
 
-bool CheckSorted1000(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = false) {
-    auto arrA = std::static_pointer_cast<arrow::Int8Array>(batch->GetColumnByName("i8"));
-    auto arrB = std::static_pointer_cast<arrow::Int16Array>(batch->GetColumnByName("i16"));
-    auto arrC = std::static_pointer_cast<arrow::Int32Array>(batch->GetColumnByName("i32"));
+bool CheckSorted1000(const std::shared_ptr<arrow20::RecordBatch>& batch, bool desc = false) {
+    auto arrA = std::static_pointer_cast<arrow20::Int8Array>(batch->GetColumnByName("i8"));
+    auto arrB = std::static_pointer_cast<arrow20::Int16Array>(batch->GetColumnByName("i16"));
+    auto arrC = std::static_pointer_cast<arrow20::Int32Array>(batch->GetColumnByName("i32"));
     UNIT_ASSERT(arrA->length() == arrB->length() && arrA->length() == arrC->length());
 
     for (int i = 0; i < arrA->length(); ++i) {
@@ -583,10 +583,10 @@ bool CheckSorted1000(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc
     return true;
 }
 
-bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, bool desc = false) {
-    auto arrA = std::static_pointer_cast<arrow::Int8Array>(batch->GetColumnByName("i8"));
-    auto arrB = std::static_pointer_cast<arrow::Int16Array>(batch->GetColumnByName("i16"));
-    auto arrC = std::static_pointer_cast<arrow::Int32Array>(batch->GetColumnByName("i32"));
+bool CheckSorted(const std::shared_ptr<arrow20::RecordBatch>& batch, bool desc = false) {
+    auto arrA = std::static_pointer_cast<arrow20::Int8Array>(batch->GetColumnByName("i8"));
+    auto arrB = std::static_pointer_cast<arrow20::Int16Array>(batch->GetColumnByName("i16"));
+    auto arrC = std::static_pointer_cast<arrow20::Int32Array>(batch->GetColumnByName("i32"));
     UNIT_ASSERT(arrA->length() == arrB->length() && arrA->length() == arrC->length());
 
     ui32 prev = RestoreValue(arrA->Value(0), arrB->Value(0), arrC->Value(0));
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     Y_UNIT_TEST(BatchBuilder) {
         std::vector<TDataRow> rows = TestRows();
 
-        std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows);
+        std::shared_ptr<arrow20::RecordBatch> batch = VectorToBatch(rows);
         UNIT_ASSERT(batch);
 
         auto expectedSchema = TDataRow::MakeArrowSchema();
@@ -662,11 +662,11 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), testValues.size());
 
         auto column = batch->column(0);
-        UNIT_ASSERT(column->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
-        auto fsb_type = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+        UNIT_ASSERT(column->type()->id() == arrow20::Type::FIXED_SIZE_BINARY);
+        auto fsb_type = std::static_pointer_cast<arrow20::FixedSizeBinaryType>(column->type());
         UNIT_ASSERT_VALUES_EQUAL(fsb_type->byte_width(), NScheme::FSB_SIZE);
 
-        auto fsb_array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        auto fsb_array = std::static_pointer_cast<arrow20::FixedSizeBinaryArray>(column);
         for (size_t i = 0; i < testValues.size(); ++i) {
             auto value = fsb_array->GetString(i);
             UNIT_ASSERT_VALUES_EQUAL(value, testValues[i]);
@@ -708,11 +708,11 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), testValues.size());
 
         auto column = batch->column(0);
-        UNIT_ASSERT(column->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
-        auto fsb_type = std::static_pointer_cast<arrow::FixedSizeBinaryType>(column->type());
+        UNIT_ASSERT(column->type()->id() == arrow20::Type::FIXED_SIZE_BINARY);
+        auto fsb_type = std::static_pointer_cast<arrow20::FixedSizeBinaryType>(column->type());
         UNIT_ASSERT_VALUES_EQUAL(fsb_type->byte_width(), NScheme::FSB_SIZE);
 
-        auto fsb_array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
+        auto fsb_array = std::static_pointer_cast<arrow20::FixedSizeBinaryArray>(column);
         for (size_t i = 0; i < testValues.size(); ++i) {
             auto value = fsb_array->GetString(i);
             UNIT_ASSERT_VALUES_EQUAL(value, testValues[i]);
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             cellRows.push_back(TOwnedCellVec(row.SerializedCells()));
         }
 
-        std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows);
+        std::shared_ptr<arrow20::RecordBatch> batch = VectorToBatch(rows);
         UNIT_ASSERT(batch);
 
         auto expectedSchema = TDataRow::MakeArrowSchema();
@@ -773,17 +773,17 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             testValues.push_back(value);
         }
 
-        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(NScheme::FSB_SIZE), arrow::default_memory_pool());
+        arrow20::FixedSizeBinaryBuilder builder(arrow20::fixed_size_binary(NScheme::FSB_SIZE), arrow20::default_memory_pool());
         for (const auto& value : testValues) {
             UNIT_ASSERT(builder.Append(value).ok());
         }
-        std::shared_ptr<arrow::FixedSizeBinaryArray> array;
+        std::shared_ptr<arrow20::FixedSizeBinaryArray> array;
         UNIT_ASSERT(builder.Finish(&array).ok());
 
-        auto schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{
-            arrow::field("decimal_col", arrow::fixed_size_binary(NScheme::FSB_SIZE))
+        auto schema = std::make_shared<arrow20::Schema>(std::vector<std::shared_ptr<arrow20::Field>>{
+            arrow20::field("decimal_col", arrow20::fixed_size_binary(NScheme::FSB_SIZE))
         });
-        auto batch = arrow::RecordBatch::Make(schema, testValues.size(), {array});
+        auto batch = arrow20::RecordBatch::Make(schema, testValues.size(), {array});
 
         struct TRowWriter : public NArrow::IRowWriter {
             std::vector<TOwnedCellVec> Rows;
@@ -821,17 +821,17 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             testValues.push_back(uuid);
         }
 
-        arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(NScheme::FSB_SIZE), arrow::default_memory_pool());
+        arrow20::FixedSizeBinaryBuilder builder(arrow20::fixed_size_binary(NScheme::FSB_SIZE), arrow20::default_memory_pool());
         for (const auto& value : testValues) {
             UNIT_ASSERT(builder.Append(value).ok());
         }
-        std::shared_ptr<arrow::FixedSizeBinaryArray> array;
+        std::shared_ptr<arrow20::FixedSizeBinaryArray> array;
         UNIT_ASSERT(builder.Finish(&array).ok());
 
-        auto schema = std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{
-            arrow::field("uuid_col", arrow::fixed_size_binary(NScheme::FSB_SIZE))
+        auto schema = std::make_shared<arrow20::Schema>(std::vector<std::shared_ptr<arrow20::Field>>{
+            arrow20::field("uuid_col", arrow20::fixed_size_binary(NScheme::FSB_SIZE))
         });
-        auto batch = arrow::RecordBatch::Make(schema, testValues.size(), {array});
+        auto batch = arrow20::RecordBatch::Make(schema, testValues.size(), {array});
 
         struct TRowWriter : public NArrow::IRowWriter {
             std::vector<TOwnedCellVec> Rows;
@@ -856,17 +856,17 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(SortWithCompositeKey) {
-        std::shared_ptr<arrow::Table> table = Shuffle(MakeTable1000());
+        std::shared_ptr<arrow20::Table> table = Shuffle(MakeTable1000());
 
         // Table sort is not supported yet: we need not chunked arrays in MakeSortPermutation
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(table);
+        std::shared_ptr<arrow20::RecordBatch> batch = ExtractBatch(table);
 
         UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), 1000);
         UNIT_ASSERT(!CheckSorted1000(batch));
 
         auto sortPermutation = NArrow::MakeSortPermutation(batch, table->schema(), false);
 
-        auto res = arrow::compute::Take(batch, sortPermutation);
+        auto res = arrow20::compute::Take(batch, sortPermutation);
         UNIT_ASSERT(res.ok());
         batch = (*res).record_batch();
 
@@ -875,17 +875,17 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(MergingSortedInputStream) {
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
+        std::shared_ptr<arrow20::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
         batches.push_back(batch->Slice(0, 100));    // 0..100 +100
         batches.push_back(batch->Slice(100, 200));  // 100..300 +200
         batches.push_back(batch->Slice(200, 400));  // 200..600 +300
         batches.push_back(batch->Slice(500, 50));   // 500..550 +50
         batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
-        std::shared_ptr<arrow::RecordBatch> sorted;
+        std::shared_ptr<arrow20::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
@@ -903,17 +903,17 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReversed) {
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
+        std::shared_ptr<arrow20::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
         batches.push_back(batch->Slice(0, 100));    // 0..100 +100
         batches.push_back(batch->Slice(100, 200));  // 100..300 +200
         batches.push_back(batch->Slice(200, 400));  // 200..600 +300
         batches.push_back(batch->Slice(500, 50));   // 500..550 +50
         batches.push_back(batch->Slice(600, 1));    // 600..601 +1
 
-        std::shared_ptr<arrow::RecordBatch> sorted;
+        std::shared_ptr<arrow20::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = { batch->schema()->field(0)->name() };
@@ -931,16 +931,16 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(MergingSortedInputStreamReplace) {
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
+        std::shared_ptr<arrow20::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
         batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
         batches.push_back(AddSnapColumn(batch->Slice(600, 400), 3));
 
-        std::shared_ptr<arrow::RecordBatch> sorted;
+        std::shared_ptr<arrow20::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
@@ -957,7 +957,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(sorted));
         UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
 
-        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
+        auto counts = CountValues(std::static_pointer_cast<arrow20::UInt64Array>(sorted->GetColumnByName("snap")));
         UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[1], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[2], 200);
@@ -965,10 +965,10 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
     }
 
     Y_UNIT_TEST(MaxVersionFilter) {
-        std::shared_ptr<arrow::RecordBatch> batch = ExtractBatch(MakeTable1000());
+        std::shared_ptr<arrow20::RecordBatch> batch = ExtractBatch(MakeTable1000());
         UNIT_ASSERT(CheckSorted1000(batch));
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batch->Slice(0, 400), 0));
         batches.push_back(AddSnapColumn(batch->Slice(200, 400), 1));
         batches.push_back(AddSnapColumn(batch->Slice(400, 400), 2));
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
         NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 100)};
 
-        std::shared_ptr<arrow::RecordBatch> sorted;
+        std::shared_ptr<arrow20::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
@@ -994,37 +994,37 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(CheckSorted1000(sorted));
         UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batch->schema()));
 
-        auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
+        auto counts = CountValues(std::static_pointer_cast<arrow20::UInt64Array>(sorted->GetColumnByName("snap")));
         UNIT_ASSERT_VALUES_EQUAL(counts[0], 200);
         UNIT_ASSERT_VALUES_EQUAL(counts[1], 400);
     }
 
     Y_UNIT_TEST(EqualKeysVersionFilter) {
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batchesByKey(3);
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batchesByKey(3);
         for (ui64 i = 0; i < batchesByKey.size(); ++i) {
-            batchesByKey[i] = arrow::RecordBatch::Make(
-                std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+            batchesByKey[i] = arrow20::RecordBatch::Make(
+                std::make_shared<arrow20::Schema>(arrow20::FieldVector()), 1, std::vector<std::shared_ptr<arrow20::Array>>());
             batchesByKey[i] = batchesByKey[i]
                                   ->AddColumn(batchesByKey[i]->num_columns(), "key", NArrow::MakeUI64Array(i, batchesByKey[i]->num_rows()))
                                   .ValueOrDie();
         }
 
-        std::shared_ptr<arrow::Schema> sortingSchema = std::make_shared<arrow::Schema>(*batchesByKey.front()->schema());
+        std::shared_ptr<arrow20::Schema> sortingSchema = std::make_shared<arrow20::Schema>(*batchesByKey.front()->schema());
 
-        std::shared_ptr<arrow::RecordBatch> maxVersion =
-            arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(arrow::FieldVector()), 1, std::vector<std::shared_ptr<arrow::Array>>());
+        std::shared_ptr<arrow20::RecordBatch> maxVersion =
+            arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(arrow20::FieldVector()), 1, std::vector<std::shared_ptr<arrow20::Array>>());
         maxVersion = AddSnapColumn(maxVersion, 1);
         NArrow::NMerger::TCursor maxVersionCursor{MakeSingleUi64CellTableCursor("snap", 1)};
         NArrow::NMerger::TCursor uncommittedVersionCursor{MakeSingleUi64CellTableCursor("snap", 1000)};
 
-        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        std::vector<std::shared_ptr<arrow20::RecordBatch>> batches;
         batches.push_back(AddSnapColumn(batchesByKey[0], 1));
         batches.push_back(AddSnapColumn(batchesByKey[1], 1));
         batches.push_back(AddSnapColumn(batchesByKey[1], 1));
         batches.push_back(AddSnapColumn(batchesByKey[2], 1));
         batches.push_back(AddSnapColumn(batchesByKey[2], 2));
 
-        std::shared_ptr<arrow::RecordBatch> sorted;
+        std::shared_ptr<arrow20::RecordBatch> sorted;
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = { "snap" };
@@ -1041,14 +1041,14 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         UNIT_ASSERT(NArrow::IsSortedAndUnique(sorted, batches[0]->schema()));
 
         {
-            auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("key")));
+            auto counts = CountValues(std::static_pointer_cast<arrow20::UInt64Array>(sorted->GetColumnByName("key")));
             UNIT_ASSERT_VALUES_EQUAL(counts[0], 1);
             UNIT_ASSERT_VALUES_EQUAL(counts[1], 1);
             UNIT_ASSERT_VALUES_EQUAL(counts[2], 1);
         }
 
         {
-            auto counts = CountValues(std::static_pointer_cast<arrow::UInt64Array>(sorted->GetColumnByName("snap")));
+            auto counts = CountValues(std::static_pointer_cast<arrow20::UInt64Array>(sorted->GetColumnByName("snap")));
             UNIT_ASSERT_VALUES_EQUAL(counts[1], 3);
         }
     }

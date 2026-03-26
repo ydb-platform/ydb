@@ -35,7 +35,7 @@ private:
     YDB_READONLY(bool, NoDataToWrite, false);
     TString ErrorMessage;
     std::optional<bool> IsInternalErrorFlag;
-    std::shared_ptr<arrow::RecordBatch> PKBatch;
+    std::shared_ptr<arrow20::RecordBatch> PKBatch;
     ui32 RecordsCount;
 
 public:
@@ -63,7 +63,7 @@ public:
         return ErrorMessage;
     }
 
-    const std::shared_ptr<arrow::RecordBatch>& GetPKBatchVerified() const {
+    const std::shared_ptr<arrow20::RecordBatch>& GetPKBatchVerified() const {
         AFL_VERIFY(PKBatch);
         return PKBatch;
     }
@@ -84,7 +84,7 @@ public:
         return WriteMeta;
     }
 
-    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow::RecordBatch>& pkBatch,
+    TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMeta, const ui64 dataSize, const std::shared_ptr<arrow20::RecordBatch>& pkBatch,
         const bool noDataToWrite, const ui32 recordsCount);
 };
 

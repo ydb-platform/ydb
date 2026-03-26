@@ -328,11 +328,11 @@ namespace NYql::NDq {
             for (int i = 0; i < batch->num_columns(); ++i) {
                 const auto& columnName = batch->schema()->field(i)->name();
                 const auto ix = fieldNameOrder[columnName];
-                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)));
+                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow20::Datum(batch->column(i)));
             }
 
             structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())));
+                arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(batch->num_rows())));
             value = structObj;
 
             buffer.emplace_back(std::move(value));

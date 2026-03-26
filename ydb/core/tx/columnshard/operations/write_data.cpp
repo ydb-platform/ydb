@@ -40,14 +40,14 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, con
     return !!IncomingData;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
+TConclusion<std::shared_ptr<arrow20::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
-    std::shared_ptr<arrow::RecordBatch> result;
+    std::shared_ptr<arrow20::RecordBatch> result;
     if (Operation.HasPayloadSchema()) {
         auto payloadSchema = NArrow::DeserializeSchema(Operation.GetPayloadSchema());
         result = NArrow::DeserializeBatch(IncomingData, payloadSchema);
     } else {
-        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow20::Schema>(BatchSchema->GetSchema()->fields()));
     }
 
     TString emptyString;
@@ -60,12 +60,12 @@ ui64 TArrowData::GetSchemaVersion() const {
 }
 
 TString TArrowData::DebugString() const {
-    std::shared_ptr<arrow::RecordBatch> result;
+    std::shared_ptr<arrow20::RecordBatch> result;
     if (Operation.HasPayloadSchema()) {
         auto payloadSchema = NArrow::DeserializeSchema(Operation.GetPayloadSchema());
         result = NArrow::DeserializeBatch(IncomingData, payloadSchema);
     } else {
-        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
+        result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow20::Schema>(BatchSchema->GetSchema()->fields()));
     }
     return result->ToString();
 }
@@ -99,7 +99,7 @@ bool TProtoArrowData::ParseFromProto(const NKikimrTxColumnShard::TEvWrite& proto
     return true;
 }
 
-TConclusion<std::shared_ptr<arrow::RecordBatch>> TProtoArrowData::ExtractBatch() {
+TConclusion<std::shared_ptr<arrow20::RecordBatch>> TProtoArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
     auto result = NArrow::DeserializeBatch(IncomingData, ArrowSchema);
     IncomingData = "";

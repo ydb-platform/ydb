@@ -3,7 +3,7 @@
 
 namespace NYql {
 
-extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx) {
+extern "C" TPgKernelState& GetPGKernelState(arrow20::compute::KernelContext* ctx) {
     return dynamic_cast<TPgKernelState&>(*ctx->state());
 }
 

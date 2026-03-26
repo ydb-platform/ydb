@@ -438,7 +438,7 @@ struct TKeyParams {
     TType* Type;
 };
 
-size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
+size_t GetBitmapPopCount(const std::shared_ptr<arrow20::ArrayData>& arr) {
     size_t len = (size_t)arr->length;
     MKQL_ENSURE(arr->GetNullCount() == 0, "Bitmap block should not have nulls");
     const ui8* src = arr->GetValues<ui8>(1);
@@ -493,7 +493,7 @@ struct TBlockCombineAllState: public TComputationValue<TBlockCombineAllState> {
     }
 
     void ProcessInput() {
-        const ui64 batchLength = TArrowBlock::From(Values_[Width_ - 1U]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const ui64 batchLength = TArrowBlock::From(Values_[Width_ - 1U]).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         if (!batchLength) {
             return;
         }
@@ -502,7 +502,7 @@ struct TBlockCombineAllState: public TComputationValue<TBlockCombineAllState> {
         if (FilterColumn_) {
             const auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
             if (filterDatum.is_scalar()) {
-                if (!filterDatum.scalar_as<arrow::UInt8Scalar>().value) {
+                if (!filterDatum.scalar_as<arrow20::UInt8Scalar>().value) {
                     return;
                 }
             } else {
@@ -818,7 +818,7 @@ public:
 
     void ProcessInput(const THolderFactory& holderFactory) {
         ++BatchNum_;
-        const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+        const auto batchLength = TArrowBlock::From(Values_.back()).GetDatum().scalar_as<arrow20::UInt64Scalar>().value;
         if (!batchLength) {
             return;
         }
@@ -827,7 +827,7 @@ public:
         if constexpr (UseFilter) {
             auto filterDatum = TArrowBlock::From(Values_[*FilterColumn_]).GetDatum();
             if (filterDatum.is_scalar()) {
-                if (!filterDatum.template scalar_as<arrow::UInt8Scalar>().value) {
+                if (!filterDatum.template scalar_as<arrow20::UInt8Scalar>().value) {
                     return;
                 }
             } else {
@@ -845,7 +845,7 @@ public:
         if constexpr (Many) {
             auto streamIndexDatum = TArrowBlock::From(Values_[StreamIndex_]).GetDatum();
             if (streamIndexDatum.is_scalar()) {
-                streamIndexScalar = streamIndexDatum.template scalar_as<arrow::UInt32Scalar>().value;
+                streamIndexScalar = streamIndexDatum.template scalar_as<arrow20::UInt32Scalar>().value;
             } else {
                 MKQL_ENSURE(streamIndexDatum.is_array(), "Expected array");
                 streamIndexData = streamIndexDatum.array()->template GetValues<ui32>(1);
@@ -859,7 +859,7 @@ public:
         }
 
         HasValues_ = true;
-        std::vector<arrow::Datum> keysDatum;
+        std::vector<arrow20::Datum> keysDatum;
         keysDatum.reserve(Keys_.size());
         for (ui32 i = 0; i < Keys_.size(); ++i) {
             keysDatum.emplace_back(TArrowBlock::From(Values_[Keys_[i].Index]).GetDatum());
@@ -1091,7 +1091,7 @@ private:
             }
         }
 
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputBlockSize_)));
+        Values.back() = holderFactory.CreateArrowBlock(arrow20::Datum(std::make_shared<arrow20::UInt64Scalar>(OutputBlockSize_)));
         OutputBlockSize_ = 0;
     }
 

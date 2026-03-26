@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
     }
 
     static std::shared_ptr<IChunkedArray> BuildCompositeArray() {
-        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
+        TCompositeChunkedArray::TBuilder builder(arrow20::utf8());
         {
             TTrivialArray::TPlainBuilder arrBuilder;
             arrBuilder.AddRecord(1, "a1");

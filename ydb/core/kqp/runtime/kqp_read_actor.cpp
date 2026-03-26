@@ -1202,7 +1202,7 @@ public:
                         NMiniKQL::WriteColumnValuesFromArrow(editAccessors, NMiniKQL::TBatchDataAccessor(result->Get()->GetArrowBatch(), NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE), columnIndex, resultColumnIndex, column.TypeInfo)
                     );
                     if (column.NotNull) {
-                        std::shared_ptr<arrow::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);
+                        std::shared_ptr<arrow20::Array> columnSharedPtr = result->Get()->GetArrowBatch()->column(columnIndex);
                         bool gotNullValue = false;
                         for (ui64 rowIndex = 0; rowIndex < result->Get()->GetRowsCount(); ++rowIndex) {
                             if (columnSharedPtr->IsNull(rowIndex)) {

@@ -31,7 +31,7 @@ class TPKRangesFilter {
 private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
-    std::shared_ptr<arrow::RecordBatch> Data;
+    std::shared_ptr<arrow20::RecordBatch> Data;
     TMemoryTrackingGuard MemoryGuard;
 
     [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
@@ -39,7 +39,7 @@ private:
         : MemoryGuard(0)
     {
     }
-    TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
+    TPKRangesFilter(const std::shared_ptr<arrow20::RecordBatch>& data);
 
     static inline TPositiveControlInteger TotalFiltersMemorySize;
 
@@ -52,7 +52,7 @@ public:
     {
     }
 
-    std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow20::Schema>& pkSchema) {
         if (SortedRanges.empty()) {
             return std::nullopt;
         }
@@ -67,8 +67,8 @@ public:
         return result;
     }
 
-    std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;
-    TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
+    std::shared_ptr<arrow20::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow20::Schema>& pkSchema) const;
+    TString SerializeToString(const std::shared_ptr<arrow20::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
         return SortedRanges.empty() || FakeRanges;
@@ -115,17 +115,17 @@ public:
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
 
-    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow::RecordBatch>& batch);
+    static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchLines(const std::shared_ptr<arrow20::RecordBatch>& batch);
 
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
-        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
-    static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
+        const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& pkSchema);
+    static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow20::Schema>& pkSchema);
     static TPKRangesFilter BuildEmpty() {
         return TPKRangesFilter();
     }
 
     static TConclusion<TPKRangesFilter> BuildFromProto(
-        const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
+        const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow20::Schema>& arrPk);
 
     size_t GetMemorySize() const {
         return NArrow::GetBatchMemorySize(Data);
@@ -513,7 +513,7 @@ class TRangesBuilder {
         }
 
         std::optional<TPredicate> BuildPredicate(
-            const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+            const std::shared_ptr<arrow20::Schema>& schema, const std::shared_ptr<arrow20::RecordBatch>& batch) const {
             if (!NumColumns) {
                 return std::nullopt;
             }
@@ -526,7 +526,7 @@ class TRangesBuilder {
 
 private:
     const std::vector<NScheme::TTypeInfo> YdbPK;
-    const std::shared_ptr<arrow::Schema> ArrPK;
+    const std::shared_ptr<arrow20::Schema> ArrPK;
     NArrow::TArrowBatchBuilder BatchBuilder;
     std::vector<std::pair<TPredicateInfo, TPredicateInfo>> RangesInfo;
 
@@ -543,7 +543,7 @@ private:
     static TConclusion<TCell> MakeDefaultCell(const NScheme::TTypeInfo typeInfo);
 
 public:
-    TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
+    TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow20::Schema>& arrPk)
         : YdbPK(ExtractTypes(ydbPk))
         , ArrPK(arrPk)
     {

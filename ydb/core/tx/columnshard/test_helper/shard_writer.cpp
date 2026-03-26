@@ -52,7 +52,7 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
 }
 
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Write(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
 //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 

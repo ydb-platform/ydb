@@ -32,9 +32,9 @@ private:
     using TBase = TSimpleColumnInfo;
     YDB_READONLY_DEF(std::shared_ptr<IBlobsStorageOperator>, Operator);
 public:
-    TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
+    TColumnFeatures(const ui32 columnId, const std::shared_ptr<arrow20::Field>& arrowField, const NArrow::NSerialization::TSerializerContainer& serializer,
         const std::shared_ptr<IBlobsStorageOperator>& bOperator, const bool needMinMax, const bool isSorted, const bool isNullable,
-        const std::shared_ptr<arrow::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
+        const std::shared_ptr<arrow20::Scalar>& defaultValue, const std::optional<ui32>& pkColumnIndex)
         : TBase(columnId, arrowField, serializer, needMinMax, isSorted, isNullable, defaultValue, pkColumnIndex)
         , Operator(bOperator)
     {

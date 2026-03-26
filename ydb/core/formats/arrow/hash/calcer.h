@@ -67,12 +67,12 @@ public:
     }
 
     template <class TAction>
-    static void CalcForAll(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const TAction& action) {
+    static void CalcForAll(const std::shared_ptr<arrow20::Array>& array, const ui64 seed, const TAction& action) {
         AFL_VERIFY(array);
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
-            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+            using TArray = typename arrow20::TypeTraits<T>::ArrayType;
             for (ui32 idx = 0; idx < array->length(); ++idx) {
                 if (array->IsNull(idx)) {
                     action(CalcSimple(Default<TString>().data(), 0, seed), idx);
@@ -80,12 +80,12 @@ public:
                 }
                 auto& typedArray = static_cast<const TArray&>(*array);
                 auto value = typedArray.GetView(idx);
-                if constexpr (arrow::has_string_view<T>()) {
+                if constexpr (arrow20::has_string_view<T>()) {
                     action(CalcSimple(value.data(), value.size(), seed), idx);
-                } else if constexpr (arrow::has_c_type<T>()) {
+                } else if constexpr (arrow20::has_c_type<T>()) {
                     action(CalcSimple(&value, sizeof(value), seed), idx);
                 } else {
-                    static_assert(arrow::is_decimal_type<T>());
+                    static_assert(arrow20::is_decimal_type<T>());
                     AFL_VERIFY(false);
                 }
             }
@@ -95,13 +95,13 @@ public:
 
     static ui64 CalcSimple(const std::string_view data, const ui64 seed);
     static ui64 CalcSimple(const void* data, const ui32 dataSize, const ui64 seed);
-    static ui64 CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed);
-    static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
-    static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
-    static void AppendField(const std::shared_ptr<arrow::Array>& array, const int row, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
-    static void AppendField(const std::shared_ptr<arrow::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
-    static ui64 CalcHash(const std::shared_ptr<arrow::Scalar>& scalar);
-    std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow::RecordBatch>& batch) const;
+    static ui64 CalcForScalar(const std::shared_ptr<arrow20::Scalar>& scalar, const ui64 seed);
+    static void AppendField(const std::shared_ptr<arrow20::Array>& array, const int row, NXX64::TStreamStringHashCalcer& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow20::Scalar>& scalar, NXX64::TStreamStringHashCalcer& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow20::Array>& array, const int row, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
+    static void AppendField(const std::shared_ptr<arrow20::Scalar>& scalar, NXX64::TStreamStringHashCalcer_H3& hashCalcer);
+    static ui64 CalcHash(const std::shared_ptr<arrow20::Scalar>& scalar);
+    std::optional<std::vector<ui64>> Execute(const std::shared_ptr<arrow20::RecordBatch>& batch) const;
 
     template <class TDataContainer, class TAcceptor>
     [[nodiscard]] bool ExecuteToArrayImpl(const std::shared_ptr<TDataContainer>& batch, const TAcceptor& acceptor) const {
@@ -131,9 +131,9 @@ public:
     }
 
     template <class TDataContainer>
-    std::shared_ptr<arrow::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch) const {
-        auto builder = NArrow::MakeBuilder(arrow::TypeTraits<arrow::UInt64Type>::type_singleton());
-        auto& intBuilder = static_cast<arrow::UInt64Builder&>(*builder);
+    std::shared_ptr<arrow20::Array> ExecuteToArray(const std::shared_ptr<TDataContainer>& batch) const {
+        auto builder = NArrow::MakeBuilder(arrow20::TypeTraits<arrow20::UInt64Type>::type_singleton());
+        auto& intBuilder = static_cast<arrow20::UInt64Builder&>(*builder);
         TStatusValidator::Validate(intBuilder.Reserve(batch->num_rows()));
 
         const auto acceptor = [&](const ui64 hash) {

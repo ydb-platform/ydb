@@ -13,7 +13,7 @@
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
-bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
+bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow20::RecordBatch>& batch) {
     if (batch) {
         FilteredRecordsCount.Add(batch->num_rows());
     }

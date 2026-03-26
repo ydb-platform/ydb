@@ -24,7 +24,7 @@ extern "C" {
 
 namespace NYql {
 
-struct TPgKernelState : arrow::compute::KernelState {
+struct TPgKernelState : arrow20::compute::KernelState {
     FmgrInfo    flinfo;         /* lookup info used for this call */
     fmNodePtr   context;        /* pass info about context of call */
     fmNodePtr   resultinfo;     /* pass or return extra info about result */
@@ -124,7 +124,7 @@ struct TInputArgsAccessor {
     std::array<const ui32*, TArgsPolicy::IsFixedArg.size()> StringOffsetsArrays;
     std::array<const ui8*, TArgsPolicy::IsFixedArg.size()> StringDataArrays;
 
-    void Bind(const std::vector<arrow::Datum>& values, size_t skipArgs = 0, TMaybe<size_t> realArgsCount = {}) {
+    void Bind(const std::vector<arrow20::Datum>& values, size_t skipArgs = 0, TMaybe<size_t> realArgsCount = {}) {
         if constexpr (!TArgsPolicy::VarArgs) {
             const size_t argCount = realArgsCount.GetOrElse(TArgsPolicy::IsFixedArg.size());
             Y_ENSURE(argCount == values.size() + skipArgs);
@@ -137,9 +137,9 @@ struct TInputArgsAccessor {
                     } else {
                         Scalars[j].isnull = false;
                         if (TArgsPolicy::IsFixedArg[j]) {
-                            Scalars[j].value = (Datum)*static_cast<const ui64*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data());
+                            Scalars[j].value = (Datum)*static_cast<const ui64*>(arrow20::internal::checked_cast<const arrow20::internal::PrimitiveScalarBase&>(scalar).data());
                         } else {
-                            auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(scalar).value;
+                            auto buffer = arrow20::internal::checked_cast<const arrow20::BaseBinaryScalar&>(scalar).value;
                             Scalars[j].value = (Datum)(buffer->data() + sizeof(void*));
                         }
                     }
@@ -166,7 +166,7 @@ struct TInputArgsAccessor {
 };
 
 template <bool HasNulls, bool IsFixed>
-void FillScalarItem(const arrow::Scalar& scalar, NullableDatum& d) {
+void FillScalarItem(const arrow20::Scalar& scalar, NullableDatum& d) {
     if constexpr (IsFixed) {
         NUdf::TFixedSizeBlockReader<ui64, HasNulls> reader;
         auto item = reader.GetScalarItem(scalar);
@@ -177,7 +177,7 @@ void FillScalarItem(const arrow::Scalar& scalar, NullableDatum& d) {
             d.value = (Datum)item.template As<ui64>();
         }
     } else {
-        NUdf::TStringBlockReader<arrow::BinaryType, HasNulls> reader;
+        NUdf::TStringBlockReader<arrow20::BinaryType, HasNulls> reader;
         auto item = reader.GetScalarItem(scalar);
         if (HasNulls && !item) {
             d.isnull = true;
@@ -189,7 +189,7 @@ void FillScalarItem(const arrow::Scalar& scalar, NullableDatum& d) {
 }
 
 template <bool HasNulls, bool IsFixed>
-void FillArrayItem(const arrow::ArrayData& array, size_t i, NullableDatum& d) {
+void FillArrayItem(const arrow20::ArrayData& array, size_t i, NullableDatum& d) {
     if constexpr (IsFixed) {
         NUdf::TFixedSizeBlockReader<ui64, HasNulls> reader;
         auto item = reader.GetItem(array, i);
@@ -200,7 +200,7 @@ void FillArrayItem(const arrow::ArrayData& array, size_t i, NullableDatum& d) {
             d.value = (Datum)item.template As<ui64>();
         }
     } else {
-        NUdf::TStringBlockReader<arrow::BinaryType, HasNulls> reader;
+        NUdf::TStringBlockReader<arrow20::BinaryType, HasNulls> reader;
         auto item = reader.GetItem(array, i);
         if (HasNulls && !item) {
             d.isnull = true;
@@ -246,7 +246,7 @@ struct TDefaultArgsPolicy {
 
 Y_PRAGMA_DIAGNOSTIC_PUSH
 Y_PRAGMA("GCC diagnostic ignored \"-Wreturn-type-c-linkage\"")
-extern "C" TPgKernelState& GetPGKernelState(arrow::compute::KernelContext* ctx);
+extern "C" TPgKernelState& GetPGKernelState(arrow20::compute::KernelContext* ctx);
 Y_PRAGMA_DIAGNOSTIC_POP
 
 template <typename TFunc, bool IsStrict, bool IsFixedResult, typename TArgsPolicy = TDefaultArgsPolicy>
@@ -255,7 +255,7 @@ struct TGenericExec {
         : Func(func)
     {}
 
-    Y_NO_INLINE arrow::Status operator()(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
+    Y_NO_INLINE arrow20::Status operator()(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res) const {
         auto& state = GetPGKernelState(ctx);
         if constexpr (!TArgsPolicy::VarArgs) {
             Y_ENSURE(batch.values.size() == TArgsPolicy::IsFixedArg.size());
@@ -290,44 +290,44 @@ struct TGenericExec {
         Y_ENSURE(state.IsFixedResult == IsFixedResult);
         TArenaMemoryContext arena;
         Dispatch1(hasScalars, hasNulls, ctx, batch, length, state, res);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    Y_NO_INLINE void Dispatch1(bool hasScalars, bool hasNulls, arrow::compute::KernelContext* ctx,
-        const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, arrow::Datum* res) const {
+    Y_NO_INLINE void Dispatch1(bool hasScalars, bool hasNulls, arrow20::compute::KernelContext* ctx,
+        const arrow20::compute::ExecBatch& batch, size_t length, TPgKernelState& state, arrow20::Datum* res) const {
         if (hasScalars) {
             if (hasNulls) {
                 if constexpr (IsFixedResult) {
-                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, true>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, true>(batch, length, state, builder);
                 }
             } else {
                 if constexpr (IsFixedResult) {
-                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, false>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
                     *res = Dispatch2<true, false>(batch, length, state, builder);
                 }
             }
         } else {
             if (hasNulls) {
                 if constexpr (IsFixedResult) {
-                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<false, true>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
                     *res = Dispatch2<false, true>(batch, length, state, builder);
                 }
             } else {
                 if constexpr (IsFixedResult) {
-                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *ctx->memory_pool(), length);
+                    NUdf::TFixedSizeArrayBuilder<ui64, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *ctx->memory_pool(), length);
                     *res = Dispatch2<false, false>(batch, length, state, builder);
                 } else {
-                    NUdf::TStringArrayBuilder<arrow::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::binary(), *ctx->memory_pool(), length);
+                    NUdf::TStringArrayBuilder<arrow20::BinaryType, true> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::binary(), *ctx->memory_pool(), length);
                     *res = Dispatch2<false, false>(batch, length, state, builder);
                 }
             }
@@ -335,7 +335,7 @@ struct TGenericExec {
     }
 
     template <bool HasScalars, bool HasNulls, typename TBuilder>
-    Y_NO_INLINE arrow::Datum Dispatch2(const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
+    Y_NO_INLINE arrow20::Datum Dispatch2(const arrow20::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
         if constexpr (!TArgsPolicy::VarArgs) {
             if (TArgsPolicy::IsFixedArg.size() == 2) {
                 if (batch.values[0].is_scalar()) {
@@ -352,7 +352,7 @@ struct TGenericExec {
     }
 
     template <bool HasScalars, bool HasNulls, EScalarArgBinary ScalarArgBinary, typename TBuilder>
-    Y_NO_INLINE arrow::Datum Dispatch3(const arrow::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
+    Y_NO_INLINE arrow20::Datum Dispatch3(const arrow20::compute::ExecBatch& batch, size_t length, TPgKernelState& state, TBuilder& builder) const {
         LOCAL_FCINFO(fcinfo, FUNC_MAX_ARGS);
         fcinfo->flinfo = &state.flinfo;
         fcinfo->context = state.context;
@@ -481,7 +481,7 @@ struct TGenericExec {
     TFunc Func;
 };
 
-using TExecFunc = std::function<arrow::Status(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res)>;
+using TExecFunc = std::function<arrow20::Status(arrow20::compute::KernelContext* ctx, const arrow20::compute::ExecBatch& batch, arrow20::Datum* res)>;
 
 template <bool IsStrict, bool IsFixedResult>
 TExecFunc MakeIndirectExec(PGFunction pgFunc) {
@@ -509,7 +509,7 @@ NullableDatum GetInputValue(const TInputArgsAccessor<TArgsPolicy>& accessor, ui3
 }
 
 template <bool IsFixed>
-NullableDatum GetInputValueSlow(const std::vector<arrow::Datum>& values, ui32 j, ui64 row) {
+NullableDatum GetInputValueSlow(const std::vector<arrow20::Datum>& values, ui32 j, ui64 row) {
     NullableDatum d;
     if (values[j].is_scalar()) {
         if constexpr (IsFixed) {
@@ -531,7 +531,7 @@ NullableDatum GetInputValueSlow(const std::vector<arrow::Datum>& values, ui32 j,
 template <bool IsFixed, bool HasFunc, typename TFunc, bool IsStrict, typename TBuilder>
 class TAggColumnBuilder : public NKikimr::NMiniKQL::IAggColumnBuilder {
 public:
-    TAggColumnBuilder(const TString& name, TFunc func, ui64 size, FmgrInfo* funcInfo, const std::shared_ptr<arrow::DataType>& dataType,
+    TAggColumnBuilder(const TString& name, TFunc func, ui64 size, FmgrInfo* funcInfo, const std::shared_ptr<arrow20::DataType>& dataType,
         NKikimr::NMiniKQL::TComputationContext& ctx, i32 typeLen)
         : Name_(name)
         , Func_(func)
@@ -714,7 +714,7 @@ private:
 
         void AddMany(void* state, const NUdf::TUnboxedValue* columns, ui64 batchLength, std::optional<ui64> filtered) final {
             auto typedState = (NullableDatum*)state;
-            std::vector<arrow::Datum> values;
+            std::vector<arrow20::Datum> values;
             values.reserve(this->ArgsColumns_.size());
             for (auto col : this->ArgsColumns_) {
                 values.push_back(NKikimr::NMiniKQL::TArrowBlock::From(columns[col]).GetDatum());
@@ -759,7 +759,7 @@ private:
         }
 
         template <bool HasNulls, bool HasScalars>
-        void AddManyImpl(NullableDatum* typedState, const std::vector<arrow::Datum>& values, ui64 batchLength, const ui8* filterBitmap) {
+        void AddManyImpl(NullableDatum* typedState, const std::vector<arrow20::Datum>& values, ui64 batchLength, const ui8* filterBitmap) {
             LOCAL_FCINFO(transCallInfo, FUNC_MAX_ARGS);
             transCallInfo->flinfo = &this->TransFuncInfo_;
             if constexpr (!TTransArgsPolicy::VarArgs) {
@@ -1018,16 +1018,16 @@ SkipCall:;
             auto typeLen = NPg::LookupType(SerializedType_).TypeLen;
             if constexpr (IsSerializedTypeFixed) {
                 return std::make_unique<TAggColumnBuilder<true, HasSerialize, TSerializeFunc, true, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
-                    this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::uint64(), this->Ctx_, typeLen);
+                    this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow20::uint64(), this->Ctx_, typeLen);
             } else {
-                return std::make_unique<TAggColumnBuilder<false, HasSerialize, TSerializeFunc, true, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true, NYql::NUdf::EPgStringType::Text>>>(
-                    this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow::binary(), this->Ctx_, typeLen);
+                return std::make_unique<TAggColumnBuilder<false, HasSerialize, TSerializeFunc, true, NYql::NUdf::TStringArrayBuilder<arrow20::BinaryType, true, NYql::NUdf::EPgStringType::Text>>>(
+                    this->AggDesc_.Name, this->SerializeFunc_, size, &this->SerializeFuncInfo_, arrow20::binary(), this->Ctx_, typeLen);
             }
         }
 
         const ui32 SerializedType_;
         ui64 BatchNum_ = Max<ui64>();
-        std::vector<arrow::Datum> Values_;
+        std::vector<arrow20::Datum> Values_;
         TInputArgsAccessor<TTransArgsPolicy> InputArgsAccessor_;
     };
 
@@ -1194,10 +1194,10 @@ SkipCall:;
             auto typeLen = NPg::LookupType(FinalType_).TypeLen;
             if constexpr (IsFinalTypeFixed) {
                 return std::make_unique<TAggColumnBuilder<true, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TFixedSizeArrayBuilder<ui64, true>>>(
-                    this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::uint64(), this->Ctx_, typeLen);
+                    this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow20::uint64(), this->Ctx_, typeLen);
             } else {
-                return std::make_unique<TAggColumnBuilder<false, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, true>>>(
-                    this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow::binary(), this->Ctx_, typeLen);
+                return std::make_unique<TAggColumnBuilder<false, HasFinal, TFinalFunc, IsFinalStrict, NYql::NUdf::TStringArrayBuilder<arrow20::BinaryType, true>>>(
+                    this->AggDesc_.Name, this->FinalFunc_, size, &this->FinalFuncInfo_, arrow20::binary(), this->Ctx_, typeLen);
             }
         }
 
@@ -1210,7 +1210,7 @@ SkipCall:;
         const ui32 FinalType_;
         const i32 TransTypeLen_;
         ui64 BatchNum_ = Max<ui64>();
-        std::vector<arrow::Datum> Values_;
+        std::vector<arrow20::Datum> Values_;
         TInputArgsAccessor<TDeserializeArgsPolicy> DeserializeAccessor_;
         TInputArgsAccessor<TCombineArgsPolicy> CombineAccessor_;
         FmgrInfo DeserializeFuncInfo_;

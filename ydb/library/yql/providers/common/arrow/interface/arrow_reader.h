@@ -46,14 +46,14 @@ public:
 
     class TSchemaResponse {
     public:
-        TSchemaResponse(std::shared_ptr<arrow::Schema> schema, int numRowGroups, std::shared_ptr<TArrowFileCookie> cookie);
-        std::shared_ptr<arrow::Schema> Schema;
+        TSchemaResponse(std::shared_ptr<arrow20::Schema> schema, int numRowGroups, std::shared_ptr<TArrowFileCookie> cookie);
+        std::shared_ptr<arrow20::Schema> Schema;
         int NumRowGroups;
         std::shared_ptr<TArrowFileCookie> Cookie;
     };
 
     virtual NThreading::TFuture<TSchemaResponse> GetSchema(const TArrowFileDesc& desc) const = 0;
-    virtual NThreading::TFuture<std::shared_ptr<arrow::Table>> ReadRowGroup(
+    virtual NThreading::TFuture<std::shared_ptr<arrow20::Table>> ReadRowGroup(
         const TArrowFileDesc& desc,
         int rowGroupIndex,
         const std::vector<int>& columnIndices

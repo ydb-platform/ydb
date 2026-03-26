@@ -3,8 +3,8 @@
 
 namespace NKikimr::NArrow {
 
-std::string CompressionToString(const arrow::Compression::type compression) {
-    return arrow::util::Codec::GetCodecAsString(compression);
+std::string CompressionToString(const arrow20::Compression::type compression) {
+    return arrow20::util::Codec::GetCodecAsString(compression);
 }
 
 std::string CompressionToString(const NKikimrSchemeOp::EColumnCodec compression) {
@@ -19,35 +19,35 @@ std::string CompressionToString(const NKikimrSchemeOp::EColumnCodec compression)
     return "";
 }
 
-std::optional<arrow::Compression::type> CompressionFromString(const std::string& compressionStr) {
-    auto result = arrow::util::Codec::GetCompressionType(compressionStr);
+std::optional<arrow20::Compression::type> CompressionFromString(const std::string& compressionStr) {
+    auto result = arrow20::util::Codec::GetCompressionType(compressionStr);
     if (!result.ok()) {
         return {};
     }
     return *result;
 }
 
-NKikimrSchemeOp::EColumnCodec CompressionToProto(const arrow::Compression::type compression) {
+NKikimrSchemeOp::EColumnCodec CompressionToProto(const arrow20::Compression::type compression) {
     switch (compression) {
-        case arrow::Compression::UNCOMPRESSED:
+        case arrow20::Compression::UNCOMPRESSED:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain;
-        case arrow::Compression::LZ4_FRAME:
+        case arrow20::Compression::LZ4_FRAME:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
-        case arrow::Compression::ZSTD:
+        case arrow20::Compression::ZSTD:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD;
         default:
             return NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4;
     }
 }
 
-std::optional<arrow::Compression::type> CompressionFromProto(const NKikimrSchemeOp::EColumnCodec compression) {
+std::optional<arrow20::Compression::type> CompressionFromProto(const NKikimrSchemeOp::EColumnCodec compression) {
     switch (compression) {
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
-            return arrow::Compression::UNCOMPRESSED;
+            return arrow20::Compression::UNCOMPRESSED;
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD:
-            return arrow::Compression::ZSTD;
+            return arrow20::Compression::ZSTD;
         case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
-            return arrow::Compression::LZ4_FRAME;
+            return arrow20::Compression::LZ4_FRAME;
     }
 }
 

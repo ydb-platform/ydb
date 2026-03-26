@@ -7611,23 +7611,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto result = session.ExecuteSchemeQuery(createTable).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-        auto schema = std::make_shared<arrow::Schema>(
-            std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("CUint8", arrow::uint8(), false),
-                arrow::field("CInt8", arrow::int8(), false),
-                arrow::field("CUint16", arrow::uint16(), false),
-                arrow::field("CInt16", arrow::int16(), false)
+        auto schema = std::make_shared<arrow20::Schema>(
+            std::vector<std::shared_ptr<arrow20::Field>>{
+                arrow20::field("CUint8", arrow20::uint8(), false),
+                arrow20::field("CInt8", arrow20::int8(), false),
+                arrow20::field("CUint16", arrow20::uint16(), false),
+                arrow20::field("CInt16", arrow20::int16(), false)
             });
 
         size_t rowsCount = 10;
         auto builders = NArrow::MakeBuilders(schema, rowsCount);
         for (size_t i = 0; i < rowsCount; ++i) {
-            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt8Type>(*builders[0], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int8Type>(*builders[1], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::UInt16Type>(*builders[2], i));
-            Y_ABORT_UNLESS(NArrow::Append<arrow::Int16Type>(*builders[3], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::UInt8Type>(*builders[0], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int8Type>(*builders[1], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::UInt16Type>(*builders[2], i));
+            Y_ABORT_UNLESS(NArrow::Append<arrow20::Int16Type>(*builders[3], i));
         }
-        auto batch = arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
+        auto batch = arrow20::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
 
         TString strSchema = NArrow::SerializeSchema(*schema);
         TString strBatch = NArrow::SerializeBatchNoCompression(batch);
@@ -14821,9 +14821,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.CreateTable(testTable);
 
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
-        dataBuilders.push_back(NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+        dataBuilders.push_back(NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
         for (ui64 i = 1; i < schema.size(); ++i) {
-            dataBuilders.push_back(std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>(schema[i].GetName()));
+            dataBuilders.push_back(std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>(schema[i].GetName()));
         }
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(10000);
         testHelper.BulkUpsert(testTable, batch);
@@ -14879,9 +14879,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
-            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
         dataBuilders.push_back(
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>("int_column"));
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
         testHelper.BulkUpsert(testTable, batch);
 
@@ -14911,9 +14911,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
-            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
         dataBuilders.push_back(
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>("int_column"));
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
 
         for (ui32 i = 0; i < 5; i++) {
@@ -14924,11 +14924,11 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
             TVector<NConstruction::IArrayBuilder::TPtr> newDataBuilders;
             newDataBuilders.push_back(
-                NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+                NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
             newDataBuilders.push_back(
-                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>("int_column"));
             newDataBuilders.push_back(
-                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("column" + ToString(i)));
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>>("column" + ToString(i)));
             auto newBatch = NConstruction::TRecordBatchConstructor(newDataBuilders).BuildBatch(100);
 
             testHelper.BulkUpsert(testTable, newBatch);
@@ -14963,9 +14963,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
-            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
         dataBuilders.push_back(
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>("int_column"));
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
 
         testHelper.BulkUpsert(testTable, batch);
@@ -14995,9 +14995,9 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
 
         TVector<NConstruction::IArrayBuilder::TPtr> dataBuilders;
         dataBuilders.push_back(
-            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::UInt64Type>>::BuildNotNullable("id", false));
         dataBuilders.push_back(
-            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow20::Int32Type>>>("int_column"));
         auto batch = NConstruction::TRecordBatchConstructor(dataBuilders).BuildBatch(100);
 
         testHelper.BulkUpsert(testTable, batch);

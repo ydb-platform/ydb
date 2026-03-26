@@ -8,7 +8,7 @@ class THashGranuleSharding: public IGranuleShardingLogic {
 private:
     std::optional<NArrow::NHash::TXX64> HashCalcer;
 protected:
-    std::vector<ui64> CalcHashes(const std::shared_ptr<arrow::Table>& table) const {
+    std::vector<ui64> CalcHashes(const std::shared_ptr<arrow20::Table>& table) const {
         AFL_VERIFY(!!HashCalcer);
         return HashCalcer->ExecuteToVector(table);
     }
@@ -88,7 +88,7 @@ public:
         return TBase::DebugString() + ";Columns: " + JoinSeq(", ", GetShardingColumns());
     }
 
-    virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    virtual std::vector<ui64> MakeHashes(const std::shared_ptr<arrow20::RecordBatch>& batch) const {
         AFL_VERIFY(!!HashCalcer);
         return HashCalcer->Execute(batch).value_or(Default<std::vector<ui64>>());
     }

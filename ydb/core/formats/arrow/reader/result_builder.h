@@ -14,22 +14,22 @@ namespace NKikimr::NArrow::NMerger {
 
 class TRecordBatchBuilder {
 private:
-    std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow::Field>>, Fields);
+    std::vector<std::unique_ptr<arrow20::ArrayBuilder>> Builders;
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<arrow20::Field>>, Fields);
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui32>, MemoryBufferLimit);
 
     ui64 CurrentBytesUsed = 0;
-    static bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow::Field>>& f1, const std::vector<std::shared_ptr<arrow::Field>>& f2);
+    static bool IsSameFieldsSequence(const std::vector<std::shared_ptr<arrow20::Field>>& f1, const std::vector<std::shared_ptr<arrow20::Field>>& f2);
 
 public:
 
     class TRecordGuard {
     private:
-        const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& Builders;
+        const std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& Builders;
         ui32 ColumnIdx = 0;
     public:
-        TRecordGuard(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders)
+        TRecordGuard(std::vector<std::unique_ptr<arrow20::ArrayBuilder>>& builders)
             : Builders(builders)
         {
 
@@ -39,7 +39,7 @@ public:
             AFL_VERIFY(ColumnIdx == Builders.size());
         }
 
-        void Add(const arrow::Array& arr, const ui32 position, ui64* recordSize = nullptr) {
+        void Add(const arrow20::Array& arr, const ui32 position, ui64* recordSize = nullptr) {
             AFL_VERIFY(ColumnIdx < Builders.size());
             AFL_VERIFY(NArrow::Append(*Builders[ColumnIdx], arr, position, recordSize));
             AFL_VERIFY(++ColumnIdx <= Builders.size());
@@ -56,16 +56,16 @@ public:
 
     TString GetColumnNames() const;
 
-    TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::optional<ui32> rowsCountExpectation = {}, const THashMap<std::string, ui64>& fieldDataSizePreallocated = {});
+    TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow20::Field>>& fields, const std::optional<ui32> rowsCountExpectation = {}, const THashMap<std::string, ui64>& fieldDataSizePreallocated = {});
 
-    std::shared_ptr<arrow::RecordBatch> Finalize();
+    std::shared_ptr<arrow20::RecordBatch> Finalize();
 
     bool IsBufferExhausted() const {
         return MemoryBufferLimit && *MemoryBufferLimit < CurrentBytesUsed;
     }
     void AddRecord(const TCursor& position);
     void AddRecord(const TRWSortableBatchPosition& position);
-    void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& schema) const;
+    void ValidateDataSchema(const std::shared_ptr<arrow20::Schema>& schema) const;
     void AddRecord(const TBatchIterator& cursor);
     void SkipRecord(const TBatchIterator& cursor);
 };

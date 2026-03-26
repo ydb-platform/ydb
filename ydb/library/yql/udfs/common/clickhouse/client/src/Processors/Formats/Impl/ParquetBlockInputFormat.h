@@ -9,7 +9,7 @@
 
 namespace parquet::arrow { class FileReader; }
 
-namespace arrow { class Buffer; }
+namespace arrow20 { class Buffer; }
 
 namespace NDB
 {
@@ -32,7 +32,7 @@ private:
     void prepareReader();
 
 private:
-    std::unique_ptr<parquet::arrow::FileReader> file_reader;
+    std::unique_ptr<parquet::arrow20::FileReader> file_reader;
     int row_group_total = 0;
     // indices of columns to read from Parquet file
     std::vector<int> column_indices;

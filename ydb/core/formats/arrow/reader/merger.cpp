@@ -37,8 +37,8 @@ void TMergePartialStream::CheckSequenceInDebug(const TRWSortableBatchPosition& n
 #endif
 }
 
-std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
-    std::shared_ptr<arrow::Table> result;
+std::shared_ptr<arrow20::Table> TMergePartialStream::SingleSourceDrain(const TSortableBatchPosition& readTo, const bool includeFinish, std::optional<TCursor>* lastResultPosition) {
+    std::shared_ptr<arrow20::Table> result;
     if (SortHeap.Empty()) {
         return result;
     }
@@ -110,10 +110,10 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
     return result;
 }
 
-std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllParts(const TIntervalPositions& positions,
-    const std::vector<std::shared_ptr<arrow::Field>>& resultFields)
+std::vector<std::shared_ptr<arrow20::RecordBatch>> TMergePartialStream::DrainAllParts(const TIntervalPositions& positions,
+    const std::vector<std::shared_ptr<arrow20::Field>>& resultFields)
 {
-    std::vector<std::shared_ptr<arrow::RecordBatch>> result;
+    std::vector<std::shared_ptr<arrow20::RecordBatch>> result;
     for (auto&& i : positions) {
         TRecordBatchBuilder indexesBuilder(resultFields);
         if (SortHeap.Empty() || i.GetPosition().Compare(SortHeap.Current().GetKeyColumns()) == std::partial_ordering::less) {

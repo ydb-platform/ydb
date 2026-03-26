@@ -750,8 +750,8 @@ public:
  * are pending.
  */
 class TArrowTokenStream {
-    std::deque<std::shared_ptr<arrow::UInt64Array>> PendingDocumentIds;
-    std::deque<std::shared_ptr<arrow::UInt32Array>> PendingDocumentFrequencies;
+    std::deque<std::shared_ptr<arrow20::UInt64Array>> PendingDocumentIds;
+    std::deque<std::shared_ptr<arrow20::UInt32Array>> PendingDocumentFrequencies;
     bool ReadFinished = false;
     i64 UnprocessedDocumentPos = 0;
     ui64 UnprocessedDocumentCount = 0;
@@ -793,7 +793,7 @@ public:
         YQL_ENSURE(result->Record.GetResultFormat() == NKikimrDataEvents::EDataFormat::FORMAT_ARROW);
         auto batch = result->GetArrowBatch();
         YQL_ENSURE(batch && batch->num_columns() >= 1);
-        auto docIds = std::static_pointer_cast<arrow::UInt64Array>(batch->column(0));
+        auto docIds = std::static_pointer_cast<arrow20::UInt64Array>(batch->column(0));
         YQL_ENSURE(docIds);
         YQL_ENSURE(docIds->length() == static_cast<int64_t>(result->GetRowsCount()));
         Rows += docIds->length();
@@ -802,7 +802,7 @@ public:
         MaxKey = docIds->Value(docIds->length() - 1);
         if (batch->num_columns() > 1) {
             auto array = batch->column(1);
-            auto freq_array = std::static_pointer_cast<arrow::UInt32Array>(array);
+            auto freq_array = std::static_pointer_cast<arrow20::UInt32Array>(array);
             YQL_ENSURE(freq_array);
             YQL_ENSURE(freq_array->length() == docIds->length());
             Bytes += freq_array->length() * sizeof(ui32);
@@ -2867,9 +2867,9 @@ public:
         size_t rows = msg.GetRowsCount();
         YQL_ENSURE(batch);
         YQL_ENSURE(batch->columns().size() >= 2);
-        auto docIds = std::static_pointer_cast<arrow::UInt64Array>(batch->column(0));
+        auto docIds = std::static_pointer_cast<arrow20::UInt64Array>(batch->column(0));
         YQL_ENSURE(docIds);
-        auto freq_array = std::static_pointer_cast<arrow::UInt32Array>(batch->column(1));
+        auto freq_array = std::static_pointer_cast<arrow20::UInt32Array>(batch->column(1));
         YQL_ENSURE(freq_array);
         YQL_ENSURE(freq_array->length() == docIds->length());
         YQL_ENSURE((i64)rows == freq_array->length());

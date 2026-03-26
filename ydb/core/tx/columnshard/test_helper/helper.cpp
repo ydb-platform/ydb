@@ -84,14 +84,14 @@ std::vector<NKikimr::NArrow::NTest::TTestColumn> TTestColumn::CropSchema(const s
 
 namespace NKikimr::NArrow {
 
-std::vector<std::shared_ptr<arrow::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns) {
+std::vector<std::shared_ptr<arrow20::Field>> MakeArrowFields(const std::vector<NTest::TTestColumn>& columns) {
     std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowFields(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());
     return result.ValueUnsafe();
 }
 
-std::shared_ptr<arrow::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns) {
+std::shared_ptr<arrow20::Schema> MakeArrowSchema(const std::vector<NTest::TTestColumn>& columns) {
     std::set<std::string> notNullColumns = NTest::TTestColumn::GetNullableSet(columns);
     auto result = MakeArrowSchema(NTest::TTestColumn::ConvertToPairs(columns), notNullColumns);
     UNIT_ASSERT_C(result.ok(), result.status().ToString());

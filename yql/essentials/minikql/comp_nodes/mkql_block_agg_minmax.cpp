@@ -180,7 +180,7 @@ private:
 };
 
 template <bool IsMin>
-void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64 row, IBlockReader& reader,
+void PushValueToState(TGenericState* typedState, const arrow20::Datum& datum, ui64 row, IBlockReader& reader,
                       IBlockItemConverter& converter, NYql::NUdf::IBlockItemComparator& comparator, TComputationContext& ctx)
 {
     TBlockItem stateItem;
@@ -416,7 +416,7 @@ private:
 };
 
 template <typename TStringType, bool IsMin>
-void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64 row) {
+void PushValueToState(TGenericState* typedState, const arrow20::Datum& datum, ui64 row) {
     using TOffset = typename TPrimitiveDataType<TStringType>::TResult::offset_type;
     ;
 
@@ -428,7 +428,7 @@ void PushValueToState(TGenericState* typedState, const arrow::Datum& datum, ui64
     bool stateUpdated = false;
     if (datum.is_scalar()) {
         if (datum.scalar()->is_valid) {
-            auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(*datum.scalar()).value;
+            auto buffer = arrow20::internal::checked_cast<const arrow20::BaseBinaryScalar&>(*datum.scalar()).value;
             const char* data = reinterpret_cast<const char*>(buffer->data());
             auto value = NUdf::TStringRef(data, buffer->size());
             UpdateMinMax<IsMin>(currentState, stateUpdated, value);
@@ -494,7 +494,7 @@ public:
         bool stateUpdated = false;
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                auto buffer = arrow::internal::checked_cast<const arrow::BaseBinaryScalar&>(*datum.scalar()).value;
+                auto buffer = arrow20::internal::checked_cast<const arrow20::BaseBinaryScalar&>(*datum.scalar()).value;
                 const char* data = reinterpret_cast<const char*>(buffer->data());
                 auto value = NUdf::TStringRef(data, buffer->size());
                 UpdateMinMax<IsMin>(currentState, stateUpdated, value);
@@ -787,7 +787,7 @@ private:
 };
 
 template <bool IsNullable, bool IsScalar, typename TIn, bool IsMin>
-static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const arrow::Datum& datum, ui64 row) {
+static void PushValueToState(TState<IsNullable, TIn, IsMin>* typedState, const arrow20::Datum& datum, ui64 row) {
     using TInScalar = typename TPrimitiveDataType<TIn>::TScalarResult;
     if constexpr (IsScalar) {
         Y_ENSURE(datum.is_scalar());
@@ -856,7 +856,7 @@ public:
 
 private:
     const ui32 ArgColumn_;
-    const std::shared_ptr<arrow::DataType> BuilderDataType_;
+    const std::shared_ptr<arrow20::DataType> BuilderDataType_;
     TType* const Type_;
 };
 

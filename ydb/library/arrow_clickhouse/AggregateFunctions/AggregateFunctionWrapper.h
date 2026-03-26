@@ -10,24 +10,24 @@
 namespace CH
 {
 
-class ArrowAggregateFunctionWrapper : public arrow::compute::ScalarAggregateFunction
+class ArrowAggregateFunctionWrapper : public arrow20::compute::ScalarAggregateFunction
 {
 public:
     ArrowAggregateFunctionWrapper(std::string name)
-        : arrow::compute::ScalarAggregateFunction(std::move(name), arrow::compute::Arity::Unary(), nullptr)
+        : arrow20::compute::ScalarAggregateFunction(std::move(name), arrow20::compute::Arity::Unary(), nullptr)
     {}
 
     virtual AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) const = 0;
 
-    arrow::Result<arrow::Datum> Execute(
-        const std::vector<arrow::Datum>& args,
-        const arrow::compute::FunctionOptions* options,
-        arrow::compute::ExecContext* /*ctx*/) const override
+    arrow20::Result<arrow20::Datum> Execute(
+        const std::vector<arrow20::Datum>& args,
+        const arrow20::compute::FunctionOptions* options,
+        arrow20::compute::ExecContext* /*ctx*/) const override
     {
         static const std::string result_name = "res";
         static const std::vector<std::string> arg_names = {"0", "1", "2", "3", "4", "5"};
         if (args.size() > arg_names.size())
-            return arrow::Status::Invalid("unexpected arguments count");
+            return arrow20::Status::Invalid("unexpected arguments count");
 
         bool has_nullable_key = true;
         if (options)
@@ -40,8 +40,8 @@ public:
         arg_positions.reserve(args.size());
 
         DataTypes types;
-        arrow::FieldVector fields;
-        std::vector<std::shared_ptr<arrow::Array>> columns;
+        arrow20::FieldVector fields;
+        std::vector<std::shared_ptr<arrow20::Array>> columns;
 
         types.reserve(args.size());
         fields.reserve(args.size());
@@ -52,24 +52,24 @@ public:
         for (auto& arg : args)
         {
             if (!arg.is_array())
-                return arrow::Status::Invalid("argument is not an array");
+                return arrow20::Status::Invalid("argument is not an array");
 
             columns.push_back(arg.make_array());
             types.push_back(columns.back()->type());
-            fields.push_back(std::make_shared<arrow::Field>(arg_names[arg_num], types.back()));
+            fields.push_back(std::make_shared<arrow20::Field>(arg_names[arg_num], types.back()));
 
             if (!arg_num)
                 num_rows = columns.back()->length();
             else if (num_rows != columns.back()->length())
-                return arrow::Status::Invalid("different argiments length");
+                return arrow20::Status::Invalid("different argiments length");
 
             arg_positions.push_back(arg_num);
             ++arg_num;
         }
 
-        auto batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), num_rows, columns);
+        auto batch = arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(fields), num_rows, columns);
         if (!batch)
-            return arrow::Status::Invalid("Wrong aggregation arguments: cannot make batch");
+            return arrow20::Status::Invalid("Wrong aggregation arguments: cannot make batch");
 
         AggregateDescription description {
             .function = getHouseFunction(types),
@@ -86,40 +86,40 @@ public:
 
         auto result_batch = agg_stream.read();
         if (!result_batch || result_batch->num_rows() != 1)
-            return arrow::Status::Invalid("unexpected arrgerate result");
+            return arrow20::Status::Invalid("unexpected arrgerate result");
         if (agg_stream.read())
-            return arrow::Status::Invalid("unexpected second batch in aggregate result");
+            return arrow20::Status::Invalid("unexpected second batch in aggregate result");
 
         auto res_column = result_batch->GetColumnByName(result_name);
         if (!res_column || res_column->length() != 1)
-            return arrow::Status::Invalid("no result value");
+            return arrow20::Status::Invalid("no result value");
 
         return res_column->GetScalar(0);
     }
 };
 
-class ArrowGroupBy : public arrow::compute::ScalarAggregateFunction
+class ArrowGroupBy : public arrow20::compute::ScalarAggregateFunction
 {
 public:
     ArrowGroupBy(std::string name)
-        : arrow::compute::ScalarAggregateFunction(std::move(name), arrow::compute::Arity::VarArgs(1), nullptr)
+        : arrow20::compute::ScalarAggregateFunction(std::move(name), arrow20::compute::Arity::VarArgs(1), nullptr)
     {}
 
-    arrow::Result<arrow::Datum> Execute(
-        const std::vector<arrow::Datum>& args,
-        const arrow::compute::FunctionOptions* options,
-        arrow::compute::ExecContext* /*ctx*/) const override
+    arrow20::Result<arrow20::Datum> Execute(
+        const std::vector<arrow20::Datum>& args,
+        const arrow20::compute::FunctionOptions* options,
+        arrow20::compute::ExecContext* /*ctx*/) const override
     {
         if (args.empty())
-            return arrow::Status::Invalid("GROUP BY without arguments");
+            return arrow20::Status::Invalid("GROUP BY without arguments");
         if (!options)
-            return arrow::Status::Invalid("GROUP BY without options");
+            return arrow20::Status::Invalid("GROUP BY without options");
 
         auto* opts = dynamic_cast<const GroupByOptions*>(options);
         if (!opts || !opts->schema)
-            return arrow::Status::Invalid("Wrong GROUP BY options");
+            return arrow20::Status::Invalid("Wrong GROUP BY options");
         if ((int)args.size() != opts->schema->num_fields())
-            return arrow::Status::Invalid("Wrong GROUP BY arguments count");
+            return arrow20::Status::Invalid("Wrong GROUP BY arguments count");
 
         // Find needed columns
         std::unordered_set<std::string> needed_columns;
@@ -136,10 +136,10 @@ public:
         }
 
         // Make batch with needed columns
-        std::shared_ptr<arrow::RecordBatch> batch;
+        std::shared_ptr<arrow20::RecordBatch> batch;
         {
-            std::vector<std::shared_ptr<arrow::Array>> columns;
-            std::vector<std::shared_ptr<arrow::Field>> fields;
+            std::vector<std::shared_ptr<arrow20::Array>> columns;
+            std::vector<std::shared_ptr<arrow20::Field>> fields;
             columns.reserve(needed_columns.size());
             fields.reserve(needed_columns.size());
 
@@ -155,11 +155,11 @@ public:
                 if (datum.is_array())
                 {
                     if (num_rows && *num_rows != datum.mutable_array()->length)
-                        return arrow::Status::Invalid("Arrays have different length");
+                        return arrow20::Status::Invalid("Arrays have different length");
                     num_rows = datum.mutable_array()->length;
                 }
                 else if (!datum.is_scalar())
-                    return arrow::Status::Invalid("Bad scalar: '" + field->name() + "'");
+                    return arrow20::Status::Invalid("Bad scalar: '" + field->name() + "'");
             }
             if (!num_rows) // All datums are scalars
                 num_rows = 1;
@@ -175,9 +175,9 @@ public:
                 if (datum.is_scalar())
                 {
                     // TODO: better GROUP BY over scalars
-                    auto res = arrow::MakeArrayFromScalar(*datum.scalar(), *num_rows);
+                    auto res = arrow20::MakeArrayFromScalar(*datum.scalar(), *num_rows);
                     if (!res.ok())
-                        return arrow::Status::Invalid("Bad scalar for '" + field->name() + "', " + res.status().ToString());
+                        return arrow20::Status::Invalid("Bad scalar for '" + field->name() + "', " + res.status().ToString());
                     columns.push_back(*res);
                 }
                 else
@@ -186,9 +186,9 @@ public:
                 fields.push_back(field);
             }
 
-            batch = arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), *num_rows, columns);
+            batch = arrow20::RecordBatch::Make(std::make_shared<arrow20::Schema>(fields), *num_rows, columns);
             if (!batch)
-                return arrow::Status::Invalid("Wrong GROUP BY arguments: cannot make batch");
+                return arrow20::Status::Invalid("Wrong GROUP BY arguments: cannot make batch");
         }
 
         // Make aggregats descriptions
@@ -212,14 +212,14 @@ public:
                     for (auto& agg_arg : assign.arguments) {
                         int pos = schema->GetFieldIndex(agg_arg);
                         if (pos < 0)
-                            return arrow::Status::Invalid("Unexpected aggregate function argument in GROUP BY");
+                            return arrow20::Status::Invalid("Unexpected aggregate function argument in GROUP BY");
                         arg_positions.push_back(pos);
                         types.push_back(schema->field(pos)->type());
                     }
 
                     AggregateFunctionPtr func = GetAggregateFunction(assign.function, types);
                     if (!func)
-                        return arrow::Status::Invalid("Unexpected agregate function in GROUP BY");
+                        return arrow20::Status::Invalid("Unexpected agregate function in GROUP BY");
 
                     descriptions.emplace_back(AggregateDescription{
                         .function = func,
@@ -229,7 +229,7 @@ public:
                 } else {
                     int pos = schema->GetFieldIndex(assign.result_column);
                     if (pos < 0)
-                        return arrow::Status::Invalid("Unexpected key in GROUP BY: '" + assign.result_column + "'");
+                        return arrow20::Status::Invalid("Unexpected key in GROUP BY: '" + assign.result_column + "'");
                     keys.push_back(pos);
                 }
             }
@@ -245,11 +245,11 @@ public:
 
         auto result_batch = agg_stream.read();
         if (!result_batch || (batch->num_rows() && !result_batch->num_rows()))
-            return arrow::Status::Invalid("unexpected arrgerate result");
+            return arrow20::Status::Invalid("unexpected arrgerate result");
         if (agg_stream.read())
-            return arrow::Status::Invalid("unexpected second batch in aggregate result");
+            return arrow20::Status::Invalid("unexpected second batch in aggregate result");
 
-        return arrow::Result<arrow::Datum>(result_batch);
+        return arrow20::Result<arrow20::Datum>(result_batch);
     }
 };
 

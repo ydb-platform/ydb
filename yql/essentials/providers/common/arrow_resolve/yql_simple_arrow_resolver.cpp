@@ -89,7 +89,7 @@ private:
                 YQL_ENSURE(type);
                 auto mkqlType = NCommon::BuildType(*type, typeBuilder, typeMemoization, null);
                 YQL_ENSURE(mkqlType);
-                std::shared_ptr<arrow::DataType> arrowType;
+                std::shared_ptr<arrow20::DataType> arrowType;
                 if (!ConvertArrowType(mkqlType, arrowType, cb)) {
                     allOk = false;
                     if (!cb) {

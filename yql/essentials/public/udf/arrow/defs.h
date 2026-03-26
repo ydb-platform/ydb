@@ -11,7 +11,7 @@
 
 #define ARROW_OK_S(op, ...)                      \
     do {                                         \
-        ::arrow::Status _s = (op);               \
+        ::arrow20::Status _s = (op);               \
         ARROW_CHECK_STATUS(_s, op, __VA_ARGS__); \
     } while (false)
 

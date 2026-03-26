@@ -57,7 +57,7 @@ public:
         return ColumnStats.GetAccessorConstructor(colIndex);
     }
 
-    std::shared_ptr<arrow::Field> GetField(const ui32 colIndex) const {
+    std::shared_ptr<arrow20::Field> GetField(const ui32 colIndex) const {
         return ColumnStats.GetField(colIndex);
     }
 

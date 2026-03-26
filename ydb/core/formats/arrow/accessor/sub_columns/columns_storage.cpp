@@ -62,8 +62,8 @@ void TColumnsData::TIterator::InitArrays() {
         }
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
-        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
-        CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
+        AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow20::binary()->id());
+        CurrentArrayData = static_cast<const arrow20::BinaryArray*>(ChunkAddress->GetArray().get());
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();

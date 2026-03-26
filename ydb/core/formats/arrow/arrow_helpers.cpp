@@ -31,37 +31,37 @@
 namespace NKikimr::NArrow {
 
 template <typename TType>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl() {
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl() {
     return std::make_shared<TType>();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::BooleanType>() {
-    return arrow::uint8();
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl<arrow20::BooleanType>() {
+    return arrow20::uint8();
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
-    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl<arrow20::Decimal128Type>() {
+    return arrow20::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::FixedSizeBinaryType>() {
-    return arrow::fixed_size_binary(NScheme::FSB_SIZE);
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl<arrow20::FixedSizeBinaryType>() {
+    return arrow20::fixed_size_binary(NScheme::FSB_SIZE);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
-    return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl<arrow20::TimestampType>() {
+    return arrow20::timestamp(arrow20::TimeUnit::TimeUnit::MICRO);
 }
 
 template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
-    return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
+std::shared_ptr<arrow20::DataType> CreateEmptyArrowImpl<arrow20::DurationType>() {
+    return arrow20::duration(arrow20::TimeUnit::TimeUnit::MICRO);
 }
 
-arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo) {
-    std::shared_ptr<arrow::DataType> result;
+arrow20::Result<std::shared_ptr<arrow20::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo) {
+    std::shared_ptr<arrow20::DataType> result;
     bool success = SwitchYqlTypeToArrowType(typeInfo, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
         Y_UNUSED(typeHolder);
         result = CreateEmptyArrowImpl<TType>();
@@ -72,40 +72,40 @@ arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo 
         return result;
     }
 
-    return arrow::Status::TypeError("unsupported type ", NKikimr::NScheme::TypeName(typeInfo));
+    return arrow20::Status::TypeError("unsupported type ", NKikimr::NScheme::TypeName(typeInfo));
 }
 
-arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId) {
-    std::shared_ptr<arrow::DataType> result;
+arrow20::Result<std::shared_ptr<arrow20::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId) {
+    std::shared_ptr<arrow20::DataType> result;
     switch (typeId.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return std::make_shared<arrow::UInt8Type>();
+            return std::make_shared<arrow20::UInt8Type>();
         case NScheme::NTypeIds::Datetime:
         case NScheme::NTypeIds::Datetime64:
-            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+            return std::make_shared<arrow20::TimestampType>(arrow20::TimeUnit::SECOND);
         case NScheme::NTypeIds::Timestamp:
         case NScheme::NTypeIds::Timestamp64:
-            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+            return std::make_shared<arrow20::TimestampType>(arrow20::TimeUnit::MICRO);
         case NScheme::NTypeIds::Date:
         case NScheme::NTypeIds::Date32:
-            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::SECOND);
+            return std::make_shared<arrow20::TimestampType>(arrow20::TimeUnit::SECOND);
         case NScheme::NTypeIds::Decimal:
-            return std::make_shared<arrow::FixedSizeBinaryType>(NScheme::FSB_SIZE);
+            return std::make_shared<arrow20::FixedSizeBinaryType>(NScheme::FSB_SIZE);
         default:
             return GetArrowType(typeId);
     }
 }
 
-arrow::Result<arrow::FieldVector> MakeArrowFields(
+arrow20::Result<arrow20::FieldVector> MakeArrowFields(
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow20::Field>> fields;
     fields.reserve(ydbColumns.size());
     TVector<TString> errors;
     for (auto& [name, ydbType] : ydbColumns) {
         std::string colName(name.data(), name.size());
         auto arrowType = GetArrowType(ydbType);
         if (arrowType.ok()) {
-            fields.emplace_back(std::make_shared<arrow::Field>(colName, arrowType.ValueUnsafe(), !notNullColumns.contains(colName)));
+            fields.emplace_back(std::make_shared<arrow20::Field>(colName, arrowType.ValueUnsafe(), !notNullColumns.contains(colName)));
         } else {
             errors.emplace_back(colName + " error: " + arrowType.status().ToString());
         }
@@ -113,22 +113,22 @@ arrow::Result<arrow::FieldVector> MakeArrowFields(
     if (errors.empty()) {
         return fields;
     }
-    return arrow::Status::TypeError(JoinSeq(", ", errors));
+    return arrow20::Status::TypeError(JoinSeq(", ", errors));
 }
 
-arrow::Result<std::shared_ptr<arrow::Schema>> MakeArrowSchema(
+arrow20::Result<std::shared_ptr<arrow20::Schema>> MakeArrowSchema(
     const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::set<std::string>& notNullColumns) {
     const auto fields = MakeArrowFields(ydbColumns, notNullColumns);
     if (fields.ok()) {
-        return std::make_shared<arrow::Schema>(fields.ValueUnsafe());
+        return std::make_shared<arrow20::Schema>(fields.ValueUnsafe());
     }
     return fields.status();
 }
 
-std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
-    std::shared_ptr<arrow::Buffer> buffer(std::make_shared<NSerialization::TBufferOverString>(str));
-    arrow::io::BufferReader reader(buffer);
-    arrow::ipc::DictionaryMemo dictMemo;
+std::shared_ptr<arrow20::Schema> DeserializeSchema(const TString& str) {
+    std::shared_ptr<arrow20::Buffer> buffer(std::make_shared<NSerialization::TBufferOverString>(str));
+    arrow20::io::BufferReader reader(buffer);
+    arrow20::ipc::DictionaryMemo dictMemo;
     auto schema = ReadSchema(&reader, &dictMemo);
     if (!schema.ok()) {
         return {};
@@ -136,17 +136,17 @@ std::shared_ptr<arrow::Schema> DeserializeSchema(const TString& str) {
     return *schema;
 }
 
-TString SerializeBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const arrow::ipc::IpcWriteOptions& options) {
+TString SerializeBatch(const std::shared_ptr<arrow20::RecordBatch>& batch, const arrow20::ipc::IpcWriteOptions& options) {
     return NSerialization::TNativeSerializer(options).SerializePayload(batch);
 }
 
-TString SerializeBatchNoCompression(const std::shared_ptr<arrow::RecordBatch>& batch) {
-    auto writeOptions = arrow::ipc::IpcWriteOptions::Defaults();
+TString SerializeBatchNoCompression(const std::shared_ptr<arrow20::RecordBatch>& batch) {
+    auto writeOptions = arrow20::ipc::IpcWriteOptions::Defaults();
     writeOptions.use_threads = false;
     return SerializeBatch(batch, writeOptions);
 }
 
-std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow::Schema>& schema) {
+std::shared_ptr<arrow20::RecordBatch> DeserializeBatch(const TString& blob, const std::shared_ptr<arrow20::Schema>& schema) {
     auto result = NSerialization::TNativeSerializer().Deserialize(blob, schema);
     if (result.ok()) {
         return *result;
@@ -157,8 +157,8 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     }
 }
 
-void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
-    std::vector<std::shared_ptr<arrow::RecordBatch>>& out) {
+void DedupSortedBatch(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey,
+    std::vector<std::shared_ptr<arrow20::RecordBatch>>& out) {
     if (batch->num_rows() < 2) {
         out.push_back(batch);
         return;
@@ -193,7 +193,7 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const st
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(out.back(), sortingKey));
 }
 
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
+bool IsSorted(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, false>(keyBatch);
@@ -202,7 +202,7 @@ bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::share
     }
 }
 
-bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
+bool IsSortedAndUnique(const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, bool desc) {
     auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
     if (desc) {
         return IsSelfSorted<true, true>(keyBatch);
@@ -211,8 +211,8 @@ bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const s
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow::Array>>& sortingKey, const bool andUnique) {
+std::shared_ptr<arrow20::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::vector<std::shared_ptr<arrow20::Array>>& sortingKey, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(sortingKey, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);
@@ -221,8 +221,8 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> SortBatch(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, const bool andUnique) {
+std::shared_ptr<arrow20::RecordBatch> SortBatch(
+    const std::shared_ptr<arrow20::RecordBatch>& batch, const std::shared_ptr<arrow20::Schema>& sortingKey, const bool andUnique) {
     auto sortPermutation = MakeSortPermutation(batch, sortingKey, andUnique);
     if (sortPermutation) {
         return Reorder(batch, sortPermutation, andUnique);
@@ -231,14 +231,14 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original) {
+std::shared_ptr<arrow20::RecordBatch> ReallocateBatch(std::shared_ptr<arrow20::RecordBatch> original) {
     if (!original) {
         return nullptr;
     }
-    return DeserializeBatch(SerializeBatch(original, arrow::ipc::IpcWriteOptions::Defaults()), original->schema());
+    return DeserializeBatch(SerializeBatch(original, arrow20::ipc::IpcWriteOptions::Defaults()), original->schema());
 }
 
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool) {
+std::shared_ptr<arrow20::Table> ReallocateBatch(const std::shared_ptr<arrow20::Table>& original, arrow20::MemoryPool* pool) {
     if (!original) {
         return original;
     }
@@ -249,44 +249,44 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
         i = NArrow::TStatusValidator::GetValid(
             NArrow::NSerialization::TNativeSerializer(pool).Deserialize(NArrow::NSerialization::TNativeSerializer(pool).SerializeFull(i)));
     }
-    return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
+    return NArrow::TStatusValidator::GetValid(arrow20::Table::FromRecordBatches(batches));
 }
 
-std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool) {
+std::shared_ptr<arrow20::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow20::ChunkedArray>& original, arrow20::MemoryPool* pool) {
     if (!original) {
         return original;
     }
-    auto f = std::make_shared<arrow::Field>("1", original->type());
-    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
+    auto f = std::make_shared<arrow20::Field>("1", original->type());
+    auto table = arrow20::Table::Make(std::make_shared<arrow20::Schema>(arrow20::FieldVector({ f })), { original }, original->length());
     table = ReallocateBatch(table, pool);
     AFL_VERIFY(table->num_columns() == 1);
     return table->column(0);
 }
 
-std::shared_ptr<arrow::Array> ReallocateArray(
-    const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool /*= arrow::default_memory_pool()*/) {
+std::shared_ptr<arrow20::Array> ReallocateArray(
+    const std::shared_ptr<arrow20::Array>& arr, arrow20::MemoryPool* pool /*= arrow20::default_memory_pool()*/) {
     if (!arr) {
         return arr;
     }
     if (arr->length() == 0) {
         return arr;
     }
-    auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
+    auto cArray = NArrow::ReallocateArray(std::make_shared<arrow20::ChunkedArray>(arr), pool);
     AFL_VERIFY(cArray->num_chunks() == 1);
     return cArray->chunk(0);
 }
 
-std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
-    arrow::FieldVector fields;
+std::vector<std::shared_ptr<arrow20::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow20::Array>>& columns) {
+    arrow20::FieldVector fields;
     ui32 idx = 0;
     for (auto&& i : columns) {
-        fields.emplace_back(std::make_shared<arrow::Field>(::ToString(idx++), i->type()));
+        fields.emplace_back(std::make_shared<arrow20::Field>(::ToString(idx++), i->type()));
     }
     return fields;
 }
 
-std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
-    return std::make_shared<arrow::Schema>(BuildFakeFields(columns));
+std::shared_ptr<arrow20::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow20::Array>>& columns) {
+    return std::make_shared<arrow20::Schema>(BuildFakeFields(columns));
 }
 
 }   // namespace NKikimr::NArrow

@@ -1479,57 +1479,57 @@ namespace NMiniKQL {
 
 namespace {
 
-bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type, bool output) {
+bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow20::DataType>& type, bool output) {
     switch (slot) {
         case NUdf::EDataSlot::Bool:
-            type = output ? arrow::boolean() : arrow::uint8();
+            type = output ? arrow20::boolean() : arrow20::uint8();
             return true;
         case NUdf::EDataSlot::Uint8:
-            type = arrow::uint8();
+            type = arrow20::uint8();
             return true;
         case NUdf::EDataSlot::Int8:
-            type = arrow::int8();
+            type = arrow20::int8();
             return true;
         case NUdf::EDataSlot::Uint16:
         case NUdf::EDataSlot::Date:
-            type = arrow::uint16();
+            type = arrow20::uint16();
             return true;
         case NUdf::EDataSlot::Int16:
-            type = arrow::int16();
+            type = arrow20::int16();
             return true;
         case NUdf::EDataSlot::Uint32:
         case NUdf::EDataSlot::Datetime:
-            type = arrow::uint32();
+            type = arrow20::uint32();
             return true;
         case NUdf::EDataSlot::Int32:
         case NUdf::EDataSlot::Date32:
-            type = arrow::int32();
+            type = arrow20::int32();
             return true;
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Interval:
         case NUdf::EDataSlot::Interval64:
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Datetime64:
-            type = arrow::int64();
+            type = arrow20::int64();
             return true;
         case NUdf::EDataSlot::Uint64:
         case NUdf::EDataSlot::Timestamp:
-            type = arrow::uint64();
+            type = arrow20::uint64();
             return true;
         case NUdf::EDataSlot::Float:
-            type = arrow::float32();
+            type = arrow20::float32();
             return true;
         case NUdf::EDataSlot::Double:
-            type = arrow::float64();
+            type = arrow20::float64();
             return true;
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::JsonDocument:
-            type = arrow::binary();
+            type = arrow20::binary();
             return true;
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
-            type = arrow::utf8();
+            type = arrow20::utf8();
             return true;
         case NUdf::EDataSlot::TzDate: {
             type = MakeTzDateArrowType<NYql::NUdf::EDataSlot::TzDate>();
@@ -1559,7 +1559,7 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
             return false;
         }
         case NUdf::EDataSlot::Decimal: {
-            type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+            type = arrow20::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
             return true;
         }
         case NUdf::EDataSlot::DyNumber: {
@@ -1569,7 +1569,7 @@ bool ConvertArrowTypeImpl(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>
 }
 
 // TODO(YQL): This must be rewrited via traits dispatcher.
-bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
+bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow20::DataType>& type, const TArrowConvertFailedCallback& onFail, bool output) {
     itemType = SkipTaggedType(itemType);
     bool isOptional;
     auto unpacked = SkipTaggedType(UnpackOptional(itemType, isOptional));
@@ -1596,16 +1596,16 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
             ++nestLevel;
         }
 
-        std::shared_ptr<arrow::DataType> innerArrowType;
+        std::shared_ptr<arrow20::DataType> innerArrowType;
         if (!ConvertArrowTypeImpl(previousType, innerArrowType, onFail, output)) {
             return false;
         }
 
         for (ui32 i = 1; i < nestLevel; ++i) {
             // wrap as one nullable field in struct
-            std::vector<std::shared_ptr<arrow::Field>> fields;
-            fields.emplace_back(std::make_shared<arrow::Field>("opt", innerArrowType, true));
-            innerArrowType = std::make_shared<arrow::StructType>(fields);
+            std::vector<std::shared_ptr<arrow20::Field>> fields;
+            fields.emplace_back(std::make_shared<arrow20::Field>("opt", innerArrowType, true));
+            innerArrowType = std::make_shared<arrow20::StructType>(fields);
         }
 
         type = innerArrowType;
@@ -1614,35 +1614,35 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
 
     if (unpacked->IsStruct()) {
         auto structType = AS_TYPE(TStructType, unpacked);
-        std::vector<std::shared_ptr<arrow::Field>> members;
+        std::vector<std::shared_ptr<arrow20::Field>> members;
         for (ui32 i = 0; i < structType->GetMembersCount(); i++) {
-            std::shared_ptr<arrow::DataType> childType;
+            std::shared_ptr<arrow20::DataType> childType;
             const TString memberName(structType->GetMemberName(i));
             auto memberType = SkipTaggedType(structType->GetMemberType(i));
             if (!ConvertArrowTypeImpl(memberType, childType, onFail, output)) {
                 return false;
             }
-            members.emplace_back(std::make_shared<arrow::Field>(memberName, childType, memberType->IsOptional()));
+            members.emplace_back(std::make_shared<arrow20::Field>(memberName, childType, memberType->IsOptional()));
         }
 
-        type = std::make_shared<arrow::StructType>(members);
+        type = std::make_shared<arrow20::StructType>(members);
         return true;
     }
 
     if (unpacked->IsTuple()) {
         auto tupleType = AS_TYPE(TTupleType, unpacked);
-        std::vector<std::shared_ptr<arrow::Field>> fields;
+        std::vector<std::shared_ptr<arrow20::Field>> fields;
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            std::shared_ptr<arrow::DataType> childType;
+            std::shared_ptr<arrow20::DataType> childType;
             auto elementType = SkipTaggedType(tupleType->GetElementType(i));
             if (!ConvertArrowTypeImpl(elementType, childType, onFail, output)) {
                 return false;
             }
 
-            fields.emplace_back(std::make_shared<arrow::Field>("field" + ToString(i), childType, elementType->IsOptional()));
+            fields.emplace_back(std::make_shared<arrow20::Field>("field" + ToString(i), childType, elementType->IsOptional()));
         }
 
-        type = std::make_shared<arrow::StructType>(fields);
+        type = std::make_shared<arrow20::StructType>(fields);
         return true;
     }
 
@@ -1650,16 +1650,16 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         auto pgType = AS_TYPE(TPgType, unpacked);
         const auto& desc = NYql::NPg::LookupType(pgType->GetTypeId());
         if (desc.PassByValue) {
-            type = arrow::uint64();
+            type = arrow20::uint64();
         } else {
-            type = arrow::binary();
+            type = arrow20::binary();
         }
 
         return true;
     }
 
     if (unpacked->IsResource()) {
-        type = arrow::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
+        type = arrow20::fixed_size_binary(sizeof(NYql::NUdf::TUnboxedValuePod));
         return true;
     }
 
@@ -1694,24 +1694,24 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
 
 } // namespace
 
-bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+bool ConvertArrowType(TType* itemType, std::shared_ptr<arrow20::DataType>& type, const TArrowConvertFailedCallback& onFail) {
     return ConvertArrowTypeImpl(itemType, type, onFail, false);
 }
 
-bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+bool ConvertArrowType(NUdf::EDataSlot slot, std::shared_ptr<arrow20::DataType>& type) {
     return ConvertArrowTypeImpl(slot, type, false);
 }
 
-bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow::DataType>& type, const TArrowConvertFailedCallback& onFail) {
+bool ConvertArrowOutputType(TType* itemType, std::shared_ptr<arrow20::DataType>& type, const TArrowConvertFailedCallback& onFail) {
     return ConvertArrowTypeImpl(itemType, type, onFail, true);
 }
 
-bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow::DataType>& type) {
+bool ConvertArrowOutputType(NUdf::EDataSlot slot, std::shared_ptr<arrow20::DataType>& type) {
     return ConvertArrowTypeImpl(slot, type, true);
 }
 
 void TArrowType::Export(ArrowSchema* out) const {
-    auto status = arrow::ExportType(*Type_, out);
+    auto status = arrow20::ExportType(*Type_, out);
     if (!status.ok()) {
         UdfTerminate(status.ToString().c_str());
     }
@@ -2180,7 +2180,7 @@ const NYql::NUdf::TPgTypeDescription* TTypeInfoHelper::FindPgTypeDescription(ui3
 }
 
 NUdf::IArrowType::TPtr TTypeInfoHelper::MakeArrowType(const NUdf::TType* type) const {
-    std::shared_ptr<arrow::DataType> arrowType;
+    std::shared_ptr<arrow20::DataType> arrowType;
     if (!ConvertArrowType(const_cast<TType*>(static_cast<const TType*>(type)), arrowType)) {
         return nullptr;
     }
@@ -2189,7 +2189,7 @@ NUdf::IArrowType::TPtr TTypeInfoHelper::MakeArrowType(const NUdf::TType* type) c
 }
 
 NUdf::IArrowType::TPtr TTypeInfoHelper::ImportArrowType(ArrowSchema* schema) const {
-    auto res = arrow::ImportType(schema);
+    auto res = arrow20::ImportType(schema);
     auto status = res.status();
     if (!status.ok()) {
         UdfTerminate(status.ToString().c_str());
@@ -2580,7 +2580,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         if (desc.PassByValue) {
             return 8;
         } else {
-            return sizeof(arrow::BinaryType::offset_type);
+            return sizeof(arrow20::BinaryType::offset_type);
         }
     }
 
@@ -2627,11 +2627,11 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             case NUdf::EDataSlot::Yson:
             case NUdf::EDataSlot::JsonDocument:
                 // size of offset part
-                return sizeof(arrow::BinaryType::offset_type);
+                return sizeof(arrow20::BinaryType::offset_type);
             case NUdf::EDataSlot::Utf8:
             case NUdf::EDataSlot::Json:
                 // size of offset part
-                return sizeof(arrow::StringType::offset_type);
+                return sizeof(arrow20::StringType::offset_type);
             case NUdf::EDataSlot::TzDate:
                 return sizeof(typename NUdf::TDataType<NUdf::TTzDate>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
             case NUdf::EDataSlot::TzDatetime:

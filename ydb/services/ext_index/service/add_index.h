@@ -16,7 +16,7 @@ public:
 
 class TIndexUpsertActor: public NActors::TActorBootstrapped<TIndexUpsertActor> {
 private:
-    std::shared_ptr<arrow::RecordBatch> Data;
+    std::shared_ptr<arrow20::RecordBatch> Data;
     const NMetadata::NCSIndex::TObject IndexInfo;
     std::vector<TString> PKFields;
     const TString DatabaseName;
@@ -36,7 +36,7 @@ protected:
 public:
     void Bootstrap();
 
-    TIndexUpsertActor(const std::shared_ptr<arrow::RecordBatch>& data, const NMetadata::NCSIndex::TObject& indexInfo,
+    TIndexUpsertActor(const std::shared_ptr<arrow20::RecordBatch>& data, const NMetadata::NCSIndex::TObject& indexInfo,
         const std::vector<TString>& pKFields,
         const TString& databaseName, const TString& indexTablePath,
         IIndexUpsertController::TPtr externalController

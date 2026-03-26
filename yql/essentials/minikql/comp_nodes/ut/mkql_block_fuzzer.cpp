@@ -16,7 +16,7 @@ namespace {
 constexpr double RemoveMaskProbability = 0.5;
 constexpr int MaxOffsetShift = 64;
 
-std::shared_ptr<arrow::ArrayData> SynchronizeArrayDataMeta(std::shared_ptr<arrow::ArrayData> result, const arrow::ArrayData& original, i64 extraShift) {
+std::shared_ptr<arrow20::ArrayData> SynchronizeArrayDataMeta(std::shared_ptr<arrow20::ArrayData> result, const arrow20::ArrayData& original, i64 extraShift) {
     if (!original.buffers[0]) {
         result->buffers[0] = nullptr;
     }
@@ -26,13 +26,13 @@ std::shared_ptr<arrow::ArrayData> SynchronizeArrayDataMeta(std::shared_ptr<arrow
     return result;
 }
 
-std::shared_ptr<arrow::Buffer> CreateShiftedBitmask(arrow::MemoryPool& pool, std::shared_ptr<arrow::Buffer> bitmap, size_t bitmapOffset, size_t length, size_t extraShift) {
+std::shared_ptr<arrow20::Buffer> CreateShiftedBitmask(arrow20::MemoryPool& pool, std::shared_ptr<arrow20::Buffer> bitmap, size_t bitmapOffset, size_t length, size_t extraShift) {
     if (!bitmap) {
         return bitmap;
     }
     auto resultBitmap = MakeDenseFalseBitmap(length + extraShift, &pool);
     for (size_t i = 0; i < length; i++) {
-        arrow::BitUtil::SetBitTo(resultBitmap->mutable_data(), i + extraShift, arrow::BitUtil::GetBit(bitmap->data(), bitmapOffset + i));
+        arrow20::BitUtil::SetBitTo(resultBitmap->mutable_data(), i + extraShift, arrow20::BitUtil::GetBit(bitmap->data(), bitmapOffset + i));
     }
     return resultBitmap;
 }
@@ -44,8 +44,8 @@ ui64 CalculateRandomOffsetShift(IRandomProvider& randomProvider) {
 class IOffsetFuzzer {
 public:
     virtual ~IOffsetFuzzer() = default;
-    virtual std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
-                                                        arrow::MemoryPool& memoryPool,
+    virtual std::shared_ptr<arrow20::ArrayData> FuzzArray(const arrow20::ArrayData& array,
+                                                        arrow20::MemoryPool& memoryPool,
                                                         IRandomProvider& randomProvider) const = 0;
 };
 
@@ -65,7 +65,7 @@ public:
     }
 
 protected:
-    TBuilderAndReader CreateBuilderAndReader(ui64 length, arrow::MemoryPool& memoryPool) const {
+    TBuilderAndReader CreateBuilderAndReader(ui64 length, arrow20::MemoryPool& memoryPool) const {
         auto reader = NYql::NUdf::MakeBlockReader(NKikimr::NMiniKQL::TTypeInfoHelper(), Type());
         auto builder = NYql::NUdf::MakeArrayBuilder(NKikimr::NMiniKQL::TTypeInfoHelper(), Type(), memoryPool, length, /*pgBuilder=*/nullptr);
         return {std::move(reader), std::move(builder)};
@@ -87,8 +87,8 @@ public:
     {
     }
 
-    std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
-                                                arrow::MemoryPool& memoryPool,
+    std::shared_ptr<arrow20::ArrayData> FuzzArray(const arrow20::ArrayData& array,
+                                                arrow20::MemoryPool& memoryPool,
                                                 IRandomProvider& randomProvider) const override {
         if (array.length == 0) {
             return array.Copy();
@@ -122,8 +122,8 @@ public:
     {
     }
 
-    std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
-                                                arrow::MemoryPool& memoryPool,
+    std::shared_ptr<arrow20::ArrayData> FuzzArray(const arrow20::ArrayData& array,
+                                                arrow20::MemoryPool& memoryPool,
                                                 IRandomProvider& randomProvider) const override {
         auto result = array.Copy();
         for (size_t i = 0; i < Children_.size(); ++i) {
@@ -147,8 +147,8 @@ public:
     {
     }
 
-    std::shared_ptr<arrow::ArrayData> FuzzArray(const arrow::ArrayData& array,
-                                                arrow::MemoryPool& memoryPool,
+    std::shared_ptr<arrow20::ArrayData> FuzzArray(const arrow20::ArrayData& array,
+                                                arrow20::MemoryPool& memoryPool,
                                                 IRandomProvider& randomProvider) const override {
         auto result = array.Copy();
         result->child_data[0] = Base_->FuzzArray(*array.child_data[0], memoryPool, randomProvider);
@@ -233,7 +233,7 @@ public:
 
     NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
                                    const THolderFactory& holderFactory,
-                                   arrow::MemoryPool& memoryPool,
+                                   arrow20::MemoryPool& memoryPool,
                                    IRandomProvider& randomProvider) const override {
         Y_UNUSED(memoryPool);
         const auto& block = TArrowBlock::From(input);
@@ -244,14 +244,14 @@ public:
         }
 
         auto fuzzedArray = FuzzArrayData(*datum.array(), randomProvider);
-        auto fuzzedDatum = arrow::Datum(fuzzedArray);
+        auto fuzzedDatum = arrow20::Datum(fuzzedArray);
 
         // Create a new TArrowBlock with the fuzzed data
         return holderFactory.CreateArrowBlock(std::move(fuzzedDatum));
     }
 
 private:
-    std::shared_ptr<arrow::ArrayData> FuzzArrayData(const arrow::ArrayData& arrayData, IRandomProvider& randomProvider) const {
+    std::shared_ptr<arrow20::ArrayData> FuzzArrayData(const arrow20::ArrayData& arrayData, IRandomProvider& randomProvider) const {
         auto result = arrayData.Copy();
 
         if (result->buffers[0]) {
@@ -261,7 +261,7 @@ private:
             }
         }
 
-        std::vector<std::shared_ptr<arrow::ArrayData>> children;
+        std::vector<std::shared_ptr<arrow20::ArrayData>> children;
         for (const auto& child : result->child_data) {
             children.push_back(FuzzArrayData(*child, randomProvider));
         }
@@ -280,7 +280,7 @@ public:
 
     NYql::NUdf::TUnboxedValue Fuzz(NYql::NUdf::TUnboxedValue input,
                                    const THolderFactory& holderFactory,
-                                   arrow::MemoryPool& memoryPool,
+                                   arrow20::MemoryPool& memoryPool,
                                    IRandomProvider& randomProvider) const override {
         if (!input.HasValue()) {
             return input;
@@ -295,7 +295,7 @@ public:
         }
 
         auto fuzzedArray = OffsetFuzzer_->FuzzArray(*datum.array(), memoryPool, randomProvider);
-        auto fuzzedDatum = arrow::Datum(fuzzedArray);
+        auto fuzzedDatum = arrow20::Datum(fuzzedArray);
 
         // Create a new TArrowBlock with the fuzzed data
         return holderFactory.CreateArrowBlock(std::move(fuzzedDatum));
@@ -337,7 +337,7 @@ void TFuzzerHolder::ClearFuzzers() {
 NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue input,
                                                       ui64 fuzzIdx,
                                                       const THolderFactory& holderFactory,
-                                                      arrow::MemoryPool& memoryPool,
+                                                      arrow20::MemoryPool& memoryPool,
                                                       IRandomProvider& randomProvider) const {
     auto it = NodeToFuzzOptions_.find(fuzzIdx);
     if (it == NodeToFuzzOptions_.end()) {

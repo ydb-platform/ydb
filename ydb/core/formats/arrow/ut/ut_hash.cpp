@@ -8,8 +8,8 @@ Y_UNIT_TEST_SUITE(Hash) {
     using namespace NKikimr::NArrow;
 
     Y_UNIT_TEST(ScalarBinaryHash) {
-        std::shared_ptr<arrow::Scalar> s1 = std::make_shared<arrow::StringScalar>("abcde");
-        std::shared_ptr<arrow::Scalar> s2 = std::make_shared<arrow::StringScalar>("abcde");
+        std::shared_ptr<arrow20::Scalar> s1 = std::make_shared<arrow20::StringScalar>("abcde");
+        std::shared_ptr<arrow20::Scalar> s2 = std::make_shared<arrow20::StringScalar>("abcde");
         NHash::NXX64::TStreamStringHashCalcer calcer1(0);
         calcer1.Start();
         NHash::TXX64::AppendField(s1, calcer1);
@@ -23,8 +23,8 @@ Y_UNIT_TEST_SUITE(Hash) {
     }
 
     Y_UNIT_TEST(ScalarCTypeHash) {
-        std::shared_ptr<arrow::Scalar> s1 = std::make_shared<arrow::UInt32Scalar>(52);
-        std::shared_ptr<arrow::Scalar> s2 = std::make_shared<arrow::UInt32Scalar>(52);
+        std::shared_ptr<arrow20::Scalar> s1 = std::make_shared<arrow20::UInt32Scalar>(52);
+        std::shared_ptr<arrow20::Scalar> s2 = std::make_shared<arrow20::UInt32Scalar>(52);
         NHash::NXX64::TStreamStringHashCalcer calcer1(0);
         calcer1.Start();
         NHash::TXX64::AppendField(s1, calcer1);
@@ -38,10 +38,10 @@ Y_UNIT_TEST_SUITE(Hash) {
     }
 
     Y_UNIT_TEST(ScalarCompositeHash) {
-        std::shared_ptr<arrow::Scalar> s11 = std::make_shared<arrow::StringScalar>("abcde");
-        std::shared_ptr<arrow::Scalar> s12 = std::make_shared<arrow::UInt32Scalar>(52);
-        std::shared_ptr<arrow::Scalar> s21 = std::make_shared<arrow::StringScalar>("abcde");
-        std::shared_ptr<arrow::Scalar> s22 = std::make_shared<arrow::UInt32Scalar>(52);
+        std::shared_ptr<arrow20::Scalar> s11 = std::make_shared<arrow20::StringScalar>("abcde");
+        std::shared_ptr<arrow20::Scalar> s12 = std::make_shared<arrow20::UInt32Scalar>(52);
+        std::shared_ptr<arrow20::Scalar> s21 = std::make_shared<arrow20::StringScalar>("abcde");
+        std::shared_ptr<arrow20::Scalar> s22 = std::make_shared<arrow20::UInt32Scalar>(52);
         NHash::NXX64::TStreamStringHashCalcer calcer1(0);
         calcer1.Start();
         NHash::TXX64::AppendField(s11, calcer1);

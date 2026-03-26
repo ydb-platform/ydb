@@ -31,10 +31,10 @@ struct TBlockTrimmerTestData {
     NMiniKQL::TTypeEnvironment Env;
     NMiniKQL::TProgramBuilder PgmBuilder;
     NMiniKQL::TMemoryUsageInfo MemInfo;
-    arrow::MemoryPool* const ArrowPool;
+    arrow20::MemoryPool* const ArrowPool;
 };
 
-void CheckTrimmedSlice(std::shared_ptr<arrow::ArrayData> array) {
+void CheckTrimmedSlice(std::shared_ptr<arrow20::ArrayData> array) {
     UNIT_ASSERT_VALUES_EQUAL(array->offset, 0);
     for (const auto& buffer : array->buffers) {
         if (buffer) {

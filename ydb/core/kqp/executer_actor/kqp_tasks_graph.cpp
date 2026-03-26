@@ -297,8 +297,8 @@ TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpRead
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task) {
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
-    std::vector<std::shared_ptr<arrow::Field>> columns;
-    std::vector<std::shared_ptr<arrow::Array>> data;
+    std::vector<std::shared_ptr<arrow20::Field>> columns;
+    std::vector<std::shared_ptr<arrow20::Array>> data;
 
     if (const auto& parameterNames = task.Meta.ReadInfo.OlapProgram.ParameterNames; !parameterNames.empty()) {
         columns.reserve(parameterNames.size());
@@ -312,23 +312,23 @@ std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo&
             const auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(name);
             YQL_ENSURE(NYql::NArrow::IsArrowCompatible(type), "Incompatible parameter type. Can't convert to arrow");
 
-            std::unique_ptr<arrow::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
+            std::unique_ptr<arrow20::ArrayBuilder> builder = NYql::NArrow::MakeArrowBuilder(type);
             NYql::NArrow::AppendElement(value, builder.get(), type);
 
-            std::shared_ptr<arrow::Array> array;
+            std::shared_ptr<arrow20::Array> array;
             const auto status = builder->Finish(&array);
 
             YQL_ENSURE(status.ok(), "Failed to build arrow array of variables.");
 
-            auto field = std::make_shared<arrow::Field>(name, array->type());
+            auto field = std::make_shared<arrow20::Field>(name, array->type());
 
             columns.emplace_back(std::move(field));
             data.emplace_back(std::move(array));
         }
     }
 
-    auto schema = std::make_shared<arrow::Schema>(std::move(columns));
-    auto recordBatch = arrow::RecordBatch::Make(schema, 1, data);
+    auto schema = std::make_shared<arrow20::Schema>(std::move(columns));
+    auto recordBatch = arrow20::RecordBatch::Make(schema, 1, data);
 
     return std::make_pair<TString, TString>(
         NArrow::SerializeSchema(*schema),

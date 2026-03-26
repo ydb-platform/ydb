@@ -79,27 +79,27 @@ const NPg::TAggregateDesc& ResolveAggregation(const TString& name, NKikimr::NMin
     }
 }
 
-std::shared_ptr<arrow::Array> PgConvertBool(const std::shared_ptr<arrow::Array>& value) {
+std::shared_ptr<arrow20::Array> PgConvertBool(const std::shared_ptr<arrow20::Array>& value) {
     const auto& data = value->data();
     size_t length = data->length;
-    NUdf::TFixedSizeArrayBuilder<ui64, false> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
+    NUdf::TFixedSizeArrayBuilder<ui64, false> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *arrow20::default_memory_pool(), length);
     auto input = data->GetValues<ui8>(1, 0);
     builder.UnsafeReserve(length);
     auto output = builder.MutableData();
     for (size_t i = 0; i < length; ++i) {
         auto fullIndex = i + data->offset;
-        output[i] = BoolGetDatum(arrow::BitUtil::GetBit(input, fullIndex));
+        output[i] = BoolGetDatum(arrow20::BitUtil::GetBit(input, fullIndex));
     }
 
     auto dataBuffer = builder.Build(true).array()->buffers[1];
-    return arrow::MakeArray(arrow::ArrayData::Make(arrow::uint64(), length, { data->buffers[0], dataBuffer }));
+    return arrow20::MakeArray(arrow20::ArrayData::Make(arrow20::uint64(), length, { data->buffers[0], dataBuffer }));
 }
 
 template <typename T, typename F>
-std::shared_ptr<arrow::Array> PgConvertFixed(const std::shared_ptr<arrow::Array>& value, const F& f) {
+std::shared_ptr<arrow20::Array> PgConvertFixed(const std::shared_ptr<arrow20::Array>& value, const F& f) {
     const auto& data = value->data();
     size_t length = data->length;
-    NUdf::TFixedSizeArrayBuilder<ui64, false> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow::uint64(), *arrow::default_memory_pool(), length);
+    NUdf::TFixedSizeArrayBuilder<ui64, false> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), arrow20::uint64(), *arrow20::default_memory_pool(), length);
     auto input = data->GetValues<T>(1);
     builder.UnsafeReserve(length);
     auto output = builder.MutableData();
@@ -108,18 +108,18 @@ std::shared_ptr<arrow::Array> PgConvertFixed(const std::shared_ptr<arrow::Array>
     }
 
     auto dataBuffer = builder.Build(true).array()->buffers[1];
-    return arrow::MakeArray(arrow::ArrayData::Make(arrow::uint64(), length, { data->buffers[0], dataBuffer }));
+    return arrow20::MakeArray(arrow20::ArrayData::Make(arrow20::uint64(), length, { data->buffers[0], dataBuffer }));
 }
 
 template <bool IsCString>
-std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array>& value) {
+std::shared_ptr<arrow20::Array> PgConvertString(const std::shared_ptr<arrow20::Array>& value) {
     const auto& data = value->data();
     size_t length = data->length;
-    arrow::BinaryBuilder builder;
+    arrow20::BinaryBuilder builder;
     ARROW_OK(builder.Reserve(length));
-    auto inputDataSize = arrow::BinaryArray(data).total_values_length();
+    auto inputDataSize = arrow20::BinaryArray(data).total_values_length();
     ARROW_OK(builder.ReserveData(inputDataSize + length * (sizeof(void*) + (IsCString ? 1 : VARHDRSZ))));
-    NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
+    NUdf::TStringBlockReader<arrow20::BinaryType, true> reader;
     std::vector<char> tmp;
     for (size_t i = 0; i < length; ++i) {
         auto item = reader.GetItem(*data, i);
@@ -157,7 +157,7 @@ std::shared_ptr<arrow::Array> PgConvertString(const std::shared_ptr<arrow::Array
         ARROW_OK(builder.Append(tmp.data(), len));
     }
 
-    std::shared_ptr<arrow::BinaryArray> ret;
+    std::shared_ptr<arrow20::BinaryArray> ret;
     ARROW_OK(builder.Finish(&ret));
     return ret;
 }
@@ -213,16 +213,16 @@ Numeric PgFloatToNumeric(double item, ui64 scale, int digits) {
     }
 }
 
-std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow::Array>& value, int32_t precision, int32_t scale) {
+std::shared_ptr<arrow20::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<arrow20::Array>& value, int32_t precision, int32_t scale) {
     TArenaMemoryContext arena;
     const auto& data = value->data();
     size_t length = data->length;
-    arrow::BinaryBuilder builder;
+    arrow20::BinaryBuilder builder;
 
     bool error;
     Numeric high_bits_mul = numeric_mul_opt_error(int64_to_numeric(int64_t(1) << 62), int64_to_numeric(4), &error);
 
-    auto input = data->GetValues<arrow::Decimal128>(1);
+    auto input = data->GetValues<arrow20::Decimal128>(1);
     for (size_t i = 0; i < length; ++i) {
         if (value->IsNull(i)) {
             ARROW_OK(builder.AppendNull());
@@ -238,12 +238,12 @@ std::shared_ptr<arrow::Array> PgDecimal128ConvertNumeric(const std::shared_ptr<a
         ARROW_OK(builder.Append(ptr - sizeof(void*), len + sizeof(void*)));
     }
 
-    std::shared_ptr<arrow::BinaryArray> ret;
+    std::shared_ptr<arrow20::BinaryArray> ret;
     ARROW_OK(builder.Finish(&ret));
     return ret;
 }
 
-Numeric PgDecimal128ToNumeric(arrow::Decimal128 value, int32_t precision, int32_t scale, Numeric high_bits_mul) {
+Numeric PgDecimal128ToNumeric(arrow20::Decimal128 value, int32_t precision, int32_t scale, Numeric high_bits_mul) {
     uint64_t low_bits = value.low_bits();
     int64 high_bits = value.high_bits();
 
@@ -262,33 +262,33 @@ Numeric PgDecimal128ToNumeric(arrow::Decimal128 value, int32_t precision, int32_
     return res;
 }
 
-TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::DataType>& originalType) {
+TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow20::DataType>& originalType) {
     switch (originalType->id()) {
-    case arrow::Type::INT16:
-        return [](const std::shared_ptr<arrow::Array>& value) {
+    case arrow20::Type::INT16:
+        return [](const std::shared_ptr<arrow20::Array>& value) {
             return PgConvertNumeric<i16>(value);
         };
-    case arrow::Type::INT32:
-        return [](const std::shared_ptr<arrow::Array>& value) {
+    case arrow20::Type::INT32:
+        return [](const std::shared_ptr<arrow20::Array>& value) {
             return PgConvertNumeric<i32>(value);
         };
-    case arrow::Type::INT64:
-        return [](const std::shared_ptr<arrow::Array>& value) {
+    case arrow20::Type::INT64:
+        return [](const std::shared_ptr<arrow20::Array>& value) {
             return PgConvertNumeric<i64>(value);
         };
-    case arrow::Type::FLOAT:
-        return [](const std::shared_ptr<arrow::Array>& value) {
+    case arrow20::Type::FLOAT:
+        return [](const std::shared_ptr<arrow20::Array>& value) {
             return PgConvertNumeric<float>(value);
         };
-    case arrow::Type::DOUBLE:
-        return [](const std::shared_ptr<arrow::Array>& value) {
+    case arrow20::Type::DOUBLE:
+        return [](const std::shared_ptr<arrow20::Array>& value) {
             return PgConvertNumeric<double>(value);
         };
-    case arrow::Type::DECIMAL128: {
-        auto decimal128Ptr = std::static_pointer_cast<arrow::Decimal128Type>(originalType);
+    case arrow20::Type::DECIMAL128: {
+        auto decimal128Ptr = std::static_pointer_cast<arrow20::Decimal128Type>(originalType);
         int32_t precision = decimal128Ptr->precision();
         int32_t scale     = decimal128Ptr->scale();
-        return [precision, scale](const std::shared_ptr<arrow::Array>& value) {
+        return [precision, scale](const std::shared_ptr<arrow20::Array>& value) {
             return PgDecimal128ConvertNumeric(value, precision, scale);
         };
     }
@@ -298,14 +298,14 @@ TColumnConverter BuildPgNumericColumnConverter(const std::shared_ptr<arrow::Data
 }
 
 template <typename T, typename F>
-TColumnConverter BuildPgFixedColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, const F& f) {
+TColumnConverter BuildPgFixedColumnConverter(const std::shared_ptr<arrow20::DataType>& originalType, const F& f) {
     auto primaryType = NKikimr::NMiniKQL::GetPrimitiveDataType<T>();
-    if (!originalType->Equals(*primaryType) && !arrow::compute::CanCast(*originalType, *primaryType)) {
+    if (!originalType->Equals(*primaryType) && !arrow20::compute::CanCast(*originalType, *primaryType)) {
         return {};
     }
 
-    return [primaryType, originalType, f](const std::shared_ptr<arrow::Array>& value) {
-        auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow::compute::Cast(*value, primaryType));
+    return [primaryType, originalType, f](const std::shared_ptr<arrow20::Array>& value) {
+        auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow20::compute::Cast(*value, primaryType));
         return PgConvertFixed<T, F>(res, f);
     };
 }
@@ -318,16 +318,16 @@ Datum MakePgTimestampFromInt64(i64 value) {
     return DatumGetTimestamp(USECS_PER_SEC * ((UNIX_EPOCH_JDATE - POSTGRES_EPOCH_JDATE) * SECS_PER_DAY + value));
 }
 
-TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
+TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow20::DataType>& originalType, NKikimr::NMiniKQL::TPgType* targetType) {
     switch (targetType->GetTypeId()) {
     case BOOLOID: {
-        auto primaryType = arrow::boolean();
-        if (!originalType->Equals(*primaryType) && !arrow::compute::CanCast(*originalType, *primaryType)) {
+        auto primaryType = arrow20::boolean();
+        if (!originalType->Equals(*primaryType) && !arrow20::compute::CanCast(*originalType, *primaryType)) {
             return {};
         }
 
-        return [primaryType, originalType](const std::shared_ptr<arrow::Array>& value) {
-            auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow::compute::Cast(*value, primaryType));
+        return [primaryType, originalType](const std::shared_ptr<arrow20::Array>& value) {
+            auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow20::compute::Cast(*value, primaryType));
             return PgConvertBool(res);
         };
     }
@@ -353,13 +353,13 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
     case VARCHAROID:
     case TEXTOID:
     case CSTRINGOID: {
-        auto primaryType = (targetType->GetTypeId() == BYTEAOID) ? arrow::binary() : arrow::utf8();
-        if (!arrow::compute::CanCast(*originalType, *primaryType)) {
+        auto primaryType = (targetType->GetTypeId() == BYTEAOID) ? arrow20::binary() : arrow20::utf8();
+        if (!arrow20::compute::CanCast(*originalType, *primaryType)) {
             return {};
         }
 
-        return [primaryType, originalType, isCString = NPg::LookupType(targetType->GetTypeId()).TypeLen == -2](const std::shared_ptr<arrow::Array>& value) {
-            auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow::compute::Cast(*value, primaryType));
+        return [primaryType, originalType, isCString = NPg::LookupType(targetType->GetTypeId()).TypeLen == -2](const std::shared_ptr<arrow20::Array>& value) {
+            auto res = originalType->Equals(*primaryType) ? value : ARROW_RESULT(arrow20::compute::Cast(*value, primaryType));
             if (isCString) {
                 return PgConvertString<true>(res);
             } else {
@@ -368,12 +368,12 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
         };
     }
     case DATEOID: {
-        if (originalType->Equals(arrow::uint16())) {
-            return [](const std::shared_ptr<arrow::Array>& value) {
+        if (originalType->Equals(arrow20::uint16())) {
+            return [](const std::shared_ptr<arrow20::Array>& value) {
                 return PgConvertFixed<ui16>(value, [](auto value){ return MakePgDateFromUint16(value); });
             };
-        } else if (originalType->Equals(arrow::date32())) {
-            return [](const std::shared_ptr<arrow::Array>& value) {
+        } else if (originalType->Equals(arrow20::date32())) {
+            return [](const std::shared_ptr<arrow20::Array>& value) {
                 return PgConvertFixed<i32>(value, [](auto value){ return MakePgDateFromUint16(value); });
             };
         } else {
@@ -381,8 +381,8 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
         }
     }
     case TIMESTAMPOID: {
-        if (originalType->Equals(arrow::int64())) {
-            return [](const std::shared_ptr<arrow::Array>& value) {
+        if (originalType->Equals(arrow20::int64())) {
+            return [](const std::shared_ptr<arrow20::Array>& value) {
                 return PgConvertFixed<i64>(value, [](auto value){ return MakePgTimestampFromInt64(value); });
             };
         } else {
@@ -605,15 +605,15 @@ private:
 };
 
 
-template<typename T, arrow::Type::type Expected, typename ArrType>
+template<typename T, arrow20::Type::type Expected, typename ArrType>
 class TPgTopLevelFixedConverter : public IYtColumnConverter {
 public:
     using Fn = Datum(*)(const T&);
     TPgTopLevelFixedConverter(std::unique_ptr<NKikimr::NUdf::IArrayBuilder>&& builder) : Builder_(std::move(builder)) {}
 
-    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
-        if (arrow::Type::DICTIONARY == data->type->id()) {
-            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
+    arrow20::Datum Convert(std::shared_ptr<arrow20::ArrayData> data) override final {
+        if (arrow20::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow20::DictionaryType&>(*data->type).value_type();
             Y_ENSURE(Expected == valType->id());
             return ConvertDict(data);
         } else {
@@ -622,7 +622,7 @@ public:
         }
     }
 
-    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
+    arrow20::Datum ConvertNonDict(std::shared_ptr<arrow20::ArrayData> data) {
         ArrType arr(data);
         if (arr.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {
@@ -640,8 +640,8 @@ public:
         return Builder_->Build(false);
     }
 
-    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
-        arrow::DictionaryArray dict(data);
+    arrow20::Datum ConvertDict(std::shared_ptr<arrow20::ArrayData> data) {
+        arrow20::DictionaryArray dict(data);
         auto values = dict.dictionary()->data()->GetValues<T>(1);
         auto indices = dict.indices()->data()->GetValues<ui32>(1);
         if (dict.null_count()) {
@@ -702,24 +702,24 @@ public:
         return NUdf::TBlockItem(NUdf::TStringRef(Tmp_.data(), len));
     }
 
-    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
-        if (arrow::Type::DICTIONARY == data->type->id()) {
-            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
-            Y_ENSURE(arrow::Type::BINARY == valType->id() || arrow::Type::STRING == valType->id());
+    arrow20::Datum Convert(std::shared_ptr<arrow20::ArrayData> data) override final {
+        if (arrow20::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow20::DictionaryType&>(*data->type).value_type();
+            Y_ENSURE(arrow20::Type::BINARY == valType->id() || arrow20::Type::STRING == valType->id());
             return ConvertDict(data);
         } else {
-            if (arrow::Type::STRING == data->type->id()) {
-                auto res = arrow::compute::Cast(data, std::make_shared<arrow::BinaryType>());
+            if (arrow20::Type::STRING == data->type->id()) {
+                auto res = arrow20::compute::Cast(data, std::make_shared<arrow20::BinaryType>());
                 Y_ENSURE(res.ok());
                 data = res->array();
             }
-            Y_ENSURE(arrow::Type::BINARY == data->type->id());
+            Y_ENSURE(arrow20::Type::BINARY == data->type->id());
             return ConvertNonDict(data);
         }
     }
 
-    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
-        arrow::BinaryArray arr(data);
+    arrow20::Datum ConvertNonDict(std::shared_ptr<arrow20::ArrayData> data) {
+        arrow20::BinaryArray arr(data);
         if (arr.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {
                 if (arr.IsNull(i)) {
@@ -740,14 +740,14 @@ public:
         return Builder_->Build(false);
     }
 
-    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
-        arrow::DictionaryArray dict(data);
-        if (arrow::Type::STRING == data->dictionary->type->id()) {
-            auto res = arrow::compute::Cast(data->dictionary, std::make_shared<arrow::BinaryType>());
+    arrow20::Datum ConvertDict(std::shared_ptr<arrow20::ArrayData> data) {
+        arrow20::DictionaryArray dict(data);
+        if (arrow20::Type::STRING == data->dictionary->type->id()) {
+            auto res = arrow20::compute::Cast(data->dictionary, std::make_shared<arrow20::BinaryType>());
             Y_ENSURE(res.ok());
             data->dictionary = res->array();
         }
-        arrow::BinaryArray arr(data->dictionary);
+        arrow20::BinaryArray arr(data->dictionary);
         auto indices = dict.indices()->data()->GetValues<ui32>(1);
         if (dict.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {
@@ -782,19 +782,19 @@ public:
         return PgBlockItemFromNativeBinary(TStringBuf(reinterpret_cast<const char*>(res), len), TypeId_, Tmp_);
     }
 
-    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> data) override final {
-        if (arrow::Type::DICTIONARY == data->type->id()) {
-            auto valType = static_cast<const arrow::DictionaryType&>(*data->type).value_type();
-            Y_ENSURE(arrow::Type::BINARY == valType->id() || arrow::Type::STRING == valType->id());
+    arrow20::Datum Convert(std::shared_ptr<arrow20::ArrayData> data) override final {
+        if (arrow20::Type::DICTIONARY == data->type->id()) {
+            auto valType = static_cast<const arrow20::DictionaryType&>(*data->type).value_type();
+            Y_ENSURE(arrow20::Type::BINARY == valType->id() || arrow20::Type::STRING == valType->id());
             return ConvertDict(data);
         } else {
-            Y_ENSURE(arrow::Type::BINARY == data->type->id() || arrow::Type::STRING == data->type->id());
+            Y_ENSURE(arrow20::Type::BINARY == data->type->id() || arrow20::Type::STRING == data->type->id());
             return ConvertNonDict(data);
         }
     }
 
-    arrow::Datum ConvertNonDict(std::shared_ptr<arrow::ArrayData> data) {
-        arrow::BinaryArray arr(data);
+    arrow20::Datum ConvertNonDict(std::shared_ptr<arrow20::ArrayData> data) {
+        arrow20::BinaryArray arr(data);
         if (arr.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {
                 if (arr.IsNull(i)) {
@@ -815,14 +815,14 @@ public:
         return Builder_->Build(false);
     }
 
-    arrow::Datum ConvertDict(std::shared_ptr<arrow::ArrayData> data) {
-        arrow::DictionaryArray dict(data);
-        if (arrow::Type::STRING == data->dictionary->type->id()) {
-            auto res = arrow::compute::Cast(data->dictionary, std::make_shared<arrow::BinaryType>());
+    arrow20::Datum ConvertDict(std::shared_ptr<arrow20::ArrayData> data) {
+        arrow20::DictionaryArray dict(data);
+        if (arrow20::Type::STRING == data->dictionary->type->id()) {
+            auto res = arrow20::compute::Cast(data->dictionary, std::make_shared<arrow20::BinaryType>());
             Y_ENSURE(res.ok());
             data->dictionary = res->array();
         }
-        arrow::BinaryArray arr(data->dictionary);
+        arrow20::BinaryArray arr(data->dictionary);
         auto indices = dict.indices()->data()->GetValues<ui32>(1);
         if (dict.null_count()) {
             for (i64 i = 0; i < data->length; ++i) {
@@ -854,22 +854,22 @@ std::unique_ptr<IYtColumnConverter> BuildPgTopLevelColumnReader(std::unique_ptr<
 
     switch (targetType->GetTypeId()) {
     case BOOLOID: {
-        return std::make_unique<TPgTopLevelFixedConverter<bool, arrow::Type::BOOL, arrow::BooleanArray>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<bool, arrow20::Type::BOOL, arrow20::BooleanArray>>(std::move(builder));
     }
     case INT2OID: {
-        return std::make_unique<TPgTopLevelFixedConverter<i16, arrow::Type::INT16, arrow::Int16Array>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<i16, arrow20::Type::INT16, arrow20::Int16Array>>(std::move(builder));
     }
     case INT4OID: {
-        return std::make_unique<TPgTopLevelFixedConverter<i32, arrow::Type::INT32, arrow::Int32Array>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<i32, arrow20::Type::INT32, arrow20::Int32Array>>(std::move(builder));
     }
     case INT8OID: {
-        return std::make_unique<TPgTopLevelFixedConverter<i64, arrow::Type::INT64, arrow::Int64Array>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<i64, arrow20::Type::INT64, arrow20::Int64Array>>(std::move(builder));
     }
     case FLOAT4OID: {
-        return std::make_unique<TPgTopLevelFixedConverter<float, arrow::Type::DOUBLE, arrow::DoubleArray>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<float, arrow20::Type::DOUBLE, arrow20::DoubleArray>>(std::move(builder));
     }
     case FLOAT8OID: {
-        return std::make_unique<TPgTopLevelFixedConverter<double, arrow::Type::DOUBLE, arrow::DoubleArray>>(std::move(builder));
+        return std::make_unique<TPgTopLevelFixedConverter<double, arrow20::Type::DOUBLE, arrow20::DoubleArray>>(std::move(builder));
     }
     case BYTEAOID:
     case VARCHAROID:

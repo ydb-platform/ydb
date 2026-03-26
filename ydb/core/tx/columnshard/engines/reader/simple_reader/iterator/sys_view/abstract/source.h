@@ -28,7 +28,7 @@ private:
         return false;
     }
 
-    virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
+    virtual std::shared_ptr<arrow20::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
 
     virtual void DoAssembleColumns(const std::shared_ptr<NReader::NCommon::TColumnsSet>& columns, const bool /*sequential*/) override {
         const ui32 recordsCount = GetRecordsCount();
@@ -37,7 +37,7 @@ private:
                 i == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
                 MutableStageData().MutableTable().AddVerified(i,
                     std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                        NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
+                        NArrow::TThreadSimpleArraysCache::GetConst(arrow20::uint64(), std::make_shared<arrow20::UInt64Scalar>(0), recordsCount)),
                     true);
             } else {
                 MutableStageData().MutableTable().AddVerified(
@@ -106,7 +106,7 @@ private:
     }
 
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
-        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow20::Scalar>& /*value*/) override {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
@@ -149,7 +149,7 @@ protected:
             columnId == (ui64)IIndexInfo::ESpecialColumn::WRITE_ID) {
             context.MutableResources().AddVerified(columnId,
                 std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                    NArrow::TThreadSimpleArraysCache::GetConst(arrow::uint64(), std::make_shared<arrow::UInt64Scalar>(0), recordsCount)),
+                    NArrow::TThreadSimpleArraysCache::GetConst(arrow20::uint64(), std::make_shared<arrow20::UInt64Scalar>(0), recordsCount)),
                 true);
         } else {
             context.MutableResources().AddVerified(

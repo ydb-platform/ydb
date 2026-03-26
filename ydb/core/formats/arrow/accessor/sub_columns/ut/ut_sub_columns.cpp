@@ -18,13 +18,13 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         return std::regex_replace(str, std::regex(" |\\n"), "");
     }
 
-    TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
+    TString PrintBinaryJsons(const std::shared_ptr<arrow20::ChunkedArray>& array) {
         TStringBuilder sb;
         sb << "[";
         for (auto&& i : array->chunks()) {
             sb << "[";
-            AFL_VERIFY(i->type()->id() == arrow::binary()->id());
-            auto views = std::static_pointer_cast<arrow::BinaryArray>(i);
+            AFL_VERIFY(i->type()->id() == arrow20::binary()->id());
+            auto views = std::static_pointer_cast<arrow20::BinaryArray>(i);
             for (ui32 r = 0; r < views->length(); ++r) {
                 if (views->IsNull(r)) {
                     sb << "null";
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 R"({"a" : 5, "b1" : 5})",
             };
 
-            TTrivialArray::TPlainBuilder<arrow::BinaryType> arrBuilder;
+            TTrivialArray::TPlainBuilder<arrow20::BinaryType> arrBuilder;
             ui32 idx = 0;
             for (auto&& i : jsons) {
                 if (i != "null") {
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
                 R"({"a" : 5, "b1" : 5})",
             };
 
-            TTrivialArray::TPlainBuilder<arrow::BinaryType> arrBuilder;
+            TTrivialArray::TPlainBuilder<arrow20::BinaryType> arrBuilder;
             ui32 idx = 0;
             for (auto&& i : jsons) {
                 if (i != "null") {
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         {
             ui64 testCookie = 0;
             for (const auto& path : testPaths) {
-                testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow::BinaryType>()));
+                testAccessors.emplace_back(TTrivialArray::BuildEmpty(std::make_shared<arrow20::BinaryType>()));
                 testCookies.emplace_back(testCookie++);
                 UNIT_ASSERT(jsonPathAccessorTrie.Insert(path, testAccessors.back(), testCookies.back()).IsSuccess());
             }
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
         auto binaryJson = std::get<NBinaryJson::TBinaryJson>(binaryJsonResult);
         return std::make_shared<TTrivialArray>(NKikimr::NArrow::NAccessor::TTrivialArray::BuildArrayFromScalar(
-            std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow::binary())));
+            std::make_shared<arrow20::BinaryScalar>(std::make_shared<arrow20::Buffer>((const ui8*)binaryJson.data(), binaryJson.size()), arrow20::binary())));
     }
 
     void CheckValueByPath(const NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie& jsonPathAccessorTrie, TStringBuf path, std::optional<TStringBuf> expected) {

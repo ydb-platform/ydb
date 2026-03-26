@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
         // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
-        AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
+        AFL_VERIFY(dict->GetPositions()->type()->id() == arrow20::Type::UINT16);
 
         auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
@@ -186,14 +186,14 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
             NDictionary::TConstructor().DeserializeFromString(blobAndMeta.Blob, infoWithMeta).DetachResult());
 
-        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == arrow::Type::UINT16);
+        AFL_VERIFY(dictParsed->GetPositions()->type()->id() == arrow20::Type::UINT16);
         AFL_VERIFY(dictParsed->GetDictionary()->length() == dict->GetDictionary()->length());
         AFL_VERIFY(dictParsed->GetChunkedArray()->length() == NumRecords);
         AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == PrepareToCompare(dict->GetChunkedArray()->ToString()));
     }
 
     // Corner cases around 254/255/256 variants: with and without nulls. Ensures positions type (uint8 vs uint16) and null slot are correct.
-    void RunCornerCaseVariants(ui32 numDistinct, bool withNulls, arrow::Type::type expectedPositionsType) {
+    void RunCornerCaseVariants(ui32 numDistinct, bool withNulls, arrow20::Type::type expectedPositionsType) {
         const ui32 numRecords = numDistinct + (withNulls ? 1 : 0);
         TTrivialArray::TPlainBuilder builder(numRecords, numRecords * 16);
         for (ui32 i = 0; i < numRecords; ++i) {
@@ -223,21 +223,21 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
     }
 
     Y_UNIT_TEST(CornerCase254NoNulls) {
-        RunCornerCaseVariants(254, false, arrow::Type::UINT8); // 254 variants <= 255 -> uint8
+        RunCornerCaseVariants(254, false, arrow20::Type::UINT8); // 254 variants <= 255 -> uint8
     }
     Y_UNIT_TEST(CornerCase254WithNulls) {
-        RunCornerCaseVariants(254, true, arrow::Type::UINT8); // 255 variants (254 + null), 255 <= 255 -> uint8
+        RunCornerCaseVariants(254, true, arrow20::Type::UINT8); // 255 variants (254 + null), 255 <= 255 -> uint8
     }
     Y_UNIT_TEST(CornerCase255NoNulls) {
-        RunCornerCaseVariants(255, false, arrow::Type::UINT8); // 255 variants <= 255 -> uint8
+        RunCornerCaseVariants(255, false, arrow20::Type::UINT8); // 255 variants <= 255 -> uint8
     }
     Y_UNIT_TEST(CornerCase255WithNulls) {
-        RunCornerCaseVariants(255, true, arrow::Type::UINT16); // 256 variants > 255 -> uint16
+        RunCornerCaseVariants(255, true, arrow20::Type::UINT16); // 256 variants > 255 -> uint16
     }
     Y_UNIT_TEST(CornerCase256NoNulls) {
-        RunCornerCaseVariants(256, false, arrow::Type::UINT16); // 256 variants > 255 -> uint16
+        RunCornerCaseVariants(256, false, arrow20::Type::UINT16); // 256 variants > 255 -> uint16
     }
     Y_UNIT_TEST(CornerCase256WithNulls) {
-        RunCornerCaseVariants(256, true, arrow::Type::UINT16); // 257 variants -> uint16
+        RunCornerCaseVariants(256, true, arrow20::Type::UINT16); // 257 variants -> uint16
     }
 };

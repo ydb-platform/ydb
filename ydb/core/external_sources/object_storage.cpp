@@ -575,8 +575,8 @@ private:
         auto& value = result.GetValue();
         auto meta = value.Metadata;
 
-        arrow::BufferBuilder builder;
-        auto partitionBuffer = std::make_shared<arrow::Buffer>(nullptr, 0);
+        arrow20::BufferBuilder builder;
+        auto partitionBuffer = std::make_shared<arrow20::Buffer>(nullptr, 0);
         auto buildStatus = builder.Append(partByData->data(), partByData->size());
         auto finishStatus = builder.Finish(&partitionBuffer);
 
@@ -606,8 +606,8 @@ private:
             metaPromise.SetValue(std::move(result));
         };
 
-        auto bufferReader = std::make_shared<arrow::io::BufferReader>(std::move(partitionBuffer));
-        auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(bufferReader);
+        auto bufferReader = std::make_shared<arrow20::io::BufferReader>(std::move(partitionBuffer));
+        auto file = std::dynamic_pointer_cast<arrow20::io::RandomAccessFile>(bufferReader);
         auto config = NObjectStorage::NInference::MakeFormatConfig({{ "format", "csv_with_names" }});
         config->ShouldMakeOptional = false;
         ActorSystem->Register(new NKqp::TActorRequestHandler<NObjectStorage::TEvArrowFile, NObjectStorage::TEvInferredFileSchema, TMetadataResult>(

@@ -114,11 +114,10 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     builders.emplace_back();
     for (auto it = Borders.begin(); it != Borders.end() && it->first <= border;) {
         for (const auto& added: it->second.Start) {
-            if (ProcessedPortions.contains(added)) {
+            if (!ProcessedPortions.insert(added).second) {
                 continue;
             }
             CurrentPortions.insert(added);
-            ProcessedPortions.insert(added);
         }
 
         if (!CurrentPortions.empty()) {
@@ -130,7 +129,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             CurrentPortions.clear();
         }
         PreviousBorder = it->first;
-        Borders.erase(it++);
+        it = Borders.erase(it);
         Counters->OnLeftBorders(-1);
     }
     
@@ -223,12 +222,12 @@ void TDuplicateManager::BuildExclusivePortions() {
     
     for (auto it = Borders.begin(); it != Borders.end();) {
         if (it->second.Start.size() == 1 && it->second.Finish.size() == 0 && ExclusivePortions.count(it->second.Start.front())) {
-            Borders.erase(it++);
+            it = Borders.erase(it);
             continue;
         }
         
         if (it->second.Start.size() == 0 && it->second.Finish.size() == 1 && ExclusivePortions.count(it->second.Finish.front())) {
-            Borders.erase(it++);
+            it = Borders.erase(it);
             continue;
         }
         

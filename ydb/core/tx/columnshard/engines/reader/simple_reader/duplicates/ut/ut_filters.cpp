@@ -1,5 +1,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/filters.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 
@@ -36,22 +37,7 @@ public:
 
 // Helper to create a simple arrow RecordBatch with a single int32 "key" column and a "version" column
 std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const std::vector<int32_t>& keys, const std::vector<int32_t>& versions) {
-    arrow::Int32Builder keyBuilder;
-    arrow::Int32Builder versionBuilder;
-    UNIT_ASSERT(keyBuilder.AppendValues(keys).ok());
-    UNIT_ASSERT(versionBuilder.AppendValues(versions).ok());
-
-    std::shared_ptr<arrow::Int32Array> keyArray;
-    std::shared_ptr<arrow::Int32Array> versionArray;
-    UNIT_ASSERT(keyBuilder.Finish(&keyArray).ok());
-    UNIT_ASSERT(versionBuilder.Finish(&versionArray).ok());
-
-    auto schema = arrow::schema({
-        arrow::field("key", arrow::int32()),
-        arrow::field("version", arrow::int32())
-    });
-
-    return arrow::RecordBatch::Make(schema, keys.size(), {keyArray, versionArray});
+    return NColumnShard::MakeTestBatch<arrow::Int32Type, arrow::Int32Type>({"key", "version"}, keys, versions);
 }
 
 std::shared_ptr<arrow::Schema> MakeKeySchema() {
@@ -154,8 +140,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
     Y_UNIT_TEST(ValidateDataSchemaDoesNothing) {
         TFiltersBuilder builder;
         auto schema = arrow::schema({arrow::field("key", arrow::int32())});
-        // Should not throw
-        builder.ValidateDataSchema(schema);
+        UNIT_ASSERT_NO_EXCEPTION(builder.ValidateDataSchema(schema));
     }
 
     Y_UNIT_TEST(AddRecordIncrementsRowsAdded) {

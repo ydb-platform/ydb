@@ -90,8 +90,8 @@ private:
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const TEvIntervalConstructionResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-        Counters->OnLeftBorders(-1 * Borders.size());
-        Counters->OnWaitingBorders(-1 * WaitingBorders.size());
+        Counters->OnLeftBorders(-1 * static_cast<i64>(Borders.size()));
+        Counters->OnWaitingBorders(-1 * static_cast<i64>(WaitingBorders.size()));
         AbortAndPassAway("aborted by actor system");
     }
 

@@ -54,10 +54,10 @@ void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
         return;
     }
-    auto waitintIt = WaitingPortions.find(portionId);
-    if (waitintIt != WaitingPortions.end()) {
-        waitintIt->second->AddFilter(std::move(filterInfo.Filter));
-        WaitingPortions.erase(waitintIt);
+    auto waitingIt = WaitingPortions.find(portionId);
+    if (waitingIt != WaitingPortions.end()) {
+        waitingIt->second->AddFilter(std::move(filterInfo.Filter));
+        WaitingPortions.erase(waitingIt);
         Filters.erase(filterIt);
     }
 }

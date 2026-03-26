@@ -92,7 +92,7 @@ public:
 
         for (auto& [portion, columns] : columnsByPortion) {
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
-            for (const auto& [columnId, field] : fieldByColumn) {
+            for (const auto& [columnId, _] : fieldByColumn) {
                 auto column = columns.FindPtr(columnId);
                 AFL_VERIFY(column);
                 sortedColumns.emplace_back(*column);

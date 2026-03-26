@@ -580,7 +580,7 @@ protected:
         Runtime->Send(new IEventHandle(Wrapper, Edge, new TEvents::TEvPoison()));
 
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 2);
+        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
         Runtime->DispatchEvents(options);
 
         NKikimrSchemeOp::TFSSettings settings;
@@ -720,7 +720,7 @@ public:
 
         Runtime->Send(new IEventHandle(Wrapper, Edge, new TEvents::TEvPoison()));
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 2);
+        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
         Runtime->DispatchEvents(options);
 
         UNIT_ASSERT(!TFsPath(incompleteKey).Exists());

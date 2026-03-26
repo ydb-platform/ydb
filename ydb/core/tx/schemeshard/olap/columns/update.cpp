@@ -44,7 +44,7 @@ bool TOlapColumnDiff::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDiff& c
     }
     if (columnSchema.HasDataAccessorConstructor()) {
         const auto& dacProto = columnSchema.GetDataAccessorConstructor();
-        if (dacProto.GetClassName() == "__UNDEFINED") {
+        if (dacProto.GetClassName() == NArrow::NAccessor::TGlobalConst::UndefinedAccessorName) {
             AccessorConstructor.emplace();
         } else {
             NArrow::NAccessor::TRequestedConstructorContainer container;

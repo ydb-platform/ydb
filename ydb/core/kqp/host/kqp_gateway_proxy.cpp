@@ -1,5 +1,6 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -477,15 +478,15 @@ bool FillAccessor(
     const auto& encodingType = (*from)[0].Type;
     switch (encodingType) {
         case TColumnEncoding::EEncodingType::UNDEFINED:
-            to.MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
             break;
         case TColumnEncoding::EEncodingType::DICTIONARY:
             to.MutableDataAccessorConstructor()->MutableDictionary();
-            to.MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
             break;
         case TColumnEncoding::EEncodingType::PLAIN:
             to.MutableDataAccessorConstructor()->MutablePlain();
-            to.MutableDataAccessorConstructor()->SetClassName("PLAIN");
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
             break;
     }
 

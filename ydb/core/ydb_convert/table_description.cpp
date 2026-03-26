@@ -7,6 +7,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -905,25 +906,25 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         if (column.encoding_size() > 0) {
             if (column.encoding_size() != 1) {
                 status = Ydb::StatusIds::UNSUPPORTED;
-                error = "Several encodings are not yet supported";
+                error = TStringBuilder() << "Several encodings are not yet supported for column: " << column.name();
                 return false;
             }
 
             switch (column.encoding(0).encoding_settings_case()) {
                 case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
-                    columnDesc->MutableDataAccessorConstructor()->SetClassName("PLAIN");
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
                     columnDesc->MutableDataAccessorConstructor()->MutablePlain();
                     break;
                 case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
-                    columnDesc->MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
                     columnDesc->MutableDataAccessorConstructor()->MutableDictionary();
                     break;
                 case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
-                    columnDesc->MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+                    columnDesc->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
                     break;
                 default:
                     status = Ydb::StatusIds::UNSUPPORTED;
-                    error = "Unsupported encoding";
+                    error = TStringBuilder() << "Unsupported encoding for column: " << column.name();
                     return false;
 
             }
@@ -1039,25 +1040,25 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             if (alter.encoding_size() > 0) {
                 if (alter.encoding_size() != 1) {
                     status = Ydb::StatusIds::UNSUPPORTED;
-                    error = "Several encodings are not yet supported";
+                    error = TStringBuilder() << "Several encodings are not yet supported for column: " << name;
                     return false;
                 }
 
                 switch (alter.encoding(0).encoding_settings_case()) {
                     case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kOff:
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName("PLAIN");
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
                         alterColumn->MutableDataAccessorConstructor()->MutablePlain();
                         break;
                     case Ydb::Table::ColumnEncoding::EncodingSettingsCase::kDictionary:
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName("DICTIONARY");
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
                         alterColumn->MutableDataAccessorConstructor()->MutableDictionary();
                         break;
                     case Ydb::Table::ColumnEncoding::EncodingSettingsCase::ENCODING_SETTINGS_NOT_SET:
-                        alterColumn->MutableDataAccessorConstructor()->SetClassName("__UNDEFINED");
+                        alterColumn->MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
                         break;
                     default:
                         status = Ydb::StatusIds::UNSUPPORTED;
-                        error = "Unsupported encoding";
+                        error = TStringBuilder() << "Unsupported encoding for column: " << name;
                         return false;
 
                 }

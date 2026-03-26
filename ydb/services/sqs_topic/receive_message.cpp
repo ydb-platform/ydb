@@ -9,6 +9,7 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/attributes/attribute_name.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -151,6 +152,12 @@ namespace NKikimr::NSqsTopic::V1 {
             AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
             result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
+            if (message.ApproximateFirstReceiveTimestamp) {
+                result.mutable_attributes()->emplace("ApproximateFirstReceiveTimestamp", ToString(message.ApproximateFirstReceiveTimestamp->MilliSeconds()));
+            }
+            if (message.ApproximateReceiveCount) {
+                result.mutable_attributes()->emplace("ApproximateReceiveCount", ToString(message.ApproximateReceiveCount.value()));
+            }
 
             if (!message.MessageGroupId.empty()) {
                 if (TString v = NPQ::NSourceIdEncoding::Decode(message.MessageGroupId); !v.empty()) {
@@ -160,34 +167,17 @@ namespace NKikimr::NSqsTopic::V1 {
             if (message.SentTimestamp) {
                 result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_DEDUPLICATION_ID)) {
-                result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
+            if (!message.MessageDeduplicationId.empty()) {
+                result.mutable_attributes()->emplace("MessageDeduplicationId", message.MessageDeduplicationId);
             }
 
             result.set_message_id(GenerateMessageId(message.MessageId));
 
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::MESSAGE_ATTRIBUTE_ATTRIBUTES)) {
-                NKikimr::NSQS::TMessageAttributes messageAttributes;
-                if (messageAttributes.ParseFromString(*value)) {
-                    result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
-                    auto* mma = result.mutable_message_attributes();
-                    for (const auto& attribute : messageAttributes.attributes()) {
-                        Ydb::Ymq::V1::MessageAttribute value;
-                        if (attribute.has_binaryvalue()) {
-                            value.set_binary_value(attribute.binaryvalue());
-                        } else if (attribute.has_stringvalue()) {
-                            value.set_string_value(attribute.stringvalue());
-                        } else {
-                            continue;
-                        }
-                        mma->emplace(attribute.name(), std::move(value));
-                    }
-                } else {
-                    LOG_WARN_S(
-                        ctx,
-                        NKikimrServices::SQS,
-                        "Unable to deserialize message attributes");
-                }
+            if (!NSQS::DeserializeUserAttributes(result, message.Attributes)) {
+                LOG_WARN_S(
+                    ctx,
+                    NKikimrServices::SQS,
+                    "Unable to deserialize message attributes");
             }
 
             result.set_receipt_handle(SerializeReceipt(message.MessageId));

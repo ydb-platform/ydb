@@ -1314,6 +1314,8 @@ message TMLPMessageId {
 message TMLPMessageMeta {
     optional string MessageGroupId = 1;
     optional uint64 SentTimestampMilliseconds = 2;
+    optional uint32 ApproximateReceiveCount = 3;
+    optional uint64 ApproximateFirstReceiveTimestampMilliseconds = 4;
 };
 
 message TMLPMessage {

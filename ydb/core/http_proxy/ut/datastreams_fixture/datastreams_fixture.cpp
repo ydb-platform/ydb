@@ -432,6 +432,8 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
 
     if (enableMetering) {
         ActorRuntime->RegisterService(

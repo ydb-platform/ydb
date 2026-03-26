@@ -1679,6 +1679,288 @@ Y_UNIT_TEST(LeftSemiJoinWithDuplicatesInRightTable) {
     }
 }
 
+
+Y_UNIT_TEST(CrossJoinWithMultipleLeftJoinsAndIndexViews) {
+    TKikimrSettings settings;
+    TKikimrRunner kikimr(settings);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Requests` (
+                subscriber Utf8,
+                fld_01 Utf8,
+                fld_02 Bool,
+                fld_03 Utf8,
+                fld_04 Utf8,
+                category Utf8,
+                fld_05 Utf8,
+                fld_06 Bool,
+                ref Utf8,
+                ref_type Utf8,
+                fld_07 Timestamp,
+                fld_08 Utf8,
+                fld_09 Utf8,
+                fld_10 Utf8,
+                fld_11 Utf8,
+                fld_12 Timestamp,
+                send_ts Timestamp,
+                fld_13 Utf8,
+                fld_14 Utf8,
+                fld_15 Utf8,
+                fld_16 Int32,
+                fld_17 Timestamp,
+                fld_18 Utf8,
+                fld_19 Bool,
+                fld_20 Int64,
+                fld_21 Timestamp,
+                fld_22 Utf8,
+                fld_23 Utf8,
+                id Utf8 NOT NULL,
+                fld_24 Int32,
+                fld_25 Utf8,
+                fld_26 Utf8,
+                fld_27 Utf8,
+                INDEX ix_requests_ts_category GLOBAL SYNC
+                    ON (send_ts, category)
+                    COVER (subscriber, ref_type, ref),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Mappings` (
+                subscriber Utf8,
+                cancelled Bool,
+                fld_01 Utf8,
+                fld_02 Bool,
+                category Utf8,
+                ext_ref Utf8,
+                fld_03 Bool,
+                ref Utf8,
+                fld_04 Bool,
+                fld_05 Utf8,
+                fld_06 Utf8,
+                fld_07 Utf8,
+                fld_08 Timestamp,
+                fld_09 Utf8,
+                fld_10 Bool,
+                fld_11 Int64,
+                fld_12 Timestamp,
+                fld_13 Utf8,
+                fld_14 Utf8,
+                id Utf8 NOT NULL,
+                INDEX ix_mappings_ref_subscriber_category GLOBAL SYNC
+                    ON (ref, subscriber, category)
+                    COVER (cancelled, ext_ref),
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Documents` (
+                fld_01 Utf8,
+                fld_02 Utf8,
+                fld_03 Decimal(22, 9),
+                fld_04 Decimal(22, 9),
+                fld_05 Decimal(22, 9),
+                fld_06 Utf8,
+                fld_07 Utf8,
+                fld_08 Timestamp,
+                fld_09 Timestamp,
+                fld_10 Timestamp,
+                fld_11 Timestamp,
+                fld_12 Timestamp,
+                fld_13 Utf8,
+                fld_14 Timestamp,
+                fld_15 Utf8,
+                fld_16 Timestamp,
+                fld_17 Utf8,
+                fld_18 Utf8,
+                fld_19 Utf8,
+                fld_20 Bool,
+                fld_21 Utf8,
+                fld_22 Utf8,
+                fld_23 Utf8,
+                fld_24 Utf8,
+                fld_25 Utf8,
+                fld_26 Utf8,
+                fld_27 Bool,
+                fld_28 Int32,
+                fld_29 Utf8,
+                fld_30 Utf8,
+                fld_31 Utf8,
+                fld_32 Utf8,
+                fld_33 Utf8,
+                fld_34 Utf8,
+                fld_35 Utf8,
+                fld_36 Int32,
+                fld_37 Utf8,
+                fld_38 Utf8,
+                fld_39 Utf8,
+                fld_40 Utf8,
+                fld_41 Utf8,
+                fld_42 Utf8,
+                fld_43 Utf8,
+                fld_44 Utf8,
+                fld_45 Utf8,
+                fld_46 Utf8,
+                fld_47 Utf8,
+                fld_48 Utf8,
+                fld_49 Utf8,
+                status Utf8,
+                fld_50 Utf8,
+                fld_51 Utf8,
+                fld_52 Utf8,
+                fld_53 Utf8,
+                fld_54 Utf8,
+                fld_55 Utf8,
+                fld_56 Int32,
+                fld_57 Utf8,
+                fld_58 Utf8,
+                fld_59 Utf8,
+                fld_60 Utf8,
+                fld_61 String,
+                fld_62 Utf8,
+                fld_63 Utf8,
+                fld_64 String,
+                fld_65 Utf8,
+                fld_66 Utf8,
+                fld_67 Utf8,
+                fld_68 Bool,
+                fld_69 Utf8,
+                fld_70 Utf8,
+                fld_71 Timestamp,
+                fld_72 Utf8,
+                fld_73 Bool,
+                fld_74 Int64,
+                fld_75 Timestamp,
+                fld_76 Utf8,
+                fld_77 Utf8,
+                id Utf8 NOT NULL,
+                fld_78 Utf8,
+                fld_79 Utf8,
+                fld_80 Utf8,
+                fld_81 Utf8,
+                fld_82 Utf8,
+                fld_83 Utf8,
+                fld_84 Utf8,
+                fld_85 Utf8,
+                fld_86 Utf8,
+                fld_87 Utf8,
+                fld_88 Utf8,
+                fld_89 Utf8,
+                fld_90 Utf8,
+                fld_91 Timestamp,
+                fld_92 Timestamp,
+                fld_93 Utf8,
+                fld_94 Utf8,
+                fld_95 Utf8,
+                fld_96 Utf8,
+                PRIMARY KEY (id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        auto result = session.ExecuteDataQuery(R"(
+            UPSERT INTO `/Root/Requests` (id, subscriber, send_ts, category, ref_type, ref) VALUES
+                ("r1"u, "SUB_A"u, Timestamp("2025-12-20T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r2"u, "SUB_A"u, Timestamp("2025-12-20T15:00:00Z"), "ClassB"u, "TYPE_A"u, "d2"u),
+                ("r3"u, "SUB_A"u, Timestamp("2025-12-20T12:00:00Z"), "ClassC"u, "TYPE_A"u, "d3"u),
+                ("r4"u, "SUB_X"u, Timestamp("2025-12-20T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r5"u, "SUB_A"u, Timestamp("2025-12-19T10:00:00Z"), "ClassA"u, "TYPE_A"u, "d1"u),
+                ("r6"u, "SUB_A"u, Timestamp("2025-12-20T08:00:00Z"), "ClassA"u, "TYPE_X"u, "d4"u);
+
+            UPSERT INTO `/Root/Mappings` (id, ref, subscriber, category, ext_ref, cancelled) VALUES
+                ("m1"u, "d1"u, "SUB_B"u, "ClassA"u, "ref-a1"u, false),
+                ("m2"u, "d1"u, "SUB_A"u, "ClassA"u, "ref-b1"u, false),
+                ("m3"u, "d2"u, "SUB_B"u, "ClassB"u, "ref-a2"u, true),
+                ("m4"u, "d2"u, "SUB_A"u, "ClassB"u, "ref-b2"u, false);
+
+            UPSERT INTO `/Root/Documents` (id, status) VALUES
+                ("d1"u, "OPEN"u),
+                ("d2"u, "CLOSED"u),
+                ("d3"u, "REMOVED"u);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        const TString query = Q1_(R"(
+            SELECT
+                m1.ext_ref AS col_a,
+                m2.ext_ref AS col_b,
+                d.status AS col_c,
+                m1.cancelled AS col_d
+            FROM (SELECT 'SUB_B'u AS const_b, 'SUB_A'u AS const_a) AS consts
+            CROSS JOIN `/Root/Requests` VIEW ix_requests_ts_category AS r
+            LEFT JOIN `/Root/Mappings` VIEW ix_mappings_ref_subscriber_category AS m1
+                ON m1.ref = r.ref AND m1.subscriber = consts.const_b
+            LEFT JOIN `/Root/Mappings` VIEW ix_mappings_ref_subscriber_category AS m2
+                ON m2.ref = r.ref AND m2.subscriber = consts.const_a
+            LEFT JOIN `/Root/Documents` AS d
+                ON d.id = r.ref
+            WHERE
+                r.subscriber = 'SUB_A'u
+                AND r.send_ts >= Timestamp("2025-12-20T00:00:00Z")
+                AND r.send_ts < Timestamp("2025-12-21T00:00:00Z")
+                AND r.category != 'ClassC'u
+                AND r.ref_type = 'TYPE_A'u
+                AND d.status != 'REMOVED'u
+            ORDER BY col_a
+            LIMIT 10;
+        )");
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        NYdb::NQuery::TExecuteQuerySettings execSettings;
+        execSettings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+
+        auto result = querySession.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [["ref-a1"];["ref-b1"];["OPEN"];[%false]];
+            [["ref-a2"];["ref-b2"];["CLOSED"];[%true]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+
+        TSet<TString> accessedTables;
+        for (int phase = 0; phase < stats.query_phases().size(); ++phase) {
+            for (const auto& ta : stats.query_phases(phase).table_access()) {
+                if (ta.reads().rows() > 0) {
+                    accessedTables.insert(ta.name());
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Requests/ix_requests_ts_category/indexImplTable"),
+            "Expected reads from Requests covering index");
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Mappings/ix_mappings_ref_subscriber_category/indexImplTable"),
+            "Expected reads from Mappings covering index");
+        UNIT_ASSERT_C(accessedTables.contains("/Root/Documents"),
+            "Expected reads from Documents");
+
+        UNIT_ASSERT_C(!accessedTables.contains("/Root/Requests"),
+            "Should not read from Requests main table when covering index has all needed columns");
+        UNIT_ASSERT_C(!accessedTables.contains("/Root/Mappings"),
+            "Should not read from Mappings main table when covering index has all needed columns");
+    }
+}
+
 } // suite
 
 } // namespace NKqp

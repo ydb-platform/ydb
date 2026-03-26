@@ -86,21 +86,10 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    // Both streaming and non-streaming sources can legitimately reach this early-return:
-    //
-    // Streaming: a source can have multiple pages in-flight simultaneously.
-    // When the source emits its last page it is popped from SourcesSequentially,
-    // but the already-emitted pages are still being consumed by the client.
-    // When those pages are acked, Continue() is called with the old source's
-    // address.  The fetch was already triggered by the pre-fetch in OnSourceReady.
-    //
-    // Non-streaming: ContinueCursor() is called synchronously in OnSourceReady
-    // (result.cpp), which triggers async work.  The source can finish processing
-    // its last page and be popped from SourcesSequentially before the ack for the
-    // previous page arrives.  So Continue() with IsStreamingPage==false for a gone
-    // source is also a legitimate outcome in non-streaming mode.
-    //
-    // In both cases there is nothing to do – simply return.
+    // This early-return is valid in both modes.
+    // Streaming: old in-flight page acks may arrive after the source is popped.
+    // Non-streaming: async work may finish and pop the source before the previous
+    // page ack arrives.
     if (SourcesSequentially.empty() || SourcesSequentially.front()->GetSourceIdx() != continueAddress.GetSourceIdx()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source_already_finished")
             ("continue_source_idx", continueAddress.GetSourceIdx())
@@ -113,18 +102,12 @@ void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainRe
     auto* source = SourcesSequentially.front()->MutableAs<IDataSource>();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", SourcesSequentially.front()->GetSourceIdx())
         ("has_cursor", source->HasCursor())("prefetch_triggered", source->IsPrefetchTriggered())("streaming", source->IsStreamingMode());
-    // HasCursor() is false when ContinueCursor was already called in OnSourceReady as a
-    // pre-fetch (streaming mode, pages-in-flight count was below the limit).  In that
-    // case the next page fetch is already in progress and we must not start it again.
-    // HasCursor() is true when the pre-fetch was suppressed (limit reached) or in
-    // non-streaming mode – both cases require us to trigger the fetch now.
+    // HasCursor()==false means prefetch already started the next fetch.
+    // HasCursor()==true means prefetch was skipped or streaming is off, so start it now.
     if (source->HasCursor()) {
-        // In streaming mode, if pre-fetching was already triggered, we should not call
-        // ContinueCursor again to avoid double-advancing the page index.
-        // The pre-fetch will handle advancing to the next page.
+        // Skip ContinueCursor(): prefetch already advanced to the next page.
         if (source->IsStreamingMode() && source->IsPrefetchTriggered()) {
-            // Pre-fetch was already triggered, do not call ContinueCursor again
-            // but reset the flag for the next iteration
+            // Prefetch already ran; just reset the flag.
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "skip_continue_cursor_prefetch_already_triggered")
                 ("source_idx", source->GetSourceIdx())
                 ("page_index", source->GetCurrentEarlyPageIndex())

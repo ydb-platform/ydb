@@ -74,7 +74,9 @@ class TKafkaTestClient {
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
-        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets);
+        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId,
+                            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets,
+                            std::optional<i32> generationId = std::nullopt);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 

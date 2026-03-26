@@ -86,17 +86,25 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    // In streaming mode with pre-fetch, a source can have multiple pages in-flight
-    // simultaneously.  When the source emits its last page it is popped from
-    // SourcesSequentially (ESourceAction::ProvideNext / Finish), but the already-emitted
-    // pages are still being consumed by the client.  When those pages are acked,
-    // Continue() is called with the old source's address.  At that point the source is
-    // no longer at the front (or the queue is empty), so there is nothing to continue –
-    // the fetch was already triggered by the pre-fetch in OnSourceReady.
-    // We simply skip the ContinueCursor call in that case.
+    // Both streaming and non-streaming sources can legitimately reach this early-return:
+    //
+    // Streaming: a source can have multiple pages in-flight simultaneously.
+    // When the source emits its last page it is popped from SourcesSequentially,
+    // but the already-emitted pages are still being consumed by the client.
+    // When those pages are acked, Continue() is called with the old source's
+    // address.  The fetch was already triggered by the pre-fetch in OnSourceReady.
+    //
+    // Non-streaming: ContinueCursor() is called synchronously in OnSourceReady
+    // (result.cpp), which triggers async work.  The source can finish processing
+    // its last page and be popped from SourcesSequentially before the ack for the
+    // previous page arrives.  So Continue() with IsStreamingPage==false for a gone
+    // source is also a legitimate outcome in non-streaming mode.
+    //
+    // In both cases there is nothing to do – simply return.
     if (SourcesSequentially.empty() || SourcesSequentially.front()->GetSourceIdx() != continueAddress.GetSourceIdx()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "continue_source_already_finished")
             ("continue_source_idx", continueAddress.GetSourceIdx())
+            ("streaming_page", continueAddress.IsStreamingPage())
             ("queue_empty", SourcesSequentially.empty())
             ("front_source_idx", SourcesSequentially.empty() ? Max<ui32>() : SourcesSequentially.front()->GetSourceIdx());
         return;

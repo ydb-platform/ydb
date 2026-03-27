@@ -469,6 +469,27 @@ namespace {
         values.erase(std::unique(values.begin(), values.end()), values.end());
     }
 
+    inline std::optional<ui32> TryGetExactNodeIdMatcher(const TPrometheusVectorSelector& selector) {
+        std::optional<ui32> exactNodeId;
+        for (const auto& matcher : selector.Matchers) {
+            if (matcher.Name != "node_id") {
+                continue;
+            }
+            if (matcher.Op != EPrometheusLabelMatchOp::Equal) {
+                return {};
+            }
+            const ui32 nodeId = FromStringWithDefault<ui32>(matcher.Value, 0);
+            if (!nodeId) {
+                return {};
+            }
+            if (exactNodeId && *exactNodeId != nodeId) {
+                return {};
+            }
+            exactNodeId = nodeId;
+        }
+        return exactNodeId;
+    }
+
 } // namespace
 
 class TJsonInMemoryMetrics : public TViewerPipeClient {
@@ -959,6 +980,10 @@ public:
     }
 
     void Bootstrap() override {
+        if (const auto forwardResponse = MaybeForwardToExactNode()) {
+            return ReplyAndPassAway(*forwardResponse);
+        }
+
         const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
         if (!inMemoryMetrics) {
             return ReplyAndPassAway(BuildErrorResponse("execution", "In-memory metrics subsystem is not registered"));
@@ -1071,6 +1096,64 @@ private:
         }
 
         return BuildErrorResponse("bad_data", "unsupported endpoint");
+    }
+
+    std::optional<TString> MaybeForwardToExactNode() {
+        TString error;
+        const auto exactNodeId = GetRequestedExactNodeId(error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        if (!exactNodeId || *exactNodeId == TActivationContext::ActorSystem()->NodeId) {
+            return {};
+        }
+        return MakeForward({*exactNodeId});
+    }
+
+    std::optional<ui32> GetRequestedExactNodeId(TString& error) const {
+        error.clear();
+
+        const TString path = GetRequestPath();
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query"
+                || path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
+        {
+            const TString query = Params.Get("query");
+            if (query.empty()) {
+                return {};
+            }
+
+            TPrometheusVectorSelector selector;
+            if (!ParseSelectorParam(query, selector, error)) {
+                return {};
+            }
+            return TryGetExactNodeIdMatcher(selector);
+        }
+
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/series"
+                || path == "/viewer/inmemory_metrics/prometheus/api/v1/labels"
+                || path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values"
+                || (path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && path.EndsWith("/values")))
+        {
+            const auto selectors = ParseMatchers("match[]", error);
+            if (!error.empty() || selectors.empty()) {
+                return {};
+            }
+
+            std::optional<ui32> nodeId;
+            for (const auto& selector : selectors) {
+                const auto selectorNodeId = TryGetExactNodeIdMatcher(selector);
+                if (!selectorNodeId) {
+                    return {};
+                }
+                if (nodeId && *nodeId != *selectorNodeId) {
+                    return {};
+                }
+                nodeId = selectorNodeId;
+            }
+            return nodeId;
+        }
+
+        return {};
     }
 
     std::optional<double> GetFloatParam(TStringBuf name) const {

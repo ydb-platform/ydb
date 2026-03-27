@@ -4,6 +4,7 @@ import logging
 import re
 import time
 
+import pytest
 import requests
 
 from hamcrest import assert_that, equal_to, greater_than
@@ -432,3 +433,42 @@ def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
         )
 
     assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
+
+
+def test_inmemory_metrics_prometheus_query_routes_to_exact_remote_node(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    source_base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    target_base_url = f"http://localhost:{ydb_cluster.nodes[2].mon_port}"
+    target = wait_for_target(
+        target_base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+    remote_node_id = extract_label(target, "node_id")
+
+    last_query = None
+
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            source_base_url,
+            "/query",
+            params={
+                "query": f'{{"{TARGET}", node_id="{remote_node_id}"}}',
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus remote node query result: %s", last_query)
+        result = last_query.get("result", [])
+        return last_query.get("resultType") == "vector" and any(
+            item.get("metric", {}).get("__name__") == TARGET
+            and item.get("metric", {}).get("node_id") == remote_node_id
+            for item in result
+        )
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query

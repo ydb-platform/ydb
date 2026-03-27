@@ -20,116 +20,170 @@ TQueries ParseAndCollect(const TString& jsonPath) {
     return result.GetQueries();
 }
 
-void ExpectError(const TString& jsonPath, const TString& errorMessage) {
+template <bool ParserError = false>
+void ValidateError(const TString& jsonPath, const TString& errorMessage) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
-    UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    TQueryCollector collector(path);
-    auto result = collector.Collect();
-    UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
+    if constexpr (ParserError) {
+        UNIT_ASSERT_STRING_CONTAINS_C(issues.ToOneLineString(), errorMessage, "Expected error message not found: " + errorMessage);
+    } else {
+        UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "Expected error message not found: " + errorMessage);
+        TQueryCollector collector(path);
+        auto result = collector.Collect();
+        UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
+
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "Expected error message not found: " + errorMessage);
+    }
+}
+
+void ValidateQueries(const TString& jsonPath, const TQueries& expectedQueries) {
+    UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect(jsonPath), expectedQueries);
 }
 
 }  // namespace
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
-    Y_UNIT_TEST(CorrectJsonPath) {
-        using T = TQueries;
 
-        // Context object
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$"), T{""});
+    // Every path must have a ContextObject ($)
+    Y_UNIT_TEST(CollectPath_EmptyPath) {
+        ValidateError<true>("", "Too many errors");
+    }
 
-        // Member access
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a"), T{"\1a"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c"), T{"\1a\1b\1c"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.aba.\"caba\""), T{"\3aba\4caba"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.\"\".abc"), T{TString("\0\3abc", 5)});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*"), T{"\1a"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c"), T{"\1a"});
+    Y_UNIT_TEST(CollectPath_ContextObject) {
+        ValidateQueries("$", {""});
+    }
 
-        // Array access
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0]"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3]"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 3]"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[last]"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0, 2 to last]"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0 to 1].key"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0]"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key1[last].key2"), T{"\4key1\4key2"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.arr[2 to last]"), T{"\3arr"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*[2 to last].key"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0].*"), T{"\3key"});
+    Y_UNIT_TEST(CollectPath_MemberAccess) {
+        ValidateQueries("$.a", {"\1a"});
+        ValidateQueries("$.a.b.c", {"\1a\1b\1c"});
+        ValidateQueries("$.aba.\"caba\"", {"\3aba\4caba"});
+        ValidateQueries("$.\"\".abc", {TString("\0\3abc", 5)});
+        ValidateQueries("$.*", {""});
+        ValidateQueries("$.a.*", {"\1a"});
+        ValidateQueries("$.a.*.c", {"\1a"});
+    }
 
-        // Methods
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.abs()"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.floor()"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3].ceiling()"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.abs()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.floor()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.ceiling()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.double()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.size()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue()"), T{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.keyvalue()"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3].value.size().floor()"), T{"\3key\5value"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue().name"), T{"\3key"});
+    Y_UNIT_TEST(CollectPath_ArrayAccess) {
+        ValidateQueries("$[0]", {""});
+        ValidateQueries("$[1, 2, 3]", {""});
+        ValidateQueries("$[1 to 3]", {""});
+        ValidateQueries("$[last]", {""});
+        ValidateQueries("$[0, 2 to last]", {""});
+        ValidateQueries("$[0 to 1].key", {"\3key"});
+        ValidateQueries("$.key[0]", {"\3key"});
+        ValidateQueries("$.key1[last].key2", {"\4key1\4key2"});
+        ValidateQueries("$.arr[2 to last]", {"\3arr"});
+        ValidateQueries("$.*[2 to last].key", {""});
+        ValidateQueries("$.key[0].*", {"\3key"});
+    }
 
-        // Starts with predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ starts with \"lol\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to last] starts with \"lol\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] starts with \"lol\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key starts with \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c[1, 2, 3] starts with \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type().name starts with \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* starts with \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c[1, 2, 3] starts with \"abc\""), T{""});
+    Y_UNIT_TEST(CollectPath_Methods) {
+        ValidateQueries("$.abs()", {""});
+        ValidateQueries("$.*.floor()", {""});
+        ValidateQueries("$[1, 2, 3].ceiling()", {""});
+        ValidateQueries("$.key.abs()", {"\3key"});
+        ValidateQueries("$.key.floor()", {"\3key"});
+        ValidateQueries("$.key.ceiling()", {"\3key"});
+        ValidateQueries("$.key.double()", {"\3key"});
+        ValidateQueries("$.key.type()", {"\3key"});
+        ValidateQueries("$.key.size()", {"\3key"});
+        ValidateQueries("$.key.keyvalue()", {"\3key"});
+        ValidateQueries("$.*.keyvalue()", {""});
+        ValidateQueries("$.key[1, 2, 3].value.size().floor()", {"\3key\5value"});
+        ValidateQueries("$.key.keyvalue().name", {"\3key"});
+    }
 
-        // Like regex predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 2] like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3] like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue() like_regex \"abc\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \"a.c\""), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \".*\""), T{""});
+    // Predicates return an empty query because they always return a boolean/null value
+    // For JSON_EXISTS, the result is always true even if the path does not exist
+    Y_UNIT_TEST(CollectPath_StartsWithPredicate) {
+        ValidateQueries("$ starts with \"lol\"", {""});
+        ValidateQueries("$[1 to last] starts with \"lol\"", {""});
+        ValidateQueries("$[*] starts with \"lol\"", {""});
+        ValidateQueries("$.key starts with \"abc\"", {""});
+        ValidateQueries("$.a.b.c[1, 2, 3] starts with \"abc\"", {""});
+        ValidateQueries("$.key.type().name starts with \"abc\"", {""});
+        ValidateQueries("$.* starts with \"abc\"", {""});
+        ValidateQueries("$.a.*.c[1, 2, 3] starts with \"abc\"", {""});
+    }
 
-        // Exists predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($)"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key)"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key[1, 2, 3])"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($[*].size())"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key.keyvalue().name)"), T{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key.keyvalue().name starts with \"abc\")"), T{""});
+    // Predicates return an empty query because they always return a boolean/null value
+    // For JSON_EXISTS, the result is always true even if the path does not exist
+    Y_UNIT_TEST(CollectPath_LikeRegexPredicate) {
+        ValidateQueries("$ like_regex \"abc\"", {""});
+        ValidateQueries("$[1 to 2] like_regex \"abc\"", {""});
+        ValidateQueries("$[*] like_regex \"abc\"", {""});
+        ValidateQueries("$.key like_regex \"abc\"", {""});
+        ValidateQueries("$.* like_regex \"abc\"", {""});
+        ValidateQueries("$.key[1, 2, 3] like_regex \"abc\"", {""});
+        ValidateQueries("$.key.keyvalue() like_regex \"abc\"", {""});
+        ValidateQueries("$.key like_regex \"a.c\"", {""});
+        ValidateQueries("$.key like_regex \".*\"", {""});
+    }
 
-        // Is unknown predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("($ starts with \"abc\") is unknown"), T{""});
+    // Predicates return an empty query because they always return a boolean/null value
+    // For JSON_EXISTS, the result is always true even if the path does not exist
+    Y_UNIT_TEST(CollectPath_ExistsPredicate) {
+        ValidateQueries("exists($)", {""});
+        ValidateQueries("exists($.key)", {""});
+        ValidateQueries("exists($.key[1, 2, 3])", {""});
+        ValidateQueries("exists($[*].size())", {""});
+        ValidateQueries("exists($.key.keyvalue().name)", {""});
+        ValidateQueries("exists($.key.keyvalue().name starts with \"abc\")", {""});
+    }
+
+    // Predicates return an empty query because they always return a boolean/null value
+    // For JSON_EXISTS, the result is always true even if the path does not exist
+    Y_UNIT_TEST(CollectPath_IsUnknownPredicate) {
+        ValidateQueries("($ starts with \"abc\") is unknown", {""});
+    }
+
+    // Unary +/- stop further path extraction (same as methods): operand path only
+    Y_UNIT_TEST(CollectPath_UnaryPlusMinus) {
+        ValidateQueries("-$.key", {"\3key"});
+        ValidateQueries("+$.key", {"\3key"});
+
+        ValidateQueries("-$", {""});
+        ValidateQueries("+$", {""});
+
+        ValidateQueries("-$.a.b.c", {"\1a\1b\1c"});
+        ValidateQueries("+$.a.b.c", {"\1a\1b\1c"});
+
+        ValidateQueries("-$.*", {""});
+        ValidateQueries("+$.*", {""});
+        ValidateQueries("-$.a.*", {"\1a"});
+        ValidateQueries("+$.a.*", {"\1a"});
+
+        ValidateQueries("-$.key[0]", {"\3key"});
+        ValidateQueries("+$.key[last]", {"\3key"});
+
+        ValidateQueries("-$.key.abs()", {"\3key"});
+        ValidateQueries("+$.key.type()", {"\3key"});
+
+        ValidateQueries("-(-$.key)", {"\3key"});
+        ValidateQueries("-(+$.key)", {"\3key"});
+        ValidateQueries("+(-$.key)", {"\3key"});
+        ValidateQueries("+(+$.key)", {"\3key"});
     }
 
     // Literals are not supported without a preceding ContextObject
-    Y_UNIT_TEST(Literals) {
-        using T = TQueries;
-
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1"), T{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1.2345"), T{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("true"), T{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("false"), T{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("null"), T{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("\"string\""), T{});
+    Y_UNIT_TEST(CollectPath_Literals) {
+        ValidateQueries("1", {});
+        ValidateQueries("1.2345", {});
+        ValidateQueries("true", {});
+        ValidateQueries("false", {});
+        ValidateQueries("null", {});
+        ValidateQueries("\"string\"", {});
     }
 
     // Variables are not supported now
-    Y_UNIT_TEST(Variables) {
+    Y_UNIT_TEST(CollectPath_Variables) {
         const TString errorMessage = "Variables are not supported at the moment";
 
-        ExpectError("$var", errorMessage);
-        ExpectError("$var.key", errorMessage);
-        ExpectError("$var[1, 2, 3]", errorMessage);
+        ValidateError("$var", errorMessage);
+        ValidateError("$var.key", errorMessage);
+        ValidateError("$var[1, 2, 3]", errorMessage);
     }
 
     Y_UNIT_TEST(TokenizeJson) {

@@ -6,7 +6,7 @@ import uuid
 from importlib import import_module
 from importlib.metadata import version as dist_version
 from base64 import b64encode
-from typing import Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
+from typing import Literal, Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
 from urllib.parse import urlencode
 
 from urllib3 import Timeout
@@ -26,7 +26,7 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
     default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.query import QueryResult, QueryContext, TzSource
 from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -76,8 +76,10 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
+                 tz_source: Optional[TzSource] = None,
+                 tz_mode: Optional[str] = None,
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
-                 utc_tz_aware: Optional[bool] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
                  autogenerate_query_id: Optional[bool] = None,
@@ -184,8 +186,10 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone,
+                         tz_source=tz_source,
+                         tz_mode=tz_mode,
                          utc_tz_aware=utc_tz_aware,
+                         apply_server_timezone=apply_server_timezone,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
         cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")
@@ -202,15 +206,15 @@ class HttpClient(Client):
                 self._setting_status('http_headers_progress_interval_ms').is_writable:
             self._progress_interval = str(min(120000, max(10000, (send_receive_timeout - 5) * 1000)))
 
-    def set_client_setting(self, key, value):
+    def set_client_setting(self, key: str, value: Any) -> None:
         str_value = self._validate_setting(key, value, common.get_setting('invalid_setting_action'))
         if str_value is not None:
             self.params[key] = str_value
 
-    def get_client_setting(self, key) -> Optional[str]:
+    def get_client_setting(self, key: str) -> Optional[str]:
         return self.params.get(key)
 
-    def set_access_token(self, access_token: str):
+    def set_access_token(self, access_token: str) -> None:
         auth_header = self.headers.get('Authorization')
         if auth_header and not auth_header.startswith('Bearer'):
             raise ProgrammingError('Cannot set access token when a different auth type is used')
@@ -389,11 +393,11 @@ class HttpClient(Client):
         return summary
 
     def command(self,
-                cmd,
+                cmd: str,
                 parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                 data: Union[str, bytes] = None,
                 settings: Optional[Dict] = None,
-                use_database: int = True,
+                use_database: bool = True,
                 external_data: Optional[ExternalData] = None,
                 transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
         """
@@ -674,7 +678,7 @@ class HttpClient(Client):
         except Exception as e:
             logger.debug("Problem adding '%s' to User-Agent: %s", name, e)
 
-    def ping(self):
+    def ping(self) -> bool:
         """
         See BaseClient doc_string for this method
         """
@@ -685,10 +689,10 @@ class HttpClient(Client):
             logger.debug('ping failed', exc_info=True)
             return False
 
-    def close_connections(self):
+    def close_connections(self) -> None:
         self.http.clear()
 
-    def close(self):
+    def close(self) -> None:
         if self._owns_pool_manager:
             self.http.clear()
             all_managers.pop(self.http, None)

@@ -10,8 +10,7 @@ using namespace NLogin;
 using namespace NLogin::NSasl;
 using namespace NSchemeShard;
 
-TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, const std::string& peerName
-)
+TAuthActorBase::TAuthActorBase(TActorId sender, const std::string& database, const std::string& peerName)
     : Sender(sender)
     , Database(database)
     , PeerName(peerName)
@@ -31,18 +30,14 @@ void TAuthActorBase::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResu
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), domainInfo->ExtractSchemeShard(), GetPipeClientConfig());
             PipeClient = RegisterWithSameMailbox(pipe);
 
-            auto request = std::make_unique<TEvSchemeShard::TEvLogin>();
-            request.get()->Record = CreateLoginRequest();
-            NTabletPipe::SendData(SelfId(), PipeClient, request.release());
-            Become(&TThis::StateLogin, Timeout, new TEvents::TEvWakeup());
-            return;
+            return ProceedWithAuthentication(ctx, domainInfo);
         }
     }
 
     std::string error = "Unknown database";
     LOG_INFO_S(ctx, NKikimrServices::SASL_AUTH,
         DerivedActorName << "# " << ctx.SelfID.ToString() <<
-        ", " << error
+        ", " << "Authentication failed: " << error
     );
     SendError(NKikimrIssues::TIssuesIds::DATABASE_NOT_EXIST, error);
     return CleanupAndDie(ctx);
@@ -131,11 +126,19 @@ void TAuthActorBase::ResolveSchemeShard(const TActorContext &ctx) {
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = SplitPath(TString(Database));
     entry.RedirectRequired = false;
+    entry.SyncVersion = true;
 
     request->ResultSet.emplace_back(std::move(entry));
 
     ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
     Become(&TThis::StateNavigate);
+}
+
+void TAuthActorBase::SendLoginRequest() {
+    auto request = std::make_unique<TEvSchemeShard::TEvLogin>();
+    request.get()->Record = CreateLoginRequest();
+    NTabletPipe::SendData(SelfId(), PipeClient, request.release());
+    Become(&TThis::StateLogin, Timeout, new TEvents::TEvWakeup());
 }
 
 NTabletPipe::TClientConfig TAuthActorBase::GetPipeClientConfig() const {

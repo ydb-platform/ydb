@@ -6,9 +6,9 @@ LICENSE(
     Apache-2.0 WITH LLVM-exception
 )
 
-VERSION(20.1.8)
+VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-20.1.8.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 ADDINCL(
     contrib/libs/cxxsupp/libcxxabi/include

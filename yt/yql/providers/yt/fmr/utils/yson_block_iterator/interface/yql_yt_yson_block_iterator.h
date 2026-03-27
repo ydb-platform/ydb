@@ -9,7 +9,7 @@ struct TIndexedBlock {
     TString Data;
     std::vector<TRowIndexMarkup> Rows;
 
-    TStringBuf GetRowBytes(ui64 rowIndex);
+    TStringBuf GetRowBytes(ui64 rowIndex) const;
 };
 
 class IBlockIterator: public TThrRefBase {

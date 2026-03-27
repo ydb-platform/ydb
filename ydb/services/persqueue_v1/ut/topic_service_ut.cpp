@@ -137,7 +137,6 @@ protected:
     void SetUp(NUnitTest::TTestContext&) override {
         server = NPersQueue::TTestServer(false);
         server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
-        server->ServerSettings.SetEnableTopicServiceTx(true);
         server->StartServer();
         server->EnableLogs({NKikimrServices::PQ_WRITE_PROXY
                            , NKikimrServices::PQ_READ_PROXY
@@ -429,7 +428,7 @@ Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransacti
     auto result = tx->Commit().ExtractValueSync();
     Cerr << ">>> CommitTx >>>" << Endl;
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
 }
 
 }

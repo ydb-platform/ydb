@@ -26,7 +26,7 @@ namespace NKikimr::NDDisk {
         template <typename TSegment>
         static IEventBase* MakeReadQuery(const TQueryCredentials& sourceCreds,
                 const TBlockSelector& selector, const TSegment& segment) {
-            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), TReadInstruction(true));
+            return new TEvReadPersistentBuffer(sourceCreds, selector, segment.GetLsn(), segment.GetGeneration(), TReadInstruction(true));
         }
     };
 
@@ -62,7 +62,7 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
-        counters.Request();
+        counters.Request(0);
 
         auto cleanupSyncState = [&] {
             if (syncIt == SyncsInFlight.end()) {
@@ -255,25 +255,14 @@ namespace NKikimr::NDDisk {
             cuttedFromData = end;
 
             auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
-            std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TInternalSyncWriteOp>(SelfId(), InFlightCount, Counters);
+            std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TInternalSyncWriteOp>();
             auto* syncWriteOp = static_cast<TInternalSyncWriteOp*>(op.get());
             syncWriteOp->SetSyncId(syncId);
             syncWriteOp->SetRequestId(ev->Cookie);
             syncWriteOp->SetSegment(begin, end);
             syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, begin);
 
-            const bool submitted = DirectUringOp(op);
-            if (!submitted) {
-                if (request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                    request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                    request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: io_uring SQ ring full (short I/O retry); ";
-                    sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to write; ";
-                    if (--sync.RequestsInFlight == 0) {
-                        ReplySync(it);
-                    }
-                }
-                break;
-            }
+            DirectUringOp(op);
         }
     }
 

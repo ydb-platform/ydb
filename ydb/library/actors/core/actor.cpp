@@ -1,6 +1,7 @@
 #include "actor.h"
 #include "debug.h"
 #include "actorsystem.h"
+#include "cpu_manager.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
 

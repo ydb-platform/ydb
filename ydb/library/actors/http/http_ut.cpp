@@ -140,6 +140,83 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->LastSuccessStage, NHttp::THttpIncomingRequest::EParseStage::ChunkLength);
     }
 
+    Y_UNIT_TEST(BinaryDataInMethod) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryMethod = "G\x01T";
+        EatPartialString(request, binaryMethod + " /test HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http method");
+    }
+
+    Y_UNIT_TEST(BinaryDataInURL) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryUrl = "/test\x80path";
+        EatPartialString(request, "GET " + binaryUrl + " HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid url");
+    }
+
+    Y_UNIT_TEST(BinaryDataInProtocol) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HT\x01P/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInVersion) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HTTP/1\x02" "\x03" "1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http version");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeader) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Bad\x01Header: value";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(BinaryDataInHeaderValue) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        TString binaryHeader = "X-Header: val\x80ue";
+        EatPartialString(request, "GET /test HTTP/1.1\r\n" + binaryHeader + "\r\n\r\n");
+        UNIT_ASSERT_C(request->IsError(), static_cast<int>(request->Stage));
+        UNIT_ASSERT_EQUAL(request->GetErrorText(), "Invalid http header");
+    }
+
+    Y_UNIT_TEST(ValidURLWithSpecialChars) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test?key=value&foo=bar%20baz#fragment HTTP/1.1\r\nHost: test\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "GET");
+        UNIT_ASSERT_EQUAL(request->URL, "/test?key=value&foo=bar%20baz#fragment");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseProtocol) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        EatPartialString(response, "HT\x01P/1.1 200 OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http protocol");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseStatus) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryStatus = "2\x80" "0";
+        EatPartialString(response, "HTTP/1.1 " + binaryStatus + " OK\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http status");
+    }
+
+    Y_UNIT_TEST(BinaryDataInResponseMessage) {
+        NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(nullptr);
+        TString binaryMessage = "O\x01K";
+        EatPartialString(response, "HTTP/1.1 200 " + binaryMessage + "\r\nConnection: close\r\n\r\n");
+        UNIT_ASSERT_C(response->IsError(), static_cast<int>(response->Stage));
+        UNIT_ASSERT_EQUAL(response->GetErrorText(), "Invalid http message");
+    }
+
     Y_UNIT_TEST(BasicPost) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatPartialString(request, "POST /Url HTTP/1.1\r\nConnection: close\r\nContent-Length: 13\r\n\r\nthis is test.");

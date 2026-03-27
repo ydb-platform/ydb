@@ -63,11 +63,14 @@ public:
         if (settingsCustomizer) {
             settingsCustomizer(nodeId, common->Settings);
         }
+        setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
         #if !defined(_msan_enabled_)
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
         }
+        #else
+            Y_UNUSED(withRdma);
         #endif
 
         if (withTls) {

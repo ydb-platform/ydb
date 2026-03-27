@@ -208,6 +208,7 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
+    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
 }
 
 message TSplitBoundary {
@@ -460,6 +461,11 @@ message TRequestedMaxIndex {
     optional string ColumnName = 1;
 }
 
+message TRequestedMinMaxIndex {
+    optional string ColumnName = 1;
+    optional TIndexDataExtractor DataExtractor = 2;
+}
+
 message TRequestedCountMinSketch {
     // sketch built on the combined data from the set of columns
     repeated string ColumnNames = 1;
@@ -477,6 +483,7 @@ message TOlapIndexRequested {
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
         TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
+        TRequestedMinMaxIndex MinMaxIndex = 44;
     }
 }
 
@@ -503,6 +510,11 @@ message TMaxIndex {
     optional uint32 ColumnId = 1;
 }
 
+message TMinMaxIndex {
+    optional uint32 ColumnId = 1;
+    optional TIndexDataExtractor DataExtractor = 2;
+}
+
 message TCountMinSketch {
     repeated uint32 ColumnIds = 1;
 }
@@ -523,6 +535,7 @@ message TOlapIndexDescription {
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
         TBloomNGrammFilter BloomNGrammFilter = 44;
+        TMinMaxIndex MinMaxIndex = 45;
     }
 }
 
@@ -1190,6 +1203,7 @@ enum EIndexType {
     EIndexTypeGlobalVectorKmeansTree = 4;
     EIndexTypeGlobalFulltextPlain = 5;
     EIndexTypeGlobalFulltextRelevance = 6;
+    EIndexTypeGlobalJson = 7;
 }
 
 enum EIndexState {
@@ -1295,6 +1309,10 @@ message TFinalizeBuildIndexMainTable {
     optional uint64 SnapshotTxId = 2;
     optional uint64 BuildIndexId = 3;
     optional TBuildIndexOutcome Outcome = 4;
+}
+
+message TPrepareIndexValidation {
+    optional string TableName = 1;
 }
 
 message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way
@@ -1806,32 +1824,6 @@ message TSetColumnConstraintSettings {
     optional EConstraint Constraint = 2;
 }
 
-message TSetColumnConstraintsInitiate {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsLock {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsCheck {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsFinalize {
-    enum EStatus {
-        SUCCESS = 0;
-        COLUMN_CONSTRAINT_VIOLATION = 1;
-    }
-
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-    optional EStatus Status = 3;
-}
-
 // End Set Column Constraints
 
 // Request for scheme modification
@@ -1950,7 +1942,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
+    reserved 87;
 
     // Secret
     optional TSecretSchemaOp CreateSecret = 88;
@@ -1963,6 +1955,8 @@ message TModifyScheme {
     // but in the future it may have an indirect impact on the schema,
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2045,6 +2039,7 @@ enum EPathSubType {
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
+    EPathSubTypeJsonIndexImplTable = 6;
 }
 
 enum EPathState {

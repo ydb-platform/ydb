@@ -528,6 +528,36 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
     }
 
+    // When explicit profile is set, active profile must be ignored (no fallback to active for missing options).
+    Y_UNIT_TEST_F(ExplicitProfileIgnoresActiveProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_has_all:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: ydb-token
+                    data: token-from-active
+            explicit_no_database:
+                endpoint: {endpoint}
+        active_profile: active_has_all
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+        // Explicit profile has no database. We must NOT use database from active profile; command should fail.
+        ExpectFail();
+        RunCli(
+            {
+                "-v",
+                "-p", "explicit_no_database",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+    }
+
     Y_UNIT_TEST_F(IamToken, TCliTestFixture) {
         TString profile = fmt::format(R"yaml(
         profiles:

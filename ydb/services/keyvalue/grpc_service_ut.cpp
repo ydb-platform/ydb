@@ -66,7 +66,7 @@ namespace {
     struct VersionHolder {
         static constexpr Version version = StubVersion;
     };
-    
+
     template <Version StubVersion, typename Request>
     struct RequestToResponse {
         static_assert(false);
@@ -294,6 +294,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
 
     template <typename TCtx>
     void AdjustCtxForDB(TCtx &ctx) {
+        ctx.AddMetadata(NYdb::YDB_DATABASE_HEADER, "/Root");
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 

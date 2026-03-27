@@ -53,13 +53,11 @@ public:
 
     //! Runs all handlers in the list.
     //! The return values (if any) are ignored.
-    template <class... TCallArgs>
-    void Fire(TCallArgs&&... args) const;
+    void Fire(const TArgs&... args) const;
 
     //! Runs all handlers in the list and clears the list.
     //! The return values (if any) are ignored.
-    template <class... TCallArgs>
-    void FireAndClear(TCallArgs&&... args);
+    void FireAndClear(const TArgs&... args);
 
 private:
     std::atomic<bool> Empty_ = true;
@@ -100,8 +98,7 @@ public:
 
     //! Runs all handlers in the list.
     //! The return values (if any) are ignored.
-    template <class... TCallArgs>
-    void Fire(TCallArgs&&... args) const;
+    void Fire(const TArgs&... args) const;
 
 private:
     using TCallbackVector = TCompactVector<TCallback, 4>;

@@ -365,6 +365,14 @@ public:
         EnableLineage_ = true;
     }
 
+    void SetFuzzUntypedLambda() {
+        FuzzUntypedLambda_ = true;
+    }
+
+    void SetFuzzUniversal() {
+        FuzzUniversal_ = true;
+    }
+
 private:
     TProgram(
         TString issueReportTarget,
@@ -502,6 +510,8 @@ private:
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
     bool EnableLineage_ = false;
+    bool FuzzUntypedLambda_ = false;
+    bool FuzzUniversal_ = false;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 

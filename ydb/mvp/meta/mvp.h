@@ -3,8 +3,9 @@
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/mvp_startup_options.h>
 #include <ydb/mvp/core/mvp_tokens.h>
+#include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/signals.h>
-#include <ydb/mvp/meta/protos/config.pb.h>
+#include <ydb/mvp/meta/meta_settings.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
@@ -12,6 +13,7 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
+#include <util/generic/vector.h>
 
 namespace NMVP {
 
@@ -48,7 +50,7 @@ public:
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig();
-    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaConfig& config);
+    void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
@@ -57,6 +59,7 @@ public:
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
+    TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;
 };

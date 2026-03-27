@@ -625,6 +625,9 @@ public:
     ui64 ReconciliationCount = 0;
     const TDuration MinReconciliationDelay = TDuration::MilliSeconds(100);
     const TDuration MaxReconciliationDelay = TDuration::Seconds(10);
+    std::atomic<ui64> FailureLossSend;
+    std::atomic<ui64> FailureDoubleSend;
+    std::atomic<ui64> FailureReconciliation;
 };
 
 class TDebugNodeState : public TNodeState {
@@ -909,12 +912,10 @@ public:
 // IDqInput // Deprecated
 
     i64 GetFreeSpace() const override {
-        Y_ENSURE(false);
         return 0;
     }
 
     ui64 GetStoredBytes() const override {
-        Y_ENSURE(false);
         return 0;
     }
 

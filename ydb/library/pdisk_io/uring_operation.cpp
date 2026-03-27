@@ -1,5 +1,7 @@
 #include "uring_operation.h"
 
+#include <util/system/compiler.h>
+
 namespace NKikimr::NPDisk {
 
 TUringOperationBase::~TUringOperationBase() = default;
@@ -15,6 +17,8 @@ void TUringOperationBase::PrepareIov(void* buf, size_t size, ui64 offset) {
 #if defined(__linux__)
     Iov.iov_base = buf;
     Iov.iov_len = size;
+#else
+    Y_UNUSED(buf);
 #endif
 }
 
@@ -26,6 +30,8 @@ void TUringOperationBase::AdvanceIov(size_t bytesProcessed) {
     const size_t nextSize = Iov.iov_len - bytesProcessed;
     const ui64 nextOffset = DiskOffset + bytesProcessed;
     PrepareIov(nextBuffer, nextSize, nextOffset);
+#else
+    Y_UNUSED(bytesProcessed);
 #endif
 }
 

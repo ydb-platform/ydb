@@ -110,6 +110,12 @@ namespace NWilson {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize());
     }
 
+    TString TTraceId::GetHexTraceIdLowerCase() const {
+        TString result = GetHexTraceId();
+        result.to_lower();
+        return result;
+    }
+
     TString TTraceId::GetHexFullTraceId() const {
         return HexEncode(GetTraceIdPtr(), GetTraceIdSize()) + "." +
                 HexEncode(GetSpanIdPtr(), GetSpanIdSize());

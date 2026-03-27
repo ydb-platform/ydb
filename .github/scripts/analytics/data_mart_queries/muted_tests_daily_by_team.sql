@@ -1,9 +1,57 @@
 -- Pre-aggregation: muted tests by team and by day, per build_type.
 -- Filters: is_test_chunk = 0, is_muted = 1 (as required for BI).
--- One row per (date_window, owner_team, branch, build_type). area from area_to_owner_mapping (one area per owner_team). In BI: filter by build_type for per-config metrics, or sum for total.
+-- One row per (date_window, owner_team, branch, build_type).
+-- Grid: date spine from github_issues_timeline in the window (+ today), same calendar as bugs mart.
+-- Areas from timeline + mapping + 'area/-'; muted=0 where no rows.
 $window_days = 365;
 $muted_sla_days = 30;
 
+$normalize = ($raw_area) -> {
+    $parts = String::SplitToList(Cast($raw_area AS String), '/');
+    RETURN Cast(
+        IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
+    AS Utf8);
+};
+
+-- Single read of mapping table, reused everywhere
+$mapping = (
+    SELECT $normalize(area) AS area, owner_team AS owner_team
+    FROM `test_results/analytics/area_to_owner_mapping`
+);
+
+-- Full normalized area list: timeline + mapping + fallback
+$area_list = (
+    SELECT DISTINCT $normalize(area) AS area
+    FROM `test_results/analytics/github_issues_timeline`
+    WHERE area IS NOT NULL AND max_branch != '-'
+    UNION
+    SELECT DISTINCT area AS area FROM $mapping
+    UNION
+    SELECT Cast('area/-' AS Utf8) AS area
+);
+
+-- Owner by area (prefix match, longest wins) + fallback
+$owner = (
+    SELECT
+        al.area AS area,
+        Cast(CASE
+            WHEN al.area = 'area/-' THEN 'unknown'
+            WHEN o.owner_team IS NOT NULL THEN o.owner_team
+            ELSE 'team_unmatched:' || al.area
+        END AS Utf8) AS owner_team
+    FROM $area_list AS al
+    LEFT JOIN (
+        SELECT area AS area, owner_team AS owner_team FROM (
+            SELECT a.area AS area, om.owner_team AS owner_team,
+                   ROW_NUMBER() OVER (PARTITION BY a.area ORDER BY LENGTH(om.area) DESC) AS rn
+            FROM $area_list AS a
+            CROSS JOIN $mapping AS om
+            WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')
+        ) WHERE rn = 1
+    ) AS o ON al.area = o.area
+);
+
+-- Tests with area resolved via owner_team → MIN(area) from mapping
 $tm = (
     SELECT
         t.*,
@@ -12,14 +60,14 @@ $tm = (
     WHERE t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
       AND t.build_type = 'relwithdebinfo'
       AND t.is_test_chunk = 0
-      and t.state != 'Skipped'
+      AND t.state != 'Skipped'
 );
 
 $base = (
     SELECT
         tm.date_window AS date_window,
         tm.owner_team_key AS owner_team,
-        Coalesce(om.area, 'area/-') AS area,
+        $normalize(Coalesce(om.area, 'area/-')) AS area,
         tm.branch AS branch,
         tm.build_type AS build_type,
         tm.full_name AS full_name,
@@ -28,7 +76,7 @@ $base = (
     FROM $tm AS tm
     LEFT JOIN (
         SELECT owner_team AS owner_team, MIN(area) AS area
-        FROM `test_results/analytics/area_to_owner_mapping`
+        FROM $mapping
         GROUP BY owner_team
     ) AS om ON tm.owner_team_key = om.owner_team
 );
@@ -57,24 +105,32 @@ $agg = (
         base.build_type
 );
 
-$dates = (SELECT DISTINCT date_window AS date_window FROM $tm);
-$dims = (
-    SELECT DISTINCT
-        owner_team AS owner_team,
-        area AS area,
-        branch AS branch,
-        build_type AS build_type
-    FROM $base
+-- Grid: all (area, owner) from tests + timeline/mapping × all dates × all branches/builds
+$all_area_owner = (
+    SELECT DISTINCT owner_team AS owner_team, area AS area FROM $base
+    UNION
+    SELECT DISTINCT owner_team AS owner_team, area AS area FROM $owner
 );
+
+$dates = (
+    SELECT DISTINCT t.date AS date_window
+    FROM `test_results/analytics/github_issues_timeline` AS t
+    WHERE t.date >= CurrentUtcDate() - $window_days * Interval("P1D")
+    UNION
+    SELECT CurrentUtcDate() AS date_window
+);
+$branches_builds = (SELECT DISTINCT branch AS branch, build_type AS build_type FROM $base);
+
 $grid = (
     SELECT
         d.date_window AS date_window,
-        x.owner_team AS owner_team,
-        x.area AS area,
-        x.branch AS branch,
-        x.build_type AS build_type
+        ao.owner_team AS owner_team,
+        ao.area AS area,
+        bb.branch AS branch,
+        bb.build_type AS build_type
     FROM $dates AS d
-    CROSS JOIN $dims AS x
+    CROSS JOIN $all_area_owner AS ao
+    CROSS JOIN $branches_builds AS bb
 );
 
 SELECT

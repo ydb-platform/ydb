@@ -1,8 +1,8 @@
 diff --git a/include/__config b/include/__config
-index e14632f..d7f3e0d 100644
+index af8a297..0c438c4 100644
 --- a/include/__config
 +++ b/include/__config
-@@ -511,7 +511,7 @@ typedef __char32_t char32_t;
+@@ -486,7 +486,7 @@ typedef __char32_t char32_t;
  // TODO: We provide a escape hatch with _LIBCPP_NO_ABI_TAG for folks who want to avoid increasing
  //       the length of symbols with an ABI tag. In practice, we should remove the escape hatch and
  //       use compression mangling instead, see https://github.com/itanium-cxx-abi/cxx-abi/issues/70.
@@ -11,7 +11,7 @@ index e14632f..d7f3e0d 100644
  #    define _LIBCPP_HIDE_FROM_ABI                                                                                      \
        _LIBCPP_HIDDEN _LIBCPP_EXCLUDE_FROM_EXPLICIT_INSTANTIATION                                                       \
        __attribute__((__abi_tag__(_LIBCPP_TOSTRING(_LIBCPP_ODR_SIGNATURE))))
-@@ -823,7 +823,8 @@ typedef __char32_t char32_t;
+@@ -791,7 +791,8 @@ typedef __char32_t char32_t;
          defined(__APPLE__) ||                                                                                          \
          defined(__MVS__) ||                                                                                            \
          defined(_AIX) ||                                                                                               \

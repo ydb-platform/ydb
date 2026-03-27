@@ -1,11 +1,11 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index 5e40e30..c81ccee 100644
+index a75cd0a..aaeac79 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
-@@ -64,7 +64,12 @@
- // Previously libc++ used "unsigned int" exclusively.
- #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
- // Unstable attempt to provide a more optimized std::function
+@@ -72,7 +72,12 @@
+ #  define _LIBCPP_ABI_NO_FILESYSTEM_INLINE_NAMESPACE
+ #  define _LIBCPP_ABI_NO_ITERATOR_BASES
+ #  define _LIBCPP_ABI_NO_RANDOM_DEVICE_COMPATIBILITY_LAYOUT
 -#  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
 +#  ifdef __EMSCRIPTEN__
 +// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
@@ -13,9 +13,9 @@ index 5e40e30..c81ccee 100644
 +#  else
 +#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
 +#  endif
- // All the regex constants must be distinct and nonzero.
  #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
- // Re-worked external template instantiations for std::string with a focus on
+ #  define _LIBCPP_ABI_STRING_OPTIMIZED_EXTERNAL_INSTANTIATION
+ #  define _LIBCPP_ABI_USE_WRAP_ITER_IN_STD_ARRAY
 diff --git a/include/typeinfo b/include/typeinfo
 index 24aaabf..c952487 100644
 --- a/include/typeinfo
@@ -36,10 +36,10 @@ index 24aaabf..c952487 100644
      // from different translation units, so it is sufficient to compare their addresses.
      if (__libcpp_is_constant_evaluated()) {
 diff --git a/src/filesystem/operations.cpp b/src/filesystem/operations.cpp
-index 23c1c28..9037313 100644
+index b71f94a..38d5384 100644
 --- a/src/filesystem/operations.cpp
 +++ b/src/filesystem/operations.cpp
-@@ -51,7 +51,7 @@
+@@ -52,7 +52,7 @@
  #elif defined(__FreeBSD__)
  #  define _LIBCPP_FILESYSTEM_USE_COPY_FILE_RANGE
  #endif
@@ -49,7 +49,7 @@ index 23c1c28..9037313 100644
  #  define _LIBCPP_FILESYSTEM_USE_SENDFILE
  #elif defined(__APPLE__) || __has_include(<copyfile.h>)
 diff --git a/src/new.cpp b/src/new.cpp
-index e010fe4..eb1471a 100644
+index ce6b637..4017bcb 100644
 --- a/src/new.cpp
 +++ b/src/new.cpp
 @@ -18,7 +18,13 @@

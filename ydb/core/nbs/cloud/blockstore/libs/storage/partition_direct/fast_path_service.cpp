@@ -2,6 +2,9 @@
 
 #include "direct_block_group_in_mem.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
@@ -12,10 +15,6 @@ using namespace NThreading;
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +35,27 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
+TVector<std::shared_ptr<TRegion>> CreateRegions(
+    ui64 blockCount,
+    ui64 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
+    const NProto::TStorageServiceConfig& storageConfig)
+{
+    const ui64 regionsCount =
+        AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+    TVector<std::shared_ptr<TRegion>> regions(regionsCount);
+    for (size_t i = 0; i < regionsCount; i++) {
+        regions[i] = std::make_shared<TRegion>(
+            TActorContext::ActorSystem(),
+            i,
+            directBlockGroups,
+            storageConfig.GetSyncRequestsBatchSize(),
+            TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()));
+    }
+
+    return regions;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,11 +64,17 @@ TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
     ui32 generation,
-    std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
+    ui64 blockCount,
+    ui64 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
-    , Region(std::move(region))
+    , Regions(CreateRegions(
+          blockCount,
+          blockSize,
+          std::move(directBlockGroups),
+          storageConfig))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(
@@ -71,6 +97,16 @@ NWilson::TTraceId TFastPathService::SpanTrace()
     );
 }
 
+size_t TFastPathService::GetRegionIndex(ui64 blockIndex)
+{
+    return blockIndex / BlocksPerRegion;
+}
+
+size_t TFastPathService::GetRegionOffset(ui64 blockIndex)
+{
+    return blockIndex % BlocksPerRegion;
+}
+
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
@@ -79,9 +115,14 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::ReadBlocks,
-        request->Range.Size() * BlockSize);
+        request->Range.Size() * DefaultBlockSize);
 
-    auto result = Region->ReadBlocksLocal(
+    const size_t regionIndex = GetRegionIndex(request->Range.Start);
+    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
+    request->RegionRange =
+        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+
+    auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -109,9 +150,14 @@ TFastPathService::WriteBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::WriteBlocks,
-        request->Range.Size() * BlockSize);
+        request->Range.Size() * DefaultBlockSize);
 
-    auto result = Region->WriteBlocksLocal(
+    const size_t regionIndex = GetRegionIndex(request->Range.Start);
+    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
+    request->RegionRange =
+        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+
+    auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));

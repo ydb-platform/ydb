@@ -111,6 +111,12 @@ public:
     void RecordEnd(const gpr_timespec& /*latency*/) override
     { }
 
+    void RecordAnnotation(const Annotation& /*annotation*/) override
+    { }
+
+    std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
+    { return {}; }
+
 private:
     AtomicError Error_;
 };
@@ -218,7 +224,7 @@ public:
 
     int GetInflightRequestCount() override
     {
-        return ConcurrentCalls_.load(std::memory_order::relaxed);
+        return ConcurrentCallCount_.load(std::memory_order::relaxed);
     }
 
     const IMemoryUsageTrackerPtr& GetChannelMemoryTracker() override
@@ -244,7 +250,7 @@ private:
     TGrpcLibraryLockPtr LibraryLock_ = TDispatcher::Get()->GetLibraryLock();
     TGrpcChannelPtr Channel_;
     TGrpcChannelCredentialsPtr Credentials_;
-    std::atomic<int> ConcurrentCalls_;
+    std::atomic<int> ConcurrentCallCount_;
 
 
     class TCallHandler
@@ -264,12 +270,12 @@ private:
             , ResponseHandler_(std::move(responseHandler))
             , GuardedCompletionQueue_(TDispatcher::Get()->PickRandomGuardedCompletionQueue())
         {
-            Owner_->ConcurrentCalls_.fetch_add(1, std::memory_order::relaxed);
+            Owner_->ConcurrentCallCount_.fetch_add(1, std::memory_order::relaxed);
         }
 
         ~TCallHandler()
         {
-            Owner_->ConcurrentCalls_.fetch_sub(1, std::memory_order::relaxed);
+            Owner_->ConcurrentCallCount_.fetch_sub(1, std::memory_order::relaxed);
         }
 
         void Initialize()

@@ -237,6 +237,10 @@ public:
             return false;
         }
 
+        if (!CheckExist_) {
+            return true;
+        }
+
         TNodePtr inputTables(BuildInputTables(ctx.Pos(), tableList, IsSubquery(), ctx.Scoped));
         if (!inputTables->Init(ctx, Source_.Get())) {
             return false;
@@ -1747,11 +1751,15 @@ public:
         src->SetGroupBySuffix(GroupBySuffix_);
 
         for (auto& term : Terms_) {
-            term->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr_);
+            if (!term->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr_)) {
+                return false;
+            }
         }
 
         if (Having_) {
-            Having_->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr_);
+            if (!Having_->CollectPreaggregateExprs(ctx, *src, DistinctAggrExpr_)) {
+                return false;
+            }
         }
 
         for (auto& expr : GroupByExpr_) {
@@ -1769,7 +1777,9 @@ public:
 
             // need to collect and Init() preaggregated exprs before calling Init() on GROUP BY expression
             TVector<TNodePtr> distinctAggrsInGroupBy;
-            expr->CollectPreaggregateExprs(ctx, *src, distinctAggrsInGroupBy);
+            if (!expr->CollectPreaggregateExprs(ctx, *src, distinctAggrsInGroupBy)) {
+                return false;
+            }
             for (auto& distinct : distinctAggrsInGroupBy) {
                 if (!distinct->Init(ctx, src)) {
                     return false;

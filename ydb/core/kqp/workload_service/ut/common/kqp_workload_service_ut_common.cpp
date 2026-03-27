@@ -315,7 +315,6 @@ private:
     void SetLoggerSettings(TServerSettings& serverSettings) const {
         auto loggerInitializer = [](TTestActorRuntime& runtime) {
             runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE, NLog::EPriority::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::KQP_WORKLOAD_SERVICE_REQ, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE_SCHEDULER, NLog::EPriority::PRI_TRACE);
             runtime.SetLogPriority(NKikimrServices::KQP_SESSION, NLog::EPriority::PRI_TRACE);
         };
@@ -496,7 +495,13 @@ public:
 
     // Scheme queries helpers
     NYdb::NScheme::TSchemeClient GetSchemeClient() const override {
+        Y_ENSURE(YdbDriver_);
         return NYdb::NScheme::TSchemeClient(*YdbDriver_);
+    }
+
+    NYdb::NTable::TTableClient GetTableClient(NYdb::NTable::TClientSettings settings) const override {
+        Y_ENSURE(YdbDriver_);
+        return NYdb::NTable::TTableClient(*YdbDriver_, settings.UseQueryCache(false));
     }
 
     void ExecuteSchemeQuery(const TString& query, NYdb::EStatus expectedStatus = NYdb::EStatus::SUCCESS, const TString& expectedMessage = "") const override {

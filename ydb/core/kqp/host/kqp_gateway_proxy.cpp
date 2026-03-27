@@ -783,36 +783,10 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
-        try {
-            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-
-            if (tableName.empty()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
-            }
-
-            if (!IsStartWithSlash(tablePath)) {
-                dirname = JoinPath({GetDatabase(), dirname});
-            }
-
-            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
-            for (auto& setting : settings) {
-                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
-                add->Swap(&setting);
-            }
-
-            setColumnConstraintsInitiate.SetTableName(tableName);
-
-            NKikimrSchemeOp::TModifyScheme modifyScheme;
-            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
-            modifyScheme.SetWorkingDir(std::move(dirname));
-            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
-
-            return Gateway->ModifyScheme(std::move(modifyScheme));
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+    // TODO: flown4qqqq. Need to remove.
+    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
+        TString error = "NotImplemented";
+        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -976,16 +950,24 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
+                    TSet<ui32> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
 
                         if (isLocalBloom) {
-                            if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
+                            if (index.Type == TIndexDescription::EType::LocalBloomNgramFilter &&
+                                metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom ngram indexes are supported only for column tables"));
                                 return;
                             }
 
+                            if (metadata->StoreType == EStoreType::Column) {
+                                continue; // handled by OLAP path below
+                            }
+
+                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
+                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
                             continue;
                         }
 
@@ -1004,6 +986,7 @@ public:
                             case TIndexDescription::EType::GlobalSync:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
+                            case TIndexDescription::EType::GlobalJson:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
@@ -1017,6 +1000,9 @@ public:
                             default:
                                 break;
                         }
+                    }
+                    for (ui32 prefix : bloomPrefixes) {
+                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));

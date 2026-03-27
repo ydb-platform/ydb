@@ -203,7 +203,7 @@ void PrintFrames(IOutputStream* out, const NYql::NBacktrace::TCollectedFrame* fr
 #if defined(_linux_) && defined(_x86_64_)
     if (KikimrSymbolize) {
         for (size_t i = 0; i < count; ++i) {
-            SFrames[i] = NYql::NBacktrace::TStackFrame{frames[i].File, frames[i].Address};
+            SFrames[i] = NYql::NBacktrace::TStackFrame{.File = frames[i].File, .Address = frames[i].Address};
         }
         NYql::NBacktrace::Symbolize(SFrames, count, out);
         return;

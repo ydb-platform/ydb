@@ -14,8 +14,11 @@ class TRegion
 {
 public:
     TRegion(
+        NActors::TActorSystem* actorSystem,
+        ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        ui32 syncRequestsBatchSize);
+        ui32 syncRequestsBatchSize,
+        TDuration traceSamplePeriod);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -28,10 +31,12 @@ public:
         NWilson::TTraceId traceId);
 
 private:
+    NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
-    size_t GetVChunkIndex(ui64 blockIndex) const;
-    size_t GetVChunkOffset(ui64 blockIndex) const;
+    // Striping
+    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

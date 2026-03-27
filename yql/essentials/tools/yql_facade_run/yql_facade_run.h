@@ -146,6 +146,8 @@ public:
     bool OptimizeLibs = true;
     bool CustomTests = false;
     bool EnableLineage = false;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
     void Parse(int argc, const char** argv);
 

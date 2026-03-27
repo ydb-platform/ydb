@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp/federated_query/actors)
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 PEERDIR(
     ydb/core/kqp/federated_query/actors

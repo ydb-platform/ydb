@@ -61,7 +61,7 @@ class TAsyncQueueTraceGuard
 {
 public:
     TAsyncQueueTraceGuard(TAsyncQueueTrace* queueTrace, const TTraceContextPtr& traceContext, std::optional<i64> endIndex);
-    TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other);
+    TAsyncQueueTraceGuard(TAsyncQueueTraceGuard&& other) noexcept;
     ~TAsyncQueueTraceGuard();
 
     // Support only move construction. Delete all other copy/move operators.

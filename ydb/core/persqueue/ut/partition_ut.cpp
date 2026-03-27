@@ -824,8 +824,8 @@ void TPartitionFixture::SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> 
         read->SetStatus(NKikimrProto::OK);
 
         NKikimrPQ::TPartitionMeta meta;
-        meta.SetEffectiveStartOffset(begin);
-        meta.SetEffectiveEndOffset(end);
+        meta.SetStartOffset(begin);
+        meta.SetEndOffset(end);
         meta.SetEndWriteTimestamp(endWriteTimestamp.MilliSeconds());
 
         TString out;

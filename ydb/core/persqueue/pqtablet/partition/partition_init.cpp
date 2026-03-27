@@ -317,19 +317,19 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         bool res = meta.ParseFromString(response.GetValue());
         PQ_INIT_ENSURE(res);
 
-        Partition()->BlobEncoder.StartOffset = meta.GetEffectiveStartOffset();
-        Partition()->BlobEncoder.EndOffset = meta.GetEffectiveEndOffset();
+        Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
+        Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
 
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
 
-        if (meta.HasEffectiveStartOffset()) {
-            GetContext().StartOffset = meta.GetEffectiveStartOffset();
+        if (meta.HasStartOffset()) {
+            GetContext().StartOffset = meta.GetStartOffset();
         }
-        if (meta.HasEffectiveEndOffset()) {
-            GetContext().EndOffset = meta.GetEffectiveEndOffset();
+        if (meta.HasEndOffset()) {
+            GetContext().EndOffset = meta.GetEndOffset();
         }
 
         Partition()->SubDomainOutOfSpace = meta.GetSubDomainOutOfSpace();

@@ -357,6 +357,7 @@ namespace {
         TVector<TString> items;
         SplitPrometheusMatchers(rawMatchers, items);
 
+        bool metricNameFromMatchers = false;
         for (const TString& item : items) {
             static constexpr std::array<TStringBuf, 4> Operators = {"=~", "!~", "!=", "="};
 
@@ -370,6 +371,17 @@ namespace {
                 }
             }
             if (opPos == TString::npos) {
+                const TStringBuf itemBuf(item);
+                const TStringBuf strippedItem = StripString(itemBuf);
+                if (selector.MetricName.empty() && !metricNameFromMatchers
+                        && !strippedItem.empty()
+                        && strippedItem.front() == '"'
+                        && strippedItem.back() == '"')
+                {
+                    selector.MetricName = UnquoteGraphiteString(strippedItem);
+                    metricNameFromMatchers = true;
+                    continue;
+                }
                 error = TStringBuilder() << "invalid label matcher: " << item;
                 return false;
             }

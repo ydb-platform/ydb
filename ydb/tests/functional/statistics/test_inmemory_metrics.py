@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 TARGET = "harmonizer.max_used_cpu_x1e6"
 AWAKENING_TARGET = "harmonizer.avg_awakening_time_us"
+POOL_TARGET = "harmonizer.pool.avg_used_cpu_x1e6"
 PROMETHEUS_API_PREFIX = "/viewer/inmemory_metrics/prometheus/api/v1"
 
 
@@ -223,7 +224,7 @@ def test_inmemory_metrics_prometheus_label_discovery(ydb_cluster):
 
     pool_target = wait_for_target(
         base_url,
-        lambda metric: metric.startswith('harmonizer.pool.avg_used_cpu_x1e6{node_id="'),
+        lambda metric: metric.startswith(f'{POOL_TARGET}{{node_id="'),
     )
     pool_name = extract_label(pool_target, "pool")
     pool_id = extract_label(pool_target, "pool_id")
@@ -349,6 +350,44 @@ def test_inmemory_metrics_prometheus_query_selector_only(ydb_cluster):
         return last_query.get("resultType") == "vector" and any(
             item.get("metric", {}).get("__name__") == TARGET
             and item.get("metric", {}).get("node_id")
+            for item in result
+        )
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
+def test_inmemory_metrics_prometheus_query_grafana_quoted_metric_selector(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{POOL_TARGET}{{node_id="'),
+    )
+    node_id = extract_label(target, "node_id")
+    pool_name = extract_label(target, "pool")
+
+    last_query = None
+
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            base_url,
+            "/query",
+            params={
+                "query": f'{{"{POOL_TARGET}", node_id="{node_id}", pool="{pool_name}"}}',
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus query result for quoted metric selector: %s", last_query)
+        result = last_query.get("result", [])
+        return last_query.get("resultType") == "vector" and any(
+            item.get("metric", {}).get("__name__") == POOL_TARGET
+            and item.get("metric", {}).get("node_id") == node_id
+            and item.get("metric", {}).get("pool") == pool_name
             for item in result
         )
 

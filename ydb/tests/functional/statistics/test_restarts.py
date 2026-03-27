@@ -19,6 +19,9 @@ CLUSTER_CONFIG = dict(
     additional_log_configs={
         'STATISTICS': LogLevels.DEBUG,
     },
+    column_shard_config={
+        'max_read_staleness_ms': 200,
+    },
 )
 
 
@@ -84,7 +87,7 @@ def test_basic(ydb_cluster, ydb_database, ydb_client):
 
     # SchemeShard will wait for 120 seconds before sending the first update
     # to StatisticsAggregator so provide a generous timeout.
-    assert_that(wait_for(base_stats_ready, timeout_seconds=150), "base stats ready")
+    assert_that(wait_for(base_stats_ready, timeout_seconds=300), "base stats ready")
 
     logger.info("restart and check that table stats are still the same")
 

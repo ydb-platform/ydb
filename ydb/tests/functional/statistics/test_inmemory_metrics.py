@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import logging
+import re
+import time
 
 import requests
 
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 TARGET = "harmonizer.max_used_cpu_x1e6"
 AWAKENING_TARGET = "harmonizer.avg_awakening_time_us"
+PROMETHEUS_API_PREFIX = "/viewer/inmemory_metrics/prometheus/api/v1"
 
 
 def wait_for_target(base_url, predicate):
@@ -38,6 +41,32 @@ def wait_for_target(base_url, predicate):
 
     assert wait_for(targets_ready, timeout_seconds=30, step_seconds=1.0), last_targets
     return next(target for target in last_targets if predicate(target))
+
+
+def extract_label(target, label_name):
+    match = re.search(rf'{re.escape(label_name)}="([^"]+)"', target)
+    assert match, target
+    return match.group(1)
+
+
+def get_prometheus_json(base_url, path, params=None):
+    try:
+        response = requests.get(
+            f"{base_url}{PROMETHEUS_API_PREFIX}{path}",
+            params=params,
+            timeout=10,
+        )
+    except requests.exceptions.RequestException:
+        return None
+
+    if response.status_code != 200:
+        return None
+
+    payload = response.json()
+    if payload.get("status") != "success":
+        return None
+
+    return payload.get("data")
 
 
 def test_inmemory_metrics_are_exposed(ydb_cluster):
@@ -181,3 +210,186 @@ def test_inmemory_metrics_render_supports_graphite_alias_sub_json_format(ydb_clu
     datapoints = last_series[0]["datapoints"]
     assert_that(last_series[0]["target"], equal_to(f"{metric_target} A"))
     assert_that(len(datapoints), greater_than(0))
+
+
+def test_inmemory_metrics_prometheus_label_discovery(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+    node_id = extract_label(target, "node_id")
+
+    pool_target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith('harmonizer.pool.avg_used_cpu_x1e6{node_id="'),
+    )
+    pool_name = extract_label(pool_target, "pool")
+    pool_id = extract_label(pool_target, "pool_id")
+
+    last_labels = None
+
+    def labels_ready():
+        nonlocal last_labels
+        data = get_prometheus_json(base_url, "/labels")
+        if not data:
+            return False
+
+        last_labels = data
+        logger.info("prometheus labels: %s", last_labels)
+        return "__name__" in last_labels and "node_id" in last_labels and "pool" in last_labels and "pool_id" in last_labels
+
+    assert wait_for(labels_ready, timeout_seconds=30, step_seconds=1.0), last_labels
+
+    last_metric_names = None
+
+    def metric_names_ready():
+        nonlocal last_metric_names
+        data = get_prometheus_json(base_url, "/label/__name__/values")
+        if not data:
+            return False
+
+        last_metric_names = data
+        logger.info("prometheus metric names: %s", last_metric_names)
+        return TARGET in last_metric_names and AWAKENING_TARGET in last_metric_names
+
+    assert wait_for(metric_names_ready, timeout_seconds=30, step_seconds=1.0), last_metric_names
+
+    last_node_ids = None
+
+    def node_ids_ready():
+        nonlocal last_node_ids
+        data = get_prometheus_json(base_url, "/label/node_id/values")
+        if not data:
+            return False
+
+        last_node_ids = data
+        logger.info("prometheus node ids: %s", last_node_ids)
+        return node_id in last_node_ids
+
+    assert wait_for(node_ids_ready, timeout_seconds=30, step_seconds=1.0), last_node_ids
+
+    last_pools = None
+
+    def pools_ready():
+        nonlocal last_pools
+        data = get_prometheus_json(base_url, "/label/pool/values")
+        if not data:
+            return False
+
+        last_pools = data
+        logger.info("prometheus pool labels: %s", last_pools)
+        return pool_name in last_pools
+
+    assert wait_for(pools_ready, timeout_seconds=30, step_seconds=1.0), last_pools
+
+    last_pool_ids = None
+
+    def pool_ids_ready():
+        nonlocal last_pool_ids
+        data = get_prometheus_json(base_url, "/label/pool_id/values")
+        if not data:
+            return False
+
+        last_pool_ids = data
+        logger.info("prometheus pool ids: %s", last_pool_ids)
+        return pool_id in last_pool_ids
+
+    assert wait_for(pool_ids_ready, timeout_seconds=30, step_seconds=1.0), last_pool_ids
+
+    last_series = None
+
+    def series_ready():
+        nonlocal last_series
+        data = get_prometheus_json(
+            base_url,
+            "/series",
+            params={"match[]": f'{TARGET}{{node_id="{node_id}"}}'},
+        )
+        if not data:
+            return False
+
+        last_series = data
+        logger.info("prometheus series: %s", last_series)
+        return any(
+            series.get("__name__") == TARGET and series.get("node_id") == node_id
+            for series in last_series
+        )
+
+    assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
+
+
+def test_inmemory_metrics_prometheus_query_selector_only(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+
+    last_query = None
+
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            base_url,
+            "/query",
+            params={
+                "query": target,
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus query result: %s", last_query)
+        result = last_query.get("result", [])
+        return last_query.get("resultType") == "vector" and any(
+            item.get("metric", {}).get("__name__") == TARGET
+            and item.get("metric", {}).get("node_id")
+            for item in result
+        )
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
+def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+
+    last_query_range = None
+    end = int(time.time())
+    start = end - 300
+
+    def query_range_ready():
+        nonlocal last_query_range
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": target,
+                "start": start,
+                "end": end,
+                "step": 30,
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus query_range result: %s", last_query_range)
+        result = last_query_range.get("result", [])
+        return last_query_range.get("resultType") == "matrix" and any(
+            item.get("metric", {}).get("__name__") == TARGET
+            and item.get("metric", {}).get("node_id")
+            and item.get("values")
+            for item in result
+        )
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range

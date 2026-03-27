@@ -18,6 +18,7 @@
 #include <cmath>
 #include <optional>
 #include <regex>
+#include <algorithm>
 
 namespace NKikimr::NViewer {
 
@@ -276,6 +277,184 @@ namespace {
             result.push_back('\\');
         }
         return result;
+    }
+
+    enum class EPrometheusLabelMatchOp {
+        Equal,
+        NotEqual,
+        Regex,
+        NotRegex,
+    };
+
+    struct TPrometheusLabelMatcher {
+        TString Name;
+        EPrometheusLabelMatchOp Op = EPrometheusLabelMatchOp::Equal;
+        TString Value;
+    };
+
+    struct TPrometheusVectorSelector {
+        TString MetricName;
+        TVector<TPrometheusLabelMatcher> Matchers;
+    };
+
+    inline void SplitPrometheusMatchers(TStringBuf raw, TVector<TString>& items) {
+        size_t start = 0;
+        bool inQuotes = false;
+        bool escaped = false;
+
+        auto flush = [&](size_t end) {
+            const TStringBuf piece = StripString(raw.SubString(start, end - start));
+            if (!piece.empty()) {
+                items.emplace_back(piece);
+            }
+        };
+
+        for (size_t pos = 0; pos < raw.size(); ++pos) {
+            const char ch = raw[pos];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inQuotes && ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (!inQuotes && ch == ',') {
+                flush(pos);
+                start = pos + 1;
+            }
+        }
+
+        flush(raw.size());
+    }
+
+    inline bool TryParsePrometheusVectorSelector(TStringBuf expression, TPrometheusVectorSelector& selector, TString& error) {
+        selector = {};
+        error.clear();
+
+        const TStringBuf stripped = StripString(expression);
+        if (stripped.empty()) {
+            error = "empty query";
+            return false;
+        }
+
+        const size_t bracePos = stripped.find('{');
+        if (bracePos == TStringBuf::npos) {
+            selector.MetricName = TString(stripped);
+            return true;
+        }
+        if (!stripped.EndsWith("}")) {
+            error = "only vector selectors are supported";
+            return false;
+        }
+
+        selector.MetricName = TString(StripString(stripped.SubString(0, bracePos)));
+        const TStringBuf rawMatchers = stripped.SubString(bracePos + 1, stripped.size() - bracePos - 2);
+        TVector<TString> items;
+        SplitPrometheusMatchers(rawMatchers, items);
+
+        for (const TString& item : items) {
+            static constexpr std::array<TStringBuf, 4> Operators = {"=~", "!~", "!=", "="};
+
+            size_t opPos = TString::npos;
+            TStringBuf op;
+            for (const TStringBuf candidate : Operators) {
+                opPos = item.find(candidate);
+                if (opPos != TString::npos) {
+                    op = candidate;
+                    break;
+                }
+            }
+            if (opPos == TString::npos) {
+                error = TStringBuilder() << "invalid label matcher: " << item;
+                return false;
+            }
+
+            const TStringBuf name = StripString(TStringBuf(item).SubString(0, opPos));
+            const TStringBuf value = StripString(TStringBuf(item).SubString(opPos + op.size(), item.size() - opPos - op.size()));
+            if (name.empty() || value.empty() || value.front() != '"' || value.back() != '"') {
+                error = TStringBuilder() << "invalid label matcher: " << item;
+                return false;
+            }
+
+            TPrometheusLabelMatcher matcher;
+            matcher.Name = TString(name);
+            matcher.Value = UnquoteGraphiteString(value);
+            if (op == "=") {
+                matcher.Op = EPrometheusLabelMatchOp::Equal;
+            } else if (op == "!=") {
+                matcher.Op = EPrometheusLabelMatchOp::NotEqual;
+            } else if (op == "=~") {
+                matcher.Op = EPrometheusLabelMatchOp::Regex;
+            } else {
+                matcher.Op = EPrometheusLabelMatchOp::NotRegex;
+            }
+            selector.Matchers.push_back(std::move(matcher));
+        }
+
+        if (selector.MetricName.empty() && selector.Matchers.empty()) {
+            error = "empty selector";
+            return false;
+        }
+        return true;
+    }
+
+    inline TString FindLineLabelValue(const TLineSnapshot& line, TStringBuf labelName) {
+        if (labelName == "__name__") {
+            return line.Name;
+        }
+        for (const auto& label : line.Labels) {
+            if (label.Name == labelName) {
+                return label.Value;
+            }
+        }
+        return {};
+    }
+
+    inline bool MatchPrometheusLabelMatcher(const TLineSnapshot& line, const TPrometheusLabelMatcher& matcher, TString& error) {
+        const TString actual = FindLineLabelValue(line, matcher.Name);
+        switch (matcher.Op) {
+            case EPrometheusLabelMatchOp::Equal:
+                return actual == matcher.Value;
+            case EPrometheusLabelMatchOp::NotEqual:
+                return actual != matcher.Value;
+            case EPrometheusLabelMatchOp::Regex:
+            case EPrometheusLabelMatchOp::NotRegex:
+                try {
+                    const bool matches = std::regex_match(actual.c_str(), std::regex(matcher.Value.c_str()));
+                    return matcher.Op == EPrometheusLabelMatchOp::Regex ? matches : !matches;
+                } catch (const std::regex_error& e) {
+                    error = TStringBuilder() << "invalid regex for label '" << matcher.Name << "': " << e.what();
+                    return false;
+                }
+        }
+        return false;
+    }
+
+    inline bool MatchPrometheusSelector(const TLineSnapshot& line, const TPrometheusVectorSelector& selector, TString& error) {
+        if (!selector.MetricName.empty() && line.Name != selector.MetricName) {
+            return false;
+        }
+        for (const auto& matcher : selector.Matchers) {
+            const size_t prevErrorSize = error.size();
+            const bool matched = MatchPrometheusLabelMatcher(line, matcher, error);
+            if (!error.empty() && error.size() != prevErrorSize) {
+                return false;
+            }
+            if (!matched) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    inline void SortAndUniqueStrings(TVector<TString>& values) {
+        Sort(values);
+        values.erase(std::unique(values.begin(), values.end()), values.end());
     }
 
 } // namespace
@@ -746,6 +925,438 @@ private:
             item["allowChildren"] = 0;
         }
 
+        return GetHTTPOKJSON(json);
+    }
+};
+
+class TJsonInMemoryMetricsPrometheus : public TViewerPipeClient {
+    using TThis = TJsonInMemoryMetricsPrometheus;
+    using TBase = TViewerPipeClient;
+    using TBase::ReplyAndPassAway;
+
+    struct TSelectedSeries {
+        const TLineSnapshot* Line = nullptr;
+    };
+
+public:
+    TJsonInMemoryMetricsPrometheus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TViewerPipeClient(viewer, ev)
+    {
+        NeedRedirect = false;
+        CheckDatabase = false;
+    }
+
+    void Bootstrap() override {
+        const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
+        if (!inMemoryMetrics) {
+            return ReplyAndPassAway(BuildErrorResponse("execution", "In-memory metrics subsystem is not registered"));
+        }
+
+        ReplyAndPassAway(HandleRequest(*inMemoryMetrics));
+    }
+
+    void ReplyAndPassAway() override {}
+
+    static YAML::Node GetSwagger() {
+        TSimpleYamlBuilder yaml({
+            .Method = "get",
+            .Tag = "viewer",
+            .Summary = "Prometheus-compatible in-memory metrics API",
+            .Description = "Returns selector-only Prometheus-compatible responses for in-memory metrics",
+        });
+        yaml.AddParameter({
+            .Name = "query",
+            .Description = "Prometheus vector selector",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "match[]",
+            .Description = "Prometheus series selector",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "start",
+            .Description = "range start timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "end",
+            .Description = "range end timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "time",
+            .Description = "evaluation timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "step",
+            .Description = "query range step",
+            .Type = "string",
+        });
+        return yaml;
+    }
+
+private:
+    TString GetRequestPath() const {
+        if (Event) {
+            return TString("/") + Event->Get()->Request.GetPage()->Path + Event->Get()->Request.GetPathInfo();
+        }
+        if (HttpEvent) {
+            return TString(HttpEvent->Get()->Request->GetURI());
+        }
+        return {};
+    }
+
+    TString GetLabelNameFromPath() const {
+        static constexpr TStringBuf Prefix = "/viewer/inmemory_metrics/prometheus/api/v1/label/";
+        static constexpr TStringBuf Suffix = "/values";
+        const TString path = GetRequestPath();
+        if (!path.StartsWith(Prefix) || !path.EndsWith(Suffix)) {
+            return {};
+        }
+        return path.substr(Prefix.size(), path.size() - Prefix.size() - Suffix.size());
+    }
+
+    TString BuildErrorResponse(TStringBuf errorType, TStringBuf message) {
+        NJson::TJsonValue json;
+        json["status"] = "error";
+        json["errorType"] = TString(errorType);
+        json["error"] = TString(message);
+
+        TStringStream content;
+        NJson::WriteJson(&content, &json, {
+            .FormatOutput = false,
+            .SortKeys = false,
+            .ValidateUtf8 = false,
+        });
+        return GetHTTPBADREQUEST("application/json", content.Str());
+    }
+
+    TString HandleRequest(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        const TString path = GetRequestPath();
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/labels") {
+            return HandleLabels(inMemoryMetrics);
+        }
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/series") {
+            return HandleSeries(inMemoryMetrics);
+        }
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            return HandleQuery(inMemoryMetrics);
+        }
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range") {
+            return HandleQueryRange(inMemoryMetrics);
+        }
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values") {
+            return HandleLabelValues(inMemoryMetrics, "__name__");
+        }
+        if (path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && path.EndsWith("/values")) {
+            const TString labelName = GetLabelNameFromPath();
+            if (labelName.empty()) {
+                return BuildErrorResponse("bad_data", "invalid label path");
+            }
+            return HandleLabelValues(inMemoryMetrics, labelName);
+        }
+
+        return BuildErrorResponse("bad_data", "unsupported endpoint");
+    }
+
+    std::optional<double> GetFloatParam(TStringBuf name) const {
+        if (!Params.Has(name)) {
+            return {};
+        }
+        return FromStringWithDefault<double>(Params.Get(name), 0);
+    }
+
+    bool ParseSelectorParam(TStringBuf query, TPrometheusVectorSelector& selector, TString& error) const {
+        if (!TryParsePrometheusVectorSelector(query, selector, error)) {
+            return false;
+        }
+        if (query.find_first_of("()[]+-/*") != TStringBuf::npos && query.find('{') == TStringBuf::npos) {
+            // Keep the contract explicit: bare metric name is fine, anything else is not.
+            const TStringBuf trimmed = StripString(query);
+            if (trimmed.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:") != TStringBuf::npos) {
+                error = "only selector-only Prometheus queries are supported";
+                return false;
+            }
+        }
+        return true;
+    }
+
+    TVector<TPrometheusVectorSelector> ParseMatchers(TStringBuf paramName, TString& error) const {
+        TVector<TPrometheusVectorSelector> selectors;
+        for (size_t index = 0;; ++index) {
+            const TString raw = Params.Get(paramName, index);
+            if (raw.empty()) {
+                break;
+            }
+            TPrometheusVectorSelector selector;
+            if (!ParseSelectorParam(raw, selector, error)) {
+                selectors.clear();
+                return selectors;
+            }
+            selectors.push_back(std::move(selector));
+        }
+        return selectors;
+    }
+
+    TVector<const TLineSnapshot*> SelectSeries(const TVector<TLineSnapshot>& lines,
+            const TVector<TPrometheusVectorSelector>& selectors,
+            TString& error) const
+    {
+        TVector<const TLineSnapshot*> selected;
+        if (selectors.empty()) {
+            selected.reserve(lines.size());
+            for (const auto& line : lines) {
+                selected.push_back(&line);
+            }
+            return selected;
+        }
+
+        selected.reserve(lines.size());
+        for (const auto& line : lines) {
+            for (const auto& selector : selectors) {
+                const size_t prevErrorSize = error.size();
+                const bool matched = MatchPrometheusSelector(line, selector, error);
+                if (!error.empty() && error.size() != prevErrorSize) {
+                    selected.clear();
+                    return selected;
+                }
+                if (matched) {
+                    selected.push_back(&line);
+                    break;
+                }
+            }
+        }
+        return selected;
+    }
+
+    static NJson::TJsonValue BuildMetricObject(const TLineSnapshot& line) {
+        NJson::TJsonValue metric;
+        metric["__name__"] = line.Name;
+        for (const auto& label : line.Labels) {
+            metric[label.Name] = label.Value;
+        }
+        return metric;
+    }
+
+    static TString FormatSampleValue(double value) {
+        return TStringBuilder() << value;
+    }
+
+    TString HandleLabels(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        TString error;
+        const auto selectors = ParseMatchers("match[]", error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        const auto lines = snapshot.Lines();
+        auto selected = SelectSeries(lines, selectors, error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+
+        TVector<TString> labels;
+        labels.reserve(8);
+        labels.push_back("__name__");
+        for (const auto* line : selected) {
+            for (const auto& label : line->Labels) {
+                labels.push_back(label.Name);
+            }
+        }
+        SortAndUniqueStrings(labels);
+
+        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        for (const auto& label : labels) {
+            data.AppendValue(label);
+        }
+        NJson::TJsonValue json;
+        json["status"] = "success";
+        json["data"] = std::move(data);
+        return GetHTTPOKJSON(json);
+    }
+
+    TString HandleLabelValues(const TInMemoryMetricsRegistry& inMemoryMetrics, TStringBuf labelName) {
+        TString error;
+        const auto selectors = ParseMatchers("match[]", error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        const auto lines = snapshot.Lines();
+        auto selected = SelectSeries(lines, selectors, error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+
+        TVector<TString> values;
+        for (const auto* line : selected) {
+            const TString value = FindLineLabelValue(*line, labelName);
+            if (!value.empty()) {
+                values.push_back(value);
+            }
+        }
+        SortAndUniqueStrings(values);
+
+        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        for (const auto& value : values) {
+            data.AppendValue(value);
+        }
+        NJson::TJsonValue json;
+        json["status"] = "success";
+        json["data"] = std::move(data);
+        return GetHTTPOKJSON(json);
+    }
+
+    TString HandleSeries(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        TString error;
+        const auto selectors = ParseMatchers("match[]", error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        const auto lines = snapshot.Lines();
+        auto selected = SelectSeries(lines, selectors, error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+
+        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        for (const auto* line : selected) {
+            data.AppendValue(BuildMetricObject(*line));
+        }
+        NJson::TJsonValue json;
+        json["status"] = "success";
+        json["data"] = std::move(data);
+        return GetHTTPOKJSON(json);
+    }
+
+    TString HandleQuery(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        const TString query = Params.Get("query");
+        if (query.empty()) {
+            return BuildErrorResponse("bad_data", "query is required");
+        }
+
+        TPrometheusVectorSelector selector;
+        TString error;
+        if (!ParseSelectorParam(query, selector, error)) {
+            return BuildErrorResponse("bad_data", error);
+        }
+
+        const double evalTime = GetFloatParam("time").value_or(TInstant::Now().Seconds());
+        const ui64 evalTimestamp = static_cast<ui64>(evalTime);
+
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        const auto lines = snapshot.Lines();
+        NJson::TJsonValue result(NJson::JSON_ARRAY);
+
+        for (const auto& line : lines) {
+            const size_t prevErrorSize = error.size();
+            const bool matched = MatchPrometheusSelector(line, selector, error);
+            if (!error.empty() && error.size() != prevErrorSize) {
+                return BuildErrorResponse("bad_data", error);
+            }
+            if (!matched) {
+                continue;
+            }
+
+            struct TLastPoint {
+                ui64 Timestamp = 0;
+                double Value = 0;
+            };
+            std::optional<TLastPoint> lastPoint;
+            line.ForEachRecord([&](const TRecordView& record) {
+                const ui64 ts = record.Timestamp.Seconds();
+                if (ts <= evalTimestamp) {
+                    lastPoint = TLastPoint{
+                        .Timestamp = ts,
+                        .Value = static_cast<double>(record.Value),
+                    };
+                }
+            });
+            if (!lastPoint) {
+                continue;
+            }
+
+            NJson::TJsonValue& item = result.AppendValue({});
+            item["metric"] = BuildMetricObject(line);
+            NJson::TJsonValue& value = item["value"];
+            value.SetType(NJson::JSON_ARRAY);
+            value.AppendValue(lastPoint->Timestamp);
+            value.AppendValue(FormatSampleValue(lastPoint->Value));
+        }
+
+        NJson::TJsonValue json;
+        json["status"] = "success";
+        json["data"]["resultType"] = "vector";
+        json["data"]["result"] = std::move(result);
+        return GetHTTPOKJSON(json);
+    }
+
+    TString HandleQueryRange(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        const TString query = Params.Get("query");
+        if (query.empty()) {
+            return BuildErrorResponse("bad_data", "query is required");
+        }
+        const auto start = GetFloatParam("start");
+        const auto end = GetFloatParam("end");
+        if (!start || !end) {
+            return BuildErrorResponse("bad_data", "start and end are required");
+        }
+        if (*end < *start) {
+            return BuildErrorResponse("bad_data", "end must be greater than or equal to start");
+        }
+
+        TPrometheusVectorSelector selector;
+        TString error;
+        if (!ParseSelectorParam(query, selector, error)) {
+            return BuildErrorResponse("bad_data", error);
+        }
+
+        const ui64 startTs = static_cast<ui64>(*start);
+        const ui64 endTs = static_cast<ui64>(*end);
+
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        const auto lines = snapshot.Lines();
+        NJson::TJsonValue result(NJson::JSON_ARRAY);
+
+        for (const auto& line : lines) {
+            const size_t prevErrorSize = error.size();
+            const bool matched = MatchPrometheusSelector(line, selector, error);
+            if (!error.empty() && error.size() != prevErrorSize) {
+                return BuildErrorResponse("bad_data", error);
+            }
+            if (!matched) {
+                continue;
+            }
+
+            NJson::TJsonValue values(NJson::JSON_ARRAY);
+            bool hasValues = false;
+            line.ForEachRecord([&](const TRecordView& record) {
+                const ui64 ts = record.Timestamp.Seconds();
+                if (ts < startTs || ts > endTs) {
+                    return;
+                }
+
+                NJson::TJsonValue& item = values.AppendValue(NJson::TJsonValue(NJson::JSON_ARRAY));
+                item.AppendValue(ts);
+                item.AppendValue(FormatSampleValue(static_cast<double>(record.Value)));
+                hasValues = true;
+            });
+            if (!hasValues) {
+                continue;
+            }
+
+            NJson::TJsonValue& item = result.AppendValue({});
+            item["metric"] = BuildMetricObject(line);
+            item["values"] = std::move(values);
+        }
+
+        NJson::TJsonValue json;
+        json["status"] = "success";
+        json["data"]["resultType"] = "matrix";
+        json["data"]["result"] = std::move(result);
         return GetHTTPOKJSON(json);
     }
 };

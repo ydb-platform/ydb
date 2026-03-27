@@ -303,6 +303,11 @@ void InitViewerInMemoryMetricsJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/inmemory_metrics/render", new TJsonHandler<TJsonInMemoryMetrics>(TJsonInMemoryMetrics::GetSwagger()));
     handlers.AddHandler("/viewer/inmemory_metrics/targets", new TJsonHandler<TJsonInMemoryMetricsTargets>(TJsonInMemoryMetricsTargets::GetSwagger()));
     handlers.AddHandler("/viewer/inmemory_metrics/metrics/find", new TJsonHandler<TJsonInMemoryMetricsGraphiteFind>(TJsonInMemoryMetricsGraphiteFind::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/query", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/query_range", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/series", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/labels", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/label/*/values", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
 }
 
 void InitViewerRenderJsonHandler(TJsonHandlers& handlers) {

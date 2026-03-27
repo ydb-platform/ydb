@@ -401,7 +401,6 @@ message TPQTabletConfig {
         optional string DeadLetterQueue = 17; // For MLP consumers
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
-        optional bool ContentBasedDeduplication = 20 [default = false]; // For MLP consumers
 
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
@@ -483,6 +482,8 @@ message TPQTabletConfig {
     optional string MonitoringProjectId = 41;
 
     optional string TimestampType = 42;
+
+    optional bool ContentBasedDeduplication = 43 [default = false];
 }
 
 message THeartbeat {
@@ -1313,6 +1314,8 @@ message TMLPMessageId {
 message TMLPMessageMeta {
     optional string MessageGroupId = 1;
     optional uint64 SentTimestampMilliseconds = 2;
+    optional uint32 ApproximateReceiveCount = 3;
+    optional uint64 ApproximateFirstReceiveTimestampMilliseconds = 4;
 };
 
 message TMLPMessage {
@@ -1431,6 +1434,27 @@ message TMLPMetrics {
     optional uint64 TotalDeletedByRetentionMessageCount = 6;
 }
 
+enum EReadWithKeepOrder {
+    READ_WITH_KEEP_ORDER_UNSPECIFIED = 0;
+    READ_WITH_KEEP_ORDER_BLOCK_ALL = 1; /* reading from a partition returns an empty list of messages */
+    READ_WITH_KEEP_ORDER_ALLOW_ALL = 3; /* no reading restrictions */
+}
+
+message TExternalLockedMessageGroupsId {
+    optional uint32 ParentPartitionId = 1;
+    optional uint64 Generation = 2;
+    optional uint64 ConsumerGeneration = 3; /* increases when the consumer is recreated */
+    optional uint64 Step = 4; /* increases when the new full state is sent */
+
+    optional EReadWithKeepOrder Mode = 5;
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
+}
+
 message TMLPStorageSnapshot {
     message TConfiguration {
         optional string ConsumerName = 1;
@@ -1456,6 +1480,8 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
 }
 
 message TMLPStorageWAL {
@@ -1479,6 +1505,8 @@ message TMLPStorageWAL {
 
     optional bytes AddedToDLQMessages = 14;
     optional uint64 FirstDLQSeqNo = 15;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
 }
 
 message TMessageDeduplicationIdWAL {

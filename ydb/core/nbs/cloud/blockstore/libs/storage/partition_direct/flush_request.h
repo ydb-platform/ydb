@@ -17,7 +17,7 @@ class TFlushRequestExecutor
 public:
     struct TResponse
     {
-        ELocation Location;
+        TRoute Route;
         TVector<ui64> FlushOk;
         TVector<ui64> FlushFailed;
     };
@@ -26,7 +26,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        ELocation location,
+        TRoute route,
         TFlushHint hint,
         NWilson::TTraceId traceId);
 
@@ -45,7 +45,7 @@ private:
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const NWilson::TTraceId TraceId;
-    const ELocation Location;
+    const TRoute Route;
     const TFlushHint Hint;
 
     NThreading::TPromise<TResponse> Promise =

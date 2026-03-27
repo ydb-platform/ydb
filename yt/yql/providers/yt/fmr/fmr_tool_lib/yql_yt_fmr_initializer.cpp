@@ -85,10 +85,11 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
 
 std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
     TFmrCoordinatorSettings coordinatorSettings{};
+    NYT::TNode fmrOperationSpec;
     TString fmrOperationSpecFilePath = fmrServices->FmrOperationSpecFilePath;
     if (!fmrOperationSpecFilePath.empty()) {
         TFileInput input(fmrOperationSpecFilePath);
-        auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
+        fmrOperationSpec = NYT::NodeFromYsonStream(&input);
         coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
     }
 
@@ -142,7 +143,8 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
             return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
-        NFmr::TFmrJobFactorySettings settings{.Function=func};
+        auto settings = NFmr::GetDefaultJobFactorySettings(fmrOperationSpec);
+        settings.Function = func;
         auto jobFactory = MakeFmrJobFactory(settings);
         NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
             .TimeToSleepBetweenRequests=TDuration::Seconds(1)};

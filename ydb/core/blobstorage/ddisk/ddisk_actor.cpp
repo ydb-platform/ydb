@@ -32,8 +32,10 @@ namespace {
 } // anonymous
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : BaseInfo(std::move(baseInfo))
+        , Config(std::move(ddiskConfig))
         , Info(std::move(info))
         , CountersBase(GetServiceCounters(counters, "ddisks"))
         , PersistentBufferFormat(std::move(pbFormat))
@@ -135,6 +137,10 @@ namespace {
 
         DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
             << ':' << BaseInfo.VDiskSlotId << ']';
+
+        DdiskIoOpPool.Resize(IoOpPoolCapacity);
+        PersistentBufferPartIoOpPool.Resize(IoOpPoolCapacity);
+        InternalSyncWriteOpPool.Resize(IoOpPoolCapacity);
     }
 
     TDDiskActor::~TDDiskActor() {
@@ -142,7 +148,12 @@ namespace {
     }
 
     void TDDiskActor::Bootstrap() {
-        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor());
+        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+
+        FillPool(DdiskIoOpPool);
+        FillPool(PersistentBufferPartIoOpPool);
+        FillPool(InternalSyncWriteOpPool);
+
         Become(&TThis::StateFunc);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         InitPDiskInterface();
@@ -227,6 +238,7 @@ namespace {
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
+            case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
                 TActivationContext::Forward(ev, WritePersistentBuffersActor);
                 break;
@@ -250,8 +262,10 @@ namespace {
     }
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(counters));
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat),
+            std::move(ddiskConfig), std::move(counters));
     }
 
 } // NKikimr::NDDisk

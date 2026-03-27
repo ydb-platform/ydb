@@ -63,10 +63,20 @@ code workspace/workspace.code-workspace
     ./ydbd admin bs config invoke --proto 'Command { DefineDDiskPool { BoxId: 1 Name: "ddp1" Geometry { NumFailRealms: 1 NumFailDomainsPerFailRealm: 5 NumVDisksPerFailDomain: 1 RealmLevelBegin: 10 RealmLevelEnd: 10 DomainLevelBegin: 10 DomainLevelEnd: 40 } PDiskFilter { Property { Type: ROT } } NumDDiskGroups: 10 } }'
     ```
 
+  On remote:
+    ```
+    ./ydbd --server "vla5-8226.search.yandex.net" admin bs config invoke --proto 'Command { DefineDDiskPool { BoxId: 1 Name: "ddp1" Geometry { NumFailRealms: 1 RealmLevelBegin: 10 RealmLevelEnd: 10 DomainLevelBegin: 10 DomainLevelEnd: 40 NumFailDomainsPerFailRealm: 5 NumVDisksPerFailDomain: 1} PDiskFilter { Property { Type: SSD } } NumDDiskGroups: 3 } }'
+    ```
+
 2) Create partition:
     ```
     cd ydb_bg/ydb/apps/dstool/
     ./ydb-dstool -d -e grpc://localhost:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
+    ```
+    On Remote:
+    ```
+    cd ydb_bg/ydb/apps/dstool/
+    ./ydb-dstool -d -e grpc://vla5-8296.search.yandex.net:2135 nbs partition create --block-size 4096 --blocks-count 32768 --pool ddp1 --type=ssd --disk-id disk1
     ```
 
 3) Get load actor adapter id:

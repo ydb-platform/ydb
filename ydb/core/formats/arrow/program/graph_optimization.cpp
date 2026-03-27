@@ -9,14 +9,11 @@
 #include "reserve.h"
 #include "stream_logic.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
-#include <util/stream/output.h>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>

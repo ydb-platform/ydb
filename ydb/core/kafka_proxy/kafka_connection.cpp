@@ -90,7 +90,7 @@ public:
     MtlsAuthStages MtlsAuthStage;
     std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds> ServerCreds;
 
-    enum SslHandshakeErrors {ERROR_NONE = 1, ERROR_WANT_READ = -1, ERROR_WANT_WRITE = -2};
+    enum SslHandshakeErrors {ERROR_NONE = 0, ERROR_WANT_READ = 1, ERROR_WANT_WRITE = 2};
 
     TContext::TPtr Context;
 

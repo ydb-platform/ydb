@@ -1,0 +1,23 @@
+dstool -e <endpoint> --mon-port <mon_port> --quiet pdisk list --check-leaked-slots
+Exit Status: 0
+===== stdout =====
+┌────────────────┬────────────────┬───────────┬────────────────┬──────┬────────┬────────────────┬───────────────────┬────────────────┬─────────────┐
+│ NodeId:PDiskId │ ExpectedSerial │ FQDN      │ Path           │ Type │ Status │ DecommitStatus │ MaintenanceStatus │ NumActiveSlots │ LeakedSlots │
+├────────────────┼────────────────┼───────────┼────────────────┼──────┼────────┼────────────────┼───────────────────┼────────────────┼─────────────┤
+│ [1:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 2              │ -1          │
+│ [1:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [2:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 2              │ -1          │
+│ [2:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 0              │ 1           │
+│ [3:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [3:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [4:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [4:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [5:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [5:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [6:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [6:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [7:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [7:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [8:1]          │                │ localhost │ SectorMap:1:64 │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+│ [8:1000]       │                │ localhost │ SectorMap:2:4  │ ROT  │ ACTIVE │ DECOMMIT_NONE  │ NO_REQUEST        │ 1              │ 0           │
+└────────────────┴────────────────┴───────────┴────────────────┴──────┴────────┴────────────────┴───────────────────┴────────────────┴─────────────┘

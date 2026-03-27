@@ -9,5 +9,5 @@ WITH(
     SCHEMA(
         ts Timestamp NOT NULL
     ),
-    WATERMARK AS (UNWRAP(timestamp - Interval("PT5S")))
+    WATERMARK = timestamp - Interval("PT5S")
 );

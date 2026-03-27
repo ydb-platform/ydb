@@ -13,16 +13,18 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
+    TBlockRange64 vChunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
+    , VChunkRange(vChunkRange)
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , Lsn(DirectBlockGroup->GenerateLsn())
+    , Lsn(Request->Lsn)
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -33,7 +35,7 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
             NKikimrServices::NBS_PARTITION,
             "TWriteRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Range.Print().c_str());
+            Request->Headers.Range.Print().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -60,7 +62,7 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         VChunkConfig.VChunkIndex,
         VChunkConfig.GetHostIndex(location),
         Lsn,
-        Request->Range,
+        VChunkRange,
         Request->Sglist,
         NWilson::TTraceId(TraceId));
 

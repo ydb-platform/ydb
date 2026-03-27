@@ -2,6 +2,9 @@
 
 #include "direct_block_group_in_mem.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
@@ -12,10 +15,6 @@ using namespace NThreading;
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t BlockSize = 4096;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +35,50 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
+TVector<std::shared_ptr<TRegion>> CreateRegions(
+    IPartitionDirectService* partitionDirectService,
+    ui64 blockCount,
+    ui32 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
+    const NProto::TStorageServiceConfig& storageConfig)
+{
+    const ui64 regionsCount =
+        AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+    TVector<std::shared_ptr<TRegion>> regions(regionsCount);
+    for (size_t i = 0; i < regionsCount; i++) {
+        regions[i] = std::make_shared<TRegion>(
+            TActorContext::ActorSystem(),
+            partitionDirectService,
+            i,
+            directBlockGroups,
+            storageConfig.GetSyncRequestsBatchSize(),
+            TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()));
+    }
+
+    return regions;
+}
+
+size_t GetRegionIndex(ui64 blockIndex)
+{
+    return blockIndex / BlocksPerRegion;
+}
+
+size_t GetRegionOffset(ui64 blockIndex)
+{
+    return blockIndex % BlocksPerRegion;
+}
+
+std::pair<size_t, TBlockRange64> TranslateToRegion(
+    const TRequestHeaders& headers)
+{
+    const size_t regionIndex = GetRegionIndex(headers.Range.Start);
+    const size_t regionOffset = GetRegionOffset(headers.Range.Start);
+
+    return std::pair<size_t, TBlockRange64>{
+        regionIndex,
+        TBlockRange64::WithLength(regionOffset, headers.Range.Size())};
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -43,12 +86,18 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
-    ui32 generation,
-    std::shared_ptr<NStorage::NPartitionDirect::TRegion> region,
+    ui64 blockCount,
+    ui32 blockSize,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
-    , Region(std::move(region))
+    , Regions(CreateRegions(
+          this,
+          blockCount,
+          blockSize,
+          std::move(directBlockGroups),
+          storageConfig))
     , TraceSamplePeriod(
           TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
     , Counters(MakeCountersChain(
@@ -57,7 +106,6 @@ TFastPathService::TFastPathService(
           tabletId))
 {
     Y_UNUSED(ActorSystem);
-    Y_UNUSED(generation);
 }
 
 NWilson::TTraceId TFastPathService::SpanTrace()
@@ -79,9 +127,12 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::ReadBlocks,
-        request->Range.Size() * BlockSize);
+        request->Headers.Range.Size() * DefaultBlockSize);
 
-    auto result = Region->ReadBlocksLocal(
+    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
+    request->RegionRange = regionRange;
+
+    auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -109,9 +160,13 @@ TFastPathService::WriteBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::WriteBlocks,
-        request->Range.Size() * BlockSize);
+        request->Headers.Range.Size() * DefaultBlockSize);
 
-    auto result = Region->WriteBlocksLocal(
+    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
+    request->RegionRange = regionRange;
+    request->Lsn = GenerateSequenceNumber();
+
+    auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         std::move(traceId));
@@ -143,6 +198,11 @@ NThreading::TFuture<TZeroBlocksLocalResponse> TFastPathService::ZeroBlocksLocal(
 void TFastPathService::ReportIOError()
 {
     // TODO: implement
+}
+
+ui64 TFastPathService::GenerateSequenceNumber()
+{
+    return ++SequenceGenerator;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

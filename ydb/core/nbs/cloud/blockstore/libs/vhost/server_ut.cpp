@@ -126,12 +126,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::WriteBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -158,12 +159,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ReadBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -189,8 +191,8 @@ private:
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ZeroBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = {}});
 
             if (ServiceFrozen.test()) {

@@ -1898,14 +1898,16 @@ private:
     }
 
     void InitSharedReading() {
-        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
+        if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
         }
+        AFL_VERIFY(FederatedQuerySetup);
+        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,

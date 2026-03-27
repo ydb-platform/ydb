@@ -44,6 +44,8 @@ public:
     TGenerateTasksResult GenerateTasksImpl (const TGenerateTasksContext& context) final {
         const auto& mergeOperationParams = std::get<TMergeOperationParams>(context.OperationParams);
 
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Merge operation";
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TMergeTaskParams mergeTaskParams;
@@ -59,7 +61,7 @@ public:
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         TGetNewPartIdsForTaskResult result;
         TMergeTaskParams& mergeTaskParams = std::get<TMergeTaskParams>(context.Task->TaskParams);
         TString tableId = mergeTaskParams.Output.TableId;
@@ -70,7 +72,7 @@ public:
         return result;
     }
 
-    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TMergeTaskParams& mergeTaskParams = std::get<TMergeTaskParams>(context.Task->TaskParams);
         TString tableId = mergeTaskParams.Output.TableId;

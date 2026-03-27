@@ -568,6 +568,10 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.RdmaChecksum = config.GetRdmaChecksum();
     }
 
+    if (config.HasCollectSubscriptionStackTrace()) {
+        result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
+    }
+
     return result;
 }
 
@@ -661,6 +665,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             TChannelsConfig channels;
             auto settings = GetInterconnectSettings(icConfig, numNodes, dataCenters.size());
+            setup->InterconnectCollectSubscriptionStackTrace = settings.CollectSubscriptionStackTrace;
             ui32 interconnectPoolId = GetInterconnectThreadPoolId(appData);
 
             for (const auto& channel : icConfig.GetChannel()) {

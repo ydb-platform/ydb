@@ -1,6 +1,7 @@
 #include "transaction.h"
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
+#include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -524,6 +525,11 @@ const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui6
     static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
+}
+
+bool TDistributedTransaction::GetSkipSrcIdInfo() const
+{
+    return AllExistingWritesSkipConflictCheck(Operations);
 }
 
 void TDistributedTransaction::SetExecuteSpan(NWilson::TSpan&& span)

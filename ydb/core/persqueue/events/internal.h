@@ -227,6 +227,7 @@ struct TEvPQ {
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
         EvEnd,
     };
 
@@ -910,6 +911,9 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
@@ -917,6 +921,9 @@ struct TEvPQ {
         bool ForcePredicateFalse = false;
 
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -1179,9 +1186,18 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
-        TActorId OriginalPartition;
+        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo = false) :
+            SkipSrcIdInfo(skipSrcIdInfo)
+        {
+        }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+
+        TActorId OriginalPartition;
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1728,6 +1744,18 @@ struct TEvPQ {
             Record.SetPartitionId(partitionId);
             Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
+        }
+    };
+
+    struct TEvMLPUpdateExternalLockedMessageGroupsId : TEventPB<TEvMLPUpdateExternalLockedMessageGroupsId, NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId, EvMLPUpdateExternalLockedMessageGroupsId> {
+        TEvMLPUpdateExternalLockedMessageGroupsId() = default;
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
         }
     };
 };

@@ -259,6 +259,7 @@ class TDataShard
     class TTxLockRows;
     class TLockRowsTxObserver;
     class TLockRowsNotifyWaitGuard;
+    class TTxMultiTxIdCleanup;
 
     void HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev);
     void HandleMonVolatileTxs(NMon::TEvRemoteHttpInfo::TPtr& ev);

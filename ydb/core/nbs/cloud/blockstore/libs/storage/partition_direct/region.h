@@ -1,6 +1,7 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -15,6 +16,8 @@ class TRegion
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
+        ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
         TDuration traceSamplePeriod);
@@ -34,8 +37,8 @@ private:
     TVector<std::shared_ptr<TVChunk>> VChunks;
 
     // Striping
-    size_t GetVChunkIndex(ui64 blockIndex) const;
-    size_t GetVChunkOffset(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
+    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

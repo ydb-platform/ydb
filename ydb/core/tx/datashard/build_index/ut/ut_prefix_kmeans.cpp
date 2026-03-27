@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -84,7 +85,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
     static std::tuple<TString, TString, TString> DoPrefixKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent, ui64 seed, ui64 k,
         NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
-        VectorIndexSettings::Metric metric, ui32 maxBatchRows, ui32 overlapClusters = 0)
+        VectorIndexSettings::Metric metric, ui32 maxBatchRows, ui32 overlapClusters = 0,
+        std::optional<TSerializedTableRange> keyRange = {})
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
         auto& runtime = *server->GetRuntime();
@@ -137,6 +139,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
                 rec.SetOutputName(kPostingTable);
 
                 rec.MutableScanSettings()->SetMaxBatchRows(maxBatchRows);
+
+                if (keyRange) {
+                    keyRange->Serialize(*rec.MutableKeyRange());
+                }
             };
             fill(ev1);
             fill(ev2);
@@ -747,6 +753,87 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             );
             recreate();
         }
+    }
+
+    Y_UNIT_TEST(BuildToPostingWithKeyRange) {
+        // Verify that specifying a KeyRange causes only the rows after the given
+        // key to be scanned, skipping already-processed rows (resume semantics).
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.EnableOutOfOrder(true);
+        options.Shards(1);
+
+        CreateBuildPrefixTable(server, sender, options, "table-main");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (user, key, embedding, data) VALUES )"
+            "(\"user-1\", 11, \"\x30\x30\2\", \"1-one\"),"
+            "(\"user-1\", 12, \"\x31\x31\2\", \"1-two\"),"
+            "(\"user-1\", 13, \"\x32\x32\2\", \"1-three\"),"
+            "(\"user-1\", 14, \"\x65\x65\2\", \"1-four\"),"
+            "(\"user-1\", 15, \"\x75\x75\2\", \"1-five\"),"
+            "(\"user-2\", 21, \"\x30\x30\2\", \"2-one\"),"
+            "(\"user-2\", 22, \"\x31\x31\2\", \"2-two\"),"
+            "(\"user-2\", 23, \"\x32\x32\2\", \"2-three\"),"
+            "(\"user-2\", 24, \"\x65\x65\2\", \"2-four\"),"
+            "(\"user-2\", 25, \"\x75\x75\2\", \"2-five\");");
+
+        auto create = [&] {
+            CreatePrefixTable(server, sender, options);
+            CreateLevelTable(server, sender, options);
+            CreatePostingTable(server, sender, options);
+        };
+        create();
+        auto recreate = [&] {
+            DropTable(server, sender, "table-prefix");
+            DropTable(server, sender, "table-level");
+            DropTable(server, sender, "table-posting");
+            create();
+        };
+
+        // Full scan baseline.
+        auto [fullPrefix, fullLevel, fullPosting] = DoPrefixKMeans(server, sender, 40, 0, 2,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, 50000);
+        recreate();
+
+        // Resume scan from strictly after (user-1, key=15) — should only process user-2 rows.
+        TString userStr = "user-1";
+        TCell fromCells[2] = {TCell(userStr.data(), userStr.size()), TCell::Make(ui32(15))};
+        TSerializedTableRange resumeRange{TArrayRef<const TCell>{fromCells, 2}, false, {}, false};
+        auto [resumedPrefix, resumedLevel, resumedPosting] = DoPrefixKMeans(server, sender, 40, 0, 2,
+            NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, 50000,
+            0, resumeRange);
+
+        // Full scan contains both users.
+        UNIT_ASSERT(fullPosting.Contains("1-one"));
+        UNIT_ASSERT(fullPosting.Contains("2-one"));
+
+        // Resumed scan skips all user-1 rows.
+        UNIT_ASSERT(!resumedPosting.Contains("1-one"));
+        UNIT_ASSERT(!resumedPosting.Contains("1-two"));
+        UNIT_ASSERT(!resumedPosting.Contains("1-three"));
+        UNIT_ASSERT(!resumedPosting.Contains("1-four"));
+        UNIT_ASSERT(!resumedPosting.Contains("1-five"));
+
+        // Resumed scan contains user-2 rows.
+        UNIT_ASSERT(resumedPosting.Contains("2-one"));
+        UNIT_ASSERT(resumedPosting.Contains("2-two"));
+        UNIT_ASSERT(resumedPosting.Contains("2-three"));
+        UNIT_ASSERT(resumedPosting.Contains("2-four"));
+        UNIT_ASSERT(resumedPosting.Contains("2-five"));
     }
 }
 

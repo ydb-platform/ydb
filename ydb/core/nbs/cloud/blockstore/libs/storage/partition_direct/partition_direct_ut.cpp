@@ -553,6 +553,123 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 expectedData);
         }
     }
+
+    // set errors on 2 persistent buffers and check reading
+    Y_UNIT_TEST(WriteToManyPBuffersFallback)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        bool alreadyOnce{};
+        ui8 singleWriteRequestsCounter{};
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvWritePersistentBuffer::EventType)
+            {
+                ++singleWriteRequestsCounter;
+                return true;
+            }
+
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvWritePersistentBuffersResult::EventType)
+            {
+                if (!alreadyOnce) {
+                    alreadyOnce = true;
+
+                    auto* msg =
+                        ev->Get<NDDisk::TEvWritePersistentBuffersResult>();
+                    auto& pb0Result = (*msg->Record.MutableResult())[0];
+                    pb0Result.MutableResult()->SetStatus(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus_E_ERROR);
+                    auto& pb1Result = (*msg->Record.MutableResult())[1];
+                    pb1Result.MutableResult()->SetStatus(
+                        NKikimrBlobStorage::NDDisk::TReplyStatus_E_ERROR);
+
+                    runtime->Schedule(
+                        TDuration::Seconds(3),
+                        ev.release(),
+                        nullptr,
+                        nodeId);
+
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        auto expectedData = TString(1024, 'A') + TString(1024, 'B') +
+                            TString(1024, 'C') + TString(1024, 'D');
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+
+            // 2 - the number of errors which we set in this test
+            // 3 - the number of TEvWritePersistentBuffer requests in the
+            // blobstorage's implementation of TEvWritePersistentBuffers.
+            // This test will fail in case of the implementation's changing - we
+            // will have to fix it.
+            UNIT_ASSERT_VALUES_EQUAL(singleWriteRequestsCounter, 2 + 3);
+        }
+
+        // Read written block from persistent buffer
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.SetBlocksCount(1);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                expectedData);
+        }
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

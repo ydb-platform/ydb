@@ -128,6 +128,11 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
          i < QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
          ++i)
     {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "trying to send fallback writeRequest to %d handoff",
+            i);
         SendWriteRequest(handoffLocations[i]);
     }
 }

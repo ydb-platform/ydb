@@ -1704,11 +1704,6 @@ TExprBase DqBuildHashJoin(
                             .Name().Build("BuildSide")
                             .Value<TCoAtom>().Build("Left")
                             .Done());
-                    joinSettings.push_back(
-                        Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("blockHashJoinBuildSideLeft")
-                            .Value<TCoAtom>().Build("true")
-                            .Done());  
                 }
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import logging
 import os
 import shutil
 import sys
@@ -24,6 +25,7 @@ except ImportError:
 from ydb.operation import OperationClient
 from ydb import issues as ydb_issues
 
+logger = logging.getLogger(__name__)
 
 _EXPORT_PROGRESSES = {}
 _IMPORT_PROGRESSES = {}
@@ -43,6 +45,7 @@ class ExportToFsOperation:
     def __init__(self, rpc_state, response, driver):
         ydb_issues._process_response(response.operation)
         self.id = response.operation.id
+        self.ready = response.operation.ready
         self._driver = driver
         metadata = ydb_export_pb2.ExportToFsMetadata()
         response.operation.metadata.Unpack(metadata)
@@ -54,6 +57,7 @@ class ImportFromFsOperation:
     def __init__(self, rpc_state, response, driver):
         ydb_issues._process_response(response.operation)
         self.id = response.operation.id
+        self.ready = response.operation.ready
         self._driver = driver
         metadata = ydb_import_pb2.ImportFromFsMetadata()
         response.operation.metadata.Unpack(metadata)
@@ -166,6 +170,7 @@ class WorkloadNfsExportImport(WorkloadBase):
             self._stats[key] += 1
 
     def _create_tables(self, table_names: List[str]):
+        logger.info("[schema] Creating %d tables under prefix %s", len(table_names), table_names[0].rsplit("/", 1)[0] if table_names else "?")
         for name in table_names:
             if self.is_stop_requested():
                 return
@@ -180,8 +185,10 @@ class WorkloadNfsExportImport(WorkloadBase):
                 """,
                 True
             )
+        logger.info("[schema] Created %d tables", len(table_names))
 
     def _create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
+        logger.info("[schema] Creating %d topics with consumers", len(topic_names))
         for name in topic_names:
             if self.is_stop_requested():
                 return
@@ -192,6 +199,7 @@ class WorkloadNfsExportImport(WorkloadBase):
                         f"ALTER TOPIC `{name}` ADD CONSUMER {consumer};",
                         True
                     )
+        logger.info("[schema] Created %d topics", len(topic_names))
 
     def _insert_into_table(self, table_name: str, rows: List[Dict[str, Any]]):
         for row in rows:
@@ -205,6 +213,7 @@ class WorkloadNfsExportImport(WorkloadBase):
             )
 
     def _insert_rows(self, tables: List[str]):
+        logger.info("[data] Inserting rows into %d tables", len(tables))
         for idx, table in enumerate(tables, 1):
             if self.is_stop_requested():
                 return
@@ -213,6 +222,7 @@ class WorkloadNfsExportImport(WorkloadBase):
                 for row_id in range(1, 6)
             ]
             self._insert_into_table(table, rows)
+        logger.info("[data] Inserted rows into %d tables", len(tables))
 
     def _op_forget(self, op_id):
         try:
@@ -224,9 +234,14 @@ class WorkloadNfsExportImport(WorkloadBase):
         """Check export status. Returns terminal status string or None if still in progress."""
         try:
             op = self.fs_client.get_export_operation(export_id)
-            if op.progress in ("DONE", "CANCELLED", "UNSPECIFIED"):
-                return op.progress
-        except Exception:
+            logger.debug("[export] Poll op=%s ready=%s progress=%s", export_id, op.ready, op.progress)
+            if op.ready:
+                return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+        except ydb_issues.NotFound:
+            logger.debug("[export] Poll op=%s: NOT_FOUND (auto-dropped, treating as DONE)", export_id)
+            return "DONE"
+        except Exception as e:
+            logger.warning("[export] Poll op=%s failed: %s", export_id, e)
             return "ERROR"
         return None
 
@@ -234,9 +249,14 @@ class WorkloadNfsExportImport(WorkloadBase):
         """Check import status. Returns terminal status string or None if still in progress."""
         try:
             op = self.fs_client.get_import_operation(import_id)
-            if op.progress in ("DONE", "CANCELLED", "UNSPECIFIED"):
-                return op.progress
-        except Exception:
+            logger.debug("[import] Poll op=%s ready=%s progress=%s", import_id, op.ready, op.progress)
+            if op.ready:
+                return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+        except ydb_issues.NotFound:
+            logger.debug("[import] Poll op=%s: NOT_FOUND (auto-dropped, treating as DONE)", import_id)
+            return "DONE"
+        except Exception as e:
+            logger.warning("[import] Poll op=%s failed: %s", import_id, e)
             return "ERROR"
         return None
 
@@ -262,8 +282,13 @@ class WorkloadNfsExportImport(WorkloadBase):
                         self._stats["export_error"] += 1
             for eid, _ in completed:
                 self._op_forget(eid)
+            logger.info("[cleanup] Cleaned up %d exports: %s",
+                        len(completed), ", ".join(f"{eid[:12]}..={s}" for eid, s in completed))
 
     def _wait_for_export_slot(self):
+        if len(self.export_in_progress) >= self.export_limit:
+            logger.info("[export] Waiting for export slot (%d/%d in progress)",
+                        len(self.export_in_progress), self.export_limit)
         while len(self.export_in_progress) >= self.export_limit:
             if self.is_stop_requested():
                 return
@@ -276,6 +301,8 @@ class WorkloadNfsExportImport(WorkloadBase):
         self._wait_for_export_slot()
         if self.is_stop_requested():
             return None
+        logger.info("[export] Starting ExportToFs run_id=%s base_path=%s prefix=%s",
+                    run_id, base_path, source_prefix)
         result = self.fs_client.export_to_fs(
             base_path=base_path,
             items=[(source_prefix, source_prefix)],
@@ -284,26 +311,38 @@ class WorkloadNfsExportImport(WorkloadBase):
         with self.lock:
             self._stats["export_started"] += 1
             self.export_in_progress.append(result.id)
+        logger.info("[export] ExportToFs started: op=%s progress=%s", result.id, result.progress)
         return result.id
 
-    def _wait_op_done(self, op_id, poll_fn, timeout=120):
+    def _wait_op_done(self, op_id, poll_fn, op_type="op", timeout=120):
+        logger.info("[%s] Waiting for op=%s (timeout=%ds)", op_type, op_id, timeout)
         deadline = time.time() + timeout
+        poll_count = 0
         while time.time() < deadline:
             if self.is_stop_requested():
+                logger.info("[%s] Stop requested while waiting for op=%s", op_type, op_id)
                 return None
             status = poll_fn(op_id)
+            poll_count += 1
             if status is not None:
+                logger.info("[%s] Op=%s finished with status=%s after %d polls", op_type, op_id, status, poll_count)
                 self._op_forget(op_id)
                 return status
             time.sleep(1)
+        logger.warning("[%s] Op=%s timed out after %ds (%d polls)", op_type, op_id, timeout, poll_count)
         return None
 
     def _export_loop(self):
         """Continuously create data and export to NFS."""
+        iteration = 0
+        logger.info("[export_loop] Started, nfs_mount_path=%s", self.nfs_mount_path)
         while not self.is_stop_requested():
+            iteration += 1
             run_id = f"{uuid.uuid1()}".replace("-", "_")
             prefix = f"export_block_{run_id}"
             base_path = os.path.join(self.nfs_mount_path, f"export_{run_id}")
+
+            logger.info("[export_loop] === Iteration %d, run_id=%s ===", iteration, run_id[:16])
 
             tables = [f"{prefix}/table{i}" for i in range(1, 10)]
             topics = [f"{prefix}/topic{i}" for i in range(1, 10)]
@@ -325,15 +364,22 @@ class WorkloadNfsExportImport(WorkloadBase):
             try:
                 self._do_export(base_path, prefix, run_id)
             except Exception as e:
-                print(f"Export error: {e}", file=sys.stderr)
+                logger.error("[export_loop] Export failed: %s", e, exc_info=True)
                 self._inc_stat("export_error")
+
+        logger.info("[export_loop] Stopped after %d iterations", iteration)
 
     def _export_import_loop(self):
         """Export data to NFS, then import it back (round-trip)."""
+        iteration = 0
+        logger.info("[roundtrip_loop] Started, nfs_mount_path=%s", self.nfs_mount_path)
         while not self.is_stop_requested():
+            iteration += 1
             run_id = f"{uuid.uuid1()}".replace("-", "_")
             prefix = f"rt_block_{run_id}"
             base_path = os.path.join(self.nfs_mount_path, f"roundtrip_{run_id}")
+
+            logger.info("[roundtrip_loop] === Iteration %d, run_id=%s ===", iteration, run_id[:16])
 
             tables = [f"{prefix}/table{i}" for i in range(1, 4)]
             self._create_tables(tables)
@@ -348,7 +394,7 @@ class WorkloadNfsExportImport(WorkloadBase):
                 if export_id is None:
                     break
 
-                status = self._wait_op_done(export_id, self._poll_export)
+                status = self._wait_op_done(export_id, self._poll_export, op_type="export")
                 if status is None or self.is_stop_requested():
                     break
                 with self.lock:
@@ -360,25 +406,32 @@ class WorkloadNfsExportImport(WorkloadBase):
                         self._stats["export_error"] += 1
 
                 if status != "DONE":
+                    logger.warning("[roundtrip_loop] Export finished with status=%s, skipping import", status)
                     continue
 
-                import_dest = f"imported_{run_id}"
+                db = self.client.database.rstrip("/")
+                import_items = [(t, f"{db}/imported_{t}") for t in tables]
+                logger.info("[roundtrip_loop] Starting ImportFromFs base_path=%s items=%s", base_path, import_items)
                 result = self.fs_client.import_from_fs(
                     base_path=base_path,
-                    destination_path=import_dest,
+                    items=import_items,
                 )
                 self._inc_stat("import_started")
+                logger.info("[roundtrip_loop] ImportFromFs started: op=%s progress=%s", result.id, result.progress)
 
-                imp_status = self._wait_op_done(result.id, self._poll_import)
+                imp_status = self._wait_op_done(result.id, self._poll_import, op_type="import")
                 if imp_status == "DONE":
                     self._inc_stat("import_done")
+                    logger.info("[roundtrip_loop] Import DONE for run_id=%s", run_id[:16])
                 elif imp_status == "CANCELLED":
                     self._inc_stat("import_cancelled")
+                    logger.warning("[roundtrip_loop] Import CANCELLED for run_id=%s", run_id[:16])
                 else:
                     self._inc_stat("import_error")
+                    logger.error("[roundtrip_loop] Import failed with status=%s for run_id=%s", imp_status, run_id[:16])
 
             except Exception as e:
-                print(f"Export/Import round-trip error: {e}", file=sys.stderr)
+                logger.error("[roundtrip_loop] Round-trip failed: %s", e, exc_info=True)
                 self._inc_stat("export_error")
             finally:
                 try:
@@ -386,6 +439,8 @@ class WorkloadNfsExportImport(WorkloadBase):
                         shutil.rmtree(base_path, ignore_errors=True)
                 except Exception:
                     pass
+
+        logger.info("[roundtrip_loop] Stopped after %d iterations", iteration)
 
     def get_workload_thread_funcs(self):
         return [self._export_loop, self._export_import_loop]
@@ -400,9 +455,13 @@ class WorkloadRunner:
     @staticmethod
     def _setup_nfs():
         nfs_mount_path = os.getenv("NFS_MOUNT_PATH")
+        ld_preload = os.getenv("LD_PRELOAD")
+        logger.info("[setup] NFS_MOUNT_PATH=%s", nfs_mount_path)
+        logger.info("[setup] LD_PRELOAD=%s", ld_preload)
         if not nfs_mount_path:
             raise RuntimeError("NFS_MOUNT_PATH environment variable is not set")
         os.makedirs(nfs_mount_path, exist_ok=True)
+        logger.info("[setup] NFS mount directory ready: %s", nfs_mount_path)
         return nfs_mount_path
 
     def __enter__(self):
@@ -412,6 +471,7 @@ class WorkloadRunner:
         pass
 
     def run(self):
+        logger.info("[runner] Starting workload, duration=%ds", self.duration)
         stop = threading.Event()
         nfs_mount_path = self._setup_nfs()
         workloads = [
@@ -420,14 +480,27 @@ class WorkloadRunner:
 
         for w in workloads:
             w.start()
+            logger.info("[runner] Started workload thread: %s", w.name)
+
         started_at = time.time()
         while time.time() - started_at < self.duration:
-            print(f"Elapsed {int(time.time() - started_at)} seconds, stat:", file=sys.stderr)
+            elapsed = int(time.time() - started_at)
             for w in workloads:
-                print(f"\t{w.name}: {w.get_stat()}", file=sys.stderr)
+                stat = w.get_stat()
+                msg = f"[runner] Elapsed {elapsed}s | {w.name}: {stat}"
+                logger.info(msg)
+                print(msg, file=sys.stderr)
             time.sleep(10)
+
+        logger.info("[runner] Duration reached, sending stop signal")
         stop.set()
-        print("Waiting for stop...", file=sys.stderr)
+
         for w in workloads:
+            logger.info("[runner] Waiting for %s to finish (timeout=30s)", w.name)
             w.join(timeout=30)
-        print("Stopped", file=sys.stderr)
+            if w.is_alive():
+                logger.warning("[runner] %s did not stop within 30s", w.name)
+            else:
+                logger.info("[runner] %s finished", w.name)
+
+        logger.info("[runner] All workloads stopped")

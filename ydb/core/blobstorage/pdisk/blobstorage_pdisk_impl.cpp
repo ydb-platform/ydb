@@ -1694,6 +1694,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         double pdiskUsage = Keeper.GetPDiskUsage();
         pDiskMetrics.SetPDiskUsage(pdiskUsage);
         pdiskState.SetPDiskUsage(pdiskUsage);
+
+        auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
+        pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);

@@ -19,17 +19,18 @@ namespace NActors {
     struct TChunk;
     struct TSnapshotData;
 
-    struct TInMemoryMetricsConfig {
-        ui64 MemoryBytes = 0;
-        ui32 ChunkSizeBytes = 4096;
-        ui32 MaxLines = 0;
-    };
-
     struct TLabel {
         TString Name;
         TString Value;
 
         bool operator==(const TLabel& rhs) const noexcept;
+    };
+
+    struct TInMemoryMetricsConfig {
+        ui64 MemoryBytes = 0;
+        ui32 ChunkSizeBytes = 4096;
+        ui32 MaxLines = 0;
+        TVector<TLabel> CommonLabels;
     };
 
     struct TLineKey {

@@ -65,6 +65,30 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(timestamps[0] <= timestamps[1]);
     }
 
+    Y_UNIT_TEST(CommonLabelsArePrepended) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+            .CommonLabels = {{
+                TLabel{"node_id", "42"},
+            }},
+        });
+
+        TLabel label{"kind", "basic"};
+        auto writer = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+
+        auto lines = registry.Snapshot().Lines();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "node_id");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "42");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[1].Name, "kind");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[1].Value, "basic");
+    }
+
     Y_UNIT_TEST(ClosePreservesHistory) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,

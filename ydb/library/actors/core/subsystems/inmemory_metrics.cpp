@@ -281,10 +281,13 @@ namespace NActors {
     TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
     namespace {
-        TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
+        TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> commonLabels, std::span<const TLabel> labels) {
             TLineKey key;
             key.Name = TString(name);
-            key.Labels.reserve(labels.size());
+            key.Labels.reserve(commonLabels.size() + labels.size());
+            for (const auto& label : commonLabels) {
+                key.Labels.push_back(label);
+            }
             for (const auto& label : labels) {
                 key.Labels.push_back(label);
             }
@@ -315,7 +318,7 @@ namespace NActors {
     }
 
     TLineWriter TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
-        auto key = MakeLineKey(name, labels);
+        auto key = MakeLineKey(name, Impl->Config.CommonLabels, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
         if (Impl->LinesByKey.contains(key)) {

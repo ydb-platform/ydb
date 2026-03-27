@@ -65,9 +65,15 @@ namespace {
         return targets;
     }
 
+    inline TStringBuf GetInMemoryMetricName(TStringBuf target) {
+        const size_t pos = target.find('{');
+        return pos == TStringBuf::npos ? target : target.SubString(0, pos);
+    }
+
     inline bool MatchGraphiteQuery(TStringBuf query, TStringBuf value) {
+        const TStringBuf candidate = query.find('{') == TStringBuf::npos ? GetInMemoryMetricName(value) : value;
         if (query.empty()) {
-            return value.empty();
+            return candidate.empty();
         }
 
         size_t queryPos = 0;
@@ -75,8 +81,8 @@ namespace {
         size_t lastStar = TStringBuf::npos;
         size_t lastMatch = 0;
 
-        while (valuePos < value.size()) {
-            if (queryPos < query.size() && (query[queryPos] == value[valuePos] || query[queryPos] == '?')) {
+        while (valuePos < candidate.size()) {
+            if (queryPos < query.size() && (query[queryPos] == candidate[valuePos] || query[queryPos] == '?')) {
                 ++queryPos;
                 ++valuePos;
             } else if (queryPos < query.size() && query[queryPos] == '*') {
@@ -451,6 +457,7 @@ private:
 
     TVector<TSeries> EvaluateTarget(const TString& expression,
             const THashMap<TString, const TLineSnapshot*>& linesByTarget,
+            const THashMap<TString, TVector<const TLineSnapshot*>>& linesByName,
             const std::optional<ui64>& from,
             const std::optional<ui64>& until,
             ui32 maxDataPoints) const
@@ -459,7 +466,7 @@ private:
         TVector<TString> args;
         if (TryParseGraphiteFunction(expression, functionName, args)) {
             if (functionName == "aliasSub" && args.size() == 3) {
-                auto series = EvaluateTarget(args[0], linesByTarget, from, until, maxDataPoints);
+                auto series = EvaluateTarget(args[0], linesByTarget, linesByName, from, until, maxDataPoints);
                 try {
                     const std::string patternString(UnquoteGraphiteString(args[1]).c_str());
                     const std::regex pattern(patternString);
@@ -475,7 +482,7 @@ private:
                 return series;
             }
             if (functionName == "alias" && args.size() == 2) {
-                auto series = EvaluateTarget(args[0], linesByTarget, from, until, maxDataPoints);
+                auto series = EvaluateTarget(args[0], linesByTarget, linesByName, from, until, maxDataPoints);
                 const TString alias = UnquoteGraphiteString(args[1]);
                 for (auto& line : series) {
                     line.Target = alias;
@@ -487,6 +494,16 @@ private:
         if (const auto it = linesByTarget.find(expression); it != linesByTarget.end()) {
             return {BuildSeries(*it->second, from, until, maxDataPoints)};
         }
+        if (expression.find('{') == TString::npos) {
+            if (const auto it = linesByName.find(expression); it != linesByName.end()) {
+                TVector<TSeries> series;
+                series.reserve(it->second.size());
+                for (const auto* line : it->second) {
+                    series.push_back(BuildSeries(*line, from, until, maxDataPoints));
+                }
+                return series;
+            }
+        }
 
         return {TSeries{
             .Target = expression,
@@ -497,10 +514,13 @@ private:
     TString BuildResponseJson(const TInMemoryMetricsRegistry& inMemoryMetrics) {
         const auto snapshot = inMemoryMetrics.Snapshot();
         THashMap<TString, const TLineSnapshot*> linesByTarget;
+        THashMap<TString, TVector<const TLineSnapshot*>> linesByName;
         const auto lines = snapshot.Lines();
         linesByTarget.reserve(lines.size());
+        linesByName.reserve(lines.size());
         for (const auto& line : lines) {
             linesByTarget.emplace(BuildInMemoryMetricTarget(line), &line);
+            linesByName[line.Name].push_back(&line);
         }
 
         const std::optional<ui64> from = GetFrom();
@@ -510,7 +530,7 @@ private:
         TVector<TSeries> series;
         series.reserve(Targets.size());
         for (const auto& target : Targets) {
-            auto resolved = EvaluateTarget(target, linesByTarget, from, until, maxDataPoints);
+            auto resolved = EvaluateTarget(target, linesByTarget, linesByName, from, until, maxDataPoints);
             series.insert(series.end(),
                 std::make_move_iterator(resolved.begin()),
                 std::make_move_iterator(resolved.end()));

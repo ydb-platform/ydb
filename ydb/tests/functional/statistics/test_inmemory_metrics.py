@@ -43,6 +43,10 @@ def wait_for_target(base_url, predicate):
 def test_inmemory_metrics_are_exposed(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
 
     last_find = None
 
@@ -62,11 +66,9 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
 
         last_find = response.json()
         logger.info("inmemory graphite find: %s", last_find)
-        return any(item.get("id") == TARGET for item in last_find)
+        return any(item.get("id") == target for item in last_find)
 
     assert wait_for(graphite_find_ready, timeout_seconds=30, step_seconds=1.0), last_find
-
-    wait_for_target(base_url, lambda target: target == TARGET)
 
     last_series = None
 
@@ -93,7 +95,8 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
 
     datapoints = last_series[0]["datapoints"]
-    assert_that(last_series[0]["target"], equal_to(TARGET))
+    assert_that(last_series[0]["target"], equal_to(target))
+    assert "node_id" in last_series[0]["tags"]
     assert_that(len(datapoints), greater_than(0))
     assert_that(datapoints[-1][1], greater_than(0))
 
@@ -103,7 +106,7 @@ def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
     base_url = f"http://localhost:{mon_port}"
     target = wait_for_target(
         base_url,
-        lambda metric: metric.startswith("harmonizer.pool.avg_used_cpu_x1e6{"),
+        lambda metric: metric.startswith('harmonizer.pool.avg_used_cpu_x1e6{node_id="'),
     )
 
     last_series = None
@@ -140,6 +143,10 @@ def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
 def test_inmemory_metrics_render_supports_graphite_alias_sub_json_format(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
+    metric_target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{AWAKENING_TARGET}{{node_id="'),
+    )
     target = 'aliasSub(harmonizer.avg_awakening_time_us, "(^.*$)", "\\1 A")'
 
     last_series = None
@@ -165,12 +172,12 @@ def test_inmemory_metrics_render_supports_graphite_alias_sub_json_format(ydb_clu
         logger.info("inmemory aliased metric series: %s", last_series)
         return (
             bool(last_series)
-            and last_series[0].get("target") == f"{AWAKENING_TARGET} A"
+            and last_series[0].get("target") == f"{metric_target} A"
             and bool(last_series[0].get("datapoints"))
         )
 
     assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
 
     datapoints = last_series[0]["datapoints"]
-    assert_that(last_series[0]["target"], equal_to(f"{AWAKENING_TARGET} A"))
+    assert_that(last_series[0]["target"], equal_to(f"{metric_target} A"))
     assert_that(len(datapoints), greater_than(0))

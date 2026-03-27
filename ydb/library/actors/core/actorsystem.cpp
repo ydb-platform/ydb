@@ -176,6 +176,12 @@ namespace NActors {
         if (!GetSubSystem<TInMemoryMetricsRegistry>()) {
             RegisterSubSystem(MakeInMemoryMetricsRegistry({
                 .MemoryBytes = DefaultInMemoryMetricsMemoryBytes,
+                .CommonLabels = {{
+                    TLabel{
+                        .Name = "node_id",
+                        .Value = ToString(NodeId),
+                    },
+                }},
             }));
         }
     }

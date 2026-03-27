@@ -85,18 +85,6 @@
   const driver = new Driver('grpc://localhost:2136/local')
   await driver.ready()
   const sql = query(driver)
-
-  function convertVectorToBytes(vector) {
-    const bytes = new Uint8Array(vector.length * 4 + 1);
-    const view = new DataView(bytes.buffer);
-
-    for (let i = 0; i < vector.length; i++) {
-        view.setFloat32(i * 4, vector[i], true);
-    }
-
-    bytes[bytes.length - 1] = 0x01;
-    return bytes;
-  }
   ```
 
 {% endlist %}
@@ -383,11 +371,23 @@
 - JavaScript
 
   ```javascript
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+
   const items = [
     {
       id: "first_doc",
       document: "My Document",
-      embedding: new Float32Array([1.5, 2.5, 3.5])
+      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
     }
   ]
 

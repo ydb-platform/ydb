@@ -322,7 +322,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId,
-    DDiskIdToHostIndex& dDiskIdToHostIndex)
+    TDDiskIdToHostIndex& dDiskIdToHostIndex)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
@@ -330,16 +330,18 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
         NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
-    std::vector<std::tuple<ui32, ui32, ui32>> disksIds(hostIndexes.size());
+    std::vector<NKikimr::NDDisk::TPersistentBufferId> disksIds(
+        hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
-        auto pbufferIdTuple = std::make_tuple(
+
+        NKikimr::NDDisk::TPersistentBufferId pbufferId{
             ddiskId.NodeId,
             ddiskId.PDiskId,
-            ddiskId.DDiskSlotId);
-        disksIds.push_back(pbufferIdTuple);
-        dDiskIdToHostIndex.insert({pbufferIdTuple, hostIndex});
+            ddiskId.DDiskSlotId};
+        disksIds.push_back(pbufferId);
+        dDiskIdToHostIndex.insert({pbufferId, hostIndex});
     }
 
     if (!Initialized) {
@@ -405,7 +407,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                         const auto& pbufferId =
                             singlePBufferResponse.GetPersistentBufferId();
                         dbgResponse.Responses.emplace_back(
-                            std::make_tuple(
+                            NKikimr::NDDisk::TPersistentBufferId(
                                 pbufferId.GetNodeId(),
                                 pbufferId.GetPDiskId(),
                                 pbufferId.GetDDiskSlotId()),

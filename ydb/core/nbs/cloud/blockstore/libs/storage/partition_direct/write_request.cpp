@@ -73,7 +73,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
         Range,
         Request->Sglist,
         NWilson::TTraceId(TraceId),
-        dDiskIdToHostIndex);
+        DDiskIdToHostIndex);
 
     future.Subscribe(
         [self = shared_from_this()](
@@ -86,8 +86,8 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
 {
     for (const auto& pbufferResponse: response.Responses) {
         const auto& pbufferDiskId = pbufferResponse.PersistentBufferId;
-        auto hostId = dDiskIdToHostIndex.find(pbufferDiskId);
-        if (hostId == dDiskIdToHostIndex.end()) {
+        auto hostId = DDiskIdToHostIndex.find(pbufferDiskId);
+        if (hostId == DDiskIdToHostIndex.end()) {
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,

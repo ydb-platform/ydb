@@ -64,7 +64,7 @@ private:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
-    DDiskIdToHostIndex dDiskIdToHostIndex;
+    TDDiskIdToHostIndex DDiskIdToHostIndex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

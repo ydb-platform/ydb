@@ -32,13 +32,13 @@ struct TDBGWriteBlocksToManyPBuffersResponse
     struct TSinglePersistentBufferResult
     {
         TSinglePersistentBufferResult(
-            std::tuple<ui32, ui32, ui32> persistentBufferId,
+            NKikimr::NDDisk::TPersistentBufferId persistentBufferId,
             NProto::TError error)
-            : PersistentBufferId(std::move(persistentBufferId))
+            : PersistentBufferId(persistentBufferId)
             , Error(std::move(error))
         {}
 
-        std::tuple<ui32, ui32, ui32> PersistentBufferId;
+        NKikimr::NDDisk::TPersistentBufferId PersistentBufferId;
         NProto::TError Error;
     };
 
@@ -90,8 +90,10 @@ struct TAggregatedListPBufferResponse
     TMap<ui8, TListPBufferMetaVector> Meta;
 };
 
-// TODO переименовать
-using DDiskIdToHostIndex = THashMap<std::tuple<ui32, ui32, ui32>, ui8>;
+using TDDiskIdToHostIndex = THashMap<
+    NKikimr::NDDisk::TPersistentBufferId,
+    ui8,
+    NKikimr::NDDisk::TPersistentBufferId::Hash>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -138,7 +140,7 @@ public:
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId,
-        DDiskIdToHostIndex& dDiskIdToHostIndex) = 0;
+        TDDiskIdToHostIndex& dDiskIdToHostIndex) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -226,7 +228,7 @@ public:
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId,
-        DDiskIdToHostIndex& dDiskIdToHostIndex) override;
+        TDDiskIdToHostIndex& dDiskIdToHostIndex) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,

@@ -47,17 +47,55 @@ bool MatchesStatic(const NResourcePool::TClassifierSettings& s, const TClassifyC
 }
 
 bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& s) {
-    return s.FullScan.has_value();
+    return s.FullScanOn.has_value();
 }
 
-bool MatchesDynamic(const NResourcePool::TClassifierSettings& s, const TPreparedQueryHolder&, const ETableReadType& maxReadType) {
-    if (!s.FullScan) {
+bool MatchFullScanFor(const TString& tablePath, const NKqpProto::TKqpPhyQuery& phyQuery) {
+    for (const auto& tx : phyQuery.GetTransactions()) {
+        for (const auto& stage : tx.GetStages()) {
+            for (const auto& op : stage.GetTableOps()) {
+                if (op.GetTable().GetPath() != tablePath) {
+                    continue;
+                }
+
+                if (op.HasReadRange()) {
+                    // Standard Row-store ReadRange:
+                    // A Full Scan occurs if both 'From' and 'To' key bounds are empty,
+                    // meaning the iterator starts at the beginning and reads until the end.
+                    const auto& range = op.GetReadRange().GetKeyRange();
+                    if (range.GetFrom().ValuesSize() == 0 && range.GetTo().ValuesSize() == 0) {
+                        return true;
+                    }
+                }
+                else if (op.HasReadRanges()) {
+                    // Multi-range or In-list ReadRanges:
+                    // In KQP, if the KeyRanges parameter name is empty, it indicates 
+                    // that no specific key filters are provided, resulting in a full table scan.
+                    if (op.GetReadRanges().GetKeyRanges().GetParamName().empty()) {
+                        return true;
+                    }
+                }
+                else if (op.HasReadOlapRange()) {
+                    // Column-store (OLAP) ReadRanges:
+                    // Similar to Row-store, an empty ParamName for KeyRanges tells the 
+                    // column shard to scan all available data blocks.
+                    if (op.GetReadOlapRange().GetKeyRanges().GetParamName().empty()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+bool MatchesDynamic(const NResourcePool::TClassifierSettings& s, const TPreparedQueryHolder& q) {
+    if (!s.FullScanOn || !*s.FullScanOn) {
         return true;
     }
 
-    // dummy check, do not use it in a prod
-    const bool isFullScanQuery = (maxReadType == ETableReadType::FullScan);
-    return *s.FullScan == isFullScanQuery;
+    return MatchFullScanFor(*s.FullScanOn, q.GetPhysicalQuery());
 }
 
 } // namespace anonymous
@@ -123,8 +161,7 @@ void TWmQueryClassifier::PreCompileClassify() {
     ResolveToDefault();
 }
 
-IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
-                                                                                const ETableReadType& maxReadType) const {
+IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const {
     Y_ENSURE(Configs, "Post compile classify without configuration");
     Y_ENSURE(ResumeRank, "Post compile classify without next rank");
 
@@ -135,7 +172,7 @@ IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(
             continue;
         }
 
-        if (!MatchesDynamic(settings, preparedQuery, maxReadType)){
+        if (!MatchesDynamic(settings, preparedQuery)){
             continue;
         }
 

@@ -786,7 +786,7 @@ struct Schema : NIceDb::Schema {
         struct MemberName   : Column<4, NScheme::NTypeIds::Utf8> {};
         struct ResourcePool : Column<5, NScheme::NTypeIds::Utf8> {};
         struct AppName      : Column<6, NScheme::NTypeIds::Utf8> {};
-        struct FullScan     : Column<7, NScheme::NTypeIds::Bool> {};
+        struct FullScanOn   : Column<7, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -795,7 +795,7 @@ struct Schema : NIceDb::Schema {
             MemberName,
             ResourcePool,
             AppName,
-            FullScan>;
+            FullScanOn>;
     };
 
     struct ShowCreate : Table<21> {

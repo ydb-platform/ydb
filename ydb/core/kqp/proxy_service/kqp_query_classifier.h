@@ -10,7 +10,7 @@
 namespace NKikimr::NKqp {
 
 constexpr char DEFAULT_POOL_ID[] = "default";
-constexpr char REJECT_POOL_ID[] = "reject";
+constexpr char REJECT_POOL_ID[]  = "_reject";
 
 struct TClassifyContext {
     const TString PoolId;
@@ -88,8 +88,7 @@ struct IWmQueryClassifier {
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
-    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
-                                                    const ETableReadType& maxReadType) const = 0;
+    virtual TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const = 0;
 };
 
 
@@ -122,8 +121,7 @@ public:
 
     void PreCompileClassify();
     [[nodiscard]]
-    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery,
-                                            const ETableReadType& maxReadType) const override;
+    TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const override;
 
 private:
     void PendingCompile(i64 rank);

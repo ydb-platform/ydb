@@ -103,9 +103,9 @@ private:
                     const auto& appName = config.GetConfigJson()["app_name"].GetString();
                     return TCell(appName.data(), appName.size());
                 }});
-                insert({TSchema::FullScan::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& fullScan = config.GetConfigJson()["full_scan"].GetBoolean();
-                    return TCell::Make<bool>(fullScan);
+                insert({TSchema::FullScanOn::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& fullScanOn = config.GetConfigJson()["full_scan_on"].GetString();
+                    return TCell(fullScanOn.data(), fullScanOn.size());
                 }});
             }
         };

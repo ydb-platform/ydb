@@ -1021,7 +1021,7 @@ public:
         if (QueryState->QueryClassifier) {
             auto status = QueryState->QueryClassifier->GetPreClassifyResult();
             if (std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(status)) {
-                auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery, QueryState->MaxReadType);
+                auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery);
 
                 std::visit(TOverloaded {
                     [this](const IWmQueryClassifier::TResolvedPoolId& r) {

@@ -12,7 +12,7 @@ inline constexpr i64 CLASSIFIER_COUNT_LIMIT = 1000;
 
 struct TClassifierSettings : public TSettingsBase {
     using TBase = TSettingsBase;
-    using TProperty = std::variant<i64*, TString*, std::optional<TString>*, std::optional<bool>*>;
+    using TProperty = std::variant<i64*, TString*, std::optional<TString>*>;
 
     struct TParser : public TBase::TParser {
         void operator()(i64* setting) const;
@@ -37,7 +37,7 @@ struct TClassifierSettings : public TSettingsBase {
     TString ResourcePool = DEFAULT_POOL_ID;
     std::optional<TString> MemberName;
     std::optional<TString> AppName;
-    std::optional<bool> FullScan;
+    std::optional<TString> FullScanOn;
 };
 
 }  // namespace NKikimr::NResourcePool

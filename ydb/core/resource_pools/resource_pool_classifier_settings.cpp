@@ -60,7 +60,7 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
         {"resource_pool", &ResourcePool},
         {"member_name", &MemberName},
         {"app_name", &AppName},
-        {"full_scan", &FullScan},
+        {"full_scan_on", &FullScanOn},
     };
     return properties;
 }

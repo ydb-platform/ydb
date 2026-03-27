@@ -20,6 +20,10 @@ namespace {
         {">=", EInequalityPredicateType::GreaterOrEqual},
         {"=", EInequalityPredicateType::Equal}};
 
+    /**
+     * Check if a callable is an attribute of some table
+     * Currently just return a boolean and cover only basic cases
+     */
     std::optional<TString> IsAttribute(const TExprBase& input) {
         if (auto member = input.Maybe<TCoMember>()) {
             return TString(member.Cast().Name());
@@ -88,6 +92,7 @@ namespace {
         }
     }
 
+    // Estimates number of rows based on histogram and predicate type.
     template <typename T>
     std::optional<ui64> EstimateInequalityPredicateByType(const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator, T val,
                                                           EInequalityPredicateType predicate) {
@@ -106,6 +111,7 @@ namespace {
         return std::nullopt;
     }
 
+    // Returns an opposite predicate.
     EInequalityPredicateType GetOppositePredicateType(EInequalityPredicateType predicate) {
         switch (predicate) {
             case EInequalityPredicateType::Less:
@@ -121,6 +127,7 @@ namespace {
         }
     }
 
+    // Returns a number of rows based on predicate.
     std::optional<ui64> EstimateInequalityPredicateByHistogram(NYql::NNodes::TExprBase maybeLiteral, const TString& columnType,
                                                                const std::shared_ptr<NKikimr::TEqWidthHistogramEstimator>& estimator,
                                                                EInequalityPredicateType predicate) {
@@ -150,6 +157,7 @@ namespace {
                 ui16 val = FromString<ui16>(value);
                 return EstimateInequalityPredicateByType<ui16>(estimator, val, predicate);
             }
+            // TODO: Add support for other types.
             return std::nullopt;
         }
 
@@ -210,8 +218,8 @@ namespace {
             } else if (columnType == "Uuid") {
                 const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
                 std::pair<ui64, ui64> v{};
-                v.first = uuidData[0];
-                v.second = uuidData[1];
+                v.first = uuidData[0];   // low128
+                v.second = uuidData[1];  // high128
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&v), sizeof(v));
             } else {
                 return std::nullopt;
@@ -247,6 +255,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(const TExprBa
     }
 
     if (auto attribute = IsAttribute(left)) {
+        // It seems like this is not possible in current version.
         if (IsAttribute(right)) {
             return 0.3;
         } else if (IsConstantExprWithParams(right.Ptr())) {
@@ -271,6 +280,7 @@ double TPredicateSelectivityComputer::ComputeInequalitySelectivity(const TExprBa
                 if (!estimation.has_value()) {
                     return DefaultSelectivity(Stats, attributeName);
                 }
+                // Should we compare the number of rows in histogram against `Nrows` and adjust `value` based on that.
                 Y_ASSERT(Stats->Nrows);
                 return estimation.value() / Stats->Nrows;
             }
@@ -291,6 +301,7 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
     }
 
     if (auto attribute = IsAttribute(left)) {
+        // In case both arguments refer to an attribute, return 0.2
         if (IsAttribute(right)) {
             if (collectMembers) {
                 auto maybeMember = IsMember(left);
@@ -301,6 +312,9 @@ double TPredicateSelectivityComputer::ComputeEqualitySelectivity(
             }
             return 0.3;
         }
+        // In case the right side is a constant that can be extracted, compute the selectivity using statistics
+        // Currently, with the basic statistics we just return 1/nRows
+
         else if (IsConstantExprWithParams(right.Ptr())) {
             TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
@@ -345,9 +359,12 @@ double TPredicateSelectivityComputer::ComputeComparisonSelectivity(const TExprBa
     }
 
     if (IsAttribute(left)) {
+        // In case both arguments refer to an attribute, return 0.2
         if (IsAttribute(right)) {
             return 0.3;
         }
+        // In case the right side is a constant that can be extracted, compute the selectivity using statistics
+        // Currently, with the basic statistics we just return 0.5
         else if (IsConstantExprWithParams(right.Ptr())) {
             return 0.5;
         }
@@ -360,6 +377,9 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
     return ComputeImpl(input, false, CollectConstantMembers || CollectMemberEqualities);
 }
 
+/**
+ * ComputeImpl the selectivity of a predicate given statistics about the input it operates on
+ */
 double TPredicateSelectivityComputer::ComputeImpl(
     const TExprBase& input,
     bool underNot,
@@ -367,9 +387,12 @@ double TPredicateSelectivityComputer::ComputeImpl(
 ) {
     std::optional<double> resSelectivity;
 
+    // Process OptionalIf, just return the predicate statistics
     if (auto optIf = input.Maybe<TCoOptionalIf>()) {
         resSelectivity = ComputeImpl(optIf.Cast().Predicate(), underNot, collectMembers);
     }
+
+    // Same with Coalesce
     else if (auto coalesce = input.Maybe<TCoCoalesce>()) {
         resSelectivity = ComputeImpl(coalesce.Cast().Predicate(), underNot, collectMembers);
     }
@@ -383,6 +406,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         auto child = TExprBase(input.Ptr()->ChildRef(0));
         resSelectivity = ComputeImpl(child, underNot, collectMembers);
     }
+
     else if(input.Ptr()->IsCallable("Find") || input.Ptr()->IsCallable("StringContains")) {
         auto member =  TExprBase(input.Ptr()->ChildRef(0));
         auto stringPred = TExprBase(input.Ptr()->ChildRef(1));
@@ -391,6 +415,12 @@ double TPredicateSelectivityComputer::ComputeImpl(
             resSelectivity = 0.1;
         }
     }
+
+    // Process AND, OR and NOT logical operators.
+    // In case of AND we multiply the selectivities, since we assume them to be independent
+    // In case of OR we sum them up, again assuming independence and disjointness, but make sure its at most 1.0
+    // In case of NOT we subtract the argument's selectivity from 1.0
+
     else if (auto andNode = input.Maybe<TCoAnd>()) {
         double tmpSelectivity = 1.0;
         for (size_t i = 0; i < andNode.Cast().ArgCount(); i++) {
@@ -407,42 +437,51 @@ double TPredicateSelectivityComputer::ComputeImpl(
         double argSel = ComputeImpl(notNode.Cast().Value(), !underNot, collectMembers);
         resSelectivity = 1.0 - (argSel == 1.0 ? 0.95 : argSel);
     }
+
+    // Process the equality predicate
     else if (auto equality = input.Maybe<TCoCmpEqual>()) {
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
 
         resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
     }
+
     else if (auto less = input.Maybe<TCoCmpLess>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
         resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Less, collectMembers);
     }
+
     else if (auto less = input.Maybe<TCoCmpGreater>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
         resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::Greater, collectMembers);
     }
+
     else if (auto less = input.Maybe<TCoCmpLessOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
         resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::LessOrEqual, collectMembers);
     }
+
     else if (auto less = input.Maybe<TCoCmpGreaterOrEqual>()) {
         auto left = less.Cast().Left();
         auto right = less.Cast().Right();
 
         resSelectivity = ComputeInequalitySelectivity(left, right, EInequalityPredicateType::GreaterOrEqual, collectMembers);
     }
+
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="=") {
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
 
         resSelectivity = ComputeEqualitySelectivity(left, right, !underNot && collectMembers);
     }
+
+    // Process the not equal predicate
     else if (auto equality = input.Maybe<TCoCmpNotEqual>()) {
         auto left = equality.Cast().Left();
         auto right = equality.Cast().Right();
@@ -450,6 +489,7 @@ double TPredicateSelectivityComputer::ComputeImpl(
         double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
+
     else if (input.Ptr()->IsCallable("PgResolvedOp") && input.Ptr()->ChildPtr(0)->Content()=="<>") {
         auto left = TExprBase(input.Ptr()->ChildPtr(2));
         auto right = TExprBase(input.Ptr()->ChildPtr(3));
@@ -457,6 +497,8 @@ double TPredicateSelectivityComputer::ComputeImpl(
         double eqSel = ComputeEqualitySelectivity(left, right, underNot && collectMembers);
         resSelectivity = 1.0 - (eqSel == 1.0 ? 0.95 : eqSel);
     }
+
+    // Process all other comparison predicates
     else if (auto comparison = input.Maybe<TCoCompare>()) {
         auto left = comparison.Cast().Left();
         auto right = comparison.Cast().Right();
@@ -469,6 +511,8 @@ double TPredicateSelectivityComputer::ComputeImpl(
         resSelectivity =
             ComputeInequalitySelectivity(left, right, StringToInequalityPredicateMap[input.Ptr()->ChildPtr(0)->Content()], collectMembers);
     }
+
+    // Process SqlIn
     else if (input.Ptr()->IsCallable("SqlIn")) {
         auto list = input.Ptr()->ChildPtr(0);
 
@@ -480,15 +524,19 @@ double TPredicateSelectivityComputer::ComputeImpl(
         }
         resSelectivity = tmpSelectivity;
     }
+
     else if (input.Maybe<TCoAtom>()) {
         auto atom = input.Cast<TCoAtom>();
+        // regexp
         if (atom.StringValue().StartsWith("Re2")) {
             resSelectivity = 0.5;
         }
     }
+
     else if (auto maybeIfExpr = input.Maybe<TCoIf>()) {
         auto ifExpr = maybeIfExpr.Cast();
 
+        // attr in ('a', 'b', 'c' ...)
         if (ifExpr.Predicate().Maybe<TCoExists>() && ifExpr.ThenValue().Maybe<TCoJust>() && ifExpr.ElseValue().Maybe<TCoNothing>()) {
             auto list = FindNode<TExprList>(ifExpr.ThenValue());
 

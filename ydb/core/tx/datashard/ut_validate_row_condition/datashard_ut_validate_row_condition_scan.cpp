@@ -30,7 +30,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/test` (key, value) VALUES (1, 1), (2, 2);");
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/test" });
         auto tableId = ResolveTableId(server, sender, "/Root/test");
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
@@ -39,8 +38,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
         request->Record.AddNotNullColumns("value");
-        request->Record.SetSnapshotStep(snapshot.Step);
-        request->Record.SetSnapshotTxId(snapshot.TxId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -72,7 +69,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/test_nulls` (key, value) VALUES (1, 1), (2, NULL);");
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_nulls" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_nulls");
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
@@ -81,8 +77,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
         request->Record.AddNotNullColumns("value");
-        request->Record.SetSnapshotStep(snapshot.Step);
-        request->Record.SetSnapshotTxId(snapshot.TxId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -119,7 +113,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/test_cols` (key, col2, col3) VALUES (1, NULL, 10);");
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_cols" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols");
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
@@ -128,8 +121,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
         request->Record.AddNotNullColumns("col3");
-        request->Record.SetSnapshotStep(snapshot.Step);
-        request->Record.SetSnapshotTxId(snapshot.TxId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -166,7 +157,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
 
         ExecSQL(server, sender, "UPSERT INTO `/Root/test_cols_null` (key, col2, col3) VALUES (1, NULL, 10);");
 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/test_cols_null" });
         auto tableId = ResolveTableId(server, sender, "/Root/test_cols_null");
 
         auto request = MakeHolder<TEvDataShard::TEvValidateRowConditionRequest>();
@@ -175,8 +165,6 @@ Y_UNIT_TEST_SUITE(DataShardCheckConstraintScan) {
         request->Record.SetOwnerId(tableId.PathId.OwnerId);
         request->Record.SetPathId(tableId.PathId.LocalPathId);
         request->Record.AddNotNullColumns("col2");
-        request->Record.SetSnapshotStep(snapshot.Step);
-        request->Record.SetSnapshotTxId(snapshot.TxId);
 
         runtime.SendToPipe(shards[0], sender, request.Release(), 0, GetPipeConfigWithRetries());
 

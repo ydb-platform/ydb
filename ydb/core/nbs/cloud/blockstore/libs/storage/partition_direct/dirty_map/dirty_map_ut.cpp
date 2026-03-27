@@ -33,6 +33,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "0{[D+++..P.....][10..19][0..9]};",
             readHint.DebugPrint());
+
+        // Disable DDisk0 and enable Hand-off-0
+        auto desired = TLocationMask::Make(false, true, true, true, false);
+        auto disabled = TLocationMask::Make(true, false, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D.++*.P.....][10..19][0..9]};",
+            readHint.DebugPrint());
     }
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinished)
@@ -50,6 +59,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "123{[D.....P+++..][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // Disable DDisk0 and enable Hand-off-0
+        auto desired = TLocationMask::Make(false, true, true, true, false);
+        auto disabled = TLocationMask::Make(true, false, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "123{[D.....P.++..][10..19][0..9]};",
             readHint.DebugPrint());
     }
 
@@ -74,6 +93,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
             "124{[D.....P++.*.][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // Disable DDisk0 and enable Hand-off-0
+        auto desired = TLocationMask::Make(false, true, true, true, false);
+        auto disabled = TLocationMask::Make(true, false, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "124{[D.....P.+.*.][10..19][0..9]};",
             readHint.DebugPrint());
     }
 
@@ -119,7 +148,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             flushHint.DebugPrint());
         // Erase hints should be generated after completing flushing.
         auto eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_EQUAL(true, eraseHints.empty());
+        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
 
         // After getting flush hints, we should not get it once again
         {
@@ -164,21 +193,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Erase hints should be generated after completing the required
         // number of write operations.
         eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_EQUAL(false, eraseHints.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            eraseHints[ELocation::PBuffer0].DebugPrint());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            eraseHints[ELocation::PBuffer1].DebugPrint());
-        UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            eraseHints[ELocation::PBuffer2].DebugPrint());
+            "PBuffer0:123[10..19],124[20..29];"
+            "PBuffer1:123[10..19],124[20..29];"
+            "PBuffer2:123[10..19],124[20..29];",
+            eraseHints.DebugPrint());
 
         // After getting erase hints, we should not get it once again
         {
             auto eraseHint = dirtyMap.MakeEraseHint(2);
-            UNIT_ASSERT_EQUAL(true, eraseHint.empty());
+            UNIT_ASSERT_EQUAL(true, eraseHint.Empty());
         }
 
         // After getting erasing errors, we should get erase hints again
@@ -187,10 +211,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.EraseFinished(ELocation::PBuffer2, {}, {123, 124});
 
         eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_EQUAL(false, eraseHints.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[10..19];124[20..29];",
-            eraseHints[ELocation::PBuffer2].DebugPrint());
+            "PBuffer2:123[10..19],124[20..29];",
+            eraseHints.DebugPrint());
 
         // Should still have two inflight items
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap.GetInflightCount());
@@ -198,7 +221,192 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Complete erasing from third pbuffer
         dirtyMap.EraseFinished(ELocation::PBuffer2, {123, 124}, {});
         eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_EQUAL(true, eraseHints.empty());
+        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
+
+        // Should remove inflight items
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Enable additional Hand-off
+        auto desired = TLocationMask::Make(true, true, true, true, false);
+        dirtyMap.UpdateConfig(desired, TLocationMask::MakeEmpty());
+
+        // Written to 2 primary and 1 hand-off
+        TLocationMask requested =
+            TLocationMask::Make(false, true, true, true, false);
+        TLocationMask confirmed = requested;
+
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1->DDisk0:123[10..19];"   // Cross-node
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];"
+            "HOPBuffer0->HODDisk0:123[10..19];",
+            flushHint.DebugPrint());
+
+        // Finish flushes
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+        }
+
+        // Erase hints
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1:123[10..19];"
+            "PBuffer2:123[10..19];"
+            "HOPBuffer0:123[10..19];",
+            eraseHints.DebugPrint());
+
+        // Finish erasing
+        for (const auto& [location, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(location, GetLsns(hint.Segments), {});
+        }
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithOneDisabled)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Enable Hand-off-0 instead of DDisk0
+        auto desired = TLocationMask::Make(false, true, true, true, false);
+        auto disabled = TLocationMask::Make(true, false, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+
+        // Written to two primary and one hand-off
+        TLocationMask requested = desired.PBuffers();
+        TLocationMask confirmed = desired.PBuffers();
+
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];"
+            "HOPBuffer0->HODDisk0:123[10..19];",
+            flushHint.DebugPrint());
+
+        // Finish flushes
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+        }
+
+        // Erase hints
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1:123[10..19];"
+            "PBuffer2:123[10..19];"
+            "HOPBuffer0:123[10..19];",
+            eraseHints.DebugPrint());
+
+        // Finish erasing
+        for (const auto& [location, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(location, GetLsns(hint.Segments), {});
+        }
+    }
+
+    Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithTwoDisabled)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Enable Hand-off-0 instead of DDisk0
+        auto desired = TLocationMask::Make(false, false, true, true, true);
+        auto disabled = TLocationMask::Make(true, true, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+
+        // Written to two primary and one hand-off
+        TLocationMask requested = desired.PBuffers();
+        TLocationMask confirmed = desired.PBuffers();
+
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer2->DDisk2:123[10..19];"
+            "HOPBuffer0->HODDisk0:123[10..19];"
+            "HOPBuffer1->HODDisk1:123[10..19];",
+            flushHint.DebugPrint());
+
+        // Finish flushes
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+        }
+
+        // Erase hints
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer2:123[10..19];"
+            "HOPBuffer0:123[10..19];"
+            "HOPBuffer1:123[10..19];",
+            eraseHints.DebugPrint());
+
+        // Finish erasing
+        for (const auto& [location, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(location, GetLsns(hint.Segments), {});
+        }
+    }
+
+    Y_UNIT_TEST(ShouldNotFlushAndEraseFromDisabled)
+    {
+        TBlocksDirtyMap dirtyMap;
+
+        // Enable Hand-off-0
+        // Disable DDisk0
+        auto desired = TLocationMask::Make(false, true, true, true, false);
+        auto disabled = TLocationMask::Make(true, false, false, false, false);
+        dirtyMap.UpdateConfig(desired, disabled);
+
+        // Written to all primary
+        TLocationMask requested =
+            TLocationMask::Make(true, true, true, false, false);
+        TLocationMask confirmed = requested;
+
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer0->HODDisk0:123[10..19];"
+            "PBuffer1->DDisk1:123[10..19];"
+            "PBuffer2->DDisk2:123[10..19];",
+            flushHint.DebugPrint());
+
+        // Finish flushes
+        for (const auto& [route, hint]: flushHint.GetAllHints()) {
+            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+        }
+
+        // Erase hints
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer1:123[10..19];"
+            "PBuffer2:123[10..19];",
+            eraseHints.DebugPrint());
+
+        // Finish erasing
+        for (const auto& [location, hint]: eraseHints.GetAllHints()) {
+            dirtyMap.EraseFinished(location, GetLsns(hint.Segments), {});
+        }
 
         // Should remove inflight items
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
@@ -225,14 +433,14 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Erase hints should not be generated when PBuffer is locked.
         auto eraseHints = dirtyMap.MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(true, eraseHints.empty());
+        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
 
         // UnLock pbuffer
         dirtyMap.UnlockPBuffer(123);
 
         // Erase hints should be generated when PBuffer is unlocked.
         eraseHints = dirtyMap.MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(false, eraseHints.empty());
+        UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
     }
 
     Y_UNIT_TEST(ShouldLockDDisk)
@@ -258,7 +466,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // FLush hints should be generated when DDisk is unlocked.
         auto eraseHints = dirtyMap.MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(true, eraseHints.empty());
+        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
     }
 
     Y_UNIT_TEST(ShouldRestoreCompletePBuffer)
@@ -399,11 +607,12 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             {123},
             {});
 
-        auto eraseHint = dirtyMap.MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(false, eraseHint.empty());
+        auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "123[0..99];",
-            eraseHint[ELocation::PBuffer0].DebugPrint());
+            "PBuffer0:123[0..99];"
+            "PBuffer1:123[0..99];"
+            "PBuffer2:123[0..99];",
+            eraseHints.DebugPrint());
 
         dirtyMap.EraseFinished(ELocation::PBuffer0, {123}, {});
 

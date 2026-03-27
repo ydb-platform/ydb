@@ -8,6 +8,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TRegion::TRegion(
     NActors::TActorSystem* actorSystem,
+    IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
@@ -19,6 +20,7 @@ TRegion::TRegion(
             (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
+            partitionDirectService,
             TVChunkConfig::Make(vChunkIndex),
             std::move(directBlockGroups[i]),
             syncRequestsBatchSize,

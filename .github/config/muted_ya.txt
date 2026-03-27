@@ -10,12 +10,13 @@ ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tli unittest.[*/*] chunk
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
+ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithData
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
+ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
@@ -24,7 +25,6 @@ ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletReb
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_olap_reboots unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
@@ -46,11 +46,11 @@ ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslEx
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedCert
 ydb/services/ydb/ut TRegisterNodeOverDiscoveryService.ServerWithCertVerification_ClientProvidesCorruptedPrivatekey
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
+ydb/services/ydb/ut YdbQueryService.TestCreateAndAttachSession
 ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-25-4-1_to_prestable-26-2]
 ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_slot_size_manually[restart_stable-25-4-1_to_prestable-26-2]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-26-1-1_and_stable-25-4-1]
-ydb/tests/compatibility test_statistics.py.TestAnalyzeRollingUpdate.test[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-4-1_to_stable-26-1-1-row-False]
 ydb/tests/compatibility/distconf test_compatibility_distconf.py.TestCompatibilityDistConf.test_v2_to_v1_migration[restart_stable-25-4-1_to_stable-26-1-1]
@@ -60,12 +60,11 @@ ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeA
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-26-1-1_to_prestable-26-2]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_insert_to_topic[False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_restart_nodes[False]
+ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
-ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
@@ -78,13 +77,8 @@ ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-std]
 ydb/tests/functional/tenants py3test.[*/*] chunk
-ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[4]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[59]
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
-ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
-ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[21]
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk

@@ -105,8 +105,6 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
-    virtual ui64 GenerateLsn() = 0;
-
     virtual void EstablishConnections() = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
@@ -192,8 +190,6 @@ public:
     // IDirectBlockGroup implementation
 
     TExecutorPtr GetExecutor() override;
-
-    ui64 GenerateLsn() override;
 
     void EstablishConnections() override;
 

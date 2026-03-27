@@ -36,8 +36,9 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 }
 
 TVector<std::shared_ptr<TRegion>> CreateRegions(
+    IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
-    ui64 blockSize,
+    ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig)
 {
@@ -47,6 +48,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     for (size_t i = 0; i < regionsCount; i++) {
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
+            partitionDirectService,
             i,
             directBlockGroups,
             storageConfig.GetSyncRequestsBatchSize(),
@@ -56,6 +58,27 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     return regions;
 }
 
+size_t GetRegionIndex(ui64 blockIndex)
+{
+    return blockIndex / BlocksPerRegion;
+}
+
+size_t GetRegionOffset(ui64 blockIndex)
+{
+    return blockIndex % BlocksPerRegion;
+}
+
+std::pair<size_t, TBlockRange64> TranslateToRegion(
+    const TRequestHeaders& headers)
+{
+    const size_t regionIndex = GetRegionIndex(headers.Range.Start);
+    const size_t regionOffset = GetRegionOffset(headers.Range.Start);
+
+    return std::pair<size_t, TBlockRange64>{
+        regionIndex,
+        TBlockRange64::WithLength(regionOffset, headers.Range.Size())};
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,14 +86,14 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
-    ui32 generation,
     ui64 blockCount,
-    ui64 blockSize,
+    ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , Regions(CreateRegions(
+          this,
           blockCount,
           blockSize,
           std::move(directBlockGroups),
@@ -83,7 +106,6 @@ TFastPathService::TFastPathService(
           tabletId))
 {
     Y_UNUSED(ActorSystem);
-    Y_UNUSED(generation);
 }
 
 NWilson::TTraceId TFastPathService::SpanTrace()
@@ -97,16 +119,6 @@ NWilson::TTraceId TFastPathService::SpanTrace()
     );
 }
 
-size_t TFastPathService::GetRegionIndex(ui64 blockIndex)
-{
-    return blockIndex / BlocksPerRegion;
-}
-
-size_t TFastPathService::GetRegionOffset(ui64 blockIndex)
-{
-    return blockIndex % BlocksPerRegion;
-}
-
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
@@ -115,12 +127,10 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::ReadBlocks,
-        request->Range.Size() * DefaultBlockSize);
+        request->Headers.Range.Size() * DefaultBlockSize);
 
-    const size_t regionIndex = GetRegionIndex(request->Range.Start);
-    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
-    request->RegionRange =
-        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
+    request->RegionRange = regionRange;
 
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
@@ -150,12 +160,11 @@ TFastPathService::WriteBlocksLocal(
 
     Counters.RequestStarted(
         EBlockStoreRequest::WriteBlocks,
-        request->Range.Size() * DefaultBlockSize);
+        request->Headers.Range.Size() * DefaultBlockSize);
 
-    const size_t regionIndex = GetRegionIndex(request->Range.Start);
-    const ui64 regionOffset = GetRegionOffset(request->Range.Start);
-    request->RegionRange =
-        TBlockRange64::WithLength(regionOffset, request->Range.Size());
+    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
+    request->RegionRange = regionRange;
+    request->Lsn = GenerateSequenceNumber();
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
@@ -189,6 +198,11 @@ NThreading::TFuture<TZeroBlocksLocalResponse> TFastPathService::ZeroBlocksLocal(
 void TFastPathService::ReportIOError()
 {
     // TODO: implement
+}
+
+ui64 TFastPathService::GenerateSequenceNumber()
+{
+    return ++SequenceGenerator;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -618,6 +618,72 @@ void TestReverseStreamingScan() {
     }
 }
 
+// Verifies that reverse streaming terminates after the first page (index 0)
+// instead of restarting it forever.
+// Reverse streaming smoke test with bounded page count.
+//
+// This test keeps the dataset small enough to finish quickly while still forcing
+// multiple reverse-streaming pages. It validates that reverse streaming completes
+// and returns all rows.
+void TestReverseStreamingSmallBounded() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(2);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(2);
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+    csControllerGuard->SetOverrideBlobSplitSettings(
+        NOlap::NSplitter::TSplitSettings().SetMinRecordsCount(1));
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    const ui32 numRecords = 32;
+    std::vector<ui64> writeIds;
+    for (ui32 i = 0; i < numRecords; ++i) {
+        TString data = MakeTestBlob({i, i + 1}, table.Schema);
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, table.Schema, true, &writeIds));
+    }
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+    reader.SetReverse(true);
+
+    auto rb = reader.ReadAll();
+
+    Cerr << "ReverseStreamingSmallBounded: finished=" << reader.IsFinished()
+         << ", isError=" << reader.IsError()
+         << ", ackIterations=" << reader.GetIterationsCount()
+         << ", totalPagesCreated=" << csControllerGuard->GetTotalPagesCreated()
+         << ", maxPagesInFlightObserved=" << csControllerGuard->GetMaxPagesInFlightObserved()
+         << Endl;
+
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+    UNIT_ASSERT_GT(csControllerGuard->GetTotalPagesCreated(), 1u);
+}
+
 } // namespace
 
 // Test for extremely low memory limits that force single-record pages
@@ -1418,6 +1484,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(ReverseStreamingScan) {
         TestReverseStreamingScan();
+    }
+
+    Y_UNIT_TEST(ReverseStreamingSmallBounded) {
+        TestReverseStreamingSmallBounded();
     }
 }
 

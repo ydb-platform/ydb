@@ -65,46 +65,55 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
     // In streaming mode, each page runs a fresh fetch+assemble cycle.
     // Advance the page, reset stage state, and restart the original fetch script.
     // Re-entering TDecideStreamingModeStep is safe because HasEarlyPages() guards it.
-    if (IsStreamingMode() && HasMorePages() && StreamingFetchScript) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
-            "event", "ContinueCursor_AdvanceEarlyPage")(
-            "page_index_before", GetCurrentEarlyPageIndex())(
-            "total_pages", GetEarlyPages().size())(
-            "reverse", GetContext()->GetReadMetadata()->IsDescSorted())(
-            "has_more_pages", HasMorePages());
-        AdvanceEarlyPage();
+    if (IsStreamingMode() && StreamingFetchScript) {
+        const bool hasMorePagesBeforeAdvance = HasMorePages();
+        if (hasMorePagesBeforeAdvance) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", "ContinueCursor_AdvanceEarlyPage")(
+                "page_index_before", GetCurrentEarlyPageIndex())(
+                "total_pages", GetEarlyPages().size())(
+                "reverse", GetContext()->GetReadMetadata()->IsDescSorted())(
+                "has_more_pages", hasMorePagesBeforeAdvance);
+            AdvanceEarlyPage();
 
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
-            "event", GetContext()->GetReadMetadata()->IsDescSorted() ?
-                "ContinueCursor_PrevPage_Refetch" : "ContinueCursor_NextPage_Refetch")(
-            "page_index_after", GetCurrentEarlyPageIndex())(
-            "total_pages", GetEarlyPages().size())(
-            "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", GetContext()->GetReadMetadata()->IsDescSorted() ?
+                    "ContinueCursor_PrevPage_Refetch" : "ContinueCursor_NextPage_Refetch")(
+                "page_index_after", GetCurrentEarlyPageIndex())(
+                "total_pages", GetEarlyPages().size())(
+                "reverse", GetContext()->GetReadMetadata()->IsDescSorted());
 
-        // Reset stage state for the next page, but keep EarlyPages and StreamingMode.
-        // Also reset the execution context so TProgramStep creates a fresh iterator;
-        // otherwise it may reuse an exhausted one and crash.
-        MutableExecutionContext().Stop();
-        ScriptCursor.reset();
-        ClearStageData();
-        ResetStageResultForNextPage();
-        InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
-                GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
-            GetRecordsCountOptional()));
+            // Reset stage state for the next page, but keep EarlyPages and StreamingMode.
+            // Also reset the execution context so TProgramStep creates a fresh iterator;
+            // otherwise it may reuse an exhausted one and crash.
+            MutableExecutionContext().Stop();
+            ScriptCursor.reset();
+            ClearStageData();
+            ResetStageResultForNextPage();
+            InitStageData(std::make_unique<TFetchedData>(
+                GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                    GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),
+                GetRecordsCountOptional()));
 
-        // New fetch cycle: reset the prefetch flag.
-        SetPrefetchTriggered(false);
-        // Reset the page-relative assembly flag for the new fetch cycle.
-        SetAssembledDataPageRelative(false);
+            // New fetch cycle: reset the prefetch flag.
+            SetPrefetchTriggered(false);
+            // Reset the page-relative assembly flag for the new fetch cycle.
+            SetAssembledDataPageRelative(false);
 
-        // Restart from the original fetch script.
-        TFetchingScriptCursor cursor(StreamingFetchScript, 0);
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto sourceCopy = sourcePtr;
-        auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
-        return;
+            // Restart from the original fetch script.
+            TFetchingScriptCursor cursor(StreamingFetchScript, 0);
+            const auto& commonContext = *GetContext()->GetCommonContext();
+            auto sourceCopy = sourcePtr;
+            auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+            NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+            return;
+        }
+
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())
+            ("event", "ContinueCursor_StreamingFinished")
+            ("page_index", GetCurrentEarlyPageIndex())
+            ("total_pages", GetEarlyPages().size())
+            ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
     }
 
     if (ScriptCursor->Next()) {

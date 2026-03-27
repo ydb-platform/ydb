@@ -3564,8 +3564,6 @@ public:
             hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
-            // NOTE: TEvKqpBuffer::TEvError is NOT here because CleanupState
-            // needs HandleCleanup, not Handle.  Each state dispatches it individually.
             default:
                 return false;
         }

@@ -222,9 +222,20 @@ double ComputeSelectivityCorrection(
     if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
         // YQL_CLOG(TRACE, CoreDq) << "Histogram-based selectivity correction used";
         auto lhs = leftJoinKeys[0].AttributeName;
-        auto leftHist = leftStats.ColumnStatistics->Data[lhs].EqWidthHistogramEstimator;
         auto rhs = rightJoinKeys[0].AttributeName;
-        auto rightHist = rightStats.ColumnStatistics->Data[rhs].EqWidthHistogramEstimator;
+
+        const auto& leftData = leftStats.ColumnStatistics->Data;
+        const auto& rightData = rightStats.ColumnStatistics->Data;
+
+        auto lhsIt = leftData.find(lhs);
+        auto rhsIt = rightData.find(rhs);
+
+        if (lhsIt == leftData.end() || rhsIt == rightData.end()) {
+            return 1.0;
+        }
+
+        auto leftHist = lhsIt->second.EqWidthHistogramEstimator;
+        auto rightHist = rhsIt->second.EqWidthHistogramEstimator;
 
         if (leftHist && rightHist) {
             // Note, leftHist is PK and rightHist is FK
@@ -348,15 +359,9 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     bool isRightPKJoin = !isAntiOrSemiJoin && !isCrossJoin && IsPKJoin(rightStats, rightJoinKeys);
     bool isLeftPKJoin = !isAntiOrSemiJoin && !isCrossJoin && IsPKJoin(leftStats, leftJoinKeys);
 
-    double effectiveLeft = leftStats.Nrows * leftStats.Selectivity;
-    double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
-
-    selectivity = leftStats.Selectivity * rightStats.Selectivity;
-    selectivity = std::pow(selectivity, 0.8); // to avoid selectivity underflow
-
     if (isRightPKJoin && isLeftPKJoin) {
-        auto rightPKJoinCard = leftStats.Nrows * rightStats.Selectivity;
-        auto leftPKJoinCard = rightStats.Nrows * leftStats.Selectivity;
+        auto rightPKJoinCard = leftStats.Nrows * leftStats.Selectivity;
+        auto leftPKJoinCard = rightStats.Nrows * rightStats.Selectivity;
         if (rightPKJoinCard > leftPKJoinCard) {
             isRightPKJoin = false;
         } else {
@@ -367,12 +372,15 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     if (isRightPKJoin) {
         switch (joinKind) {
             case EJoinKind::LeftJoin:
-                newCard = effectiveLeft;
+                selectivity = leftStats.Selectivity;
+                newCard = leftStats.Nrows * selectivity;
                 newByteSize = ComputeOneSideByteSize(newCard, leftStats);
                 break;
             default: { // when left side is FK
-                selectivity *= ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
-                newCard = effectiveLeft * selectivity;
+                selectivity = leftStats.Selectivity * rightStats.Selectivity;
+                double correction = ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
+                selectivity = std::min(1.0, selectivity * correction);
+                newCard = leftStats.Nrows * selectivity;
                 newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
@@ -386,12 +394,15 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     } else if (isLeftPKJoin) {
         switch (joinKind) {
             case EJoinKind::RightJoin:
-                newCard = effectiveRight;
+                selectivity = rightStats.Selectivity;
+                newCard = rightStats.Nrows * selectivity;
                 newByteSize = ComputeOneSideByteSize(newCard, rightStats);
                 break;
             default: { // when right side is FK
-                selectivity *= ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
-                newCard = effectiveRight * selectivity;
+                selectivity = leftStats.Selectivity * rightStats.Selectivity;
+                double correction = ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
+                selectivity = std::min(1.0, selectivity * correction);
+                newCard = rightStats.Nrows * selectivity;
                 newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
         }
@@ -403,28 +414,38 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             outputType = rightStats.Type;
         }
     } else if (isCrossJoin) {
-        newCard = effectiveLeft * effectiveRight;
+        selectivity = std::min(1.0, leftStats.Selectivity * rightStats.Selectivity);
+        newCard = leftStats.Nrows * rightStats.Nrows * selectivity;
+
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
 
         /* in case of cross join we broadcast the right part to the left */
-        cost += effectiveRight;
+        cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
     } 
     else if (isAntiOrSemiJoin) {
         if (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly) {
+            selectivity = leftStats.Selectivity;
+            newCard = leftStats.Nrows * selectivity;
+
             leftKeyColumns = true;
             newNCols = leftStats.Ncols;
-            newCard = effectiveLeft;
             newByteSize = ComputeOneSideByteSize(newCard, leftStats);
         } else {
+            selectivity = rightStats.Selectivity;
+            newCard = rightStats.Nrows * selectivity;
+
             rightKeyColumns = true;
             newNCols = rightStats.Ncols;
-            newCard = effectiveRight;
             newByteSize = ComputeOneSideByteSize(newCard, rightStats);
         }
+
         outputType = EStatisticsType::FilteredFactTable;
     } else {
         auto [lhsUniqueVals, rhsUniqueVals] = GetJoinKeyUniqueVals(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
+
+        double effectiveLeft = leftStats.Nrows * leftStats.Selectivity;
+        double effectiveRight = rightStats.Nrows * rightStats.Selectivity;
 
         if (lhsUniqueVals.Defined() && rhsUniqueVals.Defined()) {
             newCard = effectiveLeft * effectiveRight / std::max(lhsUniqueVals.GetRef(), rhsUniqueVals.GetRef());
@@ -437,15 +458,17 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
             newCard = 0.2 * effectiveLeft * effectiveRight;
         }
 
+        selectivity = std::min(1.0, newCard / (leftStats.Nrows * rightStats.Nrows));
+
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
     }
 
+    newCard = std::min(newCard, leftStats.Nrows * rightStats.Nrows);
+
     if (maybeHint) {
         newCard = maybeHint->ApplyHint(newCard);
     }
-
-    newCard = std::min(newCard, leftStats.Nrows * rightStats.Nrows);
 
     double current_cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
     // cost model is dominated by inputs (i.e. not output size). Also, double counting costs.

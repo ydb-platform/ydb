@@ -234,44 +234,13 @@ public:
         return StreamingMode;
     }
 
-    bool HasMorePages() const {
-        if (!StreamingMode || EarlyPages.empty()) {
-            return false;
-        }
-        // In reverse scan mode, there are more pages if we haven't reached the first page (index 0).
-        // In forward scan mode, there are more pages if we haven't reached the last page.
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            // Reverse scan: more pages if current index > 0 (we still need to process pages before reaching index 0)
-            // When CurrentEarlyPageIndex == 0, we're at the first page and should stop after processing it
-            const bool result = CurrentEarlyPageIndex > 0;
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Reverse")
-                ("current_index", CurrentEarlyPageIndex)
-                ("total_pages", EarlyPages.size())
-                ("result", result);
-            return result;
-        } else {
-            // Forward scan: more pages if next index is still within bounds
-            const bool result = CurrentEarlyPageIndex + 1 < EarlyPages.size();
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "HasMorePages_Forward")
-                ("current_index", CurrentEarlyPageIndex)
-                ("total_pages", EarlyPages.size())
-                ("result", result);
-            return result;
-        }
-    }
+    bool HasMorePages() const;
 
     // Called by TDecideStreamingModeStep before any fetch step.
     // Stores the page list and activates streaming mode so that
     // NeedFetchColumns / DoAssembleColumns can limit work to the
     // current page.
-    void SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode) {
-        AFL_VERIFY(EarlyPages.empty());
-        EarlyPages = std::move(pages);
-        // In reverse scan mode, start from the last page and work backward
-        CurrentEarlyPageIndex = GetContext()->GetReadMetadata()->IsDescSorted() ?
-            (EarlyPages.empty() ? 0 : EarlyPages.size() - 1) : 0;
-        StreamingMode = streamingMode;
-    }
+    void SetEarlyPages(std::vector<TPortionDataAccessor::TReadPage>&& pages, bool streamingMode);
 
     // Returns true when pages were computed early (before fetching).
     bool HasEarlyPages() const {
@@ -281,47 +250,11 @@ public:
     // Returns the end-row (exclusive) of the page currently being
     // fetched/assembled, or std::nullopt when not in streaming mode or
     // pages have not been computed yet.
-    std::optional<ui32> GetCurrentEarlyPageEndRow() const {
-        if (!StreamingMode || EarlyPages.empty()) {
-            return std::nullopt;
-        }
-        if (CurrentEarlyPageIndex >= EarlyPages.size()) {
-            return std::nullopt;
-        }
-        const auto& page = EarlyPages[CurrentEarlyPageIndex];
-        return page.GetIndexStart() + page.GetRecordsCount();
-    }
+    std::optional<ui32> GetCurrentEarlyPageEndRow() const;
 
     // Advance to the next early page (called after each page's blobs
     // have been fetched and assembled).
-    void AdvanceEarlyPage() {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Start")
-            ("current_index_before", CurrentEarlyPageIndex)
-            ("total_pages", EarlyPages.size())
-            ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
-        AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size());
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            // In reverse scan mode, move to the previous page (decrement index).
-            // When the current page is index 0, advancing means the source is fully
-            // exhausted. Move to a terminal sentinel just past the valid range so
-            // any accidental restart cannot re-read page 0.
-            if (CurrentEarlyPageIndex > 0) {
-                --CurrentEarlyPageIndex;
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse")
-                    ("current_index_after", CurrentEarlyPageIndex);
-            } else {
-                CurrentEarlyPageIndex = EarlyPages.size();
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse_Finished")
-                    ("current_index_after", CurrentEarlyPageIndex)
-                    ("total_pages", EarlyPages.size());
-            }
-        } else {
-            // In forward scan mode, move to the next page (increment index)
-            ++CurrentEarlyPageIndex;
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Forward")
-                ("current_index_after", CurrentEarlyPageIndex);
-        }
-    }
+    void AdvanceEarlyPage();
 
     ui32 GetCurrentEarlyPageIndex() const {
         return CurrentEarlyPageIndex;

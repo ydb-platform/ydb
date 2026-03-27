@@ -366,7 +366,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
     }
 
     auto* msg = ev->Get();
-    const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->Record.GetDatabaseName());
+    const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->DatabaseName);
     TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
 
     LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);

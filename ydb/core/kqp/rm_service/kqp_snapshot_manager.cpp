@@ -115,9 +115,9 @@ private:
         Y_ABORT_UNLESS(Tables.empty());
         Orbit = std::move(ev->Get()->Orbit);
 
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        const auto* msg = ev->Get();
+        if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            Snapshot = IKqpGateway::TKqpSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
 
             LOG_D("KqpSnapshotManager: snapshot: " << Snapshot << " acquired");
 
@@ -127,10 +127,9 @@ private:
 
             PassAway();
         } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            NYql::TIssues issues = msg->Issues;
             LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status="
-                      << record.GetStatus() << ", issues:" << issues.ToString());
+                      << msg->Status << ", issues:" << issues.ToString());
             ReplyErrorAndDie(NKikimrIssues::TStatusIds::ERROR, std::move(issues));
         }
     }

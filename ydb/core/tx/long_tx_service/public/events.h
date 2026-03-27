@@ -174,15 +174,15 @@ namespace NLongTxService {
         };
 
         struct TEvAcquireReadSnapshot
-            : TEventPB<TEvAcquireReadSnapshot, NKikimrLongTxService::TEvAcquireReadSnapshot, EvAcquireReadSnapshot> // TODO: make it local
+            : TEventLocal<TEvAcquireReadSnapshot, EvAcquireReadSnapshot>
         {
             TEvAcquireReadSnapshot() = default;
 
             template<class... TArgs>
             explicit TEvAcquireReadSnapshot(const TString& databaseName, TVector<ui64> tableIds = {}, TArgs&&... args)
-                : TableIds(std::move(tableIds))
+                : DatabaseName(databaseName)
+                , TableIds(std::move(tableIds))
             {
-                Record.SetDatabaseName(databaseName);
                 (SetOptionalArg(std::forward<TArgs>(args)), ...);
             }
 
@@ -190,36 +190,38 @@ namespace NLongTxService {
                 Orbit = std::move(orbit);
             }
 
+            TString DatabaseName;
             TVector<ui64> TableIds;
             NLWTrace::TOrbit Orbit;
         };
 
         struct TEvAcquireReadSnapshotResult
-            : TEventPB<TEvAcquireReadSnapshotResult, NKikimrLongTxService::TEvAcquireReadSnapshotResult, EvAcquireReadSnapshotResult>  // TODO: make it local
+            : TEventLocal<TEvAcquireReadSnapshotResult, EvAcquireReadSnapshotResult>
         {
             TEvAcquireReadSnapshotResult() = default;
 
             // Success
             explicit TEvAcquireReadSnapshotResult(const TString& databaseName, const TRowVersion& snapshot, NKqp::TSnapshotHandle&& snapshotHandle, NLWTrace::TOrbit&& orbit)
-                : SnapshotHandle(std::move(snapshotHandle))
+                : Status(Ydb::StatusIds::SUCCESS)
+                , DatabaseName(databaseName)
+                , Snapshot(snapshot)
+                , SnapshotHandle(std::move(snapshotHandle))
                 , Orbit(std::move(orbit))
             {
-                Record.SetStatus(Ydb::StatusIds::SUCCESS);
-                Record.SetSnapshotStep(snapshot.Step);
-                Record.SetSnapshotTxId(snapshot.TxId);
-                Record.SetDatabaseName(databaseName);
             }
 
             // Failure
             explicit TEvAcquireReadSnapshotResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, NLWTrace::TOrbit&& orbit)
-                : Orbit(std::move(orbit))
+                : Status(status)
+                , Issues(issues)
+                , Orbit(std::move(orbit))
             {
-                Record.SetStatus(status);
-                if (issues) {
-                    IssuesToMessage(issues, Record.MutableIssues());
-                }
             }
 
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+            TString DatabaseName;
+            TRowVersion Snapshot;
             NKqp::TSnapshotHandle SnapshotHandle;
             NLWTrace::TOrbit Orbit;
         };

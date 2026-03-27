@@ -831,22 +831,22 @@ private:
     }
 
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
-        auto& record = ev->Get()->Record;
+        auto* msg = ev->Get();
 
         KQP_STLOG_T(KQPDATA, "Read snapshot result",
-            (status, record.GetStatus()),
-            (step, record.GetSnapshotStep()),
-            (tx_id, record.GetSnapshotTxId()),
+            (status, msg->Status),
+            (step, msg->Snapshot.Step),
+            (tx_id, msg->Snapshot.TxId),
             (trace_id, TraceId()));
 
-        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(record.GetStatus()));
-            ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+        if (msg->Status != Ydb::StatusIds::SUCCESS) {
+            ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds::StatusCode_Name(msg->Status));
+            ReplyErrorAndDie(msg->Status, msg->Issues);
             return;
         }
         ExecuterStateSpan.EndOk();
 
-        SetSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        SetSnapshot(msg->Snapshot.Step, msg->Snapshot.TxId);
         ImmediateTx = true;
 
         ContinueExecute();

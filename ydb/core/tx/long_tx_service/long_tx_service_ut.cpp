@@ -46,16 +46,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 // CreateConsole
                 false,
                 // Nodes {tenant_pool_config}
-                /*{{
-                    // Node0
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                    // Node1
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                }}*/nodes,
+                nodes,
                 // DataCenterCount
                 1
             };
@@ -203,7 +194,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
             const auto* msg = ev->Get();
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
         }
 
         // Begin a new read-only transaction at node 1
@@ -396,10 +387,10 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
             auto* msg = ev->Get();
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
 
             handle = std::move(msg->SnapshotHandle);
-            snapshot = TRowVersion(msg->Record.GetSnapshotStep(), msg->Record.GetSnapshotTxId());
+            snapshot = msg->Snapshot;
         }
 
         for (size_t node = 0; node < nodesCount; ++node) {

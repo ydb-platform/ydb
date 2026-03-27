@@ -43,8 +43,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
         runtime.Send(new IEventHandle(NLongTxService::MakeLongTxServiceID(nodeId), sender, req), nodeIndex, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
         auto* msg = ev->Get();
-        UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), Ydb::StatusIds::SUCCESS);
-        return TRowVersion(msg->Record.GetSnapshotStep(), msg->Record.GetSnapshotTxId());
+        UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+        return msg->Snapshot;
     }
 
     NLongTxService::TLockHandle MakeLockHandle(TTestActorRuntime& runtime, ui64 lockId, ui32 nodeIndex = 0) {

@@ -1011,11 +1011,10 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 }
 
 void TDataReq::Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr &ev, const TActorContext &ctx) {
-    const auto& record = ev->Get()->Record;
+    const auto* msg = ev->Get();
 
-    if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetIssues(), issues);
+    if (msg->Status != Ydb::StatusIds::SUCCESS) {
+        NYql::TIssues issues = msg->Issues;
         IssueManager.RaiseIssues(issues);
         ReportStatus(
             TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ResolveError,
@@ -1029,7 +1028,7 @@ void TDataReq::Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotRe
     WallClockAfterBuild = Now();
 
     Y_ABORT_UNLESS(FlatMKQLRequest);
-    FlatMKQLRequest->Snapshot = TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    FlatMKQLRequest->Snapshot = msg->Snapshot;
     ContinueFlatMKQLResolve(ctx);
 }
 

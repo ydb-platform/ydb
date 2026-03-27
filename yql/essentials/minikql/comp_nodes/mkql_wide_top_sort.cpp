@@ -12,10 +12,7 @@
 
 #include <yql/essentials/utils/sort.h>
 
-<<<<<<< HEAD
-=======
 #include <deque>
->>>>>>> 441c4b5665c (Improve memory consumption for Top/TopSort comp nodes)
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -223,8 +220,6 @@ private:
         auto ptr = Tongue = Free.back();
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
-<<<<<<< HEAD
-=======
 
     void MaybeGrowStorage() {
         if (Free.empty()) {
@@ -240,7 +235,6 @@ private:
         }
     }
 
->>>>>>> 441c4b5665c (Improve memory consumption for Top/TopSort comp nodes)
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
         : TBase(memInfo)

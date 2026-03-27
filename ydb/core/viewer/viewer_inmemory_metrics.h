@@ -17,6 +17,7 @@
 
 #include <cmath>
 #include <optional>
+#include <regex>
 
 namespace NKikimr::NViewer {
 
@@ -96,16 +97,18 @@ namespace {
         return queryPos == query.size();
     }
 
-    inline void SplitGraphiteTargets(TStringBuf raw, TVector<TString>& targets) {
+    inline void SplitGraphiteExpressions(TStringBuf raw, TVector<TString>& items) {
         size_t start = 0;
         int bracesDepth = 0;
+        int parensDepth = 0;
+        int bracketsDepth = 0;
         bool inQuotes = false;
         bool escaped = false;
 
         auto flush = [&](size_t end) {
             const TStringBuf piece = StripString(raw.SubString(start, end - start));
             if (!piece.empty()) {
-                targets.emplace_back(piece);
+                items.emplace_back(piece);
             }
         };
 
@@ -134,7 +137,27 @@ namespace {
                     }
                     continue;
                 }
-                if (ch == ',' && bracesDepth == 0) {
+                if (ch == '(') {
+                    ++parensDepth;
+                    continue;
+                }
+                if (ch == ')') {
+                    if (parensDepth > 0) {
+                        --parensDepth;
+                    }
+                    continue;
+                }
+                if (ch == '[') {
+                    ++bracketsDepth;
+                    continue;
+                }
+                if (ch == ']') {
+                    if (bracketsDepth > 0) {
+                        --bracketsDepth;
+                    }
+                    continue;
+                }
+                if (ch == ',' && bracesDepth == 0 && parensDepth == 0 && bracketsDepth == 0) {
                     flush(pos);
                     start = pos + 1;
                 }
@@ -142,6 +165,111 @@ namespace {
         }
 
         flush(raw.size());
+    }
+
+    inline bool TryParseGraphiteFunction(TStringBuf expression, TString& name, TVector<TString>& args) {
+        const TStringBuf stripped = StripString(expression);
+        const size_t openPos = stripped.find('(');
+        if (openPos == TStringBuf::npos || !stripped.EndsWith(")")) {
+            return false;
+        }
+
+        int parensDepth = 0;
+        bool inQuotes = false;
+        bool escaped = false;
+        size_t closePos = TStringBuf::npos;
+        for (size_t pos = openPos; pos < stripped.size(); ++pos) {
+            const char ch = stripped[pos];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inQuotes && ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (inQuotes) {
+                continue;
+            }
+            if (ch == '(') {
+                ++parensDepth;
+            } else if (ch == ')') {
+                --parensDepth;
+                if (parensDepth == 0) {
+                    closePos = pos;
+                    break;
+                }
+            }
+        }
+
+        if (closePos == TStringBuf::npos || closePos + 1 != stripped.size()) {
+            return false;
+        }
+
+        name = StripString(stripped.SubString(0, openPos));
+        args.clear();
+        SplitGraphiteExpressions(stripped.SubString(openPos + 1, closePos - openPos - 1), args);
+        return !name.empty();
+    }
+
+    inline TString UnquoteGraphiteString(TStringBuf value) {
+        const TStringBuf stripped = StripString(value);
+        if (stripped.size() < 2 || stripped.front() != '"' || stripped.back() != '"') {
+            return TString(stripped);
+        }
+
+        TString result;
+        result.reserve(stripped.size() - 2);
+        bool escaped = false;
+        for (size_t pos = 1; pos + 1 < stripped.size(); ++pos) {
+            const char ch = stripped[pos];
+            if (escaped) {
+                if (ch == '\\' || ch == '"') {
+                    result.push_back(ch);
+                } else {
+                    result.push_back('\\');
+                    result.push_back(ch);
+                }
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else {
+                result.push_back(ch);
+            }
+        }
+        if (escaped) {
+            result.push_back('\\');
+        }
+        return result;
+    }
+
+    inline TString ConvertGraphiteReplacementToStdRegex(TStringBuf replacement) {
+        TString result;
+        result.reserve(replacement.size());
+        bool escaped = false;
+        for (const char ch : replacement) {
+            if (escaped) {
+                if (ch >= '0' && ch <= '9') {
+                    result.push_back('$');
+                    result.push_back(ch);
+                } else {
+                    result.push_back(ch);
+                }
+                escaped = false;
+            } else if (ch == '\\') {
+                escaped = true;
+            } else {
+                result.push_back(ch);
+            }
+        }
+        if (escaped) {
+            result.push_back('\\');
+        }
+        return result;
     }
 
 } // namespace
@@ -240,7 +368,7 @@ private:
                 break;
             }
 
-            SplitGraphiteTargets(raw, Targets);
+            SplitGraphiteExpressions(raw, Targets);
         }
     }
 
@@ -320,6 +448,46 @@ private:
         return series;
     }
 
+    TVector<TSeries> EvaluateTarget(const TString& expression,
+            const THashMap<TString, const TLineSnapshot*>& linesByTarget,
+            const std::optional<ui64>& from,
+            const std::optional<ui64>& until,
+            ui32 maxDataPoints) const
+    {
+        TString functionName;
+        TVector<TString> args;
+        if (TryParseGraphiteFunction(expression, functionName, args)) {
+            if (functionName == "aliasSub" && args.size() == 3) {
+                auto series = EvaluateTarget(args[0], linesByTarget, from, until, maxDataPoints);
+                const std::string patternString(UnquoteGraphiteString(args[1]).c_str());
+                const std::regex pattern(patternString);
+                const std::string replacement(ConvertGraphiteReplacementToStdRegex(UnquoteGraphiteString(args[2])).c_str());
+                for (auto& line : series) {
+                    const std::string source(line.Target.c_str());
+                    line.Target = std::regex_replace(source, pattern, replacement).c_str();
+                }
+                return series;
+            }
+            if (functionName == "alias" && args.size() == 2) {
+                auto series = EvaluateTarget(args[0], linesByTarget, from, until, maxDataPoints);
+                const TString alias = UnquoteGraphiteString(args[1]);
+                for (auto& line : series) {
+                    line.Target = alias;
+                }
+                return series;
+            }
+        }
+
+        if (const auto it = linesByTarget.find(expression); it != linesByTarget.end()) {
+            return {BuildSeries(*it->second, from, until, maxDataPoints)};
+        }
+
+        return {TSeries{
+            .Target = expression,
+            .Name = expression,
+        }};
+    }
+
     TString BuildResponseJson(const TInMemoryMetricsRegistry& inMemoryMetrics) {
         const auto snapshot = inMemoryMetrics.Snapshot();
         THashMap<TString, const TLineSnapshot*> linesByTarget;
@@ -336,18 +504,14 @@ private:
         TVector<TSeries> series;
         series.reserve(Targets.size());
         for (const auto& target : Targets) {
-            if (const auto it = linesByTarget.find(target); it != linesByTarget.end()) {
-                series.push_back(BuildSeries(*it->second, from, until, maxDataPoints));
-            } else {
-                series.push_back(TSeries{
-                    .Target = target,
-                    .Name = target,
-                });
-            }
+            auto resolved = EvaluateTarget(target, linesByTarget, from, until, maxDataPoints);
+            series.insert(series.end(),
+                std::make_move_iterator(resolved.begin()),
+                std::make_move_iterator(resolved.end()));
         }
 
         NJson::TJsonValue json;
-        if (!Params.Has("format") || Params.Get("format") == "graphite") {
+        if (!Params.Has("format") || Params.Get("format") == "graphite" || Params.Get("format") == "json") {
             json = BuildGraphiteJson(series);
         } else {
             json = BuildPrometheusJson(series);

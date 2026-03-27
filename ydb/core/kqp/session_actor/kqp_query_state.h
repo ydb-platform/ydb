@@ -415,6 +415,17 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
+    TVector<ui64> GetTableIdsForSnapshot() const {
+        if (!Commit) {
+            return {};
+        }
+        TVector<ui64> tableIds;
+        for (const auto& [tableId, _] : TableVersions) {
+            tableIds.push_back(tableId.PathId.LocalPathId);
+        }
+        return tableIds;
+    }
+
     bool ShouldCommitWithCurrentTx(const TKqpPhyTxHolder::TConstPtr& tx) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         if (!Commit) {

@@ -1,7 +1,6 @@
 #include "dq_opt_stat.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 

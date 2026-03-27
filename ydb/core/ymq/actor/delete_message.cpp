@@ -99,7 +99,7 @@ private:
                     MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
                 }
 
-                MLPRequest_.Messages.emplace_back(receipt.GetShard(), receipt.GetOffset());
+                MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
             }
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
@@ -209,7 +209,7 @@ private:
             }
             return message.Success ?
                   TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK
-                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::NotFound;
+                : TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed;
         };
 
         if (IsBatch_) {

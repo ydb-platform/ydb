@@ -299,19 +299,21 @@ TConclusion<bool> TDecideStreamingModeStep::DoExecuteInplace(
         return true;
     }
 
+    if (!TStreamingConfigHelper::ShouldUseStreamingMode()) {
+        // Streaming is disabled — skip early page computation.
+        // Finalize() will call BuildReadPages() itself when needed.
+        return true;
+    }
+
     auto pages = source->GetPortionAccessor().BuildReadPages(
         memoryLimit, source->GetContext()->GetProgramInputColumns()->GetColumnIds());
 
-    const bool streamingMode = TStreamingConfigHelper::ShouldUseStreamingMode();
+    simpleSource->SetEarlyPages(std::move(pages), /*streamingMode=*/true);
 
-    simpleSource->SetEarlyPages(std::move(pages), streamingMode);
-
-    if (streamingMode) {
-        // Store the fetch script so ContinueCursor can restart from the beginning
-        // for each subsequent page without re-running TDecideStreamingModeStep's
-        // expensive BuildReadPages call (HasEarlyPages() guards that).
-        simpleSource->SetStreamingFetchScript(step.GetScript());
-    }
+    // Store the fetch script so ContinueCursor can restart from the beginning
+    // for each subsequent page without re-running TDecideStreamingModeStep's
+    // expensive BuildReadPages call (HasEarlyPages() guards that).
+    simpleSource->SetStreamingFetchScript(step.GetScript());
     return true;
 }
 

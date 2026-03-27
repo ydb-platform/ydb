@@ -301,16 +301,19 @@ public:
             ("reverse", GetContext()->GetReadMetadata()->IsDescSorted());
         AFL_VERIFY(StreamingMode && CurrentEarlyPageIndex < EarlyPages.size());
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            // In reverse scan mode, move to the previous page (decrement index)
-            // Allow CurrentEarlyPageIndex == 0 to be processed (the first page in reverse scan)
+            // In reverse scan mode, move to the previous page (decrement index).
+            // When the current page is index 0, advancing means the source is fully
+            // exhausted. Move to a terminal sentinel just past the valid range so
+            // any accidental restart cannot re-read page 0.
             if (CurrentEarlyPageIndex > 0) {
                 --CurrentEarlyPageIndex;
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse")
                     ("current_index_after", CurrentEarlyPageIndex);
             } else {
-                // We're at the first page (index 0), no more pages to advance to
-                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse_AtFirstPage")
-                    ("current_index_after", CurrentEarlyPageIndex);
+                CurrentEarlyPageIndex = EarlyPages.size();
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "AdvanceEarlyPage_Reverse_Finished")
+                    ("current_index_after", CurrentEarlyPageIndex)
+                    ("total_pages", EarlyPages.size());
             }
         } else {
             // In forward scan mode, move to the next page (increment index)

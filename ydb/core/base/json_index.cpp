@@ -254,15 +254,11 @@ TResult TQueryCollector::LastArrayIndex(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::UnaryMinus(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    return Finalize(item);
 }
 
 TResult TQueryCollector::UnaryPlus(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    return Finalize(item);
 }
 
 TResult TQueryCollector::BinaryAdd(const TJsonPathItem& item) {

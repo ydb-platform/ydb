@@ -19,7 +19,6 @@ struct TMetaSettings {
     TString MetaDatabase;
     NMvp::EAccessServiceType AccessServiceType = NMvp::yandex_v2;
     TString GrafanaEndpoint;
-    TString GrafanaSecretName;
     TVector<std::shared_ptr<ILinkSource>> ClusterLinkSources;
     TVector<std::shared_ptr<ILinkSource>> DatabaseLinkSources;
 };

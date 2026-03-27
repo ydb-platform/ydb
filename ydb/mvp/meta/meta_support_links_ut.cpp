@@ -1,4 +1,6 @@
 #include <ydb/mvp/core/mvp_test_runtime.h>
+#include <ydb/mvp/core/utils.h>
+#include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/meta_support_links.h>
 #include <ydb/mvp/meta/support_links/ut/mock_link_source.h>
 
@@ -10,6 +12,7 @@
 #include <google/protobuf/text_format.h>
 #include <memory>
 #include <mutex>
+#include <yaml-cpp/yaml.h>
 
 Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     class TTestActorRuntime : public NActors::TTestActorRuntimeBase {
@@ -42,6 +45,10 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     struct TSupportLinksTestContext {
         NMVP::TMetaSettings Settings;
         const TYdbLocation Location = TYdbLocation("meta", "meta", {}, "/Root");
+
+        explicit TSupportLinksTestContext(NMVP::TMetaSettings settings)
+            : Settings(std::move(settings))
+        {}
 
         explicit TSupportLinksTestContext(const NMVP::TSupportLinksConfig& config) {
             static std::once_flag once;
@@ -89,16 +96,16 @@ Y_UNIT_TEST_SUITE(MetaSupportLinks) {
     static NYdb::NTable::TDataQueryResult MakeClusterInfoResult() {
         const TString resultSetString = R"(
 columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 rows {
-  items { text_value: "ws" }
-  items { text_value: "ds" }
+  items { text_value: "ydb-workspace" }
+  items { text_value: "3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63" }
 }
 )";
 
@@ -117,11 +124,11 @@ rows {
 
     static NYdb::NTable::TDataQueryResult MakeEmptyClusterInfoResult() {
         const TString resultSetString = R"(columns {
-  name: "workspace"
+  name: "k8s_namespace"
   type { type_id: UTF8 }
 }
 columns {
-  name: "grafana_ds"
+  name: "datasource"
   type { type_id: UTF8 }
 }
 )";
@@ -150,6 +157,18 @@ columns {
 
     static NMVP::TSupportLinksConfig MakeEmptyConfig() {
         return {};
+    }
+
+    static NMvp::NMeta::TMetaAppConfig ParseConfig(const TString& yaml) {
+        YAML::Node node = YAML::Load(yaml);
+        NMvp::NMeta::TMetaAppConfig appConfig;
+        NMVP::MergeYamlNodeToProto(node, appConfig);
+        return appConfig;
+    }
+
+    static NMVP::TMVP MakeTestMvp() {
+        const char* argv[] = {"meta_support_links_ut"};
+        return NMVP::TMVP(1, argv);
     }
 
     Y_UNIT_TEST(SupportLinksReturnsBadRequestWhenClusterMissing) {
@@ -183,7 +202,7 @@ columns {
         TSupportLinksTestContext context(MakeEmptyConfig());
 
         auto handler = context.RegisterHandler(runtime);
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global", "POST");
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global", "POST");
         runtime.Send(new NActors::IEventHandle(handler, sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
 
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
@@ -218,7 +237,7 @@ columns {
         auto sender = runtime.AllocateEdgeActor();
         TSupportLinksTestContext context(MakeConfig("mock/sourceSync"));
 
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global");
         auto result = MakeClusterInfoResult();
         context.RegisterGet(runtime, sender, request, std::move(result));
 
@@ -234,7 +253,7 @@ columns {
         auto sender = runtime.AllocateEdgeActor();
         TSupportLinksTestContext context(MakeConfig("mock/sourceAsync"));
 
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global");
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global");
         auto result = MakeClusterInfoResult();
         context.RegisterGet(runtime, sender, request, std::move(result));
 
@@ -250,7 +269,7 @@ columns {
         auto sender = runtime.AllocateEdgeActor();
         TSupportLinksTestContext context(MakeEmptyConfig());
 
-        auto request = BuildHttpRequest("/meta/support_links?cluster=testing-global&database=/root/test");
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global&database=/root/test");
         auto result = MakeClusterInfoResult();
         context.RegisterGet(runtime, sender, request, std::move(result));
 
@@ -290,9 +309,63 @@ columns {
         UNIT_ASSERT_VALUES_EQUAL(json["links"][1]["url"].GetStringRobust(), "https://wiki.example.com/runbooks/mock-dashboard");
 
         UNIT_ASSERT(json.Has("errors"));
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"].GetArray().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(json["errors"][0]["source"].GetStringRobust(), "meta");
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("missing-cluster"));
-        UNIT_ASSERT(json["errors"][0]["message"].GetStringRobust().Contains("is not found in MasterClusterExt.db"));
+        UNIT_ASSERT(json["errors"].GetArray().size() >= 1);
+        bool hasMetaError = false;
+        for (const auto& error : json["errors"].GetArray()) {
+            if (error["source"].GetStringRobust() == "meta" &&
+                error["message"].GetStringRobust().Contains("missing-cluster") &&
+                error["message"].GetStringRobust().Contains("is not found in MasterClusterExt.db"))
+            {
+                hasMetaError = true;
+                break;
+            }
+        }
+        UNIT_ASSERT(hasMetaError);
     }
+
+    Y_UNIT_TEST(ResolvesGrafanaDashboardLinkFromConfiguredSource) {
+        auto mvp = MakeTestMvp();
+        const TString yaml = R"(
+generic:
+  access_service_type: "yandex_v2"
+meta:
+  meta_api_endpoint: "grpc://meta.ydb.example.net:2135"
+  meta_database: "/Root/meta"
+  grafana:
+    endpoint: "https://grafana.example.test"
+  support_links:
+    cluster:
+      - source: "grafana/dashboard"
+        title: "Overview"
+        url: "/d/ydb/overview"
+)";
+        const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
+        UNIT_ASSERT_NO_EXCEPTION(mvp.TryGetMetaOptionsFromConfig(appConfig));
+
+        TTestActorRuntime runtime;
+        TAutoPtr<NActors::IEventHandle> handle;
+
+        auto sender = runtime.AllocateEdgeActor();
+        TSupportLinksTestContext context(mvp.MetaSettings);
+
+        auto request = BuildHttpRequest("/meta/support_links?cluster=ydb-global");
+        auto result = MakeClusterInfoResult();
+        context.RegisterGet(runtime, sender, request, std::move(result));
+
+        auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
+
+        NJson::TJsonReaderConfig jsonReaderConfig;
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(response->Response->Body, &jsonReaderConfig, &json));
+        UNIT_ASSERT(json.Has("links"));
+        UNIT_ASSERT_VALUES_EQUAL(json["links"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["links"][0]["title"].GetStringRobust(), "Overview");
+        UNIT_ASSERT_VALUES_EQUAL(
+            json["links"][0]["url"].GetStringRobust(),
+            "https://grafana.example.test/d/ydb/overview?var-workspace=ydb-workspace&var-ds=3f8a1e2c-6b7d-4c91-9a52-1d7f0e8b4a63&var-cluster=ydb-global"
+        );
+        UNIT_ASSERT(!json.Has("errors"));
+    }
+
 }

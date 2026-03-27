@@ -9,6 +9,7 @@ SRCS(
     meta_cache.cpp
     meta_versions.cpp
     mvp.cpp
+    
 )
 
 PEERDIR(
@@ -32,4 +33,5 @@ END()
 
 RECURSE(
     bin
+    support_links
 )

@@ -127,8 +127,12 @@ NYdb::NTable::TTableClient TYdbLocation::GetTableClient(const NYdb::NTable::TCli
     return NYdb::NTable::TTableClient(GetDriver(), clientSettings);
 }
 
-TString TYdbLocation::GetDatabaseName(const TRequest& request) const {
-    TString database = request.Parameters["database"];
+TString TYdbLocation::GetDatabaseName(const TRequest& request, TStringBuf databaseParameterName) const {
+    if (databaseParameterName.empty()) {
+        return {};
+    }
+
+    TString database = request.Parameters[databaseParameterName];
     if (database) {
         if (!database.StartsWith('/')) {
             database.insert(database.begin(), '/');

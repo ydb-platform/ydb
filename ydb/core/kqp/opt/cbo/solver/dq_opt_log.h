@@ -12,7 +12,7 @@
 namespace NYql {
     class IOptimizationContext;
     struct TTypeAnnotationContext;
-    struct TOptimizerStatistics;  // NYql forward decl
+    struct TOptimizerStatistics;
 }
 
 namespace NYql::NDq {

@@ -107,7 +107,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {

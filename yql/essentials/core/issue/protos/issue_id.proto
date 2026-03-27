@@ -23,6 +23,7 @@ message TIssuesIds {
         CORE_PARAM_EVALUATION = 1080;
         CORE_EXPR_EVALUATION = 1081;
         CORE_POST_TYPE_ANN = 1090;
+        CORE_PARTIAL_TYPE_ANN = 1021;
 
 // core warnings
         CORE_CAST_YSON_JSON_BYTES = 1100;
@@ -208,6 +209,11 @@ message TIssuesIds {
 // CBO
         CBO_ENUM_LIMIT_REACHED = 8000;
         CBO_MISSING_TABLE_STATS = 8001;
+
+// Fmr
+        FMR_UNKNOWN_ERROR = 9000;
+        FMR_NEED_FALLBACK = 9001;
+        FMR_UDF_TERMINATE = 9002;
 
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 

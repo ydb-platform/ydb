@@ -1,0 +1,39 @@
+#pragma once
+
+#include "window_frame_bounds.h"
+
+#include <yql/essentials/core/sql_types/sort_order.h>
+
+#include <utility>
+
+namespace NYql::NWindow {
+
+template <typename TRangeType>
+class TCoreWinFramesCollectorParams {
+public:
+    TCoreWinFramesCollectorParams(TCoreWinFrameCollectorBounds<TRangeType> bounds, ESortOrder sortOrder, TString sortColumnName)
+        : Bounds_(std::move(bounds))
+        , SortOrder_(sortOrder)
+        , SortColumnName_(std::move(sortColumnName))
+    {
+    }
+
+    const TCoreWinFrameCollectorBounds<TRangeType>& GetBounds() const {
+        return Bounds_;
+    }
+
+    ESortOrder GetSortOrder() const {
+        return SortOrder_;
+    }
+
+    TStringBuf GetSortColumnName() const {
+        return SortColumnName_;
+    }
+
+private:
+    TCoreWinFrameCollectorBounds<TRangeType> Bounds_;
+    ESortOrder SortOrder_;
+    TString SortColumnName_;
+};
+
+} // namespace NYql::NWindow

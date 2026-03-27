@@ -491,7 +491,7 @@ class TEmptyConstraintNode final: public TConstraintNode {
 protected:
     friend struct TExprContext;
 
-    TEmptyConstraintNode(TExprContext& ctx);
+    explicit TEmptyConstraintNode(TExprContext& ctx);
     TEmptyConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TEmptyConstraintNode(TEmptyConstraintNode&& constr);
 
@@ -514,7 +514,7 @@ public:
 protected:
     friend struct TExprContext;
 
-    TVarIndexConstraintNode(TExprContext& ctx, const TMapType& mapping);
+    TVarIndexConstraintNode(TExprContext& ctx, TMapType mapping);
     TVarIndexConstraintNode(TExprContext& ctx, const TVariantExprType& itemType);
     TVarIndexConstraintNode(TExprContext& ctx, size_t mapItemsCount);
     TVarIndexConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);

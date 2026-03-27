@@ -449,7 +449,6 @@ public:
             auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
             Y_ABORT_UNLESS(table->AlterVersion != 0);
-            Y_ABORT_UNLESS(!table->AlterData);
 
             tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore;
             tablePath.Base()->LastTxId = OperationId.GetTxId();

@@ -56,7 +56,7 @@ TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireReader()
 
     if (!HasActiveWriter_ && WriterPromiseQueue_.empty()) {
         ++ActiveReaderCount_;
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto promise = NewPromise<void>();
@@ -75,7 +75,7 @@ TFuture<void> TAsyncReaderWriterLock::TImpl::AcquireWriter()
 
     if (ActiveReaderCount_ == 0 && !HasActiveWriter_) {
         HasActiveWriter_ = true;
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto promise = NewPromise<void>();
@@ -137,14 +137,14 @@ void TAsyncReaderWriterLock::TImpl::WakeNext(TGuard<NThreading::TSpinLock>& guar
     }
 }
 
-void TAsyncReaderWriterLock::TImpl::ReleaseReaders(int amount)
+void TAsyncReaderWriterLock::TImpl::ReleaseReaders(int count)
 {
     auto guard = Guard(SpinLock_);
 
     YT_VERIFY(!HasActiveWriter_);
-    YT_VERIFY(ActiveReaderCount_ >= amount);
+    YT_VERIFY(ActiveReaderCount_ >= count);
 
-    ActiveReaderCount_ -= amount;
+    ActiveReaderCount_ -= count;
     if (ActiveReaderCount_ == 0) {
         WakeNext(guard);
     }

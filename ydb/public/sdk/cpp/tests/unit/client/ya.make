@@ -1,4 +1,5 @@
 RECURSE(
+    connection_string
     coordination
     discovery_mutator
     draft
@@ -7,5 +8,6 @@ RECURSE(
     oauth2_token_exchange
     params
     result
+    table
     value
 )

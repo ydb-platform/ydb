@@ -6,8 +6,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
     template <ETypeAnnotationKind>
     IGraphTransformer::TStatus TypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -35,7 +35,7 @@ namespace NTypeAnnImpl {
 
     template <ETypeArgument>
     IGraphTransformer::TStatus TypeArgWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
-    IGraphTransformer::TStatus ParseTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
+    IGraphTransformer::TStatus ParseTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus FormatTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus FormatTypeDiffWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus TypeHandleWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -59,5 +59,5 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus MakeCodeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
     bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx);
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

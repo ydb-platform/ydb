@@ -7,6 +7,8 @@ SRCS(
     aggregator_impl.cpp
     analyze_actor.h
     analyze_actor.cpp
+    column_statistic_eval.h
+    column_statistic_eval.cpp
     schema.h
     schema.cpp
     select_builder.h
@@ -37,6 +39,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/statistics/database
+    ydb/library/yql/udfs/statistics_internal
     yql/essentials/core/minsketch
 )
 

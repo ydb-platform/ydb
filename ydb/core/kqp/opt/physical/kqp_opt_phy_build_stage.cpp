@@ -88,7 +88,7 @@ TMaybeNode<TDqPhyPrecompute> BuildLookupKeysPrecompute(const TExprBase& input, T
 
 bool IsLiteralNothing(TExprBase node) {
     if (node.Maybe<TCoNothing>()) {
-        auto* type = node.Raw()->GetTypeAnn();
+        auto type = node.Raw()->GetTypeAnn();
         switch (type->GetKind()) {
             case ETypeAnnotationKind::Optional: {
                 type = type->Cast<TOptionalExprType>()->GetItemType();
@@ -99,6 +99,10 @@ bool IsLiteralNothing(TExprBase node) {
 
                 auto slot = type->Cast<TDataExprType>()->GetSlot();
                 auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
+
+                if (NKikimr::NScheme::NTypeIds::IsParametrizedType(typeId)) {
+                    return false;
+                }
 
                 return (
                     NKikimr::NScheme::NTypeIds::IsYqlType(typeId)
@@ -537,7 +541,9 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
         << KqpExprToPrettyString(lookupKeys, ctx));
 
     TKqpStreamLookupSettings settings;
-    settings.Strategy = EStreamLookupStrategyType::LookupRows;
+    settings.Strategy = lookupTable.IsUnique()
+        ? EStreamLookupStrategyType::LookupUniqueRows
+        : EStreamLookupStrategyType::LookupRows;
     TNodeOnNodeOwnedMap replaceMap;
     TVector<TExprBase> newInputs;
     TVector<TCoArgument> newArgs;
@@ -630,7 +636,7 @@ NYql::NNodes::TExprBase KqpRewriteLookupTablePhy(NYql::NNodes::TExprBase node, N
 }
 
 NYql::NNodes::TExprBase KqpPrecomputeParameter(NYql::NNodes::TExprBase param, NYql::TExprContext& ctx) {
-    auto* type = param.Raw()->GetTypeAnn();
+    auto type = param.Raw()->GetTypeAnn();
     YQL_ENSURE(type);
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         param = Build<TCoUnwrap>(ctx, param.Pos())

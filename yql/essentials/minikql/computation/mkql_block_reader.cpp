@@ -10,8 +10,7 @@
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -180,7 +179,7 @@ public:
 template <bool Nullable>
 class TTupleBlockItemConverter: public IBlockItemConverter {
 public:
-    TTupleBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
+    explicit TTupleBlockItemConverter(TVector<std::unique_ptr<IBlockItemConverter>>&& children)
         : Children_(std::move(children))
     {
         Items_.resize(Children_.size());
@@ -266,7 +265,7 @@ public:
 
 class TExternalOptionalBlockItemConverter: public IBlockItemConverter {
 public:
-    TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
+    explicit TExternalOptionalBlockItemConverter(std::unique_ptr<IBlockItemConverter>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -363,5 +362,4 @@ std::unique_ptr<IBlockItemConverter> MakeBlockItemConverter(
     return NYql::NUdf::DispatchByArrowTraits<TConverterTraits>(typeInfoHelper, type, &pgBuilder);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -45,6 +45,7 @@ public:
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
+        , QuerySpanId(settings.HasQuerySpanId() ? settings.GetQuerySpanId() : 0)
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
         , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
@@ -97,7 +98,8 @@ public:
 
             if (mstats && !HasVectorTopK) {
                 switch(LookupStrategy) {
-                    case NKqpProto::EStreamLookupStrategy::LOOKUP: {
+                    case NKqpProto::EStreamLookupStrategy::LOOKUP:
+                    case NKqpProto::EStreamLookupStrategy::UNIQUE: {
                         // in lookup case without top-K pushdown we return as result actual data, that we read from the datashard.
                         rowsReadEstimate = mstats->Inputs[InputIndex]->RowsConsumed;
                         bytesReadEstimate = mstats->Inputs[InputIndex]->BytesConsumed;
@@ -362,6 +364,10 @@ private:
             resultInfo.AddLocks()->CopyFrom(lock);
         }
 
+        if (DeferredVictimQuerySpanId) {
+            resultInfo.SetDeferredVictimQuerySpanId(DeferredVictimQuerySpanId);
+        }
+
         result.PackFrom(resultInfo);
         return result;
     }
@@ -400,8 +406,15 @@ private:
             return RuntimeError(errorMsg, NYql::NDqProto::StatusIds::SCHEME_ERROR);
         }
 
-        if (IsolationLevel == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
             YQL_ENSURE(!LockTxId, "SnapshotReadOnly should not take locks");
+        }
+        if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW && LookupStrategy == NKqpProto::EStreamLookupStrategy::UNIQUE) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RW) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        } else if (LockTxId && IsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE) {
+            YQL_ENSURE(LockMode == NKikimrDataEvents::OPTIMISTIC);
         }
         LookupActorStateSpan.EndOk();
 
@@ -454,6 +467,10 @@ private:
 
         for (auto& lock : record.GetTxLocks()) {
             Locks.push_back(lock);
+        }
+
+        if (record.HasDeferredVictimQuerySpanId() && DeferredVictimQuerySpanId == 0) {
+            DeferredVictimQuerySpanId = record.GetDeferredVictimQuerySpanId();
         }
 
         if (UseFollowers) {
@@ -685,6 +702,10 @@ private:
             record.SetLockNodeId(*NodeLockId);
         }
 
+        if (QuerySpanId) {
+            record.SetQuerySpanId(QuerySpanId);
+        }
+
         auto defaultSettings = GetDefaultReadSettings()->Record;
         if (!MaxRowsDefaultQuota || !MaxBytesDefaultQuota) {
             MaxRowsDefaultQuota = defaultSettings.GetMaxRows();
@@ -853,6 +874,7 @@ private:
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
+    const ui64 QuerySpanId;
     TReads Reads;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
@@ -860,13 +882,14 @@ private:
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    ui64 DeferredVictimQuerySpanId = 0;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::unique_ptr<TKqpStreamLookupWorker> StreamLookupWorker;
     ui64 ReadId = 0;
     size_t TotalRetryAttempts = 0;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
-    NKikimrKqp::EIsolationLevel IsolationLevel;
+    NKqpProto::EIsolationLevel IsolationLevel;
     const TString Database;
 
     // stats

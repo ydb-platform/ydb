@@ -31,7 +31,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"));
         }
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", "Access denied"));
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
         ui32 nodeId = 0;
         ui32 pDiskId = 0;
@@ -98,13 +98,7 @@ public:
                 json["result"] = true;
             } else {
                 json["result"] = false;
-                TString error;
-                bool forceRetryPossible = false;
-                Viewer->TranslateFromBSC2Human(Response->Record.GetResponse(), GetRequest(), error, forceRetryPossible);
-                json["error"] = error;
-                if (!Force && forceRetryPossible) {
-                    json["forceRetryPossible"] = true;
-                }
+                Viewer->BSCError2JSON(Response->Record.GetResponse(), GetRequest(), json, Force);
             }
             json["debugMessage"] = Response->Record.ShortDebugString();
             ReplyAndPassAway(GetHTTPOKJSON(json));

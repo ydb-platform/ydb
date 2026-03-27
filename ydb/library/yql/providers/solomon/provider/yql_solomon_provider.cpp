@@ -3,11 +3,13 @@
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_ytflow_integration.h>
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_ytflow_optimize.h>
 
 namespace NYql {
 
-TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode) {
-    return [gateway, credentialsFactory, supportRtmrMode] (
+TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
+    return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -35,6 +37,10 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
         solomonState->Gateway = gateway;
         solomonState->CredentialsFactory = credentialsFactory;
         solomonState->DqIntegration = CreateSolomonDqIntegration(solomonState);
+        if (useYtflowEngine) {
+            solomonState->YtflowIntegration = CreateSolomonYtflowIntegration(solomonState);
+            solomonState->YtflowOptimization = CreateSolomonYtflowOptimization(solomonState);
+        }
         if (gatewaysConfig) {
             solomonState->Configuration->Init(gatewaysConfig->GetSolomon(), typeCtx);
         }

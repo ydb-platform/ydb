@@ -4,6 +4,7 @@
 #include <util/digest/numeric.h>
 #include <util/generic/string.h>
 #include <memory>
+#include <utility>
 
 namespace NYql {
 
@@ -104,22 +105,22 @@ public:
     {
     }
 
-    TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+    explicit TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
         : CaptureMode_(captureMode)
-        , Reader_(reader)
+        , Reader_(std::move(reader))
     {
     }
 
-    TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+    explicit TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
         : CaptureMode_(captureMode)
-        , Writer_(writer)
+        , Writer_(std::move(writer))
     {
     }
 
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
 
-    operator bool() const {
+    explicit operator bool() const {
         return CanRead() || CanWrite();
     }
 

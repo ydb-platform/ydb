@@ -1,4 +1,6 @@
 #include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
+#include "datashard_tli.h"
 #include "datashard_locks_db.h"
 #include "setup_sys_locks.h"
 
@@ -55,6 +57,9 @@ public:
                 Self->Pipeline.AddCandidateOp(op);
                 Self->PlanQueue.Progress(ctx);
             }
+
+            // Cancel any waiting lock rows requests
+            Self->CheckLockRowsRejectAll();
 
             Self->Pipeline.CleanupWaitingVolatile(ctx, Replies);
         } else {
@@ -150,7 +155,12 @@ public:
                     break;
                 }
             }
-            Self->SysLocksTable().ApplyLocks();
+            auto [_, locksBrokenBySplit] = Self->SysLocksTable().ApplyLocks();
+            if (!locksBrokenBySplit.empty()) {
+                auto victimQuerySpanIds = Self->SysLocksTable().ExtractVictimQuerySpanIds(locksBrokenBySplit);
+                NDataIntegrity::LogLocksBroken(ctx, Self->TabletID(), "Tablet split operation invalidated locks", locksBrokenBySplit,
+                                               Nothing(), victimQuerySpanIds);
+            }
             auto countAfter = Self->SysLocksTable().GetLocks().size();
             Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
             Self->Execute(Self->CreateTxStartSplit(), ctx);

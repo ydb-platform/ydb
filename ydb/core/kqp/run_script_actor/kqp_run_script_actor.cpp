@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
@@ -24,12 +25,12 @@
 
 #include <forward_list>
 
-#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_I(stream) LOG_INFO_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_N(stream) LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_W(stream) LOG_WARN_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
-#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". " << stream);
+#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_I(stream) LOG_INFO_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_N(stream) LOG_NOTICE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_W(stream) LOG_WARN_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
+#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, LogPrefix() << stream);
 
 namespace NKikimr::NKqp {
 
@@ -128,10 +129,12 @@ public:
         , CheckpointId(settings.CheckpointId)
         , PhysicalGraph(std::move(settings.PhysicalGraph))
         , StreamingQueryPath(settings.StreamingQueryPath)
+        , CustomerSuppliedId(std::move(settings.CustomerSuppliedId))
+        , StreamingDisposition(std::move(settings.StreamingDisposition))
         , Counters(settings.Counters)
     {}
 
-    [[maybe_unused]] static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
+    static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
     void Bootstrap() {
         const auto& traceId = Request.GetTraceId();
@@ -140,14 +143,18 @@ public:
             Database,
             /* SessionId*/ "",
             ExecutionId,
-            /* CustomerSuppliedId */ traceId,
+            /* CustomerSuppliedId */ CustomerSuppliedId ? CustomerSuppliedId : traceId,
             SelfId()
         );
         UserRequestContext->IsStreamingQuery = SaveQueryPhysicalGraph;
         UserRequestContext->CheckpointId = CheckpointId;
         UserRequestContext->StreamingQueryPath = StreamingQueryPath;
+        UserRequestContext->StreamingDisposition = StreamingDisposition;
 
-        LOG_I("Bootstrap");
+        LOG_I("Bootstrap "
+            << "StreamingQueryPath: " << StreamingQueryPath
+            << ", CheckpointId: " << CheckpointId
+            << ", StreamingDisposition: " << (StreamingDisposition ? StreamingDisposition->DebugString() : "null"));
 
         Become(&TRunScriptActor::StateFunc);
     }
@@ -323,6 +330,10 @@ private:
     }
 
     void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
+        if (std::exchange(Terminated, true)) {
+            return;
+        }
+
         LOG_I("Script execution finalized, cancel response status: " << replyStatus << ", issues: " << replyIssues.ToOneLineString());
         for (auto& req : CancelRequests) {
             Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues), 0, req->Cookie);
@@ -331,12 +342,17 @@ private:
     }
 
     void RunScriptExecutionFinisher() {
+        if (Terminated) {
+            return;
+        }
+
         if (!FinalStatusIsSaved) {
             FinalStatusIsSaved = true;
             WaitFinalizationRequest = true;
+            const bool cancelledByUser = (RunState == ERunState::Cancelling);
             RunState = IsExecuting() ? ERunState::Finishing : RunState;
 
-            if (RunState == ERunState::Cancelling) {
+            if (cancelledByUser) {
                 NYql::TIssue cancelIssue("Request was canceled by user");
                 cancelIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
                 Issues.AddIssue(std::move(cancelIssue));
@@ -346,7 +362,7 @@ private:
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
-                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration
+                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration, cancelledByUser
             );
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
             return;
@@ -363,9 +379,8 @@ private:
     void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
         LeaseUpdateQueryRunning = false;
 
-        const auto status = ev->Get()->Status;
         const auto& issues = ev->Get()->Issues;
-        if (status != Ydb::StatusIds::SUCCESS) {
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             LOG_E("Lease update " << ev->Sender << " failed " << status << ", Issues: " << issues.ToOneLineString() << ", ExecutionEntryExists: " << ev->Get()->ExecutionEntryExists);
         } else {
             LOG_D("Lease updated by " << ev->Sender << ", CurrentDeadline: " << ev->Get()->CurrentDeadline << ", ExecutionEntryExists: " << ev->Get()->ExecutionEntryExists);
@@ -375,6 +390,8 @@ private:
             LOG_E("Script execution entry was lost");
 
             FinalStatusIsSaved = true;
+            Issues.AddIssues(AddRootIssue("Script execution lease was lost", issues, true));
+
             if (RunState == ERunState::Running) {
                 CancelRunningQuery();
             }
@@ -382,9 +399,6 @@ private:
 
         if (FinishAfterLeaseUpdate) {
             RunScriptExecutionFinisher();
-        } else if (IsExecuting() && status != Ydb::StatusIds::SUCCESS) {
-            Issues.AddIssues(AddRootIssue("Internal error. Failed to update lease state", issues, true));
-            Finish(status);
         }
 
         if (LeaseUpdateRequired()) {
@@ -694,7 +708,7 @@ private:
         }
 
         if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
-            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
+            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig, DisableDefaultTimeout);
             NYql::TIssue timeoutIssue(TStringBuilder() << "Current request timeout is " << timeout.MilliSeconds() << "ms");
             timeoutIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             Issues.AddIssue(std::move(timeoutIssue));
@@ -968,6 +982,10 @@ private:
         return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) - static_cast<i64>(SaveResultInflightBytes);
     }
 
+    TString LogPrefix() const {
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Ctx: " << *UserRequestContext << ". LeaseGeneration: " << LeaseGeneration << ". RunState: " << static_cast<ui64>(RunState) << ". ";
+    }
+
 private:
     const TString ExecutionId;
     NKikimrKqp::TEvQueryRequest Request;
@@ -982,6 +1000,8 @@ private:
     const TString CheckpointId;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const TString StreamingQueryPath;
+    const TString CustomerSuppliedId;
+    const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
     std::optional<TActorId> PhysicalGraphSender;
     TIntrusivePtr<TKqpCounters> Counters;
     TString SessionId;
@@ -991,6 +1011,7 @@ private:
     bool FinishAfterLeaseUpdate = false;
     bool WaitFinalizationRequest = false;
     bool SavedRunningStatus = false;
+    bool Terminated = false;
     ERunState RunState = ERunState::Created;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
     ui64 CancelRequestsCount = 0;

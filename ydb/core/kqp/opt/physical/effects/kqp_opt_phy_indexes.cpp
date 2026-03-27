@@ -110,13 +110,28 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
         }
 
         if (index.KeyColumns && addIndex) {
-            auto& implTable = table.Metadata->ImplTables[i];
+            TIntrusivePtr<TKikimrTableMetadata> implTable = table.Metadata->ImplTables[i];
             switch (index.Type) {
+                case TIndexDescription::EType::GlobalJson:
                 case TIndexDescription::EType::GlobalSync:
                 case TIndexDescription::EType::GlobalAsync:
-                case TIndexDescription::EType::GlobalSyncUnique:
-                case TIndexDescription::EType::GlobalFulltext: {
+                case TIndexDescription::EType::GlobalSyncUnique: {
                     YQL_ENSURE(!implTable->Next);
+                    auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
+                    result.emplace_back(indexTable, &index);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextPlain:
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    const bool withRelevance = index.Type == TIndexDescription::EType::GlobalFulltextRelevance;
+                    if (withRelevance) {
+                        while (implTable && !implTable->Name.EndsWith(NKikimr::NTableIndex::ImplTable)) {
+                            implTable = implTable->Next;
+                        }
+                        YQL_ENSURE(implTable);
+                    } else {
+                        YQL_ENSURE(!implTable->Next);
+                    }
                     auto indexTable = tableBuilder(*implTable, pos, ctx).Ptr();
                     result.emplace_back(indexTable, &index);
                     break;
@@ -133,6 +148,9 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                     result.emplace_back(indexTable, &index);
                     break;
                 }
+                case TIndexDescription::EType::LocalBloomFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter:
+                    break;
             }
         }
     }

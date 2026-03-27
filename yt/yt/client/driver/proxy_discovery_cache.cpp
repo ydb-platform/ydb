@@ -59,7 +59,7 @@ public:
         IClientPtr client)
         : TAsyncExpiringCache(
             std::move(config),
-            NYT::NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
             DriverLogger().WithTag("Cache: ProxyDiscovery"))
         , Client_(std::move(client))
     { }
@@ -129,6 +129,7 @@ private:
         options.ReadFrom = EMasterChannelKind::ClientSideCache;
         options.SuppressUpstreamSync = true;
         options.SuppressTransactionCoordinatorSync = true;
+        options.SuppressStronglyOrderedTransactionBarrier = true;
         options.Attributes = {BannedAttributeName, RoleAttributeName, AddressesAttributeName};
 
         TYPath path;

@@ -146,7 +146,7 @@ protected:
         TStackVec<TString> AdditionalSIDs;
         bool RefreshRetryableErrorImmediately = false;
         TExternalAuthInfo ExternalAuthInfo;
-        bool IsLowAccessServiceRequestPriority = false;
+        bool IsLowRequestPriority = false;
 
         TTokenRecordBase(const TStringBuf ticket)
             : Ticket(ticket)
@@ -328,7 +328,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
-    ::NMonitoring::THistogramPtr CounterTicketsBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
+    ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
     TDuration RefreshPeriod = TDuration::Seconds(1); // how often do we check for ticket freshness/expiration
     TDuration RefreshTime = TDuration::Hours(1); // within this time we will try to refresh valid ticket
@@ -426,9 +427,12 @@ private:
             }
         }
 
-        if (record.IsLowAccessServiceRequestPriority) {
-            auto& headers = request->Headers;
+        auto& headers = request->Headers;
+        if (record.IsLowRequestPriority) {
             headers["x-ya-priority"] = "low";
+        }
+        if (!record.PeerName.empty()) {
+            headers["x-user-ip"] = record.PeerName;
         }
 
         return request;
@@ -524,6 +528,9 @@ private:
     template <typename TTokenRecord>
     void NebiusAccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthorizeRequest>(key);
+        if (!record.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.PeerName;
+        }
         TStringBuilder requestForPermissions;
         i64 i = 0;
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
@@ -560,6 +567,9 @@ private:
     void NebiusAccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
         auto request = MakeHolder<TEvNebiusAccessServiceAuthenticateRequest>(key);
         request->Request.set_iam_token(record.Ticket);
+        if (!record.PeerName.empty()) {
+            request->Headers["x-user-ip"] = record.PeerName;
+        }
         Send(NebiusAccessServiceValidator, request.Release());
     }
 
@@ -1751,6 +1761,13 @@ protected:
         if (tokenType == "Certificate") {
             return TDerived::ETokenType::Certificate;
         }
+        if (tokenType == "Builtin") {
+            if (Config.GetUseBuiltinDomain()) {
+                return TDerived::ETokenType::Builtin;
+            } else {
+                return TDerived::ETokenType::Unsupported;
+            }
+        }
         return TDerived::ETokenType::Unknown;
     }
 
@@ -1836,7 +1853,7 @@ protected:
         TInstant now = TlsActivationContext->Now();
         record.InitTime = now;
         record.AccessTime = now;
-        record.ExpireTime = GetExpireTime(record, now);
+        record.ExpireTime = GetDerived()->GetExpireTime(record, now);
         record.RefreshTime = GetRefreshTime(now);
 
         if (record.Error) {
@@ -1862,7 +1879,7 @@ protected:
         if (!token->GetUserSID().empty()) {
             record.Subject = token->GetUserSID();
         }
-        record.ExpireTime = GetExpireTime(record, now);
+        record.ExpireTime = GetDerived()->GetExpireTime(record, now);
         if (record.NeedsRefresh()) {
             record.SetOkRefreshTime(this, now);
         } else {
@@ -1870,10 +1887,15 @@ protected:
         }
         record.RefreshRetryableErrorImmediately = true;
         CounterTicketsSuccess->Inc();
-        CounterTicketsBuildTime->Collect((now - record.InitTime).MilliSeconds());
+        TDuration::TValue ticketBuildTime = (now - record.InitTime).MilliSeconds();
+        if (record.IsLowRequestPriority) {
+            CounterTicketsLowPriorityBuildTime->Collect(ticketBuildTime);
+        } else {
+            CounterTicketsHighPriorityBuildTime->Collect(ticketBuildTime);
+        }
         BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
                     << record.PeerName << ") has now valid token of " << record.Subject);
-        record.IsLowAccessServiceRequestPriority = true;
+        record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -1886,7 +1908,7 @@ protected:
             errorLogMessage << " (" << error.LogMessage << ")";
         }
         if (record.Error.Retryable) {
-            record.ExpireTime = GetExpireTime(record, now);
+            record.ExpireTime = GetDerived()->GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
@@ -1906,7 +1928,7 @@ protected:
                         << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
         }
         CounterTicketsErrors->Inc();
-        record.IsLowAccessServiceRequestPriority = true;
+        record.IsLowRequestPriority = true;
         RefreshQueue.push({.Key = key, .RefreshTime = record.RefreshTime});
     }
 
@@ -2139,8 +2161,10 @@ protected:
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
-        CounterTicketsBuildTime = counters->GetHistogram("TicketsBuildTimeMs",
-                                                         NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsHighPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "HighPriority")->GetHistogram("TicketsBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
+        CounterTicketsLowPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "LowPriority")->GetHistogram("TicketsBuildTimeMs",
+            NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
     }
 
     void FillAccessServiceSettings(NGrpcActorClient::TGrpcClientSettings& settings) {

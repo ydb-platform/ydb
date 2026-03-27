@@ -4,8 +4,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
+#define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/common/getenv.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/stream/file.h>
 

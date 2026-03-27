@@ -26,7 +26,7 @@ ADD_MEMORY(TargetUtilization)
 class TMemoryStatsAggregator {
     using TMemoryStats = NKikimrMemory::TMemoryStats;
 
-    TMemoryStats Aggregated;    
+    TMemoryStats Aggregated;
     TMap<TString, TMemoryStats> PerHost;
 
 public:
@@ -93,7 +93,7 @@ private:
                             reflection.GetUInt64(left, field) + reflection.GetUInt64(right, field));
                         break;
                     default:
-                        Y_DEBUG_ABORT_UNLESS("Unhandled field type");
+                        Y_DEBUG_ABORT("Unhandled field type");
                 }
             }
         }

@@ -19,7 +19,7 @@ TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invok
 
     WaitUntilSet(future.AsVoid(), std::move(invoker));
 
-    return future.Get();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>
@@ -32,7 +32,7 @@ TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
         WaitUntilSet(future.AsVoid(), GetCurrentInvoker());
     }
 
-    return future.Get();
+    return future.GetOrCrash();
 }
 
 template <CFuture TFuture>
@@ -42,7 +42,7 @@ TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWait
         case EWaitForStrategy::WaitFor:
             return WaitFor(future);
         case EWaitForStrategy::Get:
-            return future.Get();
+            return future.BlockingGet();
         default:
             YT_ABORT();
     }
@@ -50,12 +50,12 @@ TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWait
 
 inline void Yield()
 {
-    WaitUntilSet(VoidFuture);
+    WaitUntilSet(OKFuture);
 }
 
 inline void SwitchTo(IInvokerPtr invoker)
 {
-    WaitUntilSet(VoidFuture, std::move(invoker));
+    WaitUntilSet(OKFuture, std::move(invoker));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

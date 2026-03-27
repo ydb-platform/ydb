@@ -36,6 +36,18 @@ class QuerySnapshotReadOnly(BaseQueryTxMode):
         return ydb_query_pb2.SnapshotModeSettings()
 
 
+class QuerySnapshotReadWrite(BaseQueryTxMode):
+    def __init__(self):
+        self._name = "snapshot_read_write"
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    def to_proto(self) -> ydb_query_pb2.SnapshotRWModeSettings:
+        return ydb_query_pb2.SnapshotRWModeSettings()
+
+
 class QuerySerializableReadWrite(BaseQueryTxMode):
     """This mode guarantees that the result of successful parallel transactions is equivalent
     to their serial execution, and there are no read anomalies for successful transactions.
@@ -129,14 +141,14 @@ class ArrowFormatSettings(IToProto):
         return settings
 
 
-class ArrowFormatMeta(IFromProto):
+class ArrowFormatMeta(IFromProto["ydb_formats_pb2.ArrowFormatMeta", "ArrowFormatMeta"]):
     """Metadata for Arrow format result sets containing the schema."""
 
     def __init__(self, schema: bytes):
         self.schema = schema
 
     @classmethod
-    def from_proto(cls, proto_message):
+    def from_proto(cls, proto_message: "ydb_formats_pb2.ArrowFormatMeta") -> "ArrowFormatMeta":
         return cls(schema=proto_message.schema)
 
     def __repr__(self):

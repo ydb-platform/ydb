@@ -33,6 +33,7 @@ public:
 
 private:
     std::shared_ptr<TImportTask> Task;
+    TString ErrorMessage;
     mutable EStatus Status = EStatus::Draft;
 
     virtual TConclusion<std::unique_ptr<NActors::IActor>> DoCreateActor(const NBackground::TStartContext& context) const override;
@@ -59,6 +60,8 @@ public:
   virtual bool IsFinished() const override;
 
   virtual bool IsReadyForRemoveOnFinished() const override;
+  
+  virtual TStatus GetStatus() const override;
 
   virtual TString GetClassName() const override;
 
@@ -74,7 +77,7 @@ public:
 
   void Confirm();
 
-  void Abort();
+  void Abort(const TString& errorMessage);
 
   bool IsStarted() const;
 

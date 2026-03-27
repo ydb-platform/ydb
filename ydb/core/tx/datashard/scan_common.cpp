@@ -5,6 +5,7 @@ namespace NKikimr::NDataShard {
 
 TColumnsTags GetAllTags(const TUserTable& tableInfo) {
     TColumnsTags result;
+    result.reserve(tableInfo.Columns.size());
 
     for (const auto& it : tableInfo.Columns) {
         result[it.second.Name] = it.first;
@@ -13,14 +14,9 @@ TColumnsTags GetAllTags(const TUserTable& tableInfo) {
     return result;
 }
 
-void AddTags(TTags& tags, const TColumnsTags& allTags, TProtoColumnsCRef columns) {
-    for (const auto& colName : columns) {
-        tags.push_back(allTags.at(colName));
-    }
-}
-
 TColumnsTypes GetAllTypes(const TUserTable& tableInfo) {
     TColumnsTypes result;
+    result.reserve(tableInfo.Columns.size());
 
     for (const auto& it : tableInfo.Columns) {
         result[it.second.Name] = it.second.Type;

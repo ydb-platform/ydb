@@ -11,12 +11,14 @@ RECURSE(
     clickbench
     cms
     config
+    dstool
     encryption
     hive
     kqp
     large_serializable
     limits
     minidumps
+    nbs
     postgresql
     query_cache
     rename
@@ -30,6 +32,7 @@ RECURSE(
     security
     serializable
     serverless
+    split_merge
     sqs
     statistics
     suite_tests

@@ -47,7 +47,7 @@ public:
         } catch (const std::exception& ex) {
             auto error = TError("Failed to add columns to name table for YAMRed DSV format")
                 << ex;
-            RegisterError(error);
+            SetError(error);
         }
 
         UpdateEscapedColumnNames();
@@ -115,9 +115,9 @@ private:
                     RowValues_[id] = nullptr;
             }
             WriteYamrValue();
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteYamrKey(const std::vector<int>& columnIds)

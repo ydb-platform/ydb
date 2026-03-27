@@ -260,7 +260,7 @@ struct Schema : NIceDb::Schema {
         struct DecommitStatus                  : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State                           : Column<18, NScheme::NTypeIds::Utf8> {};
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
-        struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -281,8 +281,7 @@ struct Schema : NIceDb::Schema {
             ExpectedSlotCount,
             NumActiveSlots,
             DecommitStatus,
-            SlotSizeInUnits,
-            InferPDiskSlotCountFromUnitSize>;
+            SlotSizeInUnits>;
     };
 
     struct VSlots : Table<5> {
@@ -590,6 +589,10 @@ struct Schema : NIceDb::Schema {
         struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
         struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
         struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -606,7 +609,11 @@ struct Schema : NIceDb::Schema {
             SessionStartAt,
             QueryStartAt,
             StateChangeAt,
-            UserSID>;
+            UserSID,
+            WmPoolId,
+            WmState,
+            WmEnterTime,
+            WmExitTime>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -869,16 +876,17 @@ struct Schema : NIceDb::Schema {
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct NodeId              : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct QueryId             : Column<2, NScheme::NTypeIds::Utf8> {};
-        struct Query               : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct AccessCount         : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct CompiledAt          : Column<5, NScheme::NTypeIds::Timestamp> {};
-        struct UserSID             : Column<6, NScheme::NTypeIds::Utf8> {};
-        struct LastAccessedAt      : Column<7, NScheme::NTypeIds::Timestamp> {};
-        struct CompilationDuration : Column<8, NScheme::NTypeIds::Uint64> {};
-        struct Warnings            : Column<9, NScheme::NTypeIds::Utf8> {};
-        struct Metadata            : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct NodeId                : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct QueryId               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Query                 : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct AccessCount           : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CompiledAt            : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID               : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct LastAccessedAt        : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct CompilationDurationMs : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct Warnings              : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct Metadata              : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct IsTruncated           : Column<11, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
@@ -889,9 +897,10 @@ struct Schema : NIceDb::Schema {
             CompiledAt,
             UserSID,
             LastAccessedAt,
-            CompilationDuration,
+            CompilationDurationMs,
             Warnings,
-            Metadata>;
+            Metadata,
+            IsTruncated>;
     };
 
     struct StreamingQueries : Table<26> {

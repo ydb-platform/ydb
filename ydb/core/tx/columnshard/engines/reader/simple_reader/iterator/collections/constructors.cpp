@@ -12,6 +12,12 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
             TBase::DropNextConstructor();
             continue;
         }
+        {
+            const auto& cursorLocal = std::dynamic_pointer_cast<ISimpleScanCursor>(cursor);
+            if (cursorLocal) {
+                TBase::MutableNextConstructor().ValidateCursor(*cursorLocal);
+            }
+        }
         if (usage) {
             TBase::MutableNextConstructor().SetIsStartedByCursor();
         } else {

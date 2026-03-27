@@ -686,7 +686,7 @@ TFuture<bool> TSupportsAttributes::DoExistsAttribute(const TYPath& path)
 
     NYPath::TTokenizer tokenizer(path);
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
-        return TrueFuture;
+        return MakeFuture(true);
     }
 
     tokenizer.Expect(NYPath::ETokenType::Literal);
@@ -694,7 +694,7 @@ TFuture<bool> TSupportsAttributes::DoExistsAttribute(const TYPath& path)
 
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
         if (CustomAttributes().FindYson(key)) {
-            return TrueFuture;
+            return MakeFuture(true);
         }
 
         if (auto* builtinAttributeProvider = GetBuiltinAttributeProvider()) {
@@ -703,16 +703,16 @@ TFuture<bool> TSupportsAttributes::DoExistsAttribute(const TYPath& path)
                 auto optionalDescriptor = builtinAttributeProvider->FindBuiltinAttributeDescriptor(internedKey);
                 if (optionalDescriptor) {
                     const auto& descriptor = *optionalDescriptor;
-                    return descriptor.Present ? TrueFuture : FalseFuture;
+                    return descriptor.Present ? MakeFuture(true) : MakeFuture(false);
                 }
             }
         }
 
-        return FalseFuture;
+        return MakeFuture(false);
     } else {
         auto asyncYson = DoFindAttribute(key);
         if (!asyncYson) {
-            return FalseFuture;
+            return MakeFuture(false);
         }
 
         return asyncYson.Apply(BIND(

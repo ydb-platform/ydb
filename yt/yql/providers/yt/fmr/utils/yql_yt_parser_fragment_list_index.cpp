@@ -1,8 +1,6 @@
 #include "yql_yt_parser_fragment_list_index.h"
 
 #include <library/cpp/yson/zigzag.h>
-
-#include <util/system/yassert.h>
 #include <util/string/builder.h>
 
 namespace NYql::NFmr {
@@ -35,7 +33,7 @@ namespace {
 } // anonymous namespace
 
 
-TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data, const TVector<TString>& keyColumns)
+TParserFragmentListIndex::TParserFragmentListIndex(TStringBuf data, const std::vector<TString>& keyColumns)
     : Pos_(data.begin())
     , DataStart_(data.begin())
     , DataEnd_(data.end())

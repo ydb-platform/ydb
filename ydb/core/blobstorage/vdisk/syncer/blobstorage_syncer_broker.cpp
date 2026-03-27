@@ -44,10 +44,11 @@ namespace NKikimr {
                 Send(actorId, new TEvSyncToken);
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token sent, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                    "TEvQuerySyncToken, token sent (1):" <<
+                    " VDisk actor id# " << vDiskActorId <<
+                    " actor id# " << actorId <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
                 return;
             }
 
@@ -58,10 +59,11 @@ namespace NKikimr {
                 Send(actorId, new TEvSyncToken);
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token sent, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                    "TEvQuerySyncToken, token sent (2):" <<
+                    " VDisk actor id# " << vDiskActorId <<
+                    " actor id# " << actorId <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
                 return;
             }
 
@@ -73,25 +75,28 @@ namespace NKikimr {
                 it->ActorIds.insert(actorId);
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", enqueued, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                    "TEvQuerySyncToken, enqueued (1):" <<
+                    " VDisk actor id# " << vDiskActorId <<
+                    " actor id# " << actorId <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
                 return;
             }
-            
+
             TWaitSync sync{vDiskActorId, {actorId}};
             WaitQueue.emplace_back(std::move(sync));
 
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                "TEvQuerySyncToken, VDisk actor id: " << vDiskActorId <<
-                ", actor id: " << actorId <<
-                ", enqueued, active: " << Active.size() <<
-                ", waiting: " << WaitQueue.size());
+                "TEvQuerySyncToken, enqueued (2):" <<
+                " VDisk actor id# " << vDiskActorId <<
+                " actor id# " << actorId <<
+                " active# " << Active.size() <<
+                " waiting# " << WaitQueue.size());
         }
 
         void ProcessQueue() {
             const auto limit = (ui64)MaxInProgressSyncCount;
+            bool processed = false;
 
             while (!WaitQueue.empty() && (!limit || Active.size() < limit)) {
                 const auto& waitSync = WaitQueue.front();
@@ -99,13 +104,22 @@ namespace NKikimr {
                     Send(actorId, new TEvSyncToken);
 
                     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                        "ProcessQueue(), VDisk actor id: " << waitSync.VDiskActorId <<
-                        ", actor id: " << actorId <<
-                        ", token sent, active: " << Active.size() <<
-                        ", waiting: " << WaitQueue.size());
+                        "ProcessQueue(), token sent:" <<
+                        " VDisk actor id# " << waitSync.VDiskActorId <<
+                        " actor id# " << actorId <<
+                        " active# " << Active.size() <<
+                        " waiting# " << WaitQueue.size());
                 }
                 Active[waitSync.VDiskActorId] = std::move(waitSync.ActorIds);
                 WaitQueue.pop_front();
+                processed = true;
+            }
+
+            if (processed) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
+                    "ProcessQueue() done:" <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
             }
         }
 
@@ -115,17 +129,17 @@ namespace NKikimr {
 
             if (const auto it = Active.find(vDiskActorId); it != Active.end()) {
                 it->second.erase(actorId);
-
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvReleaseSyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", token released, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
-
                 if (it->second.empty()) {
                     Active.erase(vDiskActorId);
                     ProcessQueue();
                 }
+
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
+                    "TEvReleaseSyncToken, token released:" <<
+                    " VDisk actor id# " << vDiskActorId <<
+                    " actor id# " << actorId <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
                 return;
             }
 
@@ -140,10 +154,11 @@ namespace NKikimr {
                 }
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
-                    "TEvReleaseSyncToken, VDisk actor id: " << vDiskActorId <<
-                    ", actor id: " << actorId <<
-                    ", removed from queue, active: " << Active.size() <<
-                    ", waiting: " << WaitQueue.size());
+                    "TEvReleaseSyncToken, removed from queue:" <<
+                    " VDisk actor id# " << vDiskActorId <<
+                    " actor id# " << actorId <<
+                    " active# " << Active.size() <<
+                    " waiting# " << WaitQueue.size());
             }
         }
 

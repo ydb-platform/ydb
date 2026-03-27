@@ -294,11 +294,6 @@ public:
             return result;
         }
 
-        if (!AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && op.GetTopicAutoPartitioning()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Topic autopartitioning for CDC is disabled");
-            return result;
-        }
-
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_ABORT_UNLESS(stream);
 
@@ -367,6 +362,15 @@ protected:
     void FillNotice(const TPathId& pathId, NKikimrTxDataShard::TFlatSchemeTransaction& tx, TOperationContext& context) const override {
         auto& notice = *tx.MutableCreateCdcStreamNotice();
         NCdcStreamAtTable::FillNotice(pathId, context, notice);
+
+        // Override table schema version with coordinated version from AlterData
+        Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
+        auto table = context.SS->Tables.at(pathId);
+        table->InitAlterData(OperationId);
+        notice.SetTableSchemaVersion(*table->AlterData->CoordinatedSchemaVersion);
+
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistAddAlterTable(db, pathId, table->AlterData);
     }
 
 public:
@@ -579,7 +583,6 @@ public:
         auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
-        Y_ABORT_UNLESS(!table->AlterData);
 
         const auto txType = InitialScan
             ? TTxState::TxCreateCdcStreamAtTableWithInitialScan
@@ -697,7 +700,7 @@ void DoCreatePqPart(
     partitionConfig.SetBurstSize(1_MB); // TODO: configurable burst
     partitionConfig.SetMaxCountInPartition(Max<i32>());
 
-    if (AppData()->FeatureFlags.GetEnableTopicAutopartitioningForCDC() && IsReplicationSupportTopicAutopartitioning(op)) {
+    if (IsReplicationSupportTopicAutopartitioning(op)) {
         auto * ps = pqConfig.MutablePartitionStrategy();
         ps->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT);
         ps->SetMinPartitionCount(std::min<ui32>(std::max<ui32>(table->GetPartitions().size() / 16, 1), TSchemeShard::MaxPQGroupPartitionsCount));
@@ -841,7 +844,10 @@ ISubOperation::TPtr RejectOnTablePathChecks(const TOperationId& opId, const TPat
         if (!tablePath.IsInsideTableIndexPath()) {
             checks.IsCommonSensePath();
         } else {
-            if (!tablePath.Parent().IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)) {
+            const auto& parentPath = tablePath.Parent();
+            if (!parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobal)
+                && !parentPath.IsTableIndex(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree))
+            {
                 return CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                     "Cannot add changefeed to index table");
             }

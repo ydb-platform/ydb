@@ -217,7 +217,7 @@ namespace NFake {
 
             // put an entry into logo blobs database and reply with success
             Blobs.emplace(id, TRope(buffer));
-    
+
             return new TEvBlobStorage::TEvPatchResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
@@ -292,7 +292,7 @@ namespace NFake {
 
             Y_ABORT_UNLESS(from.TabletID() == to.TabletID());
             Y_ABORT_UNLESS(from.Channel() == to.Channel());
-            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId); 
+            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId);
             auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {

@@ -3037,7 +3037,9 @@
   ],
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -3084,7 +3086,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "CPU",
-  "uid": "cpu",
+  "uid": "ydb-cpu",
   "version": 1,
   "weekStart": ""
 }

@@ -2,6 +2,7 @@
 #include "manager.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/tiering/fetcher.h>
@@ -17,6 +18,30 @@ namespace NKikimr::NColumnShard {
 
 class TTiersManager::TActor: public TActorBootstrapped<TTiersManager::TActor> {
 private:
+    struct TEvPrivate {
+        enum EEv {
+            EvSchemaSecretsResolved = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvEnd
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+
+        struct TEvSchemaSecretsResolved : TEventLocal<TEvSchemaSecretsResolved, EvSchemaSecretsResolved> {
+            NTiers::TExternalStorageId TierId;
+            NTiers::TTierConfig TierConfig;
+            NKqp::TEvDescribeSecretsResponse::TDescription Description;
+
+            TEvSchemaSecretsResolved(
+                NTiers::TExternalStorageId tierId,
+                NTiers::TTierConfig tierConfig,
+                NKqp::TEvDescribeSecretsResponse::TDescription description)
+                : TierId(std::move(tierId))
+                , TierConfig(std::move(tierConfig))
+                , Description(std::move(description))
+            {}
+        };
+    };
+
     using IRetryPolicy = IRetryPolicy<const NTiers::TEvSchemeObjectResolutionFailed::EReason>;
 
     std::shared_ptr<TTiersManager> Owner;
@@ -53,6 +78,7 @@ private:
             hFunc(NTiers::TEvNotifySchemeObjectDeleted, Handle);
             hFunc(NTiers::TEvSchemeObjectResolutionFailed, Handle);
             hFunc(NTiers::TEvWatchSchemeObject, Handle);
+            hFunc(TEvPrivate::TEvSchemaSecretsResolved, Handle);
             default:
                 break;
         }
@@ -90,11 +116,68 @@ private:
                 return;
             }
 
+            const auto& auth = description.GetExternalDataSourceDescription().GetAuth();
+            if (auth.identity_case() == NKikimrSchemeOp::TAuth::kAws) {
+                const auto& aws = auth.GetAws();
+                TVector<TString> schemaSecretNames = {
+                    aws.GetAwsAccessKeyIdSecretName(),
+                    aws.GetAwsSecretAccessKeySecretName()
+                };
+
+                if (NKqp::UseSchemaSecrets(AppDataVerified().FeatureFlags, schemaSecretNames)) {
+                    auto userToken = MakeIntrusive<NACLib::TUserToken>(BUILTIN_ACL_METADATA, TVector<NACLib::TSID>{});
+
+                    auto future = NKqp::DescribeSecret(
+                        schemaSecretNames,
+                        userToken,
+                        AppDataVerified().TenantName,
+                        ActorContext().ActorSystem());
+
+                        const auto selfId = SelfId();
+                    const auto tierIdCopy = tierId;
+
+                    future.Subscribe([actorSystem = ActorContext().ActorSystem(),
+                                      selfId,
+                                      tierIdCopy,
+                                      tier](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
+                        actorSystem->Send(selfId, new TEvPrivate::TEvSchemaSecretsResolved(tierIdCopy, tier, result.GetValue()));
+                    });
+
+                    return;
+                }
+            } else {
+                AFL_WARN(NKikimrServices::TX_TIERING)("event", "unsupported_auth_for_tiering")("path", tierId.GetConfigPath())("identity_case", static_cast<int>(auth.identity_case()));
+            }
+
             Owner->UpdateTierConfig(tier, tierId);
         } else {
             AFL_WARN(NKikimrServices::TX_TIERING)("error", "invalid_object_type")("type", static_cast<ui64>(description.GetSelf().GetPathType()))("path", tierId.GetConfigPath());
             Owner->UpdateTierConfig(std::nullopt, tierId);
         }
+    }
+
+    void Handle(TEvPrivate::TEvSchemaSecretsResolved::TPtr& ev) {
+        if (ev->Get()->Description.Status != Ydb::StatusIds::SUCCESS) {
+            AFL_ERROR(NKikimrServices::TX_TIERING)(
+                "event", "cannot_read_schema_secrets")("tier", ev->Get()->TierId.GetConfigPath())(
+                "reason", ev->Get()->Description.Issues.ToOneLineString());
+            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+            return;
+        }
+
+        if (ev->Get()->Description.SecretValues.size() != 2) {
+            AFL_ERROR(NKikimrServices::TX_TIERING)(
+                "event", "cannot_read_schema_secrets")("tier", ev->Get()->TierId.GetConfigPath())(
+                "reason", TStringBuilder() << "expected 2 secrets, got " << ev->Get()->Description.SecretValues.size());
+            Owner->UpdateTierConfig(std::nullopt, ev->Get()->TierId);
+            return;
+        }
+
+        Owner->UpdateTierConfig(
+            ev->Get()->TierConfig.BuildWithPatchedSecrets(
+                ev->Get()->Description.SecretValues[0],
+                ev->Get()->Description.SecretValues[1]),
+            ev->Get()->TierId);
     }
 
     void Handle(NTiers::TEvNotifySchemeObjectDeleted::TPtr& ev) {

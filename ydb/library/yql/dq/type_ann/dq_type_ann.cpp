@@ -99,7 +99,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             return TStatus::Error;
         }
 
-        auto* argType = input->GetTypeAnn();
+        auto argType = input->GetTypeAnn();
         if constexpr (std::is_same_v<TStage, TDqPhyStage>) {
             if (TDqConnection::Match(input.Get()) && argType->GetKind() == ETypeAnnotationKind::List) {
                 auto* itemType = argType->Cast<TListExprType>()->GetItemType();
@@ -147,7 +147,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    auto* resultType = programLambda->GetTypeAnn();
+    auto resultType = programLambda->GetTypeAnn();
     if (!resultType) {
         return TStatus::Repeat;
     }
@@ -249,7 +249,7 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
             stageResultTypes.assign(programResultTypesTuple.begin(), programResultTypesTuple.end());
         } else {
             for (auto transform : transforms) {
-                auto* type = transform->GetTypeAnn();
+                auto type = transform->GetTypeAnn();
                 if (!EnsureListType(transform->Pos(), *type, ctx)) {
                     return TStatus::Error;
                 }
@@ -484,6 +484,10 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     auto leftInputType = join.LeftInput().Ref().GetTypeAnn();
     auto rightInputType = join.RightInput().Ref().GetTypeAnn();
+    if (!leftInputType || !rightInputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Lambda is not allowed as join input"));
+        return nullptr;
+    }
 
     if (stream) {
         if (!EnsureNewSeqType<false, false, true>(join.Pos(), *leftInputType, ctx)) {
@@ -684,7 +688,7 @@ TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnStreamLookup(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 11, 12, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 11, 13, ctx)) {
         return TStatus::Error;
     }
     if (!EnsureCallable(*input->Child(TDqCnStreamLookup::idx_Output), ctx)) {
@@ -817,8 +821,8 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     auto cnMerge = TDqCnMerge(node);
-
-    if (!EnsureTupleMinSize(*cnMerge.SortColumns().Ptr(), 1, ctx)) {
+    auto sortColumns = node->Child(TDqCnMerge::idx_SortColumns);
+    if (!EnsureTupleMinSize(*sortColumns, 1, ctx)) {
         return TStatus::Error;
     }
 
@@ -1196,8 +1200,8 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
-    if (!EnsureArgsCount(*node, 5, ctx)) {
+    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
+    if (!EnsureArgsCount(*node, 8, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1211,9 +1215,9 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
         return IGraphTransformer::TStatus(TStatus::Error);
     }
     const auto joinType = joinTypeNode.Content();
-    if (joinType != "Inner") {
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
         ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
-                    << ", supported: Inner"));
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1251,8 +1255,15 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     }
 
     // Add right side columns
-    for (auto itemType : rightItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightItemTypes) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+        }
     }
 
     // Add scalar length column at the end
@@ -1268,15 +1279,53 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
-    if (!EnsureStreamType(*inputStream, ctx)) {
+    if (!inputStream->GetTypeAnn()) {
         return TStatus::Error;
     }
-    auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
-    auto multiType = streamType->GetItemType();
+
+    const TTypeAnnotationNode* multiType = nullptr;
+    bool isFlow = false;
+
+    if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
+        multiType = streamType->GetItemType();
+    } else if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+        auto flowType = inputStream->GetTypeAnn()->Cast<TFlowExprType>();
+        multiType = flowType->GetItemType();
+        isFlow = true;
+    } else {
+        return TStatus::Error;
+    }
+
     if (!EnsureMultiType(inputStream->Pos(), *multiType, ctx)) {
         return TStatus::Error;
     }
+
+    bool needBlockWrap = false;
+
     auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
+
+    auto firstInputColumn = itemTypes.at(0);
+    if (firstInputColumn->IsBlockOrScalar()) {
+        needBlockWrap = true;
+        TTypeAnnotationNode::TListType unwrappedTypes;
+        for (size_t i = 0; i < itemTypes.size() - 1; ++i) {
+            auto colType = itemTypes.at(i);
+            if (!EnsureBlockOrScalarType(inputStream->Pos(), *colType, ctx)) {
+                return TStatus::Error;
+            }
+            const TTypeAnnotationNode* blockContentType = nullptr;
+            if (colType->IsBlock()) {
+                blockContentType = colType->Cast<TBlockExprType>()->GetItemType();
+            } else if (colType->IsScalar()) {
+                blockContentType = colType->Cast<TScalarExprType>()->GetItemType();
+            } else {
+                YQL_ENSURE(false, "Block or scalar type expected after EnsureBlockOrScalarType");
+            }
+            unwrappedTypes.push_back(blockContentType);
+        }
+        itemTypes.swap(unwrappedTypes);
+    }
 
     // key extractor lambda
     auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
@@ -1360,11 +1409,24 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     // Derive the output type from the finishHandler
     TTypeAnnotationNode::TListType finishOutputTypes;
     for (ui32 i = 1; i < finishHandler->ChildrenSize(); ++i) {
-        finishOutputTypes.emplace_back(finishHandler->Child(i)->GetTypeAnn());
+        const auto colType = finishHandler->Child(i)->GetTypeAnn();
+        if (!needBlockWrap) {
+            finishOutputTypes.emplace_back(colType);
+        } else {
+            finishOutputTypes.emplace_back(ctx.MakeType<TBlockExprType>(colType));
+        }
+    }
+    if (needBlockWrap) {
+        finishOutputTypes.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)));
     }
     auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
 
-    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
+    if (isFlow) {
+        input->SetTypeAnn(ctx.MakeType<TFlowExprType>(finishOutputType));
+    } else {
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
+    }
+
     return TStatus::Ok;
 }
 

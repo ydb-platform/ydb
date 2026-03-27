@@ -7,9 +7,9 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
-    template <typename T>
-    void CreateStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false) {
-        T t;
+    void CreateStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false,
+        bool userSIDs = false)
+    {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
@@ -47,6 +47,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             streamDesc.SetMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly);
             streamDesc.SetFormat(NKikimrSchemeOp::ECdcStreamFormatProto);
             streamDesc.SetVirtualTimestamps(vt);
+            streamDesc.SetUserSIDs(userSIDs);
 
             if (state) {
                 streamDesc.SetState(*state);
@@ -68,44 +69,48 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             TestDescribeResult(DescribePrivatePath(runtime, path + "/" + tableName + "/Stream"), {
                 NLs::PathExist,
                 NLs::StreamVirtualTimestamps(vt),
+                NLs::StreamUserSIDs(userSIDs),
             });
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStream) {
-        CreateStream<T>();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamSimple, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTable) {
-        CreateStream<T>({}, false, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTable, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, {}, false, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamExplicitReady) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamExplicitReady, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableExplicitReady) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, false, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableExplicitReady, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateReady, false, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithInitialScan) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithInitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithInitialScan) {
-        CreateStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, false, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableWithInitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, NKikimrSchemeOp::ECdcStreamStateScan, false, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithVirtualTimestamps) {
-        CreateStream<T>({}, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithVirtualTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, {}, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamOnIndexTableWithVirtualTimestamps) {
-        CreateStream<T>({}, true, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableWithVirtualTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, {}, true, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithAwsRegion) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamOnIndexTableWithUserSIDs, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        CreateStream(t, {}, true, true, true);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithAwsRegion, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -143,8 +148,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithResolvedTimestamps) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithResolvedTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -177,8 +181,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateStreamWithSchemaChanges) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithSchemaChanges, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -211,8 +214,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DisableStream) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DisableStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -262,8 +264,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(GetReadyStream) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(GetReadyStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -323,9 +324,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    template <typename T>
-    void DropStream(const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
-        T t;
+    void DropStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool onIndex = false) {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
@@ -391,32 +390,31 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStream) {
-        DropStream<T>();
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamSimple, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTable) {
-        DropStream<T>({}, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamOnIndexTable, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t, {}, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStreamExplicitReady) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamExplicitReady, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateReady);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableExplicitReady) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateReady, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamOnIndexTableExplicitReady, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateReady, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStreamCreatedWithInitialScan) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamCreatedWithInitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateScan);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropStreamOnIndexTableCreatedWithInitialScan) {
-        DropStream<T>(NKikimrSchemeOp::ECdcStreamStateScan, true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropStreamOnIndexTableCreatedWithInitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        DropStream(t, NKikimrSchemeOp::ECdcStreamStateScan, true);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(DropMultipleStreams) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropMultipleStreams, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -474,8 +472,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(CreateDropRecreate) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
@@ -541,8 +538,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(Attributes) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Attributes, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -582,8 +578,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(RacySplitAndDropTable) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitAndDropTable, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -627,8 +622,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(InitialScan) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(InitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -741,9 +735,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         }
     }
 
-    template <typename T>
-    void SplitTable(const TString& cdcStreamDesc) {
-        T t;
+    void SplitTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
@@ -782,8 +774,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitTable) {
-        SplitTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableSimple, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        SplitTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -793,8 +785,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(SplitTableResolvedTimestamps) {
-        SplitTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitTableResolvedTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        SplitTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -805,9 +797,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    template <typename T>
-    void MergeTable(const TString& cdcStreamDesc) {
-        T t;
+    void MergeTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
@@ -848,8 +838,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeTable) {
-        MergeTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableSimple, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        MergeTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -859,8 +849,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(MergeTableResolvedTimestamps) {
-        MergeTable<T>(R"(
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(MergeTableResolvedTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        MergeTable(t, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -871,8 +861,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         )");
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(RacySplitTableAndCreateStream) {
-        T t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
@@ -912,12 +901,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    template <typename T>
-    void PqTransactions(bool enable) {
-        T t;
+    void PqTransactions(TTestWithReboots& t) {
         t.GetTestEnvOptions()
-            .EnableChangefeedInitialScan(true)
-            .EnablePQConfigTransactionsAtSchemeShard(enable);
+            .EnableChangefeedInitialScan(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -954,12 +940,8 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS(WithoutPqTransactions) {
-        PqTransactions<T>(false);
-    }
-
-    Y_UNIT_TEST_WITH_REBOOTS(WithPqTransactions) {
-        PqTransactions<T>(true);
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(WithPqTransactions, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
+        PqTransactions(t);
     }
 
 } // TCdcStreamWithRebootsTests

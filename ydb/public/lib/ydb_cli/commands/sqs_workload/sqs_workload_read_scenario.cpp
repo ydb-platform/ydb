@@ -9,40 +9,43 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig&) {
+    int TSqsWorkloadReadScenario::Run(const TClientCommand::TConfig& config) {
         InitAwsSdk();
-        auto result = RunScenario();
+        auto result = RunScenario(config);
         DestroyAwsSdk();
         return result;
     }
 
-    int TSqsWorkloadReadScenario::RunScenario() {
-        InitStatsCollector(0, Concurrency);
+    int TSqsWorkloadReadScenario::RunScenario(const TClientCommand::TConfig& config) {
+        InitStatsCollector(0, WorkersCount);
         InitMeasuringHttpClient(StatsCollector);
-        InitSqsClient();
+        InitSqsClient(config);
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+        auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);
+        if (queueUrl.empty()) {
+            DestroySqsClient();
+            return EXIT_FAILURE;
+        }
 
         TSqsWorkloadReaderParams params{
             .TotalSec = TotalSec,
-            .QueueUrl = QueueUrl,
-            .EndpointOverride = EndpointOverride,
-            .Account = Account,
-            .Token = Token,
+            .QueueUrl = queueUrl,
+            .AwsAccessKeyId = AwsAccessKeyId,
+            .AwsSessionToken = AwsSessionToken,
             .Log = Log,
             .ErrorFlag = ErrorFlag,
             .SqsClient = SqsClient,
             .Mutex = Mutex,
             .FinishedCond = FinishedCond,
             .StartedCount = StartedCount,
-            .Concurrency = Concurrency,
+            .WorkersCount = WorkersCount,
             .BatchSize = BatchSize,
             .ErrorMessagesRate = ErrorMessagesRate,
-            .ErrorMessagesDestiny = ErrorMessagesDestiny,
+            .ErrorMessagesPolicy = ErrorMessagesPolicy,
             .HandleMessageDelay = TDuration::MilliSeconds(HandleMessageDelayMs),
             .VisibilityTimeout = TDuration::MilliSeconds(VisibilityTimeoutMs),
-            .SetSubjectToken = SetSubjectToken,
-            .ValidateFifo = ValidateFifo,
+            .ValidateMessagesOrder = ValidateMessagesOrder,
             .HashMapMutex = std::make_shared<std::mutex>(),
             .LastReceivedMessageInGroup =
                 std::make_shared<THashMap<TString, ui64>>(),
@@ -66,7 +69,7 @@ namespace NYdb::NConsoleClient {
 
         DestroySqsClient();
 
-        if (AnyErrors()) {
+        if (AnyErrors() || params.StatsCollector->GetTotalReadMessages() == 0) {
             return EXIT_FAILURE;
         }
 

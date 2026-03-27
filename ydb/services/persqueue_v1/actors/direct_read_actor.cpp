@@ -5,6 +5,7 @@
 #include "read_session_actor.h"
 
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 
@@ -39,6 +40,7 @@ TDirectReadSessionActor::TDirectReadSessionActor(
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , InitDone(false)
+    , ReadWithoutConsumer(false)
     , ForceACLCheck(false)
     , LastACLCheckTimestamp(TInstant::Zero())
     , Counters(counters)
@@ -231,15 +233,18 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
     }
 
-    if (init.consumer().empty()) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no consumer in init request");
-    }
+    ReadWithoutConsumer = init.consumer().empty();
 
-    ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        ClientPath = init.consumer();
+    if (ReadWithoutConsumer) {
+        ClientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER;
+        ClientPath = "";
     } else {
-        ClientPath = NPersQueue::StripLeadSlash(NPersQueue::MakeConsumerPath(init.consumer()));
+        ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
+        if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            ClientPath = init.consumer();
+        } else {
+            ClientPath = NPersQueue::StripLeadSlash(NPersQueue::MakeConsumerPath(init.consumer()));
+        }
     }
 
     Session = init.session_id();
@@ -481,7 +486,7 @@ void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster()));
+        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {

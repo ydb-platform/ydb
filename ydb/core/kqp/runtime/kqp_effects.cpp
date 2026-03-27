@@ -39,6 +39,16 @@ public:
 
     void Finish() final {}
 
+    void Flush() final {}
+
+    bool IsFinished() const final {
+        return false;
+    }
+
+    bool IsEarlyFinished() const final {
+        return false;
+    }
+
 private:
     NUdf::IApplyContext* ApplyCtx;
 };

@@ -16,8 +16,7 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using namespace NNodes;
 
@@ -1101,23 +1100,15 @@ void GetToken(const TString& string, TString& out, const TTypeAnnotationContext&
                 TStringBuf clusterName = p1;
                 if (clusterName.SkipPrefix("default_")) {
                     for (auto& x : type.DataSources) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
+                        if (auto token = x->ResolveClusterToken(TString(clusterName))) {
+                            out = *token;
+                            return;
                         }
                     }
                     for (auto& x : type.DataSinks) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
+                        if (auto token = x->ResolveClusterToken(TString(clusterName))) {
+                            out = *token;
+                            return;
                         }
                     }
                 }
@@ -1936,5 +1927,4 @@ bool RenamePgSelectColumns(
     return true;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

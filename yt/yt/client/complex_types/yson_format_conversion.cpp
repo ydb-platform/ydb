@@ -1,8 +1,9 @@
 #include "yson_format_conversion.h"
 
-#include "uuid_text.h"
+#include "common_yson_converters.h"
 #include "time_text.h"
-#include "scanner_factory.h"
+#include "uuid_text.h"
+#include "yson_scanners.h"
 
 #include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/unversioned_value.h>
@@ -25,6 +26,9 @@
 #include <variant>
 
 namespace NYT::NComplexTypes {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
 
 using namespace NTableClient;
 using namespace NYson;
@@ -33,14 +37,12 @@ using namespace NDecimal;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
 DEFINE_ENUM(EConverterType,
     (ToServer)
     (ToClient)
 );
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct TYsonConverterCreatorConfig
 {
@@ -116,7 +118,7 @@ private:
                 for (const auto& element : logicalType->GetElements()) {
                     if (!CheckAndCacheTriviality(element, config)) {
                         result = false;
-                        // no break here, we want to cache all elements
+                        // No break here, we want to cache all elements.
                     }
                 }
                 return result;
@@ -128,7 +130,7 @@ private:
                 for (const auto& field : logicalType->GetFields()) {
                     if (!CheckAndCacheTriviality(field.Type, config)) {
                         result = false;
-                        // no break here, we want to cache all elements
+                        // No break here, we want to cache all elements.
                     }
                 }
                 return result;
@@ -150,15 +152,6 @@ private:
 private:
     THashMap<void*, bool> Cache_;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-void IdRecoder(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
-{
-    cursor->TransferComplexValue(consumer);
-}
-
-using TYsonCursorConverter = std::function<void(TYsonPullParserCursor*, IYsonConsumer*)>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -192,7 +185,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
@@ -216,7 +209,7 @@ public:
 
     // This operator should be called only after previous result is consumed.
     // So use-after-free won't occur.
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
@@ -239,7 +232,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -284,13 +277,13 @@ public:
         Converted_.reserve(TimestampLength);
     }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::Uint64);
         Convert(value.Data.Uint64, consumer);
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::Uint64Value);
         Convert((*cursor)->UncheckedAsUint64(), consumer);
@@ -333,14 +326,14 @@ public:
         : ValueType_(valueType)
     { }
 
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
         return MakeUnversionedUint64Value(BinaryTimeFromText(data, ValueType_));
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -410,13 +403,13 @@ public:
         : UuidMode_(uuidMode)
     { }
 
-    void operator () (TUnversionedValue value, IYsonConsumer* consumer)
+    void operator()(TUnversionedValue value, IYsonConsumer* consumer)
     {
         CheckValueType(value.Type, EValueType::String);
         Convert(value.AsStringBuf(), consumer);
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         Convert((*cursor)->UncheckedAsString(), consumer);
@@ -435,7 +428,7 @@ private:
                 end = WriteGuidToBuffer(Buffer_.data(), GuidFromBytes(data));
                 break;
             default:
-                // binary uuid should not be converted
+                // Binary uuid should not be converted.
                 YT_ABORT();
         }
         consumer->OnStringScalar(TStringBuf(Buffer_.data(), end));
@@ -453,14 +446,14 @@ public:
         : UuidMode_(uuidMode)
     { }
 
-    TUnversionedValue operator () (TUnversionedValue value)
+    TUnversionedValue operator()(TUnversionedValue value)
     {
         CheckValueType(value.Type, EValueType::String);
         auto data = value.AsStringBuf();
         return MakeUnversionedStringValue(Convert(data));
     }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         CheckYsonItemType((*cursor)->GetType(), EYsonItemType::StringValue);
         auto data = (*cursor)->UncheckedAsString();
@@ -479,7 +472,7 @@ private:
                 GuidToBytes(TGuid::FromString(data), Buffer_.data());
                 break;
             default:
-                // binary uuid should not be converted
+                // Binary uuid should not be converted.
                 YT_ABORT();
         }
         return TStringBuf(Buffer_.data(), Buffer_.size());
@@ -513,77 +506,9 @@ struct TStructFieldInfo
     bool IsNullable = false;
 };
 
-
-template <bool IsElementNullable>
-class TOptionalHandler
-{
-public:
-    void OnEmptyOptional(IYsonConsumer* consumer) const
-    {
-        consumer->OnEntity();
-    }
-
-    void OnFilledOptional(const TYsonCursorConverter& recoder, TYsonPullParserCursor* cursor, IYsonConsumer* consumer) const
-    {
-        if constexpr (IsElementNullable) {
-            consumer->OnBeginList();
-            consumer->OnListItem();
-            recoder(cursor, consumer);
-            consumer->OnEndList();
-        } else {
-            recoder(cursor, consumer);
-        }
-    }
-};
-
-class TListHandler
-{
-public:
-    Y_FORCE_INLINE void OnListBegin(IYsonConsumer* consumer) const
-    {
-        consumer->OnBeginList();
-    }
-
-    Y_FORCE_INLINE void OnListItem(
-        const TYsonCursorConverter& recoder,
-        TYsonPullParserCursor* cursor,
-        IYsonConsumer* consumer) const
-    {
-        consumer->OnListItem();
-        recoder(cursor, consumer);
-    }
-
-    Y_FORCE_INLINE void OnListEnd(IYsonConsumer* consumer) const
-    {
-        consumer->OnEndList();
-    }
-};
-
-class TTupleApplier
-{
-public:
-    Y_FORCE_INLINE void OnTupleBegin(IYsonConsumer* consumer) const
-    {
-        consumer->OnBeginList();
-    }
-
-    Y_FORCE_INLINE void
-    OnTupleItem(const TYsonCursorConverter& recoder, TYsonPullParserCursor* cursor, IYsonConsumer* consumer) const
-    {
-        consumer->OnListItem();
-        recoder(cursor, consumer);
-    }
-
-    Y_FORCE_INLINE void OnTupleEnd(IYsonConsumer* consumer) const
-    {
-        consumer->OnEndList();
-    }
-};
-
 template <bool SkipNullValues>
-class TStructApplier
+struct TStructApplier
 {
-public:
     Y_FORCE_INLINE void OnStructBegin(IYsonConsumer* consumer) const
     {
         consumer->OnBeginMap();
@@ -610,9 +535,8 @@ public:
     }
 };
 
-class TVariantTupleApplier
+struct TVariantTupleApplier
 {
-public:
     Y_FORCE_INLINE void OnVariantAlternative(
         const std::pair<int, TYsonCursorConverter>& alternative,
         TYsonPullParserCursor* cursor,
@@ -630,9 +554,8 @@ public:
     }
 };
 
-class TVariantStructApplier
+struct TVariantStructApplier
 {
-public:
     Y_FORCE_INLINE void OnVariantAlternative(
         const std::pair<TString, TYsonCursorConverter>& alternative,
         TYsonPullParserCursor* cursor,
@@ -651,18 +574,15 @@ public:
 };
 
 template <EDictMode mode>
-class TDictApplier
+struct TDictApplier
 {
-public:
     Y_FORCE_INLINE void OnDictBegin(IYsonConsumer* consumer) const
     {
         if constexpr (mode == EDictMode::Positional) {
             consumer->OnBeginList();
-        } else if constexpr (mode == EDictMode::Named) {
-            consumer->OnBeginMap();
         } else {
-            // Not compilable.
-            static_assert(mode == EDictMode::Positional);
+            static_assert(mode == EDictMode::Named, "Unknown dict mode");
+            consumer->OnBeginMap();
         }
     }
 
@@ -674,7 +594,9 @@ public:
             consumer->OnBeginList();
             consumer->OnListItem();
             keyRecoder(cursor, consumer);
-        } else if constexpr (mode == EDictMode::Named) {
+        } else {
+            static_assert(mode == EDictMode::Named, "Unknown dict mode");
+
             const auto& item = *cursor;
 
             // Named representation of dict supported only for string keys.
@@ -682,9 +604,6 @@ public:
 
             consumer->OnKeyedItem(item->UncheckedAsString());
             cursor->Next();
-        } else {
-            // Not compilable.
-            static_assert(mode == EDictMode::Positional);
         }
     }
 
@@ -695,11 +614,9 @@ public:
             consumer->OnListItem();
             valueRecoder(cursor, consumer);
             consumer->OnEndList();
-        } else if constexpr (mode == EDictMode::Named) {
-            valueRecoder(cursor, consumer);
         } else {
-            // Not compilable.
-            static_assert(mode == EDictMode::Positional);
+            static_assert(mode == EDictMode::Named, "Unknown dict mode");
+            valueRecoder(cursor, consumer);
         }
     }
 
@@ -707,11 +624,9 @@ public:
     {
         if constexpr (mode == EDictMode::Positional) {
             consumer->OnEndList();
-        } else if constexpr (mode == EDictMode::Named) {
-            consumer->OnEndMap();
         } else {
-            // Not compilable.
-            static_assert(mode == EDictMode::Positional);
+            static_assert(mode == EDictMode::Named, "Unknown dict mode");
+            consumer->OnEndMap();
         }
     }
 };
@@ -722,10 +637,9 @@ public:
     TNamedToPositionalDictConverter(TComplexTypeFieldDescriptor descriptor, TYsonCursorConverter valueConverter)
         : Descriptor_(std::move(descriptor))
         , ValueConverter_(std::move(valueConverter))
-    {
-    }
+    { }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
         EnsureYsonToken(Descriptor_, *cursor, EYsonItemType::BeginMap);
         cursor->Next();
@@ -754,45 +668,58 @@ public:
     }
 
 private:
-    TComplexTypeFieldDescriptor Descriptor_;
-    TYsonCursorConverter ValueConverter_;
+    const TComplexTypeFieldDescriptor Descriptor_;
+    const TYsonCursorConverter ValueConverter_;
 };
 
 class TNamedToPositionalStructConverter
 {
 public:
     TNamedToPositionalStructConverter(TComplexTypeFieldDescriptor descriptor, std::vector<TStructFieldInfo> fields)
-        : BufferOutput_(Buffer_)
+        : Descriptor_(std::move(descriptor))
+        , FieldMap_(std::invoke([&] {
+            THashMap<TString, TFieldMapEntry> result;
+            result.reserve(fields.size());
+            for (auto fieldPosition : std::views::iota(0, std::ssize(fields))) {
+                auto& field = fields[fieldPosition];
+                EmplaceOrCrash(
+                    result,
+                    field.FieldName,
+                    TFieldMapEntry{
+                        .Converter = std::move(field.Converter),
+                        .Position = fieldPosition,
+                    });
+            }
+            return result;
+        }))
+        , PositionTable_(std::invoke([&] {
+            std::vector<TPositionTableEntry> result;
+            result.reserve(fields.size());
+            for (auto& field : fields) {
+                PositionTable_.push_back({
+                    .FieldName = std::move(field.FieldName),
+                    .IsNullable = field.IsNullable,
+                });
+            }
+            return result;
+        }))
+        , BufferOutput_(Buffer_)
         , YsonWriter_(&BufferOutput_, EYsonType::ListFragment)
-        , Descriptor_(std::move(descriptor))
-    {
-        PositionTable_.reserve(fields.size());
-        for (int i = 0; i < std::ssize(fields); ++i) {
-            auto& field = fields[i];
-            FieldMap_.emplace(
-                field.FieldName,
-                TFieldMapEntry{std::move(field.Converter), i});
+    { }
 
-            PositionTable_.emplace_back();
-            PositionTable_.back().IsNullable = field.IsNullable;
-            PositionTable_.back().FieldName = std::move(field.FieldName);
-        }
-    }
-
-    // NB. to wrap this object into std::function we must be able to copy it.
+    // NB: To wrap this object into std::function we must be able to copy it.
     TNamedToPositionalStructConverter(const TNamedToPositionalStructConverter& other)
-        : FieldMap_(other.FieldMap_)
+        : Descriptor_(other.Descriptor_)
+        , FieldMap_(other.FieldMap_)
         , PositionTable_(other.PositionTable_)
         , Buffer_(other.Buffer_)
         , BufferOutput_(Buffer_)
         , YsonWriter_(&BufferOutput_, EYsonType::ListFragment)
-        , Descriptor_(other.Descriptor_)
-        , CurrentGeneration_(other.CurrentGeneration_)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
+    void operator()(TYsonPullParserCursor* cursor, IYsonConsumer* consumer)
     {
-        IncrementGeneration();
+        ResetPositionEntryPresence();
 
         EnsureYsonToken(Descriptor_, *cursor, EYsonItemType::BeginMap);
         cursor->Next();
@@ -813,12 +740,11 @@ public:
             cursor->Next();
 
             auto& positionEntry = PositionTable_[it->second.Position];
-            if (positionEntry.Generation == CurrentGeneration_) {
-                THROW_ERROR_EXCEPTION(
-                    "Multiple occurrences of field %Qv while parsing %Qv",
-                    it->first, // NB. it's not safe to use fieldName since we moved cursor
-                    Descriptor_.GetDescription());
-            }
+            THROW_ERROR_EXCEPTION_IF(
+                positionEntry.IsPresent,
+                "Multiple occurrences of field %Qv while parsing %Qv",
+                it->first, // NB: It's not safe to use fieldName since we moved cursor.
+                Descriptor_.GetDescription());
 
             auto offset = Buffer_.Size();
             it->second.Converter(cursor, &YsonWriter_);
@@ -826,7 +752,7 @@ public:
 
             positionEntry.Offset = offset;
             positionEntry.Size = Buffer_.size() - offset;
-            positionEntry.Generation = CurrentGeneration_;
+            positionEntry.IsPresent = true;
         }
 
         // Skip map end token.
@@ -834,7 +760,7 @@ public:
 
         consumer->OnBeginList();
         for (const auto& positionEntry : PositionTable_) {
-            if (positionEntry.Generation == CurrentGeneration_) {
+            if (positionEntry.IsPresent) {
                 auto yson = TStringBuf(Buffer_.Data() + positionEntry.Offset, positionEntry.Size);
                 consumer->OnRaw(yson, EYsonType::ListFragment);
             } else if (positionEntry.IsNullable) {
@@ -847,16 +773,6 @@ public:
         }
         consumer->OnEndList();
     }
-private:
-    void IncrementGeneration()
-    {
-        if (++CurrentGeneration_ == 0) {
-            for (auto& entry : PositionTable_) {
-                entry.Generation = 0;
-            }
-            CurrentGeneration_ = 1;
-        }
-    }
 
 private:
     struct TFieldMapEntry
@@ -865,54 +781,30 @@ private:
         int Position = 0;
     };
 
-    struct TPositionTableEntry {
-        size_t Offset = 0;
-        size_t Size = 0;
-        ui16 Generation = 0;
-        bool IsNullable = false;
+    struct TPositionTableEntry
+    {
         TString FieldName;
+        bool IsNullable = false;
+
+        bool IsPresent = false;
+        ssize_t Offset = 0;
+        ssize_t Size = 0;
     };
 
-    THashMap<TString, TFieldMapEntry> FieldMap_;
+    const TComplexTypeFieldDescriptor Descriptor_;
+    const THashMap<TString, TFieldMapEntry> FieldMap_;
+
     std::vector<TPositionTableEntry> PositionTable_;
     TBuffer Buffer_;
     TBufferOutput BufferOutput_;
     TBufferedBinaryYsonWriter YsonWriter_;
-    TComplexTypeFieldDescriptor Descriptor_;
-    ui16 CurrentGeneration_ = 0;
-};
 
-class TClientToServerComplexValueConverterWrapper
-{
-public:
-    TClientToServerComplexValueConverterWrapper(TYsonCursorConverter converter)
-        : Converter_(std::move(converter))
-        , ConvertedWriter_(&ConvertedBuffer_)
-    { }
-
-    TClientToServerComplexValueConverterWrapper(const TClientToServerComplexValueConverterWrapper& other)
-        : Converter_(other.Converter_)
-        , ConvertedWriter_(&ConvertedBuffer_)
-    { }
-
-    // This operator should be called only after previous result is consumed.
-    // So use-after-free won't occur.
-    TUnversionedValue operator () (TUnversionedValue value)
+    void ResetPositionEntryPresence()
     {
-        TMemoryInput in(value.Data.String, value.Length);
-        TYsonPullParser parser(&in, EYsonType::Node);
-        TYsonPullParserCursor cursor(&parser);
-
-        ConvertedBuffer_.Clear();
-        Converter_(&cursor, &ConvertedWriter_);
-        ConvertedWriter_.Flush();
-        return MakeUnversionedCompositeValue(ConvertedBuffer_.Blob().ToStringBuf());
+        for (auto& entry : PositionTable_) {
+            entry.IsPresent = false;
+        }
     }
-
-private:
-    TYsonCursorConverter Converter_;
-    TBlobOutput ConvertedBuffer_;
-    TBufferedBinaryYsonWriter ConvertedWriter_;
 };
 
 TYsonCursorConverter CreateNamedToPositionalVariantStructConverter(
@@ -1024,8 +916,6 @@ TYsonCursorConverter CreateVariantStructFieldsConverter(
     };
 }
 
-using TYsonConsumerScannerFactory = TScannerFactory<IYsonConsumer*>;
-
 TYsonCursorConverter CreateYsonConverterImpl(
     const TComplexTypeFieldDescriptor& descriptor,
     const TIsTransformForTypeNeededCache& cache,
@@ -1033,7 +923,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
 {
     const auto& type = descriptor.GetType();
     if (cache.IsTrivial(type)) {
-        return IdRecoder;
+        return IdentityYsonCursorConverter;
     }
     switch (type->GetMetatype()) {
         case ELogicalMetatype::Simple: {
@@ -1056,7 +946,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 }
                 YT_ABORT();
             }
-            [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
+            YT_ABORT();
         }
         case ELogicalMetatype::Decimal: {
             const auto& decimalTypeRef = type->AsDecimalTypeRef();
@@ -1066,40 +956,32 @@ TYsonCursorConverter CreateYsonConverterImpl(
         }
         case ELogicalMetatype::Optional: {
             auto elementConverter = CreateYsonConverterImpl(descriptor.OptionalElement(), cache, config);
-            if (type->AsOptionalTypeRef().IsElementNullable()) {
-                return TYsonConsumerScannerFactory::CreateOptionalScanner(
-                    descriptor,
-                    TOptionalHandler<true>(),
-                    elementConverter);
-            } else {
-                return TYsonConsumerScannerFactory::CreateOptionalScanner(
-                    descriptor,
-                    TOptionalHandler<false>(),
-                    elementConverter);
-            };
+            return CreateOptionalYsonCursorConverter(descriptor, std::move(elementConverter));
         }
         case ELogicalMetatype::List: {
             auto elementConverter = CreateYsonConverterImpl(descriptor.ListElement(), cache, config);
-            return TYsonConsumerScannerFactory::CreateListScanner(descriptor, TListHandler(), elementConverter);
+            return CreateListYsonCursorConverter(descriptor, std::move(elementConverter));
         }
         case ELogicalMetatype::Tuple: {
-            const auto size = type->GetElements().size();
+            int size = type->GetElements().size();
             std::vector<TYsonCursorConverter> elementConverters;
             elementConverters.reserve(size);
-            for (size_t i = 0; i != size; ++i) {
-                elementConverters.push_back(CreateYsonConverterImpl(descriptor.TupleElement(i), cache, config));
+            for (auto index : std::views::iota(0, size)) {
+                elementConverters.push_back(
+                    CreateYsonConverterImpl(descriptor.TupleElement(index), cache, config));
             }
-            return TYsonConsumerScannerFactory::CreateTupleScanner(
-                descriptor, TTupleApplier(), std::move(elementConverters));
+            return CreateTupleYsonCursorConverter(descriptor, std::move(elementConverters));
         }
         case ELogicalMetatype::Struct: {
             const auto& fields = type->GetFields();
             std::vector<TStructFieldInfo> fieldInfos;
-            for (size_t i = 0; i != fields.size(); ++i) {
-                fieldInfos.emplace_back();
-                fieldInfos.back().FieldName = fields[i].Name;
-                fieldInfos.back().Converter = CreateYsonConverterImpl(descriptor.StructField(i), cache, config);
-                fieldInfos.back().IsNullable = fields[i].Type->IsNullable();
+            for (auto index : std::views::iota(0, std::ssize(fields))) {
+                auto fieldDescriptor = descriptor.StructField(index);
+                fieldInfos.push_back({
+                    .Converter = CreateYsonConverterImpl(std::move(fieldDescriptor), cache, config),
+                    .FieldName = TString(fields[index].Name),
+                    .IsNullable = fields[index].Type->IsNullable(),
+                });
             }
             if (config.Config.ComplexTypeMode == EComplexTypeMode::Positional) {
                 return CreateStructFieldsConverter(descriptor, fieldInfos, config);
@@ -1110,10 +992,10 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 } else {
                     YT_VERIFY(config.ConverterType == EConverterType::ToClient);
                     if (config.Config.SkipNullValues) {
-                        return TYsonConsumerScannerFactory::CreateStructScanner(
+                        return CreateStructScanner(
                             descriptor, TStructApplier<true>(), std::move(fieldInfos));
                     } else {
-                        return TYsonConsumerScannerFactory::CreateStructScanner(
+                        return CreateStructScanner(
                             descriptor, TStructApplier<false>(), std::move(fieldInfos));
                     }
                 }
@@ -1121,20 +1003,22 @@ TYsonCursorConverter CreateYsonConverterImpl(
         }
         case ELogicalMetatype::VariantTuple: {
             std::vector<std::pair<int, TYsonCursorConverter>> elementConverters;
-            const auto size = type->GetElements().size();
-            for (size_t i = 0; i != size; ++i) {
-                elementConverters.emplace_back(i, CreateYsonConverterImpl(descriptor.VariantTupleElement(i), cache, config));
+            int size = type->GetElements().size();
+            for (auto index : std::views::iota(0, size)) {
+                elementConverters.emplace_back(
+                    index,
+                    CreateYsonConverterImpl(descriptor.VariantTupleElement(index), cache, config));
             }
-            return TYsonConsumerScannerFactory::CreateVariantScanner(
+            return CreateVariantScanner(
                 descriptor, TVariantTupleApplier(), std::move(elementConverters));
         }
         case ELogicalMetatype::VariantStruct: {
             std::vector<std::pair<TString, TYsonCursorConverter>> elementConverters;
             const auto& fields = type->GetFields();
-            for (size_t i = 0; i != fields.size(); ++i) {
+            for (auto index : std::views::iota(0, std::ssize(fields))) {
                 elementConverters.emplace_back(
-                    fields[i].Name,
-                    CreateYsonConverterImpl(descriptor.VariantStructField(i), cache, config));
+                    fields[index].Name,
+                    CreateYsonConverterImpl(descriptor.VariantStructField(index), cache, config));
             }
             if (config.Config.ComplexTypeMode == EComplexTypeMode::Positional) {
                 return CreateVariantStructFieldsConverter(descriptor, std::move(elementConverters), config);
@@ -1144,7 +1028,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                     return CreateNamedToPositionalVariantStructConverter(descriptor, std::move(elementConverters));
                 } else {
                     YT_VERIFY(config.ConverterType == EConverterType::ToClient);
-                    return TYsonConsumerScannerFactory::CreateVariantScanner(
+                    return CreateVariantScanner(
                         descriptor, TVariantStructApplier(), std::move(elementConverters));
                 }
             }
@@ -1158,7 +1042,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 if (keyType->GetMetatype() == ELogicalMetatype::Simple
                         && keyType->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::String) {
                     if (config.ConverterType == EConverterType::ToClient) {
-                        return TYsonConsumerScannerFactory::CreateDictScanner(
+                        return CreateDictScanner(
                             descriptor,
                             TDictApplier<EDictMode::Named>(),
                             keyConverter,
@@ -1170,7 +1054,7 @@ TYsonCursorConverter CreateYsonConverterImpl(
                 }
             }
 
-            return TYsonConsumerScannerFactory::CreateDictScanner(
+            return CreateDictScanner(
                 descriptor,
                 TDictApplier<EDictMode::Positional>(),
                 keyConverter,
@@ -1223,44 +1107,49 @@ std::variant<TYsonServerToClientConverter, TYsonClientToServerConverter> CreateY
         };
     } else {
         YT_VERIFY(config.ConverterType == EConverterType::ToServer);
-        return TClientToServerComplexValueConverterWrapper(std::move(converter));
+        return CreateUnversionedValueConverter(std::move(converter));
     }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TConverter, EConverterType ConverterType>
+TConverter CreateYsonConverter(
+    const TComplexTypeFieldDescriptor& descriptor,
+    const TYsonConverterConfig& config)
+{
+    TYsonConverterCreatorConfig creatorConfig{
+        .Config = config,
+        .ConverterType = ConverterType,
+    };
+    TIsTransformForTypeNeededCache cache(descriptor.GetType(), creatorConfig);
+    if (cache.IsTrivial(descriptor.GetType())) {
+        return {};
+    }
+
+    return GetOrCrash<TConverter>(CreateYsonConverterForConfig(descriptor, cache, creatorConfig));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
 
-////////////////////////////////////////////////////////////////////////////////
-
 TYsonServerToClientConverter CreateYsonServerToClientConverter(
     const TComplexTypeFieldDescriptor& descriptor,
     const TYsonConverterConfig& config)
 {
-    TYsonConverterCreatorConfig creatorConfig{config, EConverterType::ToClient};
-    TIsTransformForTypeNeededCache cache(descriptor.GetType(), creatorConfig);
-    if (cache.IsTrivial(descriptor.GetType())) {
-        return {};
-    }
-
-    auto converterVariant = CreateYsonConverterForConfig(descriptor, cache, creatorConfig);
-    YT_VERIFY(std::holds_alternative<TYsonServerToClientConverter>(converterVariant));
-    return std::get<TYsonServerToClientConverter>(converterVariant);
+    return CreateYsonConverter<TYsonServerToClientConverter, EConverterType::ToClient>(
+        descriptor,
+        config);
 }
 
 TYsonClientToServerConverter CreateYsonClientToServerConverter(
     const TComplexTypeFieldDescriptor& descriptor,
     const TYsonConverterConfig& config)
 {
-    TYsonConverterCreatorConfig creatorConfig{config, EConverterType::ToServer};
-    TIsTransformForTypeNeededCache cache(descriptor.GetType(), creatorConfig);
-    if (cache.IsTrivial(descriptor.GetType())) {
-        return {};
-    }
-
-    auto converterVariant = CreateYsonConverterForConfig(descriptor, cache, creatorConfig);
-    YT_VERIFY(std::holds_alternative<TYsonClientToServerConverter>(converterVariant));
-    return std::get<TYsonClientToServerConverter>(converterVariant);
+    return CreateYsonConverter<TYsonClientToServerConverter, EConverterType::ToServer>(
+        descriptor,
+        config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -8,6 +8,7 @@ import posixpath
 import sys
 import pkgutil
 import importlib.resources
+import importlib.resources.abc
 import typing as t
 import weakref
 import zipimport
@@ -352,7 +353,7 @@ class PackageLoader(BaseLoader):
             try:
                 if package_path:
                     importlib.resources.files(package_name).joinpath(package_path)
-            except FileNotFoundError:
+            except (FileNotFoundError, importlib.resources.abc.TraversalError):
                 if self._check_templates:
                     raise ValueError(
                         f"PackageLoader could not find a {package_path!r} directory"

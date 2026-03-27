@@ -11,7 +11,6 @@ import ymake
 import _common
 import lib.test_const as consts
 
-
 CANON_RESULT_FILE_NAME = 'result.json'
 CANON_DATA_DIR_NAME = 'canondata'
 CANON_OUTPUT_STORAGE = 'canondata_storage'
@@ -704,7 +703,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
     # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
@@ -1185,6 +1184,15 @@ class TsTestForPath:
         return unit.get("TS_TEST_FOR_PATH")
 
 
+class TsCheckType:
+    KEY = 'TS-CHECK-TYPE'
+    required = True
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_TYPE", None)
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 
@@ -1323,6 +1331,14 @@ class TestFiles:
     @classmethod
     def test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
+        value = serialize_list(test_files)
+        return value
+
+    @classmethod
+    def ts_check_srcs(cls, unit, flat_args, spec_args):
+        test_files = get_values_list(unit, "_TS_GLOB_FILES")
+        rel_to = "TS_TEST_FOR_PATH" if unit.get("TS_TEST_FOR") else "MODDIR"
+        test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
         value = serialize_list(test_files)
         return value
 

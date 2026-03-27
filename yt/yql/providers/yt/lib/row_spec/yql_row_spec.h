@@ -155,6 +155,7 @@ private:
 };
 
 ui64 GetNativeYtTypeFlags(const TStructExprType& type, const NCommon::TStructMemberMapper& mapper = {});
+void UpdateNativeYtTypeFlags(NYT::TNode& spec, ui64 nativeTypeCompat);
 TColumnOrder GetNativeYtDefaultColumnOrder(const TStructExprType* type, const TVector<TString>& sortMembers);
 
 }

@@ -326,6 +326,10 @@ class TestViewer(object):
         print('Wait for cluster to be ready took %s seconds' % wait_time)
 
     @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
+
+    @classmethod
     def test_whoami_root(cls):
         return cls.get_viewer_normalized("/viewer/whoami")
 
@@ -537,6 +541,7 @@ class TestViewer(object):
                                     'PathId',
                                     'PublicKeys',
                                     'OriginalUserToken',
+                                    'HashesInitParams',
                                     })
 
         # groups
@@ -604,6 +609,11 @@ class TestViewer(object):
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
+        return result
+
+    @classmethod
+    def normalize_result_transfer_describe(cls, result):
+        cls.delete_keys_recursively(result, ['stats'])
         return result
 
     @classmethod
@@ -704,6 +714,14 @@ class TestViewer(object):
                 'filter_group': 'GREEN'
             })
         ]
+
+    @classmethod
+    def test_viewer_groups_with_invalid_database(cls):
+        # Test that the endpoint doesn't crash when provided with an invalid database
+        result = cls.call_viewer("/viewer/groups", {
+            'database': '/invalid_database_name_that_does_not_exist',
+        })
+        return result
 
     @classmethod
     def test_viewer_sysinfo(cls):
@@ -812,8 +830,29 @@ class TestViewer(object):
             })]
 
     @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX',
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
+
+    @classmethod
     def test_viewer_autocomplete(cls):
-        return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        return result
 
     @classmethod
     def test_viewer_check_access(cls):
@@ -1175,6 +1214,8 @@ class TestViewer(object):
                 break
 
             time.sleep(1)
+
+        describe_result = cls.normalize_result_transfer_describe(describe_result)
 
         return {
             'topic_result': topic_result,

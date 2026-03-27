@@ -686,7 +686,6 @@ order_by/sort_with_take
 params/struct
 pg/aggregate_combine_all
 pg/bit_const
-optimizers/yql-10042_disable_flow_fuse_depends_on
 pg/pg_corr_offset
 key_filter/ranges
 join/yql-14829_leftonly

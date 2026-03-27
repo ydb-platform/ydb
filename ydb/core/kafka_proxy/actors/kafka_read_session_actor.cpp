@@ -468,7 +468,7 @@ void TKafkaReadSessionActor::HandleAuthOk(NGRpcProxy::V1::TEvPQProxy::TEvAuthRes
 
     for (const auto& [name, t] : ev->Get()->TopicAndTablets) {
         auto internalName = t.TopicNameConverter->GetInternalName();
-        TopicsInfo[internalName] = NKikimr::NGRpcProxy::TTopicHolder(t);
+        TopicsInfo.insert_or_assign(internalName, NGRpcProxy::TTopicHolderBase(t));
         FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
         FullPathToConverter[t.TopicNameConverter->GetSecondaryPath()] = t.TopicNameConverter;
     }

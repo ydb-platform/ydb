@@ -7,10 +7,7 @@
 
 #include <cstring>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace NDetails {
+namespace NKikimr::NMiniKQL::NDetails {
 
 class TOptionalUsageMask {
 public:
@@ -74,6 +71,4 @@ private:
     TBitMapOps<TDynamicBitMapTraits<ui8>> Mask_;
 };
 
-} // namespace NDetails
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL::NDetails

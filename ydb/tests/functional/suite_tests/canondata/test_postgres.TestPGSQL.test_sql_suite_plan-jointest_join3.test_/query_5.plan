@@ -29,16 +29,24 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit",
+                                        "Node Type": "Limit-InnerJoin (Lookup)",
                                         "Operators": [
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    }
+                                                ],
+                                                "Limit": "1001",
+                                                "Name": "Limit"
+                                            },
                                             {
                                                 "Inputs": [
                                                     {
                                                         "ExternalPlanNodeId": 9
                                                     }
                                                 ],
-                                                "Limit": "1001",
-                                                "Name": "Limit"
+                                                "Name": "InnerJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 10,
@@ -49,13 +57,12 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "Stage",
+                                                        "Node Type": "Collect",
                                                         "PlanNodeId": 8,
                                                         "Plans": [
                                                             {
                                                                 "Columns": [
-                                                                    "k",
-                                                                    "pd"
+                                                                    "k"
                                                                 ],
                                                                 "E-Cost": "0",
                                                                 "E-Rows": "0",
@@ -69,7 +76,17 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "Stage",
+                                                                        "Node Type": "LeftJoin (Lookup)",
+                                                                        "Operators": [
+                                                                            {
+                                                                                "Inputs": [
+                                                                                    {
+                                                                                        "ExternalPlanNodeId": 5
+                                                                                    }
+                                                                                ],
+                                                                                "Name": "LeftJoin (Lookup)"
+                                                                            }
+                                                                        ],
                                                                         "PlanNodeId": 6,
                                                                         "Plans": [
                                                                             {
@@ -187,8 +204,7 @@
                 },
                 {
                     "columns": [
-                        "k",
-                        "pd"
+                        "k"
                     ],
                     "lookup_by": [
                         "k"

@@ -8,6 +8,27 @@ namespace NKikimr {
 
         class TGroupGeometryInfo;
 
+        struct TGroupMapperError {
+            struct TStats {
+                TString Domain;
+                ui32 AllSlotsAreOccupied = 0;
+                ui32 NotEnoughSpace = 0;
+                ui32 NotAcceptingNewSlots = 0;
+                ui32 NotOperational = 0;
+                ui32 Decommission = 0;
+            };
+
+            TString ErrorMessage;
+            TStats TotalStats;
+            std::vector<TStats> MatchingDomainsStats;
+            ui32 MissingFailRealmsCount = 0;
+            ui32 FailRealmsWithMissingDomainsCount = 0;
+            ui32 DomainsWithMissingDisksCount = 0;
+            ui32 OkDisksCount = 0;
+            TString RealmLocationKey;
+            TString DomainLocationKey;
+        };
+
         class TPDiskSlotTracker {
             absl::flat_hash_map<ui32, ui16> ReplicatingVDisksByNode;
             absl::flat_hash_map<TPDiskId, ui8> ReplicatingVDisksByPDisk;
@@ -38,7 +59,7 @@ namespace NKikimr {
                 ++ReplicatingVDisksByNode[pdiskId.NodeId];
                 ++ReplicatingVDisksByPDisk[pdiskId];
             }
-            
+
             void AddFreeSlotsForRack(const TString& rack, i32 freeSlots) {
                 FreeSlotsPerRack[rack] += freeSlots;
             }
@@ -141,10 +162,10 @@ namespace NKikimr {
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace,
-                bool requireOperational, TBridgePileId bridgePileId, TString& error);
+                bool requireOperational, TBridgePileId bridgePileId, TGroupMapperError& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
                 TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
-                TString& error);
+                TGroupMapperError& error);
 
             struct TMisplacedVDisks {
                 enum EFailLevel : ui32 {
@@ -160,7 +181,7 @@ namespace NKikimr {
                 TMisplacedVDisks(EFailLevel failLevel, std::vector<TVDiskIdShort> disks, TString errorReason = "")
                     : FailLevel(failLevel)
                     , Disks(std::move(disks))
-                    , ErrorReason(errorReason) 
+                    , ErrorReason(errorReason)
                 {}
 
                 EFailLevel FailLevel;

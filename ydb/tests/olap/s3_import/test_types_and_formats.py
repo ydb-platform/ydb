@@ -245,16 +245,16 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_id}'")
-        self.ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_secret}'")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source_name} WITH (
                 SOURCE_TYPE = "ObjectStorage",
                 LOCATION = "{self.s3_mock.endpoint}/{test_bucket}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_id_secret_name}",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_secret_name}",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="{access_key_id_secret_name}",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="{access_key_secret_secret_name}",
                 AWS_REGION="{self.s3_client.region}"
             );
 
@@ -400,16 +400,16 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_id}'")
-        self.ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_secret}'")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source_name} WITH (
                 SOURCE_TYPE = "ObjectStorage",
                 LOCATION = "{self.s3_mock.endpoint}/{test_bucket}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_id_secret_name}",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_secret_name}",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="{access_key_id_secret_name}",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="{access_key_secret_secret_name}",
                 AWS_REGION="{self.s3_client.region}"
             );
 
@@ -548,16 +548,16 @@ class TestTypesAndFormats(S3ImportTestBase):
 
         access_key_id_secret_name = f"{test_bucket}_key_id"
         access_key_secret_secret_name = f"{test_bucket}_key_secret"
-        self.ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_id}'")
-        self.ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{self.s3_client.key_secret}'")
+        self.ydb_client.query(f"CREATE SECRET {access_key_id_secret_name} WITH (value='{self.s3_client.key_id}')")
+        self.ydb_client.query(f"CREATE SECRET {access_key_secret_secret_name} WITH (value='{self.s3_client.key_secret}')")
 
         self.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE {s3_source_name} WITH (
                 SOURCE_TYPE = "ObjectStorage",
                 LOCATION = "{self.s3_mock.endpoint}/{test_bucket}",
                 AUTH_METHOD="AWS",
-                AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_id_secret_name}",
-                AWS_SECRET_ACCESS_KEY_SECRET_NAME="{access_key_secret_secret_name}",
+                AWS_ACCESS_KEY_ID_SECRET_PATH="{access_key_id_secret_name}",
+                AWS_SECRET_ACCESS_KEY_SECRET_PATH="{access_key_secret_secret_name}",
                 AWS_REGION="{self.s3_client.region}"
             );
 

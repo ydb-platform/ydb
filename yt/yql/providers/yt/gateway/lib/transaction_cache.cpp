@@ -115,10 +115,14 @@ void TTransactionCache::TEntry::Finalize(const TString& clusterName, bool commit
 
     if (DumpTx) {
         YQL_CLOG(INFO, ProviderYt) << (commitDumpTx ? "Commiting" : "Aborting") << " dump tx " << GetGuidAsString(DumpTx->GetId())  << " on " << clusterName;
-        if (commitDumpTx) {
-            DumpTx->Commit();
-        } else {
-            DumpTx->Abort();
+        try {
+            if (commitDumpTx) {
+                DumpTx->Commit();
+            } else {
+                DumpTx->Abort();
+            }
+        } catch (...) {
+            YQL_CLOG(WARN, ProviderYt) << CurrentExceptionMessage();
         }
     }
 }

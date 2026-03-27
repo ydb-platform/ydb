@@ -10,9 +10,8 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TReplicationCardId = NObjectClient::TObjectId;
 using TChaosObjectId = NObjectClient::TObjectId;
-// using TReplicationCardId = TChaosObjectId;
+using TReplicationCardId = TChaosObjectId;
 using TReplicationCardCollocationId = TChaosObjectId;
 using TChaosLeaseId = TChaosObjectId;
 using TReplicaId = NObjectClient::TObjectId;
@@ -34,7 +33,7 @@ DECLARE_REFCOUNTED_STRUCT(TReplicationCardCacheDynamicConfig)
 struct TReplicationProgress;
 struct TReplicaHistoryItem;
 struct TReplicaInfo;
-struct TReplicationCardFecthOptions;
+struct TReplicationCardFetchOptions;
 
 YT_DEFINE_ERROR_ENUM(
     ((ReplicationCardNotKnown)           (3200))

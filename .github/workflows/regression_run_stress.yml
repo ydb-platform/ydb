@@ -28,3 +28,4 @@ jobs:
       branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || (startsWith(inputs.use_default_branches, 'false') && github.ref_name || '') }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}
+      additional_ya_make_args: '--test-param stress_default_duration=180 --test-param stress_default_erasure=MIRROR_3_DC'

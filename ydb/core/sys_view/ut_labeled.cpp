@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(LabeledDbCounters) {
         };
 
         CreateDatabase(env, databaseName);
-        NPQ::PQTabletPrepare({.partitions=partitionsN}, {{"consumer", false}}, *env.GetServer().GetRuntime(),
+        NPQ::PQTabletPrepare({.partitions=partitionsN}, {{.Name = "consumer"}}, *env.GetServer().GetRuntime(),
                                  env.GetPqTabletIds()[0], edge);
         GetCounters(env, databaseName, databasePath, checkExists);
 

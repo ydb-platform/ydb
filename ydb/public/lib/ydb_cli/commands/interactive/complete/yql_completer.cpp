@@ -19,7 +19,9 @@
 
 namespace NYdb::NConsoleClient {
 
-    class TYQLCompleter: public IYQLCompleter {
+namespace {
+
+    class TYQLCompleter final : public IYQLCompleter {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
@@ -121,6 +123,61 @@ namespace NYdb::NConsoleClient {
         TColorSchema Color;
     };
 
+    class TCompositeCommandCompleter final : public IYQLCompleter {
+    public:
+        TCompositeCommandCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig)
+            : Commands(commands)
+            , YQLCompleter(yqlCompleterConfig ? MakeYQLCompleter(*yqlCompleterConfig) : nullptr)
+        {}
+
+        TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            if (RunCommandCompletion(text)) {
+                auto completions = GetCommandCompletions(text, contextLen);
+
+                TCompletions result;
+                result.reserve(completions.size());
+                for (auto& completion : completions) {
+                    result.emplace_back(std::move(completion));
+                }
+
+                return result;
+            }
+
+            return YQLCompleter ? YQLCompleter->ApplyHeavy(text, prefix, contextLen) : TCompletions{};
+        }
+
+        THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) final {
+            if (RunCommandCompletion(text)) {
+                return GetCommandCompletions(text, contextLen);
+            }
+
+            return YQLCompleter ? YQLCompleter->ApplyLight(text, prefix, contextLen) : THints{};
+        }
+
+    private:
+        bool RunCommandCompletion(TStringBuf text) const {
+            return text.StartsWith('/');
+        }
+
+        THints GetCommandCompletions(TStringBuf text, int& contextLen) const {
+            THints result;
+            result.reserve(Commands.size());
+
+            for (const auto& command : Commands) {
+                if (command.StartsWith(text)) {
+                    result.push_back(command);
+                }
+            }
+
+            contextLen = text.size();
+            return result;
+        }
+
+    private:
+        const std::vector<TString> Commands;
+        const IYQLCompleter::TPtr YQLCompleter;
+    };
+
     NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
@@ -150,8 +207,9 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    IYQLCompleter::TPtr MakeYQLCompleter(
-        TColorSchema color, TDriver driver, TString database, bool isVerbose) {
+} // anonymous namespace
+
+    IYQLCompleter::TPtr MakeYQLCompleter(const TYQLCompleterConfig& settings) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         auto ranking = NSQLComplete::MakeDefaultRanking(NSQLComplete::LoadFrequencyData());
@@ -164,7 +222,7 @@ namespace NYdb::NConsoleClient {
                     NSQLComplete::MakeCachedSimpleSchema(
                         MakeSchemaCaches(),
                         /* zone = */ "",
-                        MakeYDBSchema(std::move(driver), std::move(database), isVerbose))));
+                        MakeYDBSchema(std::move(settings.Driver), std::move(settings.Database), settings.IsVerbose))));
 
         auto heavy = NSQLComplete::MakeUnionNameService(
             {
@@ -180,10 +238,14 @@ namespace NYdb::NConsoleClient {
 
         auto config = NSQLComplete::MakeYDBConfiguration();
 
-        return IYQLCompleter::TPtr(new TYQLCompleter(
+        return MakeHolder<TYQLCompleter>(
             /* heavyEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, heavy, config),
             /* lightEngine = */ NSQLComplete::MakeSqlCompletionEngine(lexer, light, config),
-            std::move(color)));
+            std::move(settings.Color));
+    }
+
+    IYQLCompleter::TPtr MakeYQLCompositeCompleter(const std::vector<TString>& commands, const std::optional<TYQLCompleterConfig>& yqlCompleterConfig) {
+        return MakeHolder<TCompositeCommandCompleter>(commands, yqlCompleterConfig);
     }
 
 } // namespace NYdb::NConsoleClient

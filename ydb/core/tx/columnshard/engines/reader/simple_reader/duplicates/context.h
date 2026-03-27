@@ -16,9 +16,9 @@ private:
 
     static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
         static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("INTERSECTIONS", 10000000),   // 10 MiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 2000000000),   // 2 GiB
             NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 10000000000),   // 10 GiB
+            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 1000000000),   // 1 GiB
         };
         return StageFeatures;
     }
@@ -35,97 +35,6 @@ public:
     }
 
     TFilterBuildingGuard();
-};
-
-class TFilterAccumulator: TMoveOnly {
-public:
-    enum class EFetchingStage {
-        INTERSECTIONS = 0,
-        ACCESSORS = 1,
-        COLUMN_DATA = 2,
-    };
-
-private:
-    const TEvRequestFilter::TPtr OriginalRequest;
-    bool Done = false;
-
-    std::vector<std::optional<NArrow::TColumnFilter>> Filters;
-    ui64 FiltersAccumulated = 0;
-
-private:
-    bool IsReady() const {
-        if (Filters.empty()) {
-            return false;
-        }
-        return Filters.size() == FiltersAccumulated;
-    }
-
-    void Complete() {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(IsReady());
-        NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
-        for (const auto& filter : Filters) {
-            AFL_VERIFY(!!filter);
-            result.Append(*filter);
-        }
-        OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(result));
-        Done = true;
-        AFL_VERIFY(IsDone());
-    }
-
-public:
-    void SetIntervalsCount(const ui32 cnt) {
-        AFL_VERIFY(Filters.empty());
-        AFL_VERIFY(cnt);
-        Filters.resize(cnt);
-    }
-
-    void AddFilter(const ui32 intervalIdx, const NArrow::TColumnFilter& filterExt) {
-        AFL_VERIFY(!IsDone());
-        AFL_VERIFY(intervalIdx < Filters.size());
-        AFL_VERIFY(!Filters[intervalIdx]);
-        Filters[intervalIdx].emplace(filterExt);
-        ++FiltersAccumulated;
-        if (IsReady()) {
-            Complete();
-        }
-    }
-
-    bool IsDone() const {
-        return Done;
-    }
-
-    void Abort(const TString& error) {
-        OriginalRequest->Get()->GetSubscriber()->OnFailure(error);
-        Done = true;
-    }
-
-    const TEvRequestFilter::TPtr& GetRequest() const {
-        return OriginalRequest;
-    }
-
-    TFilterAccumulator(const TEvRequestFilter::TPtr& request);
-
-    ~TFilterAccumulator() {
-        AFL_VERIFY(IsDone() || (OriginalRequest->Get()->GetAbortionFlag() && OriginalRequest->Get()->GetAbortionFlag()->Val()) || TActorSystem::IsStopped())("state", DebugString());
-    }
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "{";
-        sb << "Portion=" << OriginalRequest->Get()->GetPortionId() << ";";
-        sb << "ReadyIntervals=[";
-        for (const auto& filter : Filters) {
-            sb << (!!filter ? '1' : '.');
-        }
-        sb << "];";
-        sb << "}";
-        return sb;
-    }
-
-    ui64 GetDataSize() const {
-        return Filters.capacity() * sizeof(std::optional<NArrow::TColumnFilter>);
-    }
 };
 
 class TJobStatus {
@@ -243,10 +152,6 @@ public:
         return sb;
     }
 
-    static ui64 GetApproximateDataSize(const ui64 intersectionCount) {
-        return intersectionCount *
-               (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr) + sizeof(TIntervalInfo) + sizeof(std::optional<NArrow::TColumnFilter>));
-    }
     ui64 GetDataSize() const {
         return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
     }

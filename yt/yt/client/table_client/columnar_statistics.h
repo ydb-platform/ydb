@@ -29,7 +29,7 @@ struct TNamedColumnarStatistics
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
     i64 LegacyChunkDataWeight = 0;
 
-    TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
+    TNamedColumnarStatistics& operator+=(const TNamedColumnarStatistics& other);
 };
 
 using TColumnarHyperLogLogDigest = THyperLogLog<

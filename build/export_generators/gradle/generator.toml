@@ -64,7 +64,7 @@ with_kotlinc_plugin_serialization="set"
 
 runs="list"
 runs-args="list"
-runs-classpath="list"
+runs-classpath="str"
 runs-cwd="str"
 runs-in="list"
 runs-in_dir="list"

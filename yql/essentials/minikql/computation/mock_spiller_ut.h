@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <utility>
 
 #include <library/cpp/threading/future/core/future.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -12,8 +13,8 @@ class TMockSpiller: public ISpiller {
 public:
     TMockSpiller(ISpiller::TMemoryReportCallback reportAllocCallback, ISpiller::TMemoryReportCallback reportFreeCallback)
         : NextKey_(0)
-        , ReportAllocCallback_(reportAllocCallback)
-        , ReportFreeCallback_(reportFreeCallback)
+        , ReportAllocCallback_(std::move(reportAllocCallback))
+        , ReportFreeCallback_(std::move(reportFreeCallback))
     {
     }
 

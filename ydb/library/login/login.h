@@ -5,10 +5,11 @@
 #include <vector>
 #include <deque>
 #include <util/generic/string.h>
-#include <ydb/library/login/protos/login.pb.h>
-#include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <ydb/library/login/cache/lru.h>
+#include <ydb/library/login/hashes_checker/hash_types.h>
+#include <ydb/library/login/protos/login.pb.h>
+#include <ydb/library/login/password_checker/password_checker.h>
 
 namespace NLogin {
 
@@ -52,6 +53,13 @@ public:
         EStatus Status = EStatus::UNSPECIFIED;
     };
 
+    struct THashToValidate {
+        NLoginProto::ESaslAuthMech::SaslAuthMech AuthMech;
+        NLoginProto::EHashType::HashType HashType;
+        TString Hash;
+        TString AuthMessage;
+    };
+
     struct TLoginUserRequest : TBasicRequest {
         struct TOptions {
             bool WithUserGroups = false;
@@ -59,9 +67,10 @@ public:
         };
 
         TString User;
-        TString Password;
+        std::optional<TString> Password;
+        std::optional<THashToValidate> HashToValidate;
+        std::optional<TString> ExternalAuth;
         TOptions Options;
-        TString ExternalAuth;
     };
 
     struct TPasswordCheckResult : TBasicResponse {
@@ -71,10 +80,13 @@ public:
             SUCCESS,
             INVALID_USER,
             INVALID_PASSWORD,
-            UNAVAILABLE_KEY
+            UNAVAILABLE_KEY,
+            UNSUPPORTED_SASL_MECHANISM,
+            INVALID_HASH_TYPE,
         };
 
         EStatus Status = EStatus::UNSPECIFIED;
+        std::optional<TString> ServerSignature;
 
     public:
         void FillInvalidPassword() {
@@ -90,6 +102,16 @@ public:
         void FillInvalidUser(const TString& error) {
             Status = TLoginUserResponse::EStatus::INVALID_USER;
             Error = error;
+        }
+
+        void FillUnsupportedSaslMech() {
+            Status = TLoginUserResponse::EStatus::UNSUPPORTED_SASL_MECHANISM;
+            Error = "Unsupported SASL auth mechanism";
+        }
+
+        void FillInvalidHashType() {
+            Status = TLoginUserResponse::EStatus::INVALID_HASH_TYPE;
+            Error = "Invalid hash type";
         }
     };
 
@@ -115,6 +137,7 @@ public:
     struct TCreateUserRequest : TBasicRequest {
         TString User;
         TString Password;
+        TString HashedPassword;
         bool IsHashedPassword = false;
         bool CanLogin = true;
     };
@@ -122,6 +145,7 @@ public:
     struct TModifyUserRequest : TBasicRequest {
         TString User;
         std::optional<TString> Password;
+        std::optional<TString> HashedPassword;
         bool IsHashedPassword = false;
         std::optional<bool> CanLogin;
     };
@@ -177,16 +201,27 @@ public:
     std::deque<TKeyRecord> Keys; // it's always ordered by KeyId
     std::chrono::time_point<std::chrono::system_clock> KeysRotationTime;
 
+    struct THashRecord {
+        TString HashInitParams;
+        TString HashValues;
+    };
+
     struct TSidRecord {
         ESidType::SidType Type = ESidType::UNKNOWN;
         TString Name;
-        TString PasswordHash;
+
+        TString ArgonHash;
+        TString PasswordHashes;
+        THashMap<NLoginProto::EHashType::HashType, THashRecord> HashStorage;
+
         bool IsEnabled;
         std::unordered_set<TString> Members;
         std::chrono::system_clock::time_point CreatedAt;
         ui32 FailedLoginAttemptCount = 0;
         std::chrono::system_clock::time_point LastFailedLogin;
         std::chrono::system_clock::time_point LastSuccessfulLogin;
+
+        void FillHashStorage();
     };
 
     struct TCacheSettings {
@@ -217,8 +252,9 @@ public:
     // Login
     TLoginUserResponse LoginUser(const TLoginUserRequest& request);
     // The next four methods are used (all together combined) when it's needed to separate hash verification which is quite cpu-intensive
-    bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* passwordHash);
-    static bool VerifyHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
+    bool NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* hashValues);
+    void VerifyHashValues(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, const TString& hashValues);
+    static bool VerifyArgonHash(const TLoginUserRequest& request, const TString& passwordHash); // it's made static to be thread-safe
     void UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying);
     TLoginProvider::TLoginUserResponse LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult);
 
@@ -267,7 +303,8 @@ private:
     static void UnlockAccount(TSidRecord* sid);
     bool ShouldResetFailedAttemptCount(const TSidRecord& sid) const;
     bool ShouldUnlockAccount(const TSidRecord& sid) const;
-    bool CheckPasswordOrHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
+    bool CheckHashes(const TString& hashedPassword, TString& error) const;
+    bool CheckPasswordOrArgonHash(bool IsHashedPassword, const TString& user, const TString& password, TString& error) const;
     TSidRecord* GetUserSid(const TString& user);
     bool FillUnavailableKey(TPasswordCheckResult* checkResult) const;
     bool FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const;

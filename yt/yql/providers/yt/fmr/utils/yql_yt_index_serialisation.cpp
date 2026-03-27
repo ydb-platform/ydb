@@ -77,7 +77,7 @@ void TSortedRowMetadata::Save(IOutputStream* data) const {
 }
 
 
-void TSortedRowMetadata::Load(IInputStream* data, TVector<TString> keyColumns) {
+void TSortedRowMetadata::Load(IInputStream* data, std::vector<TString> keyColumns) {
     if (data == nullptr) {
         return;
     }

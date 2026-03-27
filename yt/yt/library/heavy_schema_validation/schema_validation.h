@@ -83,21 +83,21 @@ void ValidateConstraintsMatch(
     const TConstrainedTableSchema& schema,
     const TColumnNameToConstraintMap& constraints);
 
-//! Validates that constraints correspond to old schema, i.e:
+//! Validates that constraints correspond to old schema, i.e.:
 // - all constrained columns are present in schema
 // - no constraints were added to already existing columns
 // - new constraints are compatible to old ones
 // - constrained columns have the same type as before alteration
-void ValidateConstrainedSchemaAlteration(
+void ValidateConstrainedTableSchemaAlter(
     const TTableSchema& oldSchema,
     const TTableSchema& newSchema,
     const TColumnStableNameToConstraintMap& oldConstraints,
     const TColumnStableNameToConstraintMap& newConstraints,
     bool isTableEmpty);
 
-//! Validates that constraints correspond to schema, i.e:
+//! Validates that constraints correspond to schema, i.e.:
 // - all constrained columns are present in schema
-void ValidateConstrainedSchemaCreation(
+void ValidateConstrainedTableSchemaCreation(
     const TTableSchema& schema,
     const TColumnStableNameToConstraintMap& constraints);
 

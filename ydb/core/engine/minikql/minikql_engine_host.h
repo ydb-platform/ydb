@@ -64,8 +64,8 @@ public:
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override;
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
-        const TArrayRef<const TUpdateCommand>& commands) override;
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override;
+        const TArrayRef<const TUpdateCommand>& commands, const TString& userSID) override;
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) override;
     bool IsPathErased(const TTableId& tableId) const override;
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;

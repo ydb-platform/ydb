@@ -745,5 +745,57 @@ TEST(TContextTest, ReaderKeepsDataFromPrevBuffers)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TParseYsonStringNodeTypeTest, Test)
+{
+    auto parseType = [] (TStringBuf buffer) {
+        return ParseYsonStringNodeType(buffer).first;
+    };
+
+    EXPECT_EQ(parseType("{}"), NYTree::ENodeType::Map);
+    EXPECT_EQ(parseType("  {"), NYTree::ENodeType::Map);
+    EXPECT_EQ(parseType("{key=value}"), NYTree::ENodeType::Map);
+
+    EXPECT_EQ(parseType("[]"), NYTree::ENodeType::List);
+    EXPECT_EQ(parseType("  ["), NYTree::ENodeType::List);
+    EXPECT_EQ(parseType("[1;2;3]"), NYTree::ENodeType::List);
+
+    EXPECT_EQ(parseType("\"hello\""), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("  \"world\""), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("\x01test"), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("hello"), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("_test"), NYTree::ENodeType::String);
+    EXPECT_EQ(parseType("test123"), NYTree::ENodeType::String);
+
+    EXPECT_EQ(parseType("\x02"), NYTree::ENodeType::Int64);
+
+    EXPECT_EQ(parseType("\x06"), NYTree::ENodeType::Uint64);
+
+    EXPECT_EQ(parseType("\x03"), NYTree::ENodeType::Double);
+
+    EXPECT_EQ(parseType("\x05"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("\x04"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("%true"), NYTree::ENodeType::Boolean);
+    EXPECT_EQ(parseType("%false"), NYTree::ENodeType::Boolean);
+
+    EXPECT_EQ(parseType("#"), NYTree::ENodeType::Entity);
+    EXPECT_EQ(parseType("  #"), NYTree::ENodeType::Entity);
+
+    EXPECT_EQ(parseType("123u"), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("-123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("+123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("123.45"), NYTree::ENodeType::Double);
+    EXPECT_EQ(parseType("-123.45"), NYTree::ENodeType::Double);
+    EXPECT_EQ(parseType("0u"), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("0"), NYTree::ENodeType::Int64);
+
+    EXPECT_EQ(parseType("   123"), NYTree::ENodeType::Int64);
+    EXPECT_EQ(parseType("   123u  "), NYTree::ENodeType::Uint64);
+    EXPECT_EQ(parseType("\t\n{"), NYTree::ENodeType::Map);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NYson

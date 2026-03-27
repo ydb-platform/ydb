@@ -2,6 +2,7 @@
 
 #include "exec_ctx.h"
 #include "qb2.h"
+#include "transform.h"
 #include <yt/yql/providers/yt/job/yql_job_user_base.h>
 #include <yt/yql/providers/yt/lib/lambda_builder/lambda_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
@@ -101,6 +102,34 @@ public:
         }
         mapJob->SetLambdaCode(mapLambda);
         return mapLambda;
+    }
+
+    template<class ExecCtxPtr>
+    TTransformerFiles UpdateAndSetMapLambda(
+        TScopedAlloc& alloc,
+        ExecCtxPtr execCtx,
+        ITableDownloaderFunc downloader,
+        TString& mapLambda,
+        TYqlUserJobBase* mapJob
+    ) {
+        alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
+        TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
+        execCtx->BaseSession_->RandomProvider_, execCtx->BaseSession_->TimeProvider_, nullptr, nullptr, nullptr, nullptr, execCtx->Options_.LangVer());
+
+        TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
+
+        TGatewayTransformer transform(execCtx, downloader, pgmBuilder);
+        size_t nodeCount = 0;
+        builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
+        if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {
+            execCtx->Options_.OptLLVM("OFF");
+        }
+        mapJob->SetLambdaCode(mapLambda);
+
+        TTransformerFiles transformerFiles = transform.GetTransformerFiles();
+        transform.ApplyJobProps(*mapJob);
+
+        return transformerFiles;
     }
 
     void SetBlockInput(TYqlUserJobBase* mapJob, NNodes::TYtMap map);

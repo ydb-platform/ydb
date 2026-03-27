@@ -16,7 +16,7 @@ import zstandard
 from urllib3.poolmanager import PoolManager, ProxyManager
 from urllib3.response import HTTPResponse
 
-from clickhouse_connect.driver.exceptions import ProgrammingError
+from clickhouse_connect.driver.exceptions import ProgrammingError, OperationalError
 from clickhouse_connect import common
 
 logger = logging.getLogger(__name__)
@@ -189,9 +189,11 @@ def default_pool_manager():
     return get_pool_manager()
 
 
+# pylint: disable=too-many-statements
 class ResponseSource:
-    def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024):
+    def __init__(self, response: HTTPResponse, chunk_size: int = 1024 * 1024, exception_tag: Optional[str] = None):
         self.response = response
+        self.exception_tag = exception_tag
         compression = response.headers.get('content-encoding')
         decompress:Optional[Callable] = None
         if compression == 'zstd':
@@ -226,14 +228,16 @@ class ResponseSource:
             done = False
             current_size = 0
             read_gen = response.stream(chunk_size, decompress is None)
+            data_received = False
+            read_error = None
             while True:
                 while not done:
                     chunk = None
                     try:
                         chunk = next(read_gen, None) # Always try to read at least one chunk if there are any left
-                    except Exception: # pylint: disable=broad-except
-                        # By swallowing an unexpected exception reading the stream, we will let consumers decide how to
-                        # handle the unexpected end of stream
+                    except Exception as ex: # pylint: disable=broad-except
+                        # Store the exception for potential re-raising if no data was received
+                        read_error = ex
                         logger.warning('unexpected failure to read next chunk', exc_info=True)
                     if not chunk:
                         done = True
@@ -243,6 +247,8 @@ class ResponseSource:
                     if current_size > buffer_size:
                         break
                 if len(chunks) == 0:
+                    if read_error and not data_received:
+                        raise OperationalError("Failed to read response data from server") from read_error
                     return
                 if decompress:
                     chunk, used = decompress(chunks)
@@ -251,6 +257,7 @@ class ResponseSource:
                     chunk = chunks.popleft()
                     current_size -= len(chunk)
                 if chunk:
+                    data_received = True
                     yield chunk
 
         self.gen = buffered()

@@ -12,7 +12,7 @@ namespace {
     constexpr ui32 kNodeIdForMetadata = 1;
     constexpr ui32 kPDiskIdForMetadata = 1;
     constexpr ui32 kMetaTimeoutSeconds = 10;
-    
+
     static NPDisk::TMainKey GetEffectiveMainKey(const NPDisk::TMainKey& mainKey) {
         NPDisk::TMainKey result = mainKey;
         if (!result.IsInitialized || result.Keys.empty()) {
@@ -20,18 +20,18 @@ namespace {
         }
         return result;
     }
-    
+
     static TIntrusivePtr<TPDiskConfig> MakeMetadataPDiskConfig(const TString& path, ui32 pdiskId, bool readOnly, TStringStream& details) {
         std::optional<NPDisk::TDriveData> driveData = NPDisk::GetDriveData(path, &details);
         const NPDisk::EDeviceType deviceType = driveData ? driveData->DeviceType : NPDisk::DEVICE_TYPE_ROT;
         const ui64 category = static_cast<ui64>(TPDiskCategory(deviceType, 0).GetRaw());
-    
+
         auto cfg = MakeIntrusive<TPDiskConfig>(path, static_cast<ui64>(0), static_cast<ui32>(pdiskId), category);
         cfg->ReadOnly = readOnly;
         cfg->MetadataOnly = true;
         return cfg;
     }
-    
+
     static NActors::TActorId RegisterPDiskActor(NActors::TActorSystem* sys,
                                                const TIntrusivePtr<TPDiskConfig>& cfg,
                                                const NPDisk::TMainKey& mainKey,
@@ -42,7 +42,7 @@ namespace {
         sys->RegisterLocalService(pdiskActorId, pdiskActor);
         return pdiskActorId;
     }
-    
+
     template <typename TFut>
     static inline void WaitOrThrow(TFut& fut, int timeoutSeconds, const TString& details, const char* action) {
         if (fut.wait_for(std::chrono::seconds(timeoutSeconds)) != std::future_status::ready) {
@@ -51,7 +51,7 @@ namespace {
                 << "Details: " << details;
         }
     }
-    
+
 } // namespace
 
 NKikimrBlobStorage::TPDiskMetadataRecord ReadPDiskMetadata(const TString& path, const NPDisk::TMainKey& mainKey) {

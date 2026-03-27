@@ -36,7 +36,7 @@ private:
     std::shared_ptr<NCommon::IDataSource> NextSource;
     ui64 Limit = 0;
 
-    ui64 InFlightLimit = 1;
+    ui64 InFlightLimit = 16;
     std::set<ui32> FetchingInFlightSources;
     bool Aborted = false;
     bool Cleared = false;
@@ -45,7 +45,11 @@ private:
 
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
-        return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords);
+        if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
+            return std::make_shared<TSimpleScanCursor>(nullptr, source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
+        } else {
+            return std::make_shared<TDeprecatedSimpleScanCursor>(nullptr, source->GetDeprecatedPortionId(), readyRecords);
+        }
     }
     virtual void DoClear() override {
         Cleared = true;

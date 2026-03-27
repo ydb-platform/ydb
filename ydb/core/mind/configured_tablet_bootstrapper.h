@@ -10,7 +10,7 @@
 namespace NKikimr {
 
     // would subscribe to boot config and instantiate tablet bootstrapper if configured for this node
-    IActor* CreateConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap::TTablet &defaultConfig);
+    IActor* CreateConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap &bootstrapConfig);
 
     TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type);
     TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(TTabletTypes::EType tabletType,

@@ -7,8 +7,7 @@
 
 #include <util/system/type_name.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 enum class EDictType {
     Sorted,
@@ -128,7 +127,7 @@ private:
 
 class TExternalComputationNode: public TStatefulComputationNode<IComputationExternalNode> {
 public:
-    TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any);
+    explicit TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any);
 
 protected:
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override;
@@ -160,6 +159,8 @@ private:
     void SetGetter(TGetter&& getter) final;
 
     void InvalidateValue(TComputationContext& compCtx) const final;
+
+    void CollectInvalidationIndexes(std::set<ui32>& out) const final;
 
     const IComputationNode* GetSource() const final;
 
@@ -219,7 +220,7 @@ private:
     }
 
 protected:
-    TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any)
+    explicit TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any)
         : TStatefulComputationNode(mutables, kind)
     {
     }
@@ -379,7 +380,7 @@ private:
 template <typename TDerived, typename IFlowInterface>
 class TFlowBaseComputationNode: public TRefCountedComputationNode<IFlowInterface> {
 protected:
-    TFlowBaseComputationNode(const IComputationNode* source)
+    explicit TFlowBaseComputationNode(const IComputationNode* source)
         : Source_(source)
         , UpvaluesCollected_(false)
     {
@@ -741,7 +742,7 @@ template <typename TDerived>
 class TWideFlowBaseComputationNode: public TFlowBaseComputationNode<TDerived, IComputationWideFlowNode>,
                                     protected TWideFlowBaseComputationNodeBase {
 protected:
-    TWideFlowBaseComputationNode(const IComputationNode* source)
+    explicit TWideFlowBaseComputationNode(const IComputationNode* source)
         : TFlowBaseComputationNode<TDerived, IComputationWideFlowNode>(source)
     {
     }
@@ -769,7 +770,7 @@ template <typename TDerived>
 class TStatelessWideFlowComputationNode: public TWideFlowBaseComputationNode<TDerived>,
                                          protected TStatelessWideFlowComputationNodeBase {
 protected:
-    TStatelessWideFlowComputationNode(const IComputationNode* source)
+    explicit TStatelessWideFlowComputationNode(const IComputationNode* source)
         : TWideFlowBaseComputationNode<TDerived>(source)
     {
     }
@@ -964,7 +965,7 @@ protected:
     {
     }
 
-    TDecoratorComputationNode(IComputationNode* node)
+    explicit TDecoratorComputationNode(IComputationNode* node)
         : TDecoratorComputationNodeBase(node, node->GetRepresentation())
     {
     }
@@ -1094,7 +1095,7 @@ private:
 
 public:
     template <typename... Args>
-    TComputationValueBaseNotSupportedStub(Args&&... args)
+    explicit TComputationValueBaseNotSupportedStub(Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
     }
@@ -1160,7 +1161,7 @@ private:
 
 public:
     template <typename... Args>
-    TComputationValueBase(Args&&... args)
+    explicit TComputationValueBase(Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
     }
@@ -1197,7 +1198,7 @@ protected:
 
 public:
     template <typename... Args>
-    TComputationValueImpl(TMemoryUsageInfo* memInfo, Args&&... args)
+    explicit TComputationValueImpl(TMemoryUsageInfo* memInfo, Args&&... args)
         : TBase(std::forward<Args>(args)...)
     {
 #ifndef NDEBUG
@@ -1208,7 +1209,7 @@ public:
 #endif
     }
 
-    ~TComputationValueImpl() {
+    ~TComputationValueImpl() override {
 #ifndef NDEBUG
         MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
 #endif
@@ -1299,7 +1300,7 @@ template <typename T>
 class TBoxedData: public NUdf::TBoxedValue {
 public:
     template <typename... Args>
-    TBoxedData(Args&&... args)
+    explicit TBoxedData(Args&&... args)
         : Data_(std::forward<Args>(args)...)
     {
     }
@@ -1319,7 +1320,7 @@ private:
 template <typename T>
 class TMutableDataOnContext: private TNonCopyable {
 public:
-    TMutableDataOnContext(TComputationMutables& mutables)
+    explicit TMutableDataOnContext(TComputationMutables& mutables)
         : Index_(mutables.CurValueIndex++)
     {
     }
@@ -1347,5 +1348,4 @@ private:
     const ui32 Index_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

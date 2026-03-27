@@ -2,7 +2,7 @@
 
 Для подключения к {{ ydb-short-name }} требуется указать обязательные параметры (подробнее читайте в разделе [Подключение к серверу {{ ydb-short-name }}](../../concepts/connect.md)) и дополнительные, которые определяют поведение драйвера при работе.
 
-Ниже приведены примеры кода подлкючения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
+Ниже приведены примеры кода подключения к {{ ydb-short-name }} (создания драйвера) в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
 
@@ -125,27 +125,33 @@
 
 - Python
 
-  ```python
-  import ydb
+  {% list tabs %}
 
-  with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
-    driver.wait(timeout=5)
-    ...
-  ```
+  - Native SDK
 
-- Python (asyncio)
+    ```python
+    import ydb
 
-  ```python
-  import ydb
-  import asyncio
-
-  async def ydb_init():
-    async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      await driver.wait()
+    with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+      driver.wait(timeout=5)
       ...
+    ```
 
-  asyncio.run(ydb_init())
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+      async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+        await driver.wait()
+        ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

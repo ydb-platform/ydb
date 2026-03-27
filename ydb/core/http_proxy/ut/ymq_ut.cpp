@@ -5,6 +5,9 @@
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 
@@ -13,6 +16,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <thread>
+
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
 using namespace NActors;
@@ -20,17 +25,73 @@ using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
+    NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
+        TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        return NYdb::TDriver(driverConfig);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        CreateQueue({{"QueueName", "ExampleQueueName"}});
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        {
+            NYdb::NScheme::TSchemeClient schemeClient(driver);
+            auto describe = schemeClient.ListDirectory("/Root/SQS/cloud4/000000000000000101v0").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+            for (auto& c : describe.GetChildren()) {
+                Cerr << (TStringBuilder() << ">>>>> /Root/SQS/cloud4/000000000000000101v0/" << c.Name << Endl);
+            }
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueue_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
+        CreateQueue(req);
+        CreateQueue(req);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndSameParams_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{{"QueueName", "ExampleQueueName"}};
         CreateQueue(req);
         CreateQueue(req);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto req = NJson::TJsonMap{
+            {"QueueName", "ExampleQueueName"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        };
+        CreateQueue(req);
+
+        req["Attributes"]["MessageRetentionPeriod"] = "61";
+        auto json = CreateQueue(req, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "ValidationError");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithSameNameAndDifferentParams_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto req = NJson::TJsonMap{
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -44,6 +105,17 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        auto json = CreateQueue({
+            {"QueueName", "B@d_queue_name"},
+            {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
+        }, 400);
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidParameterValue");
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithBadQueueName_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         auto json = CreateQueue({
             {"QueueName", "B@d_queue_name"},
             {"Attributes", NJson::TJsonMap{{"MessageRetentionPeriod", "60"}}}
@@ -53,18 +125,21 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithEmptyName, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "MissingParameter");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongBody, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({{"wrongField", "foobar"}}, 400);
         TString resultType = GetByPath<TString>(json, "__type");
         UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithWrongAttribute, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName"},
             {"Attributes", NJson::TJsonMap{
@@ -78,6 +153,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
         auto attributes1 = GetQueueAttributes({
             {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
@@ -111,9 +187,27 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto& description = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        auto& consumer = description.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), false);
+
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         auto tags = NJson::TJsonMap{
             {"key1", "value1"},
             {"key2", "value2"},
@@ -207,6 +301,41 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-1"},
+            {"DelaySeconds", 900}
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", settings).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2); // check that message was written
+
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_TableImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -226,6 +355,146 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(BillingRecordsForJsonApi, THttpProxyTestMockWithMetering) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        // loadBillingRecords was copied from metering_ut.cpp.
+        // Probably, that file is a better place for this test.
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        TVector<NSc::TValue> records;
+        auto waitBillingRecords = [&]() {
+            static size_t expectedCount = 0;
+            expectedCount += 3;  // 2 traffic records, 1 request record
+            while (records.size() != expectedCount) {
+                Sleep(TDuration::Seconds(1));
+                records = loadBillingRecords(meteringLogFilePath);
+            }
+        };
+        auto queueTags = NJson::TJsonMap{
+            {"k1", "v1"},
+            {"k2", "v2"},
+        };
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName"},
+            {"Tags", queueTags}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(1_KB, 'x')},  // 1 request unit
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", TString(150_KB, 'x')},  // 3 request units
+        });
+        waitBillingRecords();
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 20},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        waitBillingRecords();
+
+        auto makeRecordTags = [](TVector<std::pair<TString, TString>> pairs) {
+            NSc::TValue tags;
+            tags.SetDict();
+            for (auto const& [k, v] : pairs) {
+                tags[k] = v;
+            }
+            return tags;
+        };
+        NSc::TValue queueTagsDict;
+        queueTagsDict.SetDict();
+        for (auto const& [k, v] : queueTags.GetMapSafe()) {
+            queueTagsDict[k] = v.GetString();
+        }
+        auto makeRecord = [&makeRecordTags](
+            TString type,
+            TString resourceId,
+            size_t quantity,
+            TVector<std::pair<TString, TString>> tags,
+            NSc::TValue queueTags = {}
+        ) {
+            return NKikimr::NSQS::CreateMeteringBillingRecord(
+                "folder4",
+                resourceId,
+                type,
+                "fqdn",
+                TInstant::Now(),
+                quantity,
+                type == "ymq.traffic.v1" ? "byte" : "request",
+                makeRecordTags(tags),
+                queueTags
+            );
+        };
+
+        TVector<NSc::TValue> expectedRecords{
+            // CreateQueue
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "ingress"}, {"type", "inet"}}),
+            makeRecord("ymq.traffic.v1", "", 0, {{"direction", "egress"}, {"type", "inet"}}),
+            makeRecord("ymq.requests.v1", "", 1, {{"queue_type", "other"}}),
+
+            // SendMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 1 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 1, {{"queue_type", "std"}}, queueTagsDict),
+
+            // SendMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+
+            // ReceiveMessage 150 KB
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "ingress"}}, queueTagsDict),
+            makeRecord("ymq.traffic.v1", "000000000000000101v0", 0, {{"direction", "egress"}}, queueTagsDict),
+            makeRecord("ymq.requests.v1", "000000000000000101v0", 3, {{"queue_type", "std"}}, queueTagsDict),
+        };
+
+        auto asExpected = [](NSc::TValue record, NSc::TValue expected) {
+            return record["folder_id"] == expected["folder_id"] &&
+                   record["resource_id"] == expected["resource_id"] &&
+                   record["schema"] == expected["schema"] &&
+                   record["usage"]["unit"] == expected["usage"]["unit"] &&
+                   (record["schema"] != "ymq.requests.v1" || record["usage"]["quantity"] == expected["usage"]["quantity"]) &&
+                   record["tags"]["direction"] == expected["tags"]["direction"] &&
+                   record["tags"]["queue_type"] == expected["tags"]["queue_type"] &&
+                   record["labels"]["k1"] == expected["labels"]["k1"] &&
+                   record["labels"]["k2"] == expected["labels"]["k2"];
+        };
+        for (size_t i = 0; i < records.size(); ++i) {
+            UNIT_ASSERT(asExpected(records[i], expectedRecords[i]));
+        }
+    }
+
+    Y_UNIT_TEST_F(BillingRecordsForJsonApi_TableImplementation, THttpProxyTestMockWithMetering) {
         auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
 
         // loadBillingRecords was copied from metering_ut.cpp.
@@ -363,6 +632,17 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl, THttpProxyTestMockForSQS) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        // We had a bug that crashed the server if QueueUrl was empty in a request.
+        SendMessage({
+            {"QueueUrl", ""},
+            {"MessageBody", "MessageBody-0"}
+        }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageEmptyQueueUrl_TableImplementation, THttpProxyTestMockForSQS) {
         // We had a bug that crashed the server if QueueUrl was empty in a request.
         SendMessage({
             {"QueueUrl", ""},
@@ -371,6 +651,30 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageFifoQueue, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body = "MessageBody-0";
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", body},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"},
+            {"MessageGroupId", "MessageGroupId-0"}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "SequenceNumber").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageFifoQueue_TableImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{
@@ -392,6 +696,54 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageWithAttributes, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageAttributes", NJson::TJsonMap{
+                {"string-attr", NJson::TJsonMap{
+                    {"DataType", "String"},
+                    {"StringValue", "1"}
+                }},
+                {"number-attr", NJson::TJsonMap{
+                    {"DataType", "Number"},
+                    {"StringValue", "1"}
+                }},
+                {"binary-attr", NJson::TJsonMap{
+                    {"DataType", "Binary"},
+                    {"BinaryValue", Base64Encode("encoded-value")}
+                }},
+                {"custom-type-attr", NJson::TJsonMap{
+                    {"DataType", "Number.float"},
+                    {"StringValue", "2.7182818284"}
+                }}
+            }},
+
+            // From Amazon SQS docs: "Currently, the only supported message system attribute is AWSTraceHeader".
+            // We do not support the attribute, but need to check that it doesn't lead to fails.
+            {"MessageSystemAttributes", NJson::TJsonMap{
+                {"AWSTraceHeader", NJson::TJsonMap{
+                    {"DataType", "String"},
+                    {"StringValue", "Root=1-5759e988-bd862e3fe1be46a994272793;Sampled=1"}
+                }}
+            }}
+        });
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        auto attrs = json["Messages"][0]["MessageAttributes"];
+        UNIT_ASSERT_VALUES_EQUAL(attrs["string-attr"]["StringValue"].GetString(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(attrs["number-attr"]["StringValue"].GetString(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(Base64Decode(attrs["binary-attr"]["BinaryValue"].GetString()), "encoded-value");
+        UNIT_ASSERT_VALUES_EQUAL(attrs["custom-type-attr"]["StringValue"].GetString(), "2.7182818284");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithAttributes_TableImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -437,6 +789,65 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessage, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body0 = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        // TODO support approximate number of messages
+        // WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        Sleep(TDuration::Seconds(1));
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        Cerr << (TStringBuilder() << ">>>>> JSON: " << json.GetStringRobust() << Endl);
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_TopicImplementation_Compatibility, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto body0 = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body0}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body0);
+
+        for (size_t i = 1; i <= 10; ++i) {
+            auto body = TStringBuilder() << "MessageBody-" << i;
+            SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        }
+
+        // TODO support approximate number of messages
+        // WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+
+        Sleep(TDuration::Seconds(1));
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}, {"MaxNumberOfMessages", 10}});
+        Cerr << (TStringBuilder() << ">>>>> JSON: " << json.GetStringRobust() << Endl);
+        UNIT_ASSERT_GE(json["Messages"].GetArray().size(), 1);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_TableImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
 
@@ -459,6 +870,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestReceiveMessageWithAttributes, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
         // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
@@ -503,7 +917,104 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes using AttributeNames field.
             json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateReceiveCount"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["ApproximateFirstReceiveTimestamp"].GetString().empty());
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SenderId"].GetString().empty());
+        }
+
+        {
+            // Test MessageSystemAttributeNames field.
+
+            // Request SentTimestamp.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request All message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes.
+            json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
+                "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
+            }}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+        }
+
+        {
+            // Test MessageAttributeNames
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{}}});
+            auto attrs = json["Messages"][0]["MessageAttributes"];
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+            UNIT_ASSERT_VALUES_EQUAL(attrs["AnotherAttribute"]["StringValue"].GetString(), "2");
+
+            json = receiveMessage({{"MessageAttributeNames", NJson::TJsonArray{"SomeAttribute"}}});
+
+            // We return all attributes, no matter what MessageAttributeNames are in the request. Should be fixed and uncommented:
+            //     UNIT_ASSERT_VALUES_EQUAL(attrs.GetMapSafe().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(attrs["SomeAttribute"]["StringValue"].GetString(), "1");
+        }
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessageWithAttributes_TableImplementation, THttpProxyTestMock) {
+        // Test if we process AttributeNames, MessageSystemAttributeNames, MessageAttributeNames correctly.
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        TString messageBody = "MessageBody-0";
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", messageBody},
+            {"MessageAttributes", NJson::TJsonMap{
+                {"SomeAttribute", NJson::TJsonMap{
+                    {"StringValue", "1"},
+                    {"DataType", "String"}
+                }},
+                {"AnotherAttribute", NJson::TJsonMap{
+                    {"StringValue", "2"},
+                    {"DataType", "String"}
+                }}
+            }}
+        });
+
+        auto receiveMessage = [&, this](NJson::TJsonMap request, ui32 expectedStatus = 200) -> NJson::TJsonMap {
+            request["VisibilityTimeout"] = 0;  // Keep the message visible for next ReceiveMessage requests.
+            request["QueueUrl"] = queueUrl;
+            request["WaitTimeSeconds"] = 20;
+            json = ReceiveMessage(request, expectedStatus);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], messageBody);
+            return json;
+        };
+
+        {
+            // Test deprecated AttributeNames field.
+
+            // Request SentTimestamp message system attribute using deprecated AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"SentTimestamp"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request All message system attributes using deprecated AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{"All"}}});
+            UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
+
+            // Request message system attributes using AttributeNames field.
+            json = receiveMessage({{"AttributeNames", NJson::TJsonArray{
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -522,7 +1033,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
             // Request message system attributes.
             json = receiveMessage({{"MessageSystemAttributeNames", NJson::TJsonArray{
-                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber"
+                "SenderId", "SentTimestamp", "ApproximateReceiveCount", "ApproximateFirstReceiveTimestamp", "SequenceNumber",
                 "MessageDeduplicationId", "MessageGroupId", "AWSTraceHeader", "DeadLetterQueueSourceArn"
             }}});
             UNIT_ASSERT(!json["Messages"][0]["Attributes"]["SentTimestamp"].GetString().empty());
@@ -879,6 +1390,50 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSendMessageBatch, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+            }}
+        });
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "Id-0"},
+                    {"MessageBody", "MessageBody-0"},
+                    {"MessageGroupId", "MessageGroupId-0"},
+                    {"MessageAttributes", NJson::TJsonMap{
+                        {"SomeAttribute", NJson::TJsonMap{
+                            {"DataType", "String"},
+                            {"StringValue", "1"}
+                        }}
+                    }}
+                },
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageGroupId", "MessageGroupId-1"}},
+                NJson::TJsonMap{{"Id", "Id-2"}, {"MessageBody", "MessageBody-2"}},
+            }}
+        });
+
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+        auto succesful0 = json["Successful"][0];
+        UNIT_ASSERT(succesful0["Id"] == "Id-0");
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageAttributes").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(succesful0, "MessageId").empty());
+
+        UNIT_ASSERT(json["Successful"][1]["Id"] == "Id-1");
+
+        UNIT_ASSERT(json["Failed"].GetArray().size() == 1);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageBatch_TableImplementation, THttpProxyTestMock) {
         auto json = CreateQueue({
             {"QueueName", "ExampleQueueName.fifo"},
             {"Attributes", NJson::TJsonMap{

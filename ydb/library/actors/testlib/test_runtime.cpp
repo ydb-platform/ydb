@@ -13,6 +13,7 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/util/mutex_guarded_deterministic_random_provider.h>
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
@@ -524,7 +525,7 @@ namespace NActors {
         , DispatchCyclesCount(0)
         , DispatchedEventsCount(0)
         , NeedMonitoring(false)
-        , RandomProvider(CreateDeterministicRandomProvider(DefaultRandomSeed))
+        , RandomProvider(CreateMutexGuardedDeterministicRandomProvider(DefaultRandomSeed))
         , TimeProvider(new TTimeProvider(*this))
         , MonotonicTimeProvider(new TMonotonicTimeProvider(*this))
         , ShouldContinue()
@@ -906,6 +907,10 @@ namespace NActors {
 
     ui32 TTestActorRuntimeBase::GetNodeCount() const {
         return NodeCount;
+    }
+
+    void TTestActorRuntimeBase::ResetFirstNodeId() {
+        NextNodeId = 1;
     }
 
     ui64 TTestActorRuntimeBase::AllocateLocalId() {
@@ -1895,8 +1900,8 @@ namespace NActors {
         Y_ABORT("Don't use this method.");
     }
 
-    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
-        auto it = Nodes.find(GetNodeId(nodeId));
+    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeIdx) {
+        auto it = Nodes.find(GetNodeId(nodeIdx));
         Y_ABORT_UNLESS(it != Nodes.end());
         return it->second->ActorSystem.Get();
     }

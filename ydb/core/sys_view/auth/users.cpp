@@ -142,8 +142,8 @@ protected:
                         : TCell());
                     break;
                 case Schema::AuthUsers::PasswordHash::ColumnId:
-                    cells.push_back(user->HasPasswordHash()
-                        ? TCell(user->GetPasswordHash().data(), user->GetPasswordHash().size())
+                    cells.push_back(user->HasPasswordHashes()
+                        ? TCell(user->GetPasswordHashes().data(), user->GetPasswordHashes().size())
                         : TCell());
                     break;
                 default:

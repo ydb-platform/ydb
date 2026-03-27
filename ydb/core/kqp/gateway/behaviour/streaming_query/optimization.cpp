@@ -19,7 +19,6 @@ struct TStreamingExploreCtx {
     TExprContext& Ctx;
     std::unordered_set<const TExprNode*> Visited;
     ui64 StreamingReads = 0;
-    ui64 Writes = 0;
 };
 
 bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) {
@@ -44,24 +43,17 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
             return true;
         }
 
-        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
+        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName, NYql::KikimrProviderName}, dataSourceCategory)) {
             return true;
         }
 
-        if (dataSourceCategory == NYql::KikimrProviderName) {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), "Reading from YDB tables is not supported now for streaming queries"));
-        } else {
-            res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
-        }
-
+        res.Ctx.AddError(NYql::TIssue(res.Ctx.GetPosition(node->Pos()), TStringBuilder() << "Reading from data source " << dataSourceCategory << " is not supported now for streaming queries"));
         return false;
     }
 
     if (const auto maybeDataSink = TMaybeNode<TCoDataSink>(providerArg)) {
-        ++res.Writes;
-
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
-        if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName}, dataSinkCategory)) {
+        if (IsIn({NYql::PqProviderName, NYql::SolomonProviderName, NYql::S3ProviderName}, dataSinkCategory)) {
             return true;
         }
 
@@ -115,11 +107,6 @@ bool CheckStreamingQueryAst(TExprNode::TPtr ast, TExprContext& ctx) {
 
     if (res.StreamingReads == 0) {
         ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query must have at least one streaming read from topic"));
-        return false;
-    }
-
-    if (res.Writes > 1) {
-        ctx.AddError(NYql::TIssue(ctx.GetPosition(ast->Pos()), "Streaming query with more than one write is not supported now"));
         return false;
     }
 

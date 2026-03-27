@@ -79,6 +79,7 @@ BELONGS ya.make
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/math/special_functions/detail/fp_traits.hpp [9:11]
+        include/boost/math/special_functions/detail/lambert_w_lookup_table.ipp [2:4]
         include/boost/math/special_functions/nonfinite_num_facets.hpp [8:10]
 
 KEEP     BSL-1.0              1f86bcce1bbfb6d9a7d6c733166e7bba
@@ -666,6 +667,8 @@ BELONGS ya.make
         include/boost/math/special_functions/hankel.hpp [3:6]
         include/boost/math/special_functions/jacobi_elliptic.hpp [2:5]
         include/boost/math/special_functions/legendre_stieltjes.hpp [2:5]
+        include/boost/math/special_functions/logistic_sigmoid.hpp [2:5]
+        include/boost/math/special_functions/logit.hpp [2:5]
         include/boost/math/special_functions/math_fwd.hpp [9:12]
         include/boost/math/special_functions/prime.hpp [3:6]
         include/boost/math/tools/promotion.hpp [8:11]
@@ -686,20 +689,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/distributions/kolmogorov_smirnov.hpp [4:6]
         include/boost/math/special_functions/jacobi_theta.hpp [4:6]
-
-KEEP     BSL-1.0              a4d94028384239d2a9a35e386bb30daf
-BELONGS ya.make
-    License text:
-        // Distributed under the Boost Software License, Version 1.0.
-        // (See accompanying file LICENSE_1_0.txt
-        // or copy at http://www.boost.org/LICENSE_1_0.txt)
-    Scancode info:
-        Original SPDX id: BSL-1.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
-    Files with this license:
-        include/boost/math/special_functions/detail/lambert_w_lookup_table.ipp [2:4]
 
 KEEP     BSL-1.0              ab2348e8edf8e5498ae8350b5bf110e4
 BELONGS ya.make
@@ -726,6 +715,19 @@ BELONGS ya.make
     Files with this license:
         include/boost/math/differentiation/autodiff.hpp [2:4]
         include/boost/math/differentiation/autodiff_cpp11.hpp [2:4]
+        include/boost/math/differentiation/autodiff_reverse.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_operator_expressions.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_et.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_no_et.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_comparison_operator_overloads.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_erf_overloads.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_expression_template_base.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_helper_functions.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_memory_management.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_et.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_expressions.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_no_et.hpp [2:4]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_utilities.hpp [2:4]
 
 KEEP     BSL-1.0              c433ef677447b140a1c2a340c08bac97
 BELONGS ya.make

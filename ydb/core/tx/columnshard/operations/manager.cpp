@@ -4,6 +4,18 @@
 
 namespace NKikimr::NColumnShard {
 
+void TLockFeatures::SetTxId(const ui64 txId) {
+    AFL_VERIFY(!TxId || TxId == txId)("tx_id", txId)("lock_id", GetLockId())("tx_id_assigned", TxId);
+    TxId = txId;
+}
+bool TLockFeatures::IsTxIdAssigned() const {
+    return TxId != 0;
+}
+ui64 TLockFeatures::GetTxId() const {
+    AFL_VERIFY(IsTxIdAssigned())("lock_id", GetLockId());
+    return TxId;
+}
+
 bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
     {
@@ -36,10 +48,7 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(Operations.emplace(operation->GetWriteId(), operation).second);
             LinkInsertWriteIdToOperationWriteId(operation->GetInsertWriteIds(), operation->GetWriteId());
 
-            auto it = LockFeatures.find(lockId);
-            if (it == LockFeatures.end()) {
-                it = LockFeatures.emplace(lockId, TLockFeatures(lockId, 0)).first;
-            }
+            auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
             it->second.AddWriteOperation(operation);
             // all the operations are finished at the moment of transaction proposal (or later) 
             it->second.OnWriteOperationFinished();
@@ -58,12 +67,15 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         while (!rowset.EndOfSet()) {
             const ui64 lockId = rowset.GetValue<Schema::OperationTxIds::LockId>();
             const ui64 txId = rowset.GetValue<Schema::OperationTxIds::TxId>();
-            if (auto it = LockFeatures.find(lockId); it == LockFeatures.end()) {
-                auto lock = TLockFeatures(lockId, 0);
+            const bool broken = rowset.GetValueOrDefault<Schema::OperationTxIds::Broken>(true);
+
+            auto it = LockFeatures.try_emplace(lockId, lockId, 0).first;
+            auto& lock = it->second;
+
+            lock.SetTxId(txId);
+            if (broken) {
                 lock.SetBroken();
-                LockFeatures.emplace(lockId, std::move(lock));
             }
-            LockFeatures.find(lockId)->second.SetTxId(txId);
             AFL_VERIFY(Tx2Lock.emplace(txId, lockId).second);
             if (!rowset.Next()) {
                 return false;
@@ -74,11 +86,16 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
     return true;
 }
 
-void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
+void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
     for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
         if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", lockIdToBreak);
-            lockToBreak->SetBroken();
+            if (!lockToBreak->IsBroken()) {
+                lockToBreak->SetBroken();
+                if (lockToBreak->IsTxIdAssigned()) {
+                    PersistLock(*lockToBreak, txc);
+                }
+            }
         }
     }
     for (auto&& lockIdToNotify : lock.GetNotifyOnCommit()) {
@@ -88,9 +105,9 @@ void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
     }
 }
 
-void TOperationsManager::BreakConflictingTxs(const ui64 lockId) {
+void TOperationsManager::BreakConflictingTxs(const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc) {
     auto& lock = GetLockVerified(lockId);
-    BreakConflictingTxs(lock);
+    BreakConflictingTxs(lock, txc);
 }
 
 void TOperationsManager::CommitTransactionOnExecute(
@@ -98,16 +115,13 @@ void TOperationsManager::CommitTransactionOnExecute(
     auto& lock = GetLockFeaturesForTxVerified(txId);
     TLogContextGuard gLogging(
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_TX)("commit_tx_id", txId)("commit_lock_id", lock.GetLockId()));
-    if (lock.GetWriteOperations().size() > 0) {
-        AFL_VERIFY(!lock.IsBroken())("error", "the tx has writes, it is broken, and we are committing it")("writes_count", lock.GetWriteOperations().size());
-    }
     TVector<TWriteOperation::TPtr> commited;
     for (auto&& opPtr : lock.GetWriteOperations()) {
         opPtr->CommitOnExecute(owner, txc, snapshot);
         commited.emplace_back(opPtr);
     }
 
-    BreakConflictingTxs(lock);
+    BreakConflictingTxs(lock, txc);
 
     OnTransactionFinishOnExecute(commited, lock, txId, txc);
 }
@@ -210,10 +224,16 @@ std::optional<ui64> TOperationsManager::GetLockForTx(const ui64 txId) const {
     return std::nullopt;
 }
 
-void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
+void TOperationsManager::LinkTransactionOnExecute(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
+    PersistLock(lock, txc);
+    Tx2Lock[lock.GetTxId()] = lock.GetLockId();
+}
+
+void TOperationsManager::PersistLock(TLockFeatures& lock, NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
-    db.Table<Schema::OperationTxIds>().Key(txId, lockId).Update();
-    Tx2Lock[txId] = lockId;
+    db.Table<Schema::OperationTxIds>()
+        .Key(lock.GetTxId(), lock.GetLockId())
+        .Update(NIceDb::TUpdate<Schema::OperationTxIds::Broken>(lock.IsBroken()));
 }
 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {

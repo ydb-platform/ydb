@@ -79,8 +79,18 @@ private:
 
     TTabletInfoPtr FindTabletInfo(TTabletId tabletId);
 
-    std::optional<TInvalidationResult> TryHandleServantNotActiveError(
+    void SetTableInfos(std::vector<TTableMountInfoPtr> clonedTableInfos);
+
+    std::optional<TInvalidationResult> TryHandleRedirectionError(
         const TError& error);
+
+    std::optional<TInvalidationResult> TryHandleServantNotActiveError(
+        const TSmoothMovementRedirectionHint& smoothMovementHint,
+        const TTabletInfoPtr& tabletInfo);
+
+    std::optional<TInvalidationResult> TryHandleTabletReshardedError(
+        const TReshardRedirectionHintPtr& reshardHint,
+        const TTabletInfoPtr& tabletInfo);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

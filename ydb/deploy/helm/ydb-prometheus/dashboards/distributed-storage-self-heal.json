@@ -1315,15 +1315,13 @@
   ],
   "refresh": "",
   "schemaVersion": 39,
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": true,
-          "text": "prometheus",
-          "value": "bdps0jslu0ow0e"
-        },
+        "current": {},
         "hide": 0,
         "includeAll": false,
         "multi": false,
@@ -1344,7 +1342,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Distributed storage self heal",
-  "uid": "distributed-storage-self-heal",
+  "title": "Distributed Storage Self Heal",
+  "uid": "ydb-distributed-storage-self-heal",
   "weekStart": ""
 }

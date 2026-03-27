@@ -32,10 +32,9 @@ using NYql::TExprNode;
 
 Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
-    Y_UNIT_TEST_TWIN(TestNoLocksIssue, withSink) {
+    Y_UNIT_TEST(TestNoLocksIssue) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -130,9 +129,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestNoLocksIssueInteractiveTx, withSink) {
+    Y_UNIT_TEST(TestNoLocksIssueInteractiveTx) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -249,9 +247,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestNoWrite) {
+    Y_UNIT_TEST_TWIN(TestNoWrite, EnableIndexStreamWrite) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -332,7 +330,6 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
     Y_UNIT_TEST(TestSnapshotIfInsertRead) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -403,9 +400,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST(TestSecondaryIndexWithoutSnapshot) {
+    Y_UNIT_TEST_TWIN(TestSecondaryIndexWithoutSnapshot, StreamIndex) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -457,9 +454,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TestSnapshotWithDependentReads, UseSink) {
+    Y_UNIT_TEST(TestSnapshotWithDependentReads) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -561,6 +557,89 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
 
             auto result = runtime.WaitFuture(future);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());        
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestSnapshotWithOnlineRO, AllowInconsistentReads) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/KeyValue` WHERE Key = 1u;
+                SELECT Value FROM `/Root/KeyValue2` WHERE Key = "One";
+            )"));
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    auto* evRead = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetStep() == 0) == AllowInconsistentReads);
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetTxId() == 0) == AllowInconsistentReads);
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(AllowInconsistentReads))).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestSnapshotWithOnlineROOneShard, AllowInconsistentReads) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+        auto upsertSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/KeyValue` WHERE Key = 1u;
+                SELECT Value FROM `/Root/KeyValue` WHERE Key = 1u;
+            )"));
+
+            auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
+                if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                    auto* evRead = ev->Get<NKikimr::TEvDataShard::TEvRead>();
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetStep() == 0));
+                    UNIT_ASSERT((evRead->Record.GetSnapshot().GetTxId() == 0));
+                }
+
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+
+            runtime.SetObserverFunc(grab);
+
+            auto future = kikimr.RunInThreadPool([&]{
+                auto txc = TTxControl::BeginTx(TTxSettings::OnlineRO(
+                    TTxOnlineSettings().AllowInconsistentReads(AllowInconsistentReads))).CommitTx();
+                return session.ExecuteDataQuery(query, txc, execSettings).ExtractValueSync();
+            });
+
+            auto result = runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 }

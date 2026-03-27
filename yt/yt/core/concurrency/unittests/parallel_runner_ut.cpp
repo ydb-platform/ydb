@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/parallel_runner.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <atomic>
 
@@ -27,7 +28,7 @@ TEST_P(TSyncParallelRunnerTest, Do)
         sum += arg;
     });
     EXPECT_TRUE(future.IsSet());
-    EXPECT_TRUE(future.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(future).IsOK());
     EXPECT_EQ(sum, expectedSum);
 }
 
@@ -59,7 +60,7 @@ TEST_P(TAsyncParallelRunnerTest, Do)
     runner.Run([&] (int arg) {
         sum += arg;
     })
-        .Get()
+        .BlockingGet()
         .ThrowOnError();
     EXPECT_EQ(sum.load(), expectedSum);
 }

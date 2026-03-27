@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -9,6 +8,11 @@
 #include <util/string/printf.h>
 
 namespace NActors {
+
+struct TExecutorThreadStats;
+struct TExecutorPoolStats;
+struct THarmonizerStats;
+struct TLogHistogram;
 
 struct THistogramCounters {
     void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal);

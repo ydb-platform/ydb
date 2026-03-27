@@ -80,8 +80,10 @@ void ThrowIfError(const TStatus& status, const TString& what);
 //-----------------------------------------------------------------------------
 
 std::stop_source& GetGlobalInterruptSource();
+std::atomic<bool>& GetGlobalErrorVariable();
 
-inline void RequestStop() {
+inline void RequestStopWithError() {
+    GetGlobalErrorVariable().store(true);
     GetGlobalInterruptSource().request_stop();
 }
 

@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.24.0)
+VERSION(1.25.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.24.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.25.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/opentelemetry-cpp/api/include
@@ -19,6 +19,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
+    -DOPENTELEMETRY_PROTO_API=
     GLOBAL -DOPENTELEMETRY_STL_VERSION=2023
     GLOBAL -DOPENTELEMETRY_ABI_VERSION_NO=2
 )

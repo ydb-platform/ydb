@@ -60,8 +60,9 @@ struct TServerConfig
 
     //! Used for thread naming.
     //! CamelCase identifiers are preferred.
-    //! This field is not accessible from config.
-    TString ServerName = "Http";
+    std::string ServerName;
+
+    bool EnablePerPathRequestProfiling;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 

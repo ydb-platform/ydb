@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 
+#include "opentelemetry/sdk/configuration/cardinality_limits_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_producer_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_reader_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_reader_configuration_visitor.h"
@@ -18,7 +19,7 @@ namespace sdk
 namespace configuration
 {
 
-// YAML-SCHEMA: schema/meter_provider.json
+// YAML-SCHEMA: schema/meter_provider.yaml
 // YAML-NODE: PullMetricReader
 class PullMetricReaderConfiguration : public MetricReaderConfiguration
 {
@@ -30,7 +31,7 @@ public:
 
   std::unique_ptr<PullMetricExporterConfiguration> exporter;
   std::vector<std::unique_ptr<MetricProducerConfiguration>> producers;
-  // FIXME: cardinality_limits
+  std::unique_ptr<CardinalityLimitsConfiguration> cardinality_limits;
 };
 
 }  // namespace configuration

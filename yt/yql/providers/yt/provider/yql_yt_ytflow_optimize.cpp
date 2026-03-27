@@ -78,7 +78,7 @@ public:
 
         YQL_CLOG(DEBUG, ProviderYt) << __FUNCTION__;
 
-        auto* listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
+        auto listType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn();
         auto* itemType = listType->Cast<TListExprType>()->GetItemType();
 
         return Build<TYtWriteTable>(ctx, write->Pos())

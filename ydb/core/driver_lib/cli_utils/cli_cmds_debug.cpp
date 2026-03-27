@@ -12,6 +12,7 @@ class TInterconnectLoad : public TClientCommand {
     ui32 SizeMin = 0;
     ui32 SizeMax = 0;
     ui32 InFlyMax = 0;
+    ui32 NumLoadActors = 1;
     TDuration IntervalMin;
     TDuration IntervalMax;
     bool Soft = false;
@@ -88,6 +89,10 @@ public:
         config.Opts->AddLongOption("rdma-mode", "rdma mode for data transfer (0 - disabled; 1 - use rdma)")
             .RequiredArgument()
             .StoreResult(&RdmaMode);
+
+        config.Opts->AddLongOption("num", "number of load actors")
+            .RequiredArgument()
+            .StoreResult(&NumLoadActors);
     }
 
     int Run(TConfig& config) override {
@@ -118,6 +123,8 @@ public:
         if (RdmaMode) {
             request.SetRdmaMode(RdmaMode);
         }
+
+        request.SetNumLoadActors(NumLoadActors);
 
         auto callback = [](const NMsgBusProxy::TBusResponse& response) {
             return response.Record.GetStatus() == NMsgBusProxy::MSTATUS_OK ? 0 : 1;

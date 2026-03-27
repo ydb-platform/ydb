@@ -23,6 +23,7 @@
 #include <openssl/sha.h>
 
 #include <map>
+#include <ranges>
 #include <unordered_set>
 
 namespace NYql {
@@ -140,7 +141,7 @@ struct TContext {
     TString File;
     ui16 SyntaxVersion = 0;
 
-    TContext(TExprContext& expr)
+    explicit TContext(TExprContext& expr)
         : Expr(expr)
     {
     }
@@ -172,9 +173,9 @@ struct TContext {
     }
 
     TExprNode::TListType FindBinding(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Bindings.find(name);
-            if (it->Bindings.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Bindings.find(name);
+            if (frame.Bindings.cend() != r) {
                 return r->second;
             }
         }
@@ -183,9 +184,9 @@ struct TContext {
     }
 
     TString FindImport(const TStringBuf& name) const {
-        for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-            const auto r = it->Imports.find(name);
-            if (it->Imports.cend() != r) {
+        for (const auto& frame : std::ranges::reverse_view(Frames)) {
+            const auto r = frame.Imports.find(name);
+            if (frame.Imports.cend() != r) {
                 return r->second;
             }
         }
@@ -661,6 +662,14 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool);
         }
 
+        case ETypeAnnotationKind::Universal: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Universal"), pool);
+        }
+
+        case ETypeAnnotationKind::UniversalStruct: {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("UniversalStruct"), pool);
+        }
+
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
@@ -1092,7 +1101,10 @@ TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
 
         return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
     } else {
-        const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
+        /* clang-format off */
+        const auto stub = ctx.Expr.NewCallable(node.GetPosition(), "InstanceOf",
+            {ctx.Expr.NewCallable(node.GetPosition(), "UniversalType", {})});
+        /* clang-format on */
         ctx.Frames.back().Bindings[name->GetContent()] = {stub};
         ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
         return stub;
@@ -1701,7 +1713,7 @@ template <typename K, typename V>
 using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
 
 struct TFrameContext {
-    TFrameContext(IAllocator* allocator)
+    explicit TFrameContext(IAllocator* allocator)
         : Nodes(std::less<size_t>(), allocator)
         , TopoSortedNodes(allocator)
         , Bindings(0, allocator)
@@ -2086,9 +2098,9 @@ bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, cons
     }
 }
 
-typedef std::pair<const TExprNode*, const TExprNode*> TPairOfNodePotinters;
-typedef std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>> TNodesPairSet;
-typedef TNodeMap<std::pair<ui32, ui32>> TArgumentsMap;
+using TPairOfNodePotinters = std::pair<const TExprNode*, const TExprNode*>;
+using TNodesPairSet = std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>>;
+using TArgumentsMap = TNodeMap<std::pair<ui32, ui32>>;
 
 bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArgumentsMap& argumentsMap, ui32 level, TNodesPairSet& visited) {
     const auto ins = visited.emplace(one, two);
@@ -2246,7 +2258,7 @@ TNodeSetPtr CollectUnresolvedArgs(const TExprNode& root, TNodeMap<TNodeSetPtr>& 
     return result;
 }
 
-typedef TNodeMap<long> TRefCountsMap;
+using TRefCountsMap = TNodeMap<long>;
 
 void CalculateReferences(const TExprNode& node, TRefCountsMap& refCounts) {
     if (!refCounts[&node]++) {
@@ -2756,9 +2768,9 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
                                                        << node.second->UniqueId() << "}";
                         YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
                     } else {
-                        char buffer[1 + 10 + 1];
-                        snprintf(buffer, sizeof(buffer), "$%" PRIu32, ++uniqueNum);
-                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
+                        std::array<char, 1 + 10 + 1> buffer;
+                        snprintf(buffer.data(), sizeof(buffer), "$%" PRIu32, ++uniqueNum);
+                        YQL_ENSURE(frame.Bindings.emplace(node.second, buffer.data()).second);
                     }
                     frame.TopoSortedNodes.emplace_back(node.second);
                 }
@@ -3279,10 +3291,8 @@ ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
             return ret;
         }
         default:
-            break;
+            return 0; // Validate will handle it
     }
-
-    ythrow yexception() << "unexpected underlying type" << *underlyingType;
 }
 
 bool TDictExprType::Validate(TPosition position, TExprContext& ctx) const {
@@ -3567,6 +3577,14 @@ const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TUnitExprType>(ctx);
 }
 
+const TUniversalExprType* TMakeTypeImpl<TUniversalExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalExprType>(ctx);
+}
+
+const TUniversalStructExprType* TMakeTypeImpl<TUniversalStructExprType>::Make(TExprContext& ctx) {
+    return MakeSinglethonType<TUniversalStructExprType>(ctx);
+}
+
 const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TWorldExprType>(ctx);
 }
@@ -3845,10 +3863,10 @@ class TCacheKeyBuilder {
 public:
     TString Process(const TExprNode& root) {
         SHA256_Init(&Sha_);
-        unsigned char hash[SHA256_DIGEST_LENGTH];
+        std::array<unsigned char, SHA256_DIGEST_LENGTH> hash;
         Visit(root);
-        SHA256_Final(hash, &Sha_);
-        return TString((const char*)hash, sizeof(hash));
+        SHA256_Final(hash.data(), &Sha_);
+        return TString((const char*)hash.data(), sizeof(hash));
     }
 
 private:
@@ -3962,7 +3980,9 @@ TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TS
 
         return res;
     } catch (yexception& e) {
-        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos;
+        throw TErrorException(EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR)
+            << "Failed to substitute parameters into url: '" << str
+            << "', reason: '" << e.what() << "', position: " << pos;
     }
 }
 
@@ -3998,6 +4018,14 @@ const TTypeAnnotationNode& RemoveOptionality(const TTypeAnnotationNode& type) {
 }
 
 void TDefaultTypeAnnotationVisitor::Visit(const TUnitExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalExprType& type) {
+    Y_UNUSED(type);
+}
+
+void TDefaultTypeAnnotationVisitor::Visit(const TUniversalStructExprType& type) {
     Y_UNUSED(type);
 }
 

@@ -98,6 +98,15 @@ sourceSets {
 {#- glue -#}
 {{ TargetSets(target, "main") }}
     }
+{%  elif not(target is defined) %}
+    main {
+        // Preventing automatic search for main
+        java.setSrcDirs(emptyList<Any>())
+        resources.setSrcDirs(emptyList<Any>())
+{%-         if with_kotlin %}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-         endif %}
+    }
 {%  endif -%}
 
 {%- if not proto_template -%}

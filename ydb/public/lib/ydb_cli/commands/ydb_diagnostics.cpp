@@ -39,8 +39,8 @@ void TCommandClusterDiagnosticsCollect::Config(TConfig& config) {
         "If set to zero or omitted, only a single collection is done.")
     .DefaultValue(0)
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
-    config.Opts->AddLongOption('o', "output", "Path to the output .tar.bz2 file")
-    .DefaultValue("out.tar.bz2")
+    config.Opts->AddLongOption('o', "output", "Path to the output .tar file")
+    .DefaultValue("out.tar")
         .OptionalArgument("PATH").StoreResult(&FileName);
     config.Opts->AddLongOption("no-sanitize", "Disable sanitization and preserve sensitive data in the output, including table names, "
         "authentication information, and other personally identifiable information")
@@ -107,12 +107,12 @@ struct TARFile {
 
 TString ReplaceCountersIdx(TString& name, ui32 index) {
     if (!name.StartsWith("node")) {
-        return TStringBuilder() << name << ".json";
+        return TStringBuilder() << name << ".json.zst";
     }
-    return TStringBuilder() << name << "_" << index << ".json";
+    return TStringBuilder() << name << "_" << index << ".json.zst";
 }
 
-void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TBZipCompress& compress, ui32 index) {
+void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TFileOutput& out, ui32 index) {
     NMonitoring::TMonitoringClient client(CreateDriver(config));
     NMonitoring::TClusterStateSettings settings;
     settings.DurationSeconds(PeriodSeconds ? PeriodSeconds : DurationSeconds);
@@ -124,10 +124,8 @@ void TCommandClusterDiagnosticsCollect::ProcessState(TConfig& config, TBZipCompr
     for (ui32 i : xrange(proto.blocksSize())) {
         auto& block = proto.Getblocks(i);
         TString data = block.Getcontent();
-        TMemoryInput input(data.data(), data.size());
-        TBZipDecompress decompress(&input);
         TString fileName = block.Getname();
-        TARFile::ToStream(compress, ReplaceCountersIdx(fileName, index), decompress.ReadAll(), TInstant::Seconds(block.Gettimestamp().seconds()));
+        TARFile::ToStream(out, ReplaceCountersIdx(fileName, index), data, TInstant::Seconds(block.Gettimestamp().seconds()));
     }
 }
 
@@ -137,19 +135,22 @@ int TCommandClusterDiagnosticsCollect::Run(TConfig& config) {
     auto duration = TDuration::Seconds(DurationSeconds);
     ui32 index = 0;
     TFileOutput out(FileName);
-    TBZipCompress compress(&out);
+    TARFile::ToStream(out, "cluster_state_fetch_parameters.json", TStringBuilder()
+        << "{\"DurationSeconds\": " << DurationSeconds
+        << ", \"PeriodSeconds\": " << PeriodSeconds
+        << ", \"StartedAt\": \"" << start.ToStringUpToSeconds() << "\"}", start);
     Cout << TInstant::Now().ToString() << " Request cluster diagnostics" << "\n";
-    ProcessState(config, compress);
+    ProcessState(config, out);
 
     while (PeriodSeconds && (TInstant::Now() - start) < duration - period) {
         index++;
         auto p = TDuration::Seconds(PeriodSeconds * index);
 
         if (start + p > TInstant::Now()) {
-            std::this_thread::sleep_for(std::chrono::nanoseconds((start - TInstant::Now() + p).NanoSeconds()));
+            std::this_thread::sleep_for(std::chrono::nanoseconds((start + p - TInstant::Now()).NanoSeconds()));
         }
         Cout <<  TInstant::Now().ToString() << " Request counteres #" << index << "\n";
-        ProcessState(config, compress, index);
+        ProcessState(config, out, index);
     }
     return EXIT_SUCCESS;
 }

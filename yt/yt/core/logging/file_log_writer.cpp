@@ -69,7 +69,7 @@ public:
         const auto& rotationPolicy = Config_->RotationPolicy;
         auto now = TInstant::Now();
         if ((!rotationPolicy->RotationPeriod || LastRotationTimestamp_ + *rotationPolicy->RotationPeriod > now) &&
-            ((!rotationPolicy->MaxSegmentSize || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
+            ((!rotationPolicy->MaxSegmentSize || !File_ || File_->GetLength() < *rotationPolicy->MaxSegmentSize)))
         {
             return;
         }
@@ -271,11 +271,11 @@ private:
         }
     }
 
-    std::vector<TString> ListFiles() const
+    std::vector<std::string> ListFiles() const
     {
         auto files = NFS::EnumerateFiles(DirectoryName_, /*depth*/ 1, /*sortByName*/ true);
-        std::erase_if(files, [&] (const TString& s) {
-            return !s.StartsWith(FileNamePrefix_);
+        std::erase_if(files, [&] (const std::string& s) {
+            return !s.starts_with(FileNamePrefix_);
         });
         if (Config_->UseTimestampSuffix) {
             // Rotated files are suffixed with the date, decreasing with the age of file.
@@ -287,7 +287,7 @@ private:
         return files;
     }
 
-    int GetFileCountToKeep(const std::vector<TString>& fileNames) const
+    int GetFileCountToKeep(const std::vector<std::string>& fileNames) const
     {
         const auto& rotationPolicy = Config_->RotationPolicy;
         int filesToKeep = 0;
@@ -305,7 +305,7 @@ private:
         return fileNames.size();
     }
 
-    void RenameFiles(const std::vector<TString>& fileNames)
+    void RenameFiles(const std::vector<std::string>& fileNames)
     {
         if (Config_->UseTimestampSuffix || fileNames.empty()) {
             return;

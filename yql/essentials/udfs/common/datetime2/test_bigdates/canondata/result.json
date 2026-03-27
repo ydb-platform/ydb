@@ -4,6 +4,11 @@
             "uri": "file://test.test_BlockFrom_/results.txt"
         }
     ],
+    "test.test[BlockSplitMake]": [
+        {
+            "uri": "file://test.test_BlockSplitMake_/results.txt"
+        }
+    ],
     "test.test[EndOf]": [
         {
             "uri": "file://test.test_EndOf_/results.txt"

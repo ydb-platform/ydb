@@ -56,7 +56,7 @@ public:
     // length = 1 for Linear, N for Struct/Tuple
     using TUsage = TStackVec<TMaybe<TPositionHandle>, 1>;
 
-    TUsageVisitor(TExprContext& ctx)
+    explicit TUsageVisitor(TExprContext& ctx)
         : Ctx_(ctx)
     {}
 
@@ -162,6 +162,41 @@ public:
         }
     }
 
+    void Finish() {
+        for (const auto& [node, usage] : Visited_) {
+            if (!node->GetTypeAnn()->HasStaticLinear()) {
+                continue;
+            }
+            if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+                auto tupleType = node->GetTypeAnn()->Cast<TTupleExprType>();
+                YQL_ENSURE(tupleType->GetSize() == usage.size());
+                for (ui32 i = 0; i < usage.size(); ++i) {
+                    if (!tupleType->GetItems()[i]->IsLinear()) {
+                        continue;
+                    }
+
+                    if (!usage[i].Defined()) {
+                        AddError(node->Pos(), TStringBuilder() << "Element #" << i
+                            << " is not consumed, type: " << *tupleType->GetItems()[i]);
+                    }
+                }
+            } else if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+                auto structType = node->GetTypeAnn()->Cast<TStructExprType>();
+                YQL_ENSURE(structType->GetSize() == usage.size());
+                for (ui32 i = 0; i < usage.size(); ++i) {
+                    if (!structType->GetItems()[i]->GetItemType()->IsLinear()) {
+                        continue;
+                    }
+
+                    if (!usage[i].Defined()) {
+                        AddError(node->Pos(), TStringBuilder() << "Member '" << structType->GetItems()[i]->GetName()
+                            << "' is not consumed, type: " << *structType->GetItems()[i]->GetItemType());
+                    }
+                }
+            }
+        }
+    }
+
     bool HasErrors() const {
         return HasErrors_;
     }
@@ -214,6 +249,7 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
 
     TUsageVisitor visitor(ctx);
     visitor.Visit(root, nullptr);
+    visitor.Finish();
     return !visitor.HasErrors();
 }
 

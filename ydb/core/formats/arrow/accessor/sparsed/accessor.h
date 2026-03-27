@@ -42,7 +42,8 @@ private:
             : StartExt(startExt)
             , StartInt(startInt)
             , Size(size)
-            , IsDefault(defaultFlag) {
+            , IsDefault(defaultFlag)
+        {
             AFL_VERIFY(Size);
         }
 
@@ -55,7 +56,8 @@ private:
     TSparsedArrayChunk(const TSparsedArrayChunk&) = default;
 
     TSparsedArrayChunk(const ui32 recordsCount, const TSparsedArrayChunk& original)
-        : TSparsedArrayChunk(original) {
+        : TSparsedArrayChunk(original)
+    {
         AFL_VERIFY(!original.GetNotDefaultRecordsCount());
         RecordsCount = recordsCount;
         AFL_VERIFY(RemapExternalToInternal.size() == 1);
@@ -99,6 +101,7 @@ public:
     ui32 GetFirstIndexNotDefault() const;
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const;
+    TMinMax GetMinMaxScalars() const;
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const;
 
@@ -150,6 +153,7 @@ private:
 
 protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
+    virtual TMinMax DoGetMinMaxScalars() const override;
 
     virtual ui32 DoGetNullsCount() const override {
         return Record.GetNullsCount();
@@ -180,7 +184,8 @@ protected:
     TSparsedArray(TSparsedArrayChunk&& data, const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type)
         : TBase(data.GetRecordsCount(), EType::SparsedArray, type)
         , DefaultValue(defaultValue)
-        , Record(std::move(data)) {
+        , Record(std::move(data))
+    {
     }
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
@@ -229,7 +234,8 @@ public:
     TSparsedArray(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount)
         : TBase(recordsCount, EType::SparsedArray, type)
         , DefaultValue(defaultValue)
-        , Record(MakeDefaultChunk(defaultValue, type, recordsCount)) {
+        , Record(MakeDefaultChunk(defaultValue, type, recordsCount))
+    {
     }
 
     const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
@@ -257,9 +263,11 @@ public:
         ui32 RecordsCount = 0;
         const std::shared_ptr<arrow::Scalar> DefaultValue;
         std::optional<ui32> LastRecordIndex;
+
     public:
         TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
-            : DefaultValue(defaultValue) {
+            : DefaultValue(defaultValue)
+        {
             IndexBuilder = NArrow::MakeBuilder(arrow::uint32(), reserveItems, 0);
             ValueBuilder = NArrow::MakeBuilder(arrow::TypeTraits<TDataType>::type_singleton(), reserveItems, reserveData);
         }
@@ -314,7 +322,8 @@ public:
     public:
         TBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type)
             : DefaultValue(defaultValue)
-            , Type(type) {
+            , Type(type)
+        {
         }
 
         void AddChunk(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& data);

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "helpers.h"
 
+#include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/skynet.h>
 #include <yt/yt/client/api/table_partition_reader.h>
@@ -249,6 +250,8 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 void TReadTablePartitionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("control_attributes", &TThis::ControlAttributes)
+        .DefaultNew();
 }
 
 void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
@@ -264,29 +267,27 @@ void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
         THROW_ERROR_EXCEPTION("Signature validation failed");
     }
 
-    auto reader = WaitFor(client->CreateTablePartitionReader(cookie))
+    Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
+    Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
+    Options.EnableRangeIndex = ControlAttributes->EnableRangeIndex;
+    Options.EnableTabletIndex = ControlAttributes->EnableTabletIndex;
+
+    auto format = NYson::ConvertToYsonString(context->GetOutputFormat());
+    auto formatStream = WaitFor(client->CreateFormattedTablePartitionReader(cookie, format, Options))
         .ValueOrThrow();
 
-    auto format = context->GetOutputFormat();
-    auto formatWriter = CreateStaticTableWriterForFormat(
-        /*format*/ format,
-        /*nameTable*/ reader->GetNameTable(),
-        /*tableSchemas*/ GetTableSchemas(reader),
-        /*columnFilters*/ GetColumnFilters(reader),
-        /*output*/ context->Request().OutputStream,
-        /*enableContextSaving*/ false,
-        /*controlAttributesConfig*/ New<TControlAttributesConfig>(),
-        /*keyColumnCount*/ 0);
+    auto output = context->Request().OutputStream;
+    while (true) {
+        auto block = WaitFor(formatStream->Read())
+            .ValueOrThrow();
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow),
-    };
+        if (!block) {
+            break;
+        }
 
-    PipeReaderToWriterByBatches(
-        reader,
-        formatWriter,
-        options);
+        WaitFor(output->Write(block))
+            .ThrowOnError();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

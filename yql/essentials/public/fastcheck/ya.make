@@ -8,8 +8,10 @@ SRCS(
     parser.cpp
     settings.cpp
     translator.cpp
+    typecheck.cpp
     format.cpp
     utils.cpp
+    check_state.cpp
 )
 
 PEERDIR(
@@ -19,11 +21,13 @@ PEERDIR(
     yql/essentials/core/services/mounts
     yql/essentials/core/user_data
     yql/essentials/core/issue/protos
+    yql/essentials/core/type_ann
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/providers/common/provider
+    yql/essentials/providers/config
     yql/essentials/public/langver
     yql/essentials/core/langver
     yql/essentials/sql/v1/lexer

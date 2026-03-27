@@ -18,11 +18,13 @@
 
 Команда `admin database dump` выгружает в клиентскую файловую систему данные и метаданные базы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] admin database dump [options]
 ```
-
-{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -34,11 +36,13 @@
 
 Команда `tools dump` выгружает в клиентскую файловую систему данные и информацию об объектах схемы данных, в описанном в статье [{#T}](../file-structure.md) формате:
 
+{% include [limitation](./limitation-dump-column-tables.md) %}
+
+{% include [limitation](./limitation-dump-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] tools dump [options]
 ```
-
-{% include [limitation](./limitation-dump-column-tables.md) %}
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
@@ -59,7 +63,7 @@
 
 - `--save-partial-result`: Не удалять результат частично выполненной выгрузки. Без включения данной опции результат выгрузки будет удален, если в процессе её выполнения произойдет ошибка.
 
-- `--preserve-pool-kinds`: Если эта опция активна, в дамп будут сохранены имена типов устройств хранения, заданные для групп колонок таблиц (см. параметр `DATA` в статье [{#T}](../../../../yql/reference/syntax/create_table/family.md)). Если при восстановлении данных в базе не окажется [пулов хранения](../../../../concepts/glossary.md#storage-pool) с указанными именами, восстановление завершится ошибкой. По умолчанию данная опция деактивирована и при восстановлении используется пул хранения, заданный для базы данных при ее создании (см. [{#T}](../../../../devops/deployment-options/manual/initial-deployment.md#create-db)).
+- `--preserve-pool-kinds`: Если эта опция активна, в дамп будут сохранены имена типов устройств хранения, заданные для групп колонок таблиц (см. параметр `DATA` в статье [{#T}](../../../../yql/reference/syntax/create_table/family.md)). Если при восстановлении данных в базе не окажется [пулов хранения](../../../../concepts/glossary.md#storage-pool) с указанными именами, восстановление завершится ошибкой. По умолчанию данная опция деактивирована и при восстановлении используется пул хранения, заданный для базы данных при ее создании (см. [{#T}](../../../../devops/deployment-options/manual/initial-deployment/index.md#create-db)).
 
 - `--ordered`: Строки в выгруженных таблицах будут отсортированы по первичному ключу.
 

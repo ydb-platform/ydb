@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cracked_page.h"
 #include "openid_connect.h"
+#include <ydb/mvp/core/cracked_page.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http_proxy.h>

@@ -3,10 +3,10 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 PyDoc_STRVAR(code_new__doc__,
 "code(argcount, posonlyargcount, kwonlyargcount, nlocals, stacksize,\n"
@@ -57,27 +57,27 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     if (!_PyArg_CheckPositional("code", PyTuple_GET_SIZE(args), 16, 18)) {
         goto exit;
     }
-    argcount = _PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
+    argcount = PyLong_AsInt(PyTuple_GET_ITEM(args, 0));
     if (argcount == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    posonlyargcount = _PyLong_AsInt(PyTuple_GET_ITEM(args, 1));
+    posonlyargcount = PyLong_AsInt(PyTuple_GET_ITEM(args, 1));
     if (posonlyargcount == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    kwonlyargcount = _PyLong_AsInt(PyTuple_GET_ITEM(args, 2));
+    kwonlyargcount = PyLong_AsInt(PyTuple_GET_ITEM(args, 2));
     if (kwonlyargcount == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    nlocals = _PyLong_AsInt(PyTuple_GET_ITEM(args, 3));
+    nlocals = PyLong_AsInt(PyTuple_GET_ITEM(args, 3));
     if (nlocals == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    stacksize = _PyLong_AsInt(PyTuple_GET_ITEM(args, 4));
+    stacksize = PyLong_AsInt(PyTuple_GET_ITEM(args, 4));
     if (stacksize == -1 && PyErr_Occurred()) {
         goto exit;
     }
-    flags = _PyLong_AsInt(PyTuple_GET_ITEM(args, 5));
+    flags = PyLong_AsInt(PyTuple_GET_ITEM(args, 5));
     if (flags == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -105,15 +105,9 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         _PyArg_BadArgument("code", "argument 11", "str", PyTuple_GET_ITEM(args, 10));
         goto exit;
     }
-    if (PyUnicode_READY(PyTuple_GET_ITEM(args, 10)) == -1) {
-        goto exit;
-    }
     filename = PyTuple_GET_ITEM(args, 10);
     if (!PyUnicode_Check(PyTuple_GET_ITEM(args, 11))) {
         _PyArg_BadArgument("code", "argument 12", "str", PyTuple_GET_ITEM(args, 11));
-        goto exit;
-    }
-    if (PyUnicode_READY(PyTuple_GET_ITEM(args, 11)) == -1) {
         goto exit;
     }
     name = PyTuple_GET_ITEM(args, 11);
@@ -121,11 +115,8 @@ code_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
         _PyArg_BadArgument("code", "argument 13", "str", PyTuple_GET_ITEM(args, 12));
         goto exit;
     }
-    if (PyUnicode_READY(PyTuple_GET_ITEM(args, 12)) == -1) {
-        goto exit;
-    }
     qualname = PyTuple_GET_ITEM(args, 12);
-    firstlineno = _PyLong_AsInt(PyTuple_GET_ITEM(args, 13));
+    firstlineno = PyLong_AsInt(PyTuple_GET_ITEM(args, 13));
     if (firstlineno == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -240,7 +231,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         goto skip_optional_kwonly;
     }
     if (args[0]) {
-        co_argcount = _PyLong_AsInt(args[0]);
+        co_argcount = PyLong_AsInt(args[0]);
         if (co_argcount == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -249,7 +240,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[1]) {
-        co_posonlyargcount = _PyLong_AsInt(args[1]);
+        co_posonlyargcount = PyLong_AsInt(args[1]);
         if (co_posonlyargcount == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -258,7 +249,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[2]) {
-        co_kwonlyargcount = _PyLong_AsInt(args[2]);
+        co_kwonlyargcount = PyLong_AsInt(args[2]);
         if (co_kwonlyargcount == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -267,7 +258,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[3]) {
-        co_nlocals = _PyLong_AsInt(args[3]);
+        co_nlocals = PyLong_AsInt(args[3]);
         if (co_nlocals == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -276,7 +267,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[4]) {
-        co_stacksize = _PyLong_AsInt(args[4]);
+        co_stacksize = PyLong_AsInt(args[4]);
         if (co_stacksize == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -285,7 +276,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[5]) {
-        co_flags = _PyLong_AsInt(args[5]);
+        co_flags = PyLong_AsInt(args[5]);
         if (co_flags == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -294,7 +285,7 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
         }
     }
     if (args[6]) {
-        co_firstlineno = _PyLong_AsInt(args[6]);
+        co_firstlineno = PyLong_AsInt(args[6]);
         if (co_firstlineno == -1 && PyErr_Occurred()) {
             goto exit;
         }
@@ -367,9 +358,6 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
             _PyArg_BadArgument("replace", "argument 'co_filename'", "str", args[13]);
             goto exit;
         }
-        if (PyUnicode_READY(args[13]) == -1) {
-            goto exit;
-        }
         co_filename = args[13];
         if (!--noptargs) {
             goto skip_optional_kwonly;
@@ -380,9 +368,6 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
             _PyArg_BadArgument("replace", "argument 'co_name'", "str", args[14]);
             goto exit;
         }
-        if (PyUnicode_READY(args[14]) == -1) {
-            goto exit;
-        }
         co_name = args[14];
         if (!--noptargs) {
             goto skip_optional_kwonly;
@@ -391,9 +376,6 @@ code_replace(PyCodeObject *self, PyObject *const *args, Py_ssize_t nargs, PyObje
     if (args[15]) {
         if (!PyUnicode_Check(args[15])) {
             _PyArg_BadArgument("replace", "argument 'co_qualname'", "str", args[15]);
-            goto exit;
-        }
-        if (PyUnicode_READY(args[15]) == -1) {
             goto exit;
         }
         co_qualname = args[15];
@@ -473,7 +455,7 @@ code__varname_from_oparg(PyCodeObject *self, PyObject *const *args, Py_ssize_t n
     if (!args) {
         goto exit;
     }
-    oparg = _PyLong_AsInt(args[0]);
+    oparg = PyLong_AsInt(args[0]);
     if (oparg == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -482,4 +464,4 @@ code__varname_from_oparg(PyCodeObject *self, PyObject *const *args, Py_ssize_t n
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=ff40f7bdd3851de3 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=d604263a3ca72a0f input=a9049054013a1b77]*/

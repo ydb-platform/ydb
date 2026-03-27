@@ -675,7 +675,7 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
                 } else if (ev->Sender == newReader) {
                     continue;
                 } else {
-                    UNIT_ASSERT("Unexpected reader has gone");
+                    UNIT_FAIL("Unexpected reader has gone");
                 }
             } catch (yexception&) {
                 // bad luck, previous session was not closed, close it manually

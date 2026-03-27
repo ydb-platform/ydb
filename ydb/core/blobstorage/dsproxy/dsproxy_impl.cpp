@@ -30,7 +30,7 @@ namespace NKikimr {
     {}
 
     IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon) {
-        return new TBlobStorageGroupProxy(groupId, true, nodeMon, 
+        return new TBlobStorageGroupProxy(groupId, true, nodeMon,
                 TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = TControlWrapper(false, false, true),

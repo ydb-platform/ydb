@@ -2,8 +2,14 @@
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
+#include <yql/essentials/public/udf/udf_types.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
+
+#include <algorithm>
 
 namespace NKikimr::NFulltext {
 
@@ -16,18 +22,6 @@ namespace {
 
         error = TStringBuilder() << "Invalid " << name << ": " << value << " should be between " << minValue << " and " << maxValue;
         return false;
-    };
-
-    Ydb::Table::FulltextIndexSettings::Layout ParseLayout(const TString& layout_, TString& error) {
-        const TString layout = to_lower(layout_);
-        if (layout == "flat") {
-            return Ydb::Table::FulltextIndexSettings::FLAT;
-        } else if (layout == "flat_relevance") {
-            return Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-        } else {
-            error = TStringBuilder() << "Invalid layout: " << layout_;
-            return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-        }
     };
 
     Ydb::Table::FulltextIndexSettings::Tokenizer ParseTokenizer(const TString& tokenizer_, TString& error) {
@@ -64,7 +58,7 @@ namespace {
         return !IsAlphabetic(c) && !IsDecdigit(c);
     }
 
-    void Tokenize(const TString& text, TVector<TString>& tokens, auto isDelimiter) {
+    void Tokenize(const TStringBuf text, TVector<TString>& tokens, auto isDelimiter) {
         const unsigned char* ptr = (const unsigned char*)text.data();
         const unsigned char* end = ptr + text.size();
 
@@ -101,18 +95,26 @@ namespace {
         }
     }
 
-    TVector<TString> Tokenize(const TString& text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer) {
+    TVector<TString> Tokenize(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Tokenizer& tokenizer, const std::unordered_set<wchar32> ignoredDelimiter) {
         TVector<TString> tokens;
         switch (tokenizer) {
             case Ydb::Table::FulltextIndexSettings::WHITESPACE:
-                Tokenize(text, tokens, IsWhitespace);
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
+                    return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
+                        ? false
+                        : IsWhitespace(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::STANDARD:
-                Tokenize(text, tokens, IsNonStandard);
+                Tokenize(text, tokens, [&ignoredDelimiter](const wchar32 c) {
+                    return !ignoredDelimiter.empty() && ignoredDelimiter.contains(c)
+                        ? false
+                        : IsNonStandard(c);
+                });
                 break;
             case Ydb::Table::FulltextIndexSettings::KEYWORD:
                 if (UTF8Detect(text) != NotUTF8) {
-                    tokens.push_back(text);
+                    tokens.push_back(TString(text));
                 }
                 break;
             default:
@@ -138,37 +140,6 @@ namespace {
         }
 
         return length;
-    }
-
-    void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
-        const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
-        const unsigned char* end = ngram_begin_ptr + token.size();
-        wchar32 symbol;
-        size_t symbolBytes;
-
-        while (ngram_begin_ptr < end) {
-            const unsigned char* ngram_end_ptr = ngram_begin_ptr;
-            size_t ngram_length = 0;
-            while (ngram_end_ptr < end) {
-                if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
-                    Y_ASSERT(false); // should already be validated during tokenization
-                    return;
-                }
-                ngram_length++;
-                ngram_end_ptr += symbolBytes;
-                if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
-                    ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
-                }
-            }
-            if (edge) {
-                break; // only prefixes
-            }
-            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
-                Y_ASSERT(false); // should already be validated during tokenization
-                return;
-            }
-            ngram_begin_ptr += symbolBytes;
-        }
     }
 
     bool ValidateSettings(const Ydb::Table::FulltextIndexSettings::Analyzers& settings, TString& error) {
@@ -275,8 +246,49 @@ namespace {
     }
 }
 
-TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
-    TVector<TString> tokens = Tokenize(text, settings.tokenizer());
+void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
+    const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
+    const unsigned char* end = ngram_begin_ptr + token.size();
+    wchar32 symbol;
+    size_t symbolBytes;
+
+    while (ngram_begin_ptr < end) {
+        const unsigned char* ngram_end_ptr = ngram_begin_ptr;
+        size_t ngram_length = 0;
+        while (ngram_end_ptr < end) {
+            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
+                Y_ASSERT(false); // should already be validated during tokenization
+                return;
+            }
+            ngram_length++;
+            ngram_end_ptr += symbolBytes;
+            if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
+                ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
+            }
+        }
+        if (edge) {
+            break; // only prefixes
+        }
+        if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
+            Y_ASSERT(false); // should already be validated during tokenization
+            return;
+        }
+        ngram_begin_ptr += symbolBytes;
+    }
+}
+
+Ydb::Table::FulltextIndexSettings::Analyzers GetAnalyzersForQuery(Ydb::Table::FulltextIndexSettings::Analyzers analyzers) {
+    // Prevent splitting tokens into ngrams
+    analyzers.set_use_filter_ngram(false);
+    analyzers.set_use_filter_edge_ngram(false);
+    // Prevent dropping patterns by length
+    analyzers.set_use_filter_length(false);
+
+    return analyzers;
+}
+
+TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexSettings::Analyzers& settings, const std::unordered_set<wchar32>& ignoredDelimiters) {
+    TVector<TString> tokens = Tokenize(text, settings.tokenizer(), ignoredDelimiters);
 
     if (settings.use_filter_lowercase()) {
         for (auto i : xrange(tokens.size())) {
@@ -330,6 +342,126 @@ TVector<TString> Analyze(const TString& text, const Ydb::Table::FulltextIndexSet
     return tokens;
 }
 
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens);
+
+void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix, TVector<TString>& tokens) {
+    if (element.GetType() == NBinaryJson::EEntryType::Container) {
+        TokenizeBinaryJson(element.GetContainer(), prefix, tokens);
+        return;
+    }
+    TString token = prefix;
+    token.push_back(0);
+    // Value always comes last in the token and we may want range queries on value,
+    // so we just store element type and data.
+    token.push_back((char)element.GetType());
+    switch (element.GetType()) {
+    case NBinaryJson::EEntryType::String:
+        token += element.GetString();
+        break;
+    case NBinaryJson::EEntryType::Number: {
+        double number = element.GetNumber();
+        token += TStringBuf((char*)&number, sizeof(double));
+        break;
+    }
+    case NBinaryJson::EEntryType::BoolFalse:
+    case NBinaryJson::EEntryType::BoolTrue:
+    case NBinaryJson::EEntryType::Null:
+        break;
+    case NBinaryJson::EEntryType::Container:
+        Y_ENSURE(false, "Unreachable");
+        break;
+    }
+    tokens.push_back(token);
+}
+
+TString TokenizeJsonNextPrefix(const TString& prefix, TStringBuf key) {
+    size_t size = key.size();
+    TString newPrefix = prefix;
+    // We don't need range queries on paths and keys may contain binary data,
+    // for example a zero byte, so we store keys with varint length
+    do {
+        if (size < 0x80) {
+            newPrefix.push_back((ui8)size);
+        } else {
+            newPrefix.push_back(0x80 | (ui8)(size & 0x7F));
+        }
+        size >>= 7;
+    } while (size > 0);
+    newPrefix += key;
+    return newPrefix;
+}
+
+void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens) {
+    switch (root.GetType()) {
+    case NBinaryJson::EContainerType::TopLevelScalar:
+        TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
+        break;
+    case NBinaryJson::EContainerType::Array:
+        for (ui32 pos = 0; pos < root.GetSize(); pos++) {
+            TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
+        }
+        break;
+    case NBinaryJson::EContainerType::Object:
+        auto it = root.GetObjectIterator();
+        while (it.HasNext()) {
+            auto kv = it.Next();
+            Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);
+            TokenizeBinaryJson(kv.second, TokenizeJsonNextPrefix(prefix, kv.first.GetString()), tokens);
+        }
+        break;
+    }
+}
+
+TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
+    TVector<TString> tokens;
+    if (!binaryJson.size()) {
+        return tokens;
+    }
+    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(binaryJson);
+    TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
+    return tokens;
+}
+
+TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
+    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(jsonStr);
+    if (std::holds_alternative<TString>(json)) {
+        error = std::get<TString>(json);
+        return TVector<TString>();
+    }
+    error = "";
+    auto buffer = std::get<NKikimr::NBinaryJson::TBinaryJson>(json);
+    return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
+}
+
+TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
+    const bool expectWildcard = settings.use_filter_ngram() || settings.use_filter_edge_ngram();
+    const bool edge = settings.use_filter_edge_ngram();
+
+    if (!expectWildcard) {
+        return Analyze(query, settings);
+    }
+
+    const Ydb::Table::FulltextIndexSettings::Analyzers analyzersForQuery = GetAnalyzersForQuery(settings);
+
+    TVector<TString> searchTerms;
+    for (const TString& pattern : Analyze(query, analyzersForQuery, std::unordered_set<wchar32>{'%', '_'})) {
+        for (const auto& term : StringSplitter(pattern).SplitBySet("%_")) {
+            const TString token(term.Token());
+            const i64 tokenLength = GetLengthUTF8(token);
+
+            if (tokenLength != 0 && analyzersForQuery.filter_ngram_min_length() <= tokenLength) {
+                const size_t upper = std::min(static_cast<i64>(analyzersForQuery.filter_ngram_max_length()), tokenLength);
+                BuildNgrams(token, upper, upper, edge, searchTerms);
+            }
+
+            if (edge) {
+                break;
+            }
+        }
+    }
+    return searchTerms;
+}
+
 bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     return ValidateColumnsMatches(TVector<TString>{columns.begin(), columns.end()}, settings, error);
 }
@@ -350,16 +482,13 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
 }
 
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
-    if (!settings.has_layout() || settings.layout() == Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED) {
-        error = "layout should be set";
-        return false;
-    }
+    // layout is set automatically based on index type (fulltext_plain vs fulltext_relevance)
 
     if (settings.columns().empty()) {
         error = "columns should be set";
         return false;
     }
-    
+
     // current implementation limitation:
     if (settings.columns().size() != 1) {
         error = "columns should have a single value";
@@ -394,9 +523,7 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         : settings.mutable_columns()->rbegin()->mutable_analyzers();
 
     const TString nameLower = to_lower(name);
-    if (nameLower == "layout") {
-        settings.set_layout(ParseLayout(value, error));
-    } else if (nameLower == "tokenizer") {
+    if (nameLower == "tokenizer") {
         analyzers->set_tokenizer(ParseTokenizer(value, error));
     } else if (nameLower == "language") {
         analyzers->set_language(value);

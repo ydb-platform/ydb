@@ -23,6 +23,7 @@ namespace NFake {
         ui64 DiskSize = 0;
         bool FormatDisk = true;
         TString DiskPath;
+        std::optional<TDuration> EventDispatchTimeout;
     };
 
     struct INode {

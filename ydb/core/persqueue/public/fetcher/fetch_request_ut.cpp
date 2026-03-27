@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
         runtime.DispatchEvents();
-        
+
         auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
         UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
         Cerr << "Got event: " << ev->Response.DebugString() << Endl;
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         auto fetchActorId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchActorId);
         runtime.DispatchEvents();
-        
+
         auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
         Cerr << ev->Response.DebugString() << Endl;
         UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1, p2}, 1000, 1000};
         auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
         runtime.EnableScheduleForActor(fetchId);
-        
+
         auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
         UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SCHEME_ERROR, ev->Message);
     }
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
             UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
         }
-        
+
         {
             auto badToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{});
             TFetchRequestSettings settings{
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
 
             auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
             runtime.EnableScheduleForActor(fetchId);
-            
+
             auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
             UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::UNAUTHORIZED, ev->Message);
         }

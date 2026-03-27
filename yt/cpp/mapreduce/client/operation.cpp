@@ -2291,7 +2291,7 @@ public:
     }
 
     const TOperationId& GetId() const;
-    TString GetWebInterfaceUrl() const;
+    TString GetWebInterfaceUrl(const TClientPtr& client) const;
 
     void OnPrepared();
     void SetDelayedStartFunction(std::function<TOperationId()> start);
@@ -2434,10 +2434,10 @@ const TOperationId& TOperation::TOperationImpl::GetId() const
     return *Id_;
 }
 
-TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
+TString TOperation::TOperationImpl::GetWebInterfaceUrl(const TClientPtr& client) const
 {
     ValidateOperationStarted();
-    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_);
+    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_, client);
 }
 
 void TOperation::TOperationImpl::OnPrepared()
@@ -2855,9 +2855,12 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
             // so we call `GetJobStatistics' in order to get it from server
             // and cache inside object.
             GetJobStatistics();
-        } catch (const TErrorResponse& ) {
+        } catch (const std::exception& e) {
             // But if for any reason we failed to get attributes
             // we complete operation using what we have.
+            YT_LOG_ERROR("Failed to get job statistics for operation %v: %v",
+                *Id_,
+                e.what());
             auto g = Guard(Lock_);
             Attributes_ = attributes;
         }
@@ -2935,7 +2938,7 @@ const TOperationId& TOperation::GetId() const
 
 TString TOperation::GetWebInterfaceUrl() const
 {
-    return Impl_->GetWebInterfaceUrl();
+    return Impl_->GetWebInterfaceUrl(Client_);
 }
 
 void TOperation::OnPrepared()

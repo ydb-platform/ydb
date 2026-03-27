@@ -19,7 +19,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -41,7 +40,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -59,7 +58,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         for (ui32 reboot = 0; reboot < 2; reboot++) {
             TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"),{ 
                 NLs::PathExist,
-                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltext),
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexKeys({"text"}),
                 NLs::IndexDataColumns({"covered"}),
@@ -85,7 +84,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -107,7 +105,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: [ "another", "text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -128,7 +126,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text1"
                 analyzers: {
@@ -158,7 +155,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text1", "text2"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -179,7 +176,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -201,7 +197,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -222,7 +218,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text_wrong"
                 analyzers: {
@@ -244,7 +239,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -265,7 +260,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
         )";
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
@@ -280,7 +274,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s
@@ -301,7 +295,6 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         ui64 txId = 100;
 
         TString fulltextSettings = R"(
-            layout: FLAT
             columns: {
                 column: "text"
                 analyzers: {
@@ -323,7 +316,7 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
                 Name: "idx_fulltext"
                 KeyColumnNames: ["text"]
                 DataColumnNames: ["covered"]
-                Type: EIndexTypeGlobalFulltext
+                Type: EIndexTypeGlobalFulltextPlain
                 FulltextIndexDescription: { 
                     Settings: { 
                         %s

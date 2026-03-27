@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
             }));
             VDiskDelayEmulator.reset(new TVDiskDelayEmulator(Env));
         }
-    
+
         TNodeLocation LocationGenerator(ui32 nodeId) {
             if (Erasure.BlobSubgroupSize() == 9) {
                 if (nodeId == NodeCount) {
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(Deadlines) {
 
             TInstant now = TAppData::TimeProvider->Now();
             ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
-                SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation, 1, channel, 
+                SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation, 1, channel,
                         true, generation, steps / 2, keep.release(), nullptr, now + timeout, multicollect, hard));
             });
         };

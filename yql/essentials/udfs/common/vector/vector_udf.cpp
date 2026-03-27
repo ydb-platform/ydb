@@ -49,7 +49,7 @@ extern const char VectorResourceName[] = "Vector.VectorResource";
 class TVectorResource: public TBoxedResource<TVector, VectorResourceName> {
 public:
     template <typename... Args>
-    inline TVectorResource(Args&&... args)
+    inline explicit TVectorResource(Args&&... args)
         : TBoxedResource(std::forward<Args>(args)...)
     {
     }

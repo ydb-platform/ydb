@@ -3,22 +3,22 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/kqp_physical.pb.h>
-
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/local_proxy/local_pq_client/local_topic_client_factory.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extensions/discovery_mutator/discovery_mutator.h>
 
@@ -141,12 +141,29 @@ namespace {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
-    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
+    std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver) {
+        if (!driver) {
+            return nullptr;
+        }
+
+        return std::shared_ptr<NYdb::TDriver>(driver.release(), [](NYdb::TDriver* d) {
+            if (!d) {
+                return;
+            }
+
+            // Stop requests and wait for their completion
+            d->Stop(true);
+            delete d;
+        });
+    }
+
+    std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
         NYdb::TDriverConfig cfg;
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
 
-        auto driver = std::make_shared<NYdb::TDriver>(cfg);
+        auto driver = std::make_unique<NYdb::TDriver>(cfg);
 
         if (const auto& patchPrefix = config.GetDiscoveryCommonHostnamePrefixPatch()) {
             driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([patchPrefix](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
@@ -172,28 +189,29 @@ namespace {
 
         if (handlersExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(handlersExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
-            settings.DefaultHandlersExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultHandlersExecutor(NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         if (compressionExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(compressionExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compression").SetBlocking(true).SetCatching(false));
-            settings.DefaultCompressionExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultCompressionExecutor(NYdb::NAdapters::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         return settings;
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
-        return CreatePqNativeGateway(NYql::TPqGatewayServices(
+        return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
             nullptr,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr,
             nullptr,
-            settings
+            settings,
+            localTopicClientSettings ? CreateLocalTopicClientFactory(*localTopicClientSettings) : nullptr
         ));
     }
 
@@ -240,7 +258,6 @@ namespace {
         S3GatewayConfig = queryServiceConfig.GetS3();
 
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
-        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
@@ -250,7 +267,11 @@ namespace {
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-        PqGateway = MakePqGateway(Driver);
+
+        if (appConfig.GetFeatureFlags().GetEnableTopicsSqlIoOperations()) {
+            LocalTopicClientSettings.emplace();
+            LocalTopicClientSettings->ChannelBufferSize = appConfig.GetTableServiceConfig().GetResourceManager().GetChannelBufferSize();
+        }
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -299,7 +320,12 @@ namespace {
             ActorSystemPtr->store(actorSystem, std::memory_order_relaxed);
         }
 
+        if (LocalTopicClientSettings) {
+            LocalTopicClientSettings->ActorSystem = actorSystem;
+        }
+
         auto result = TKqpFederatedQuerySetup{
+            Driver,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -309,14 +335,13 @@ namespace {
             YtGatewayConfig,
             YtGateway,
             SolomonGatewayConfig,
-            SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            PqGateway,
-            ActorSystemPtr,
-            Driver};
+            MakePqGatewayFactory(Driver, LocalTopicClientSettings),
+            ActorSystemPtr
+        };
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&
@@ -334,7 +359,6 @@ namespace {
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
         HttpGateway.reset();
-        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 Y_UNIT_TEST_SUITE(RequestValidation) {
     struct TestCtx {
@@ -9,7 +10,7 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
             Env.reset(new TEnvironmentSetup(TEnvironmentSetup::TSettings{
                 .FeatureFlags = std::move(ff),
             }));
-        
+
             Env->CreateBoxAndPool(1, 1);
             Env->Sim(TDuration::Minutes(1));
 
@@ -104,11 +105,41 @@ Y_UNIT_TEST_SUITE(RequestValidation) {
 
         auto ev = std::make_unique<TEvBlobStorage::TEvVMovedPatch>(ctx.GroupId.GetRawId(), ctx.GroupId.GetRawId(),
                 oldId, newId, ctx.VDiskId, false, 0, TInstant::Max());
-        
+
         ctx.Env->Runtime->Send(new IEventHandle(ctx.VDiskActorId, ctx.Edge, ev.release()), ctx.VDiskActorId.NodeId());
 
         auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvVMovedPatchResult>(ctx.Edge, false, TInstant::Max());
         UNIT_ASSERT(res);
         UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrProto::ERROR);
+    }
+
+    void TestSameId(bool changeData) {
+        TestCtx ctx;
+        ctx.Initialize();
+
+        const ui32 blobSize = 10;
+        const ui32 putsCount = 10;
+        TLogoBlobID blobId(100, 1, 1, 0, blobSize, 0);
+        for (ui32 i = 0; i < putsCount; ++i) {
+            TString data = MakeData(blobSize, i * changeData);
+
+            std::unique_ptr<IEventBase> ev = std::make_unique<TEvBlobStorage::TEvPut>(blobId, data, TInstant::Max());
+            ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
+                SendToBSProxy(ctx.Edge, ctx.GroupId.GetRawId(), ev.release());
+            });
+        }
+
+        for (ui32 i = 0; i < putsCount; ++i) {
+            auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(ctx.Edge, false, TInstant::Max());
+            UNIT_ASSERT(res);
+        }
+    }
+
+    Y_UNIT_TEST(TestMultiputSameId) {
+        TestSameId(true);
+    }
+
+    Y_UNIT_TEST(TestMultiputSameIdSameData) {
+        TestSameId(false);
     }
 }

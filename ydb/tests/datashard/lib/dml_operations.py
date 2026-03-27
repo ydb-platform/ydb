@@ -375,3 +375,9 @@ class DMLOperations():
                 {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](ttl_value), ttl)}" if ttl != "" else ""}
                 """
         return sql_select
+
+    def table_exists(self, table_name: str, root_path: str = "/Root") -> bool:
+        return any(
+            child.name == table_name for child
+            in self.query_object.driver.scheme_client.list_directory(root_path).children
+        )

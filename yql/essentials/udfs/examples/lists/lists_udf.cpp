@@ -4,6 +4,7 @@
 #include <yql/essentials/public/udf/udf_registrator.h>
 
 #include <util/generic/yexception.h>
+#include <ranges>
 #include <vector>
 #include <array>
 
@@ -31,12 +32,12 @@ private:
         std::vector<TUnboxedValue> list(count);
         ui32 i = 0U;
         if (TStringRef::Of("Append") == appendPrepend) {
-            for (auto it = list.begin(); list.end() != it; ++it) {
-                *it = TUnboxedValuePod(i++);
+            for (auto& it : list) {
+                it = TUnboxedValuePod(i++);
             }
         } else if (TStringRef::Of("Prepend") == appendPrepend) {
-            for (auto it = list.rbegin(); list.rend() != it; ++it) {
-                *it = TUnboxedValuePod(i++);
+            for (auto& it : std::ranges::reverse_view(list)) {
+                it = TUnboxedValuePod(i++);
             }
         }
 

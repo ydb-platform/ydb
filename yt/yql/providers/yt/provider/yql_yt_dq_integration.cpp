@@ -487,6 +487,9 @@ public:
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddMessage(ctx, "dynamic store read", skipIssues, ytState->PassiveExecution);
                             return false;
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddMessage(ctx, "rls table", skipIssues, ytState->PassiveExecution);
+                            return false;
                         }
 
                         chunksCount += tableInfo->Stat->ChunkCount;
@@ -636,6 +639,9 @@ public:
                         } else if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
                             AddErrorWrap(ctx, node_->Pos(), "dynamic store read");
                             return Nothing();
+                        } else if (tableInfo->Meta->HasRLS) {
+                            AddErrorWrap(ctx, node_->Pos(), "rls table");
+                            return Nothing();
                         } else { //
                             if (tableInfo->Meta->Attrs.Value("erasure_codec", "none") != "none") {
                                 hasErasure = true;
@@ -693,8 +699,8 @@ public:
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
             TMaybeNode<TCoSecureParam> secParams;
-            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster();
-            if (ytState->Configuration->Auth.Get().GetOrElse(TString()) || ytState->Configuration->Tokens.Value(cluster, "")) {
+            const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
             return Build<TDqReadWrap>(ctx, read->Pos())
@@ -940,10 +946,10 @@ public:
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;
-        if (auto auth = ytState->Configuration->Auth.Get().GetOrElse(TString())) {
+        if (auto token = ytState->ResolveClusterToken(cluster)) {
             tokenName = TString("cluster:default_").append(cluster);
             if (!secureParams.contains(tokenName)) {
-                secureParams[tokenName] = auth;
+                secureParams[tokenName] = *token;
             }
         }
         param("token", tokenName);

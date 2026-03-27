@@ -119,7 +119,7 @@ public:
     TFuture<void> GetReadyEvent() override
     {
         if (FlushExecutor_) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         {
@@ -252,12 +252,12 @@ private:
         {
             auto guard = Guard(SpinLock_);
             if ((checkIfFlushNeeded && !IsFlushNeeded()) && !Closed_) {
-                return VoidFuture;
+                return OKFuture;
             }
             buffer = GetBufferToFlush();
         }
         if (!buffer) {
-            return VoidFuture;
+            return OKFuture;
         }
         return FlushImpl(std::move(*buffer))
             .Apply(BIND([this, this_ = MakeStrong(this), checkIfFlushNeeded] {
@@ -382,8 +382,7 @@ public:
         const IInvokerPtr& invoker) override
     {
         return Client_->CreateQueueProducerSession(ProducerPath_, queuePath, sessionId)
-            .Apply(BIND([=, this, this_ = MakeStrong(this)]
-                        (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
+            .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TCreateQueueProducerSessionResult& createSessionResult) -> IProducerSessionPtr {
                 return New<TProducerSession>(Client_, ProducerPath_, queuePath, nameTable, sessionId, createSessionResult, options, invoker);
             }));
     }

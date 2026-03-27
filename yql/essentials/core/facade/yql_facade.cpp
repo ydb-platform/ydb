@@ -50,6 +50,8 @@
 #include <util/system/rusage.h>
 #include <util/generic/yexception.h>
 
+#include <utility>
+
 using namespace NThreading;
 
 namespace NYql {
@@ -75,8 +77,8 @@ const TString StartTimeLabel = "StartTime";
 
 class TUrlLoader: public IUrlLoader {
 public:
-    TUrlLoader(TFileStoragePtr storage)
-        : Storage_(storage)
+    explicit TUrlLoader(TFileStoragePtr storage)
+        : Storage_(std::move(storage))
     {
     }
 
@@ -177,7 +179,7 @@ TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
     TMaybe<NYql::TQItem> loaded =
         context
             .GetReader()
-            ->Get({FacadeComponent, TranslationLabel})
+            ->Get({.Component = FacadeComponent, .Label = TranslationLabel})
             .GetValueSync();
 
     if (!loaded) {
@@ -195,14 +197,14 @@ TProgramFactory::TProgramFactory(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
-    const TString& runner)
+    TString runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , Credentials_(MakeIntrusive<TCredentials>())
     , GatewaysConfig_(nullptr)
-    , Runner_(runner)
+    , Runner_(std::move(runner))
     , ArrowResolver_(MakeSimpleArrowResolver(*functionRegistry))
 {
 }
@@ -213,6 +215,10 @@ void TProgramFactory::UnrepeatableRandom() {
 
 void TProgramFactory::EnableRangeComputeFor() {
     EnableRangeComputeFor_ = true;
+}
+
+void TProgramFactory::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget_ = reportTarget;
 }
 
 void TProgramFactory::SetLanguageVersion(TLangVersion version) {
@@ -317,7 +323,7 @@ TProgramPtr TProgramFactory::Create(
     }
 
     // make UserDataTable_ copy here
-    return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
+    return new TProgram(IssueReportTarget_, FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
@@ -328,6 +334,7 @@ TProgramPtr TProgramFactory::Create(
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
+    TString issueReportTarget,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TIntrusivePtr<IRandomProvider> randomProvider,
     const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -336,58 +343,59 @@ TProgram::TProgram(
     TLangVersion langVer,
     TLangVersion maxLangVer,
     bool volatileResults,
-    const TUserDataTable& userDataTable,
+    TUserDataTable userDataTable,
     const TCredentials::TPtr& credentials,
-    const IModuleResolver::TPtr& modules,
-    const IUrlListerManagerPtr& urlListerManager,
+    IModuleResolver::TPtr modules,
+    IUrlListerManagerPtr urlListerManager,
     const IUdfResolver::TPtr& udfResolver,
     const TUdfIndex::TPtr& udfIndex,
-    const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
+    TUdfIndexPackageSet::TPtr udfIndexPackageSet,
     const TFileStoragePtr& fileStorage,
     const IUrlPreprocessing::TPtr& urlPreprocessing,
     const TGatewaysConfig* gatewaysConfig,
-    const TString& filename,
-    const TString& sourceCode,
-    const TString& sessionId,
+    TString filename,
+    TString sourceCode,
+    TString sessionId,
     const TString& runner,
     bool enableRangeComputeFor,
-    const IArrowResolver::TPtr& arrowResolver,
+    IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
     TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
-    : FunctionRegistry_(functionRegistry)
+    : IssueReportTarget_(std::move(issueReportTarget))
+    , FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
     , NextUniqueId_(nextUniqueId)
     , AstRoot_(nullptr)
-    , Modules_(modules)
+    , Modules_(std::move(modules))
     , DataProvidersInit_(dataProvidersInit)
     , LangVer_(langVer)
     , MaxLangVer_(maxLangVer)
     , VolatileResults_(volatileResults)
     , Credentials_(MakeIntrusive<NYql::TCredentials>(*credentials))
-    , UrlListerManager_(urlListerManager)
+    , UrlListerManager_(std::move(urlListerManager))
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
-    , UdfIndexPackageSet_(udfIndexPackageSet)
+    , UdfIndexPackageSet_(std::move(udfIndexPackageSet))
     , FileStorage_(fileStorage)
-    , SavedUserDataTable_(userDataTable)
+    , SavedUserDataTable_(std::move(userDataTable))
     , GatewaysConfig_(gatewaysConfig)
-    , Filename_(filename)
-    , SourceCode_(sourceCode)
+    , Filename_(std::move(filename))
+    , SourceCode_(std::move(sourceCode))
     , SourceSyntax_(ESourceSyntax::Unknown)
     , SyntaxVersion_(0)
     , ExprRoot_(nullptr)
-    , SessionId_(sessionId)
+    , SessionId_(std::move(sessionId))
     , ResultType_(IDataProvider::EResultFormat::Yson)
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
-    , ArrowResolver_(arrowResolver)
+    , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
-    , GatewaysForMerge_(gatewaysForMerge)
+    , GatewaysForMerge_(std::move(gatewaysForMerge))
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
@@ -395,21 +403,21 @@ TProgram::TProgram(
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({GeneralInfoComponent, StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = GeneralInfoComponent, .Label = StartTimeLabel}, TInstant::Now().ToStringLocalUpToSeconds()).GetValueSync();
         NYT::TNode credListNode = NYT::TNode::CreateList();
         Credentials_->ForEach([&](const TString name, const TCredential& cred) {
             credListNode.Add(NYT::TNode()("Name", name)("Category", cred.Category)("Subcategory", cred.Subcategory));
         });
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticCredentialsLabel}, credList).GetValueSync();
     } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
         Credentials_ = MakeIntrusive<TCredentials>();
         Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
                                           .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
 
         for (const auto& label : {StaticCredentialsLabel, DynamicCredentialsLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& c : node.AsList()) {
@@ -427,11 +435,11 @@ TProgram::TProgram(
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, StaticUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = StaticUserFilesLabel}, userFiles).GetValueSync();
     } else if (QContext_.CanRead()) {
         SavedUserDataTable_.clear();
         for (const auto& label : {StaticUserFilesLabel, DynamicUserFilesLabel}) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, label}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = label}).GetValueSync();
             if (item) {
                 auto node = NYT::NodeFromYsonString(item->Value);
                 for (const auto& alias : node.AsList()) {
@@ -467,7 +475,7 @@ TProgram::TProgram(
         }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
         if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, GatewaysLabel}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = GatewaysLabel}).GetValueSync();
             if (item) {
                 YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
 
@@ -510,11 +518,11 @@ TProgram::TProgram(
             }
 
             auto data = cleaned.SerializeAsString();
-            QContext_.GetWriter()->Put({FacadeComponent, GatewaysLabel}, data).GetValueSync();
+            QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
         }
 
         if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({FacadeComponent, ParametersLabel}).GetValueSync();
+            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = ParametersLabel}).GetValueSync();
             if (item) {
                 SetParametersYson(item->Value);
             }
@@ -603,7 +611,7 @@ bool TProgram::IsFullCaptureReady() const {
 
 void TProgram::CommitFullCapture() const {
     if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = FullCaptureLabel}, "").GetValueSync();
     }
 }
 
@@ -649,7 +657,7 @@ void TProgram::SetParametersYson(const TString& parameters) {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, ParametersLabel}, parameters).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = ParametersLabel}, parameters).GetValueSync();
     }
 }
 
@@ -723,7 +731,7 @@ void TProgram::AddCredentials(const TVector<std::pair<TString, TCredential>>& cr
         }
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicCredentialsLabel}, credList).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicCredentialsLabel}, credList).GetValueSync();
     }
 
     for (const auto& credential : credentials) {
@@ -766,22 +774,22 @@ void TProgram::AddUserDataTable(const TUserDataTable& userDataTable) {
         }
 
         auto userFiles = NYT::NodeToYsonString(userFilesNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, DynamicUserFilesLabel}, userFiles).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = DynamicUserFilesLabel}, userFiles).GetValueSync();
     }
 }
 
 void TProgram::HandleSourceCode() {
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, SourceCodeLabel}, SourceCode_).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = SourceCodeLabel}, SourceCode_).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, SourceCodeLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = SourceCodeLabel}).GetValueSync();
         Y_ENSURE(loaded.Defined(), "No source code");
         SourceCode_ = loaded->Value;
     }
 }
 
 bool HasFullCapture(const IQReaderPtr& reader) {
-    auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
+    auto fullCaptureItem = reader->Get({.Component = FacadeComponent, .Label = FullCaptureLabel}).GetValueSync();
     return fullCaptureItem.Defined();
 }
 
@@ -810,9 +818,9 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         // clang-format on
 
         auto data = NYT::NodeToYsonString(dataNode, NYT::NYson::EYsonFormat::Binary);
-        QContext_.GetWriter()->Put({FacadeComponent, TranslationLabel}, data).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = TranslationLabel}, data).GetValueSync();
     } else if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, TranslationLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = TranslationLabel}).GetValueSync();
         if (!loaded) {
             return;
         }
@@ -853,7 +861,7 @@ bool TProgram::CheckParameters() {
 
 bool TProgram::ValidateLangVersion() {
     if (QContext_.CanRead()) {
-        auto loaded = QContext_.GetReader()->Get({FacadeComponent, LangVerLabel}).GetValueSync();
+        auto loaded = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = LangVerLabel}).GetValueSync();
         if (loaded.Defined()) {
             LangVer_ = FromString<TLangVersion>(loaded->Value);
         } else {
@@ -864,7 +872,7 @@ bool TProgram::ValidateLangVersion() {
     }
 
     if (QContext_.CanWrite()) {
-        QContext_.GetWriter()->Put({FacadeComponent, LangVerLabel}, ToString(LangVer_)).GetValueSync();
+        QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = LangVerLabel}, ToString(LangVer_)).GetValueSync();
     }
 
     TMaybe<TIssue> issue;
@@ -932,7 +940,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         HandleTranslationSettings(loadedSettings, currentSettings);
     }
 
-    currentSettings->EmitReadsForExists = true;
+    SqlFlags_ = currentSettings->Flags;
     currentSettings->LangVer = LangVer_;
 
     NSQLTranslationV1::TLexers lexers;
@@ -948,6 +956,21 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         NSQLTranslationPG::MakeTranslator());
 
     return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
+}
+
+TProgram::TStatus TProgram::TestPartialTypecheck() {
+    YQL_PROFILE_FUNC(TRACE);
+
+    Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
+
+    TIssues issues;
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+        return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
+    })
+                   ? TProgram::TStatus::Ok
+                   : TProgram::TStatus::Error;
+    ExprCtx_->IssueManager.AddIssues(issues);
+    return ret;
 }
 
 bool TProgram::Compile(const TString& username, bool skipLibraries) {
@@ -1418,7 +1441,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1497,7 +1520,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable) || QContext_.CanRead();
 
     TVector<TDataProviderInfo> dataProviders;
     with_lock (DataProvidersLock_) {
@@ -1886,25 +1909,30 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     // lineage
-    if (TypeCtx_->CorrectLineage) {
-        writer.OnKeyedItem("CorrectLineage");
+    if (TypeCtx_->LineageStats.Correct || TypeCtx_->LineageStats.CorrectStandalone) {
+        writer.OnKeyedItem("Lineage");
         writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->CorrectStandaloneLineage) {
-        writer.OnKeyedItem("CorrectStandaloneLineage");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
-        writer.OnEndMap();
-    }
-    if (TypeCtx_->LineageSize) {
-        writer.OnKeyedItem("LineageSize");
-        writer.OnBeginMap();
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(*TypeCtx_->LineageSize);
+            if (TypeCtx_->LineageStats.Correct) {
+                writer.OnKeyedItem("Correct");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.Correct);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.CorrectStandalone) {
+                writer.OnKeyedItem("CorrectStandalone");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(*TypeCtx_->LineageStats.CorrectStandalone);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Size > 0) {
+                writer.OnKeyedItem("Size");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Size);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 
@@ -1961,7 +1989,7 @@ TIssues TProgram::Issues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -1971,7 +1999,7 @@ TIssues TProgram::CompletedIssues() const {
         result.AddIssues(ExprCtx_->IssueManager.GetCompletedIssues());
     }
     result.AddIssues(FinalIssues_);
-    CheckFatalIssues(result);
+    CheckFatalIssues(result, IssueReportTarget_);
     return result;
 }
 
@@ -2101,6 +2129,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
+    typeAnnotationContext->SqlFlags = SqlFlags_;
+    typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
+    typeAnnotationContext->FuzzUniversal = FuzzUniversal_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }
@@ -2205,7 +2236,13 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     tokenResolvers.push_back(BuildDefaultTokenResolver(typeAnnotationContext->Credentials));
-    typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
+    auto tokenResolver = BuildCompositeTokenResolver(std::move(tokenResolvers));
+
+    typeAnnotationContext->UserDataStorage->SetTokenResolver(tokenResolver);
+
+    if (auto* urlListerManager = typeAnnotationContext->UrlListerManager.Get()) {
+        urlListerManager->SetTokenResolver(std::move(tokenResolver));
+    }
 
     return typeAnnotationContext;
 }

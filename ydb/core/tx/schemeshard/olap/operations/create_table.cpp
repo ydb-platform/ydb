@@ -191,6 +191,8 @@ private:
         if (!TableSchema.Update(schemaDiff, errors)) {
             return false;
         }
+
+        TableSchema.ParseIndexesFromFullSchema(description.GetSchema());
         return true;
     }
 
@@ -552,27 +554,6 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
-        auto schema = createDescription.GetSchema();
-        for (const auto& family : schema.GetColumnFamilies()) {
-            if (family.GetName() == "default") {
-                return;
-            }
-        }
-
-        auto mutableSchema = createDescription.MutableSchema();
-        auto defaultFamily = mutableSchema->AddColumnFamilies();
-        defaultFamily->SetName("default");
-        defaultFamily->SetId(0);
-
-        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
-                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
-                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
-            }
-        }
-    }
-
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -720,7 +701,6 @@ public:
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
-            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }

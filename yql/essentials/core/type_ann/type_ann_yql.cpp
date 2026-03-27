@@ -6,6 +6,52 @@
 
 namespace NYql::NTypeAnnImpl {
 
+IGraphTransformer::TStatus PromoteYqlAggOptions(
+    const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
+{
+    YQL_ENSURE(0 < input->ChildrenSize());
+    TExprNode::TPtr options = input->ChildPtr(input->ChildrenSize() - 1);
+    if (GetSetting(*options, "yql_agg_promoted")) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TExprNode::TPtr groupBy = GetSetting(*options, "group_by");
+    if (!groupBy) {
+        groupBy = GetSetting(*options, "group_exprs");
+    }
+
+    if (groupBy && 0 < groupBy->Tail().ChildrenSize()) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    TOptimizeExprSettings settings(&ctx.Types);
+    settings.VisitChecker = [&](const TExprNode& node) {
+        return !node.IsCallable({"YqlSelect"});
+    };
+
+    auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        if (!node->IsCallable("YqlAgg")) {
+            return node;
+        }
+
+        TExprNode::TPtr options = node->ChildPtr(1);
+        if (GetSetting(*options, "nokey")) {
+            return node;
+        }
+
+        options = AddSetting(*options, node->Pos(), "nokey", /*value=*/nullptr, ctx);
+        return ctx.ChangeChild(*node, 1, std::move(options));
+    }, ctx.Expr, settings);
+
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    options = AddSetting(*options, options->Pos(), "yql_agg_promoted", /*value=*/nullptr, ctx.Expr);
+    output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1, std::move(options));
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {
@@ -22,8 +68,19 @@ IGraphTransformer::TStatus YqlAggFactoryWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!ctx.Types.Modules) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     const TExprNode::TPtr* factory = ImportFreezed(
@@ -57,6 +114,7 @@ IGraphTransformer::TStatus YqlAggFactoryWrapper(
     return IGraphTransformer::TStatus::Ok;
 }
 
+// See also the logic at the AggregateWrapper
 IGraphTransformer::TStatus YqlAggWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {
@@ -73,6 +131,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(0)->IsCallable("YqlAggFactory")) {
         ctx.Expr.AddError(TIssue(
             input->Child(0)->Pos(ctx.Expr),
@@ -81,7 +144,17 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     YQL_ENSURE(input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Unit);
+
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     if (!EnsureTuple(*input->Child(1), ctx.Expr)) {
         ctx.Expr.AddError(TIssue(
@@ -90,13 +163,20 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
-    for (const auto& setting : input->Child(1)->Children()) {
+    const TExprNode* settings = input->Child(1);
+    for (const auto& setting : settings->Children()) {
         if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(setting->Head(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         TStringBuf content = setting->Head().Content();
@@ -104,14 +184,21 @@ IGraphTransformer::TStatus YqlAggWrapper(
             if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-
-            YQL_ENSURE(GetSetting(*input->Child(1), "distinct"));
+        } else if (content == "nokey") {
+            if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
         } else {
             ctx.Expr.AddError(TIssue(
                 input->Pos(ctx.Expr),
                 TStringBuilder() << "Unexpected setting " << content));
             return IGraphTransformer::TStatus::Error;
         }
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(2)->IsCallable("Void")) {
@@ -126,15 +213,21 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Ok;
     }
 
+    const TString name(input->Child(0)->Child(0)->Content());
     TExprNode::TPtr traitsFactory = ImportDeeplyCopied(
         input->Child(0)->Child(0)->Pos(ctx.Expr),
         "/lib/yql/aggregate.yqls",
-        TString(input->Child(0)->Child(0)->Content()) + "_traits_factory",
+        name + "_traits_factory",
         ctx.Expr,
         ctx.Types);
     YQL_ENSURE(traitsFactory);
 
     TExprNode::TPtr body = input->Child(3);
+    if (body->GetTypeAnn() && body->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(body->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     YQL_ENSURE(input->ChildrenSize() <= 4);
 
     // clang-format off
@@ -165,7 +258,6 @@ IGraphTransformer::TStatus YqlAggWrapper(
         .Build();
     // clang-format on
 
-
     ctx.Expr.Step.Repeat(TExprStep::ExpandApplyForLambdas);
     auto status = ExpandApplyNoRepeat(traits, traits, ctx.Expr);
     YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
@@ -178,13 +270,28 @@ IGraphTransformer::TStatus YqlAggWrapper(
         .Build();
     // clang-format on
 
-    // clang-format off
-    TExprNode::TPtr finish = ctx.Expr.Builder(input->Pos())
-        .Apply(traits->Child(6))
-            .With(0, std::move(init))
-        .Seal()
-        .Build();
-    // clang-format on
+    TExprNode::TPtr defVal = traits->ChildPtr(7);
+    const bool isDefault = !defVal->IsCallable("Null");
+
+    TExprNode::TPtr finish;
+    if (!isDefault) {
+        // clang-format off
+        finish = ctx.Expr.Builder(input->Pos())
+            .Apply(traits->Child(6))
+                .With(0, std::move(init))
+            .Seal()
+            .Build();
+        // clang-format on
+    } else if (defVal->IsLambda()) {
+        ctx.Expr.AddError(TIssue(
+            input->Pos(ctx.Expr),
+            TStringBuilder()
+                << "An aggregation '" << name << "'"
+                << "with a lambda DefVal is not yet supported"));
+        return IGraphTransformer::TStatus::Error;
+    } else {
+        finish = std::move(defVal);
+    }
 
     // clang-format off
     TExprNode::TPtr result = ctx.Expr.Builder(input->Pos())
@@ -193,6 +300,25 @@ IGraphTransformer::TStatus YqlAggWrapper(
         .Seal()
         .Build();
     // clang-format on
+
+    if (!isDefault && GetSetting(*settings, "nokey")) {
+        // clang-format off
+        result = ctx.Expr.Builder(input->Pos())
+            .Callable("MatchType")
+                .Add(0, result)
+                .Atom(1, "Optional")
+                .Lambda(2)
+                    .Set(result)
+                .Seal()
+                .Lambda(3)
+                    .Callable("OptionalType")
+                        .Add(0, result)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+        // clang-format on
+    }
 
     output = ctx.Expr.ChangeChild(*input, 2, std::move(result));
     return IGraphTransformer::TStatus::Repeat;

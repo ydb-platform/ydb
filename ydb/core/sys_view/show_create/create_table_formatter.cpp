@@ -515,6 +515,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;
+    bool isLocalBloomFilter = false;
+    bool isLocalBloomNgramFilter = false;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
@@ -533,9 +535,28 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
             break;
         }
-        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
-            Stream << " GLOBAL USING fulltext ON ";
-            fulltextIndexSettings = index.global_fulltext_index().fulltext_settings();
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+            Stream << " GLOBAL USING fulltext_plain ON ";
+            fulltextIndexSettings = index.global_fulltext_plain_index().fulltext_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+            Stream << " GLOBAL USING fulltext_relevance ON ";
+            fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalJsonIndex: {
+            Stream << " GLOBAL USING json ON ";
+            break;
+        }
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+            Stream << " LOCAL USING bloom_filter ON ";
+            isLocalBloomFilter = true;
+            break;
+        }
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+            Stream << " LOCAL USING bloom_ngram_filter ON ";
+            isLocalBloomNgramFilter = true;
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -642,20 +663,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     if (fulltextIndexSettings) {
         Stream << " WITH (";
 
-        Y_ENSURE(fulltextIndexSettings->has_layout());
-        Stream << "layout=";
-        switch (fulltextIndexSettings->layout()) {
-            case Ydb::Table::FulltextIndexSettings_Layout_FLAT:
-                Stream << "flat";
-                break;
-            default:
-                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Layout");
-        }
-
         Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
         auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
         Y_ENSURE(analyzers.has_tokenizer());
-        Stream << ", tokenizer=";
+        Stream << "tokenizer=";
         switch (analyzers.tokenizer()) {
             case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
                 Stream << "whitespace";
@@ -701,6 +712,22 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         }
 
         Stream << ")";
+    }
+
+    if (isLocalBloomFilter && index.local_bloom_filter_index().has_false_positive_probability()) {
+        Stream << " WITH (false_positive_probability=" << index.local_bloom_filter_index().false_positive_probability() << ")";
+    }
+
+    if (isLocalBloomNgramFilter) {
+        const auto& settings = index.local_bloom_ngram_filter_index();
+        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : true;
+        Stream << " WITH ("
+               << "ngram_size=" << settings.ngram_size()
+               << ", hashes_count=" << settings.hashes_count()
+               << ", filter_size_bytes=" << settings.filter_size_bytes()
+               << ", records_count=" << settings.records_count()
+               << ", case_sensitive=" << (caseSensitive ? "true" : "false")
+               << ")";
     }
 }
 
@@ -1098,6 +1125,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    if (cdcStream.GetUserSIDs()) {
+        Stream << del << "USER_SIDS = TRUE";
+        del = ", ";
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";
@@ -1131,7 +1163,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         }
     }
 
-    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {
+    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
         Stream << del << "INITIAL_SCAN = TRUE";
     }
 
@@ -1327,12 +1359,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     try {
         for (const auto& column: columns) {
-            const TFamilyDescription* family = nullptr;
-            if (column.second->HasColumnFamilyId()) {
-                family = families.at(column.second->GetColumnFamilyId());
-            }
-
-            FormatAlterColumn(fullPath, *column.second, family);
+            FormatAlterColumn(fullPath, *column.second);
         }
     } catch (const TFormatFail& ex) {
         return TFormatResult(ex.Status, ex.Error);
@@ -1379,16 +1406,37 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     EscapeName(olapColumnDesc.GetName(), Stream);
     Stream << " " << olapColumnDesc.GetType();
 
-    if (olapColumnDesc.HasColumnFamilyName()) {
-        Stream << " FAMILY ";
-        EscapeName(olapColumnDesc.GetColumnFamilyName(), Stream);
-    }
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";
     }
 
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
+    }
+
+    if (olapColumnDesc.HasSerializer()) {
+        Stream << " COMPRESSION (";
+        auto compression = olapColumnDesc.GetSerializer();
+        if (compression.HasArrowCompression()) {
+            if (compression.GetArrowCompression().HasCodec()) {
+                Stream << "algorithm=";
+                switch (compression.GetArrowCompression().GetCodec()) {
+                    case NKikimrSchemeOp::ColumnCodecPlain:
+                        Stream << "off";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecLZ4:
+                        Stream << "lz4";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecZSTD:
+                        Stream << "zstd";
+                        break;
+                }
+            }
+            if (compression.GetArrowCompression().HasLevel()) {
+                Stream << ", level=" << compression.GetArrowCompression().GetLevel();
+            }
+        }
+        Stream << ')';
     }
 }
 
@@ -1555,7 +1603,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
     }
 }
 
-void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const TFamilyDescription* family) {
+void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
 
@@ -1660,46 +1708,6 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
         paramsStr << "=";
         EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
         del = ", ";
-    }
-
-    if (columnDesc.HasSerializer()) {
-        const auto& serializer = columnDesc.GetSerializer();
-        if (serializer.HasClassName() && !serializer.GetClassName().empty()) {
-            bool hasDiff = false;
-            if (family && serializer.HasArrowCompression()) {
-                const auto& arrowCompression = serializer.GetArrowCompression();
-                if (arrowCompression.HasCodec() && (!family->HasColumnCodec() || arrowCompression.GetCodec() != family->GetColumnCodec())) {
-                    hasDiff = true;
-                }
-                if (arrowCompression.HasLevel() && (!family->HasColumnCodecLevel() || arrowCompression.GetLevel() != family->GetColumnCodecLevel())) {
-                    hasDiff = true;
-                }
-            }
-            if (hasDiff) {
-                paramsStr << del;
-                EscapeName("SERIALIZER.CLASS_NAME", paramsStr);
-                paramsStr << "=";
-                EscapeValue(serializer.GetClassName(), paramsStr);
-                del = ", ";
-                if (serializer.HasArrowCompression()) {
-                    const auto& arrowCompression = serializer.GetArrowCompression();
-                    if (arrowCompression.HasCodec()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.TYPE", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(NArrow::CompressionToString(arrowCompression.GetCodec()), paramsStr);
-                        del = ", ";
-                    }
-                    if (arrowCompression.HasLevel()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.LEVEL", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(arrowCompression.GetLevel(), paramsStr);
-                        del = ", ";
-                    }
-                }
-            }
-        }
     }
 
     TString params = paramsStr.Str();

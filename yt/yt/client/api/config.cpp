@@ -41,7 +41,7 @@ void TConnectionDynamicConfig::Register(TRegistrar registrar)
     registrar.Parameter("table_mount_cache", &TThis::TableMountCache)
         .DefaultNew();
     registrar.Parameter("timestamp_provider", &TThis::TimestampProvider)
-        .DefaultNew();
+        .Default(); // DefaultNew breaks exenodes job config due to direct patching.
     registrar.Parameter("tablet_write_backoff", &TThis::TabletWriteBackoff)
         .Default({
             .InvocationCount = 0,
@@ -121,6 +121,10 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("replica_fake_timeout_delay", &TThis::ReplicaFakeTimeoutDelay)
         .Default();
+
+    registrar.Parameter("chunk_close_grace_period", &TThis::ChunkCloseGracePeriod)
+        .Default(TDuration::Seconds(15))
+        .DontSerializeDefault();
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxBatchRowCount > config->MaxFlushRowCount) {

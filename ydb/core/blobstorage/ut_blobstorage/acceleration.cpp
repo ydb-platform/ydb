@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
             }))
             , VDiskDelayEmulator(new TVDiskDelayEmulator(Env))
         {}
-    
+
         TNodeLocation LocationGenerator(ui32 nodeId) {
             if (Erasure.BlobSubgroupSize() == 9) {
                 if (nodeId == NodeCount) {
@@ -330,14 +330,14 @@ Y_UNIT_TEST_SUITE(Acceleration) {
         TDiskDelay slowDiskDelay = TDiskDelay(TDuration::Seconds(1.5), "slow");
 
         ui32 requests = 1000;
-        
+
         TestCtx ctx(erasure, slowDiskThreshold, delayMultiplier);
         ctx.VDiskDelayEmulator->DefaultDelay = fastDiskDelay;
         ui32 groupSize = erasure.BlobSubgroupSize();
 
         std::vector<bool> nodeIsSlow(groupSize, true);
         std::vector<ui32> vrequestsByNode(groupSize, 0);
-    
+
         for (ui32 i = 0; i < groupSize; ++i) {
             bool isSlow = (i % 3 == 0 && i / 3 < slowDisks);
             ctx.VDiskDelayEmulator->DelayByNode[i + 1] = isSlow ? slowDiskDelay : fastDiskDelay;
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(Acceleration) {
 
         ctx.Initialize();
         ctx.VDiskDelayEmulator->LogUnwrap = true;
-        
+
         if (delayPuts) {
             ctx.VDiskDelayEmulator->AddHandler(TEvBlobStorage::TEvVPutResult::EventType, [&](std::unique_ptr<IEventHandle>& ev) {
                 ui32 nodeId = ev->Sender.NodeId();

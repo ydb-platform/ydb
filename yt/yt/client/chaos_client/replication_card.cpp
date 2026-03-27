@@ -119,7 +119,7 @@ bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& 
     return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
-TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator |= (const TReplicationCardFetchOptions& other)
+TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator|=(const TReplicationCardFetchOptions& other)
 {
     IncludeCoordinators |= other.IncludeCoordinators;
     IncludeProgress |= other.IncludeProgress;
@@ -331,6 +331,11 @@ ETableReplicaState GetTargetReplicaState(ETableReplicaState state)
     return (state == ETableReplicaState::Enabled || state == ETableReplicaState::Enabling)
         ? ETableReplicaState::Enabled
         : ETableReplicaState::Disabled;
+}
+
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode)
+{
+    return mode == ETableReplicaMode::Sync || mode == ETableReplicaMode::AsyncToSync;
 }
 
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update)
@@ -905,7 +910,7 @@ TDuration ComputeReplicationProgressLag(
     return lag;
 }
 
-THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+TReplicationProgress BuildMaxSyncProgress(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
 
@@ -924,6 +929,13 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
             }
         }
     }
+
+    return syncProgress;
+}
+
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+{
+    auto syncProgress = BuildMaxSyncProgress(replicas);
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {

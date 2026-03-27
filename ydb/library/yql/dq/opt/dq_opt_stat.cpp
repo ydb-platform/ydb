@@ -238,6 +238,26 @@ bool NeedCalc(NNodes::TExprBase node) {
     return !node.Maybe<TCoDataCtor>();
 }
 
+bool IsLiteralDataExpr(NNodes::TExprBase node) {
+    auto type = node.Ref().GetTypeAnn();
+    if (type->IsSingleton()) {
+        return false;
+    }
+    if (node.Maybe<TCoDataCtor>()) {
+        return true;
+    }
+    if (node.Maybe<TCoNothing>()) {
+        return true;
+    }
+    if (auto maybeJust = node.Maybe<TCoJust>()) {
+        return IsLiteralDataExpr(maybeJust.Cast().Input());
+    }
+    if (node.Maybe<TCoPgConst>()) {
+        return true;
+    }
+    return false;
+}
+
 bool IsConstantExprPg(const TExprNode::TPtr& input) {
     if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg) {
         if (input->IsCallable("PgConst")) {

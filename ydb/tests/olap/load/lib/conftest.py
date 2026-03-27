@@ -112,6 +112,7 @@ class LoadSuiteBase:
                 result.timeout = q.timeout
             if q.query_prefix is not None:
                 result.query_prefix = q.query_prefix
+        result.iterations = int(get_external_param('BENCHMARK_ITERATIONS', result.iterations))
         return result
 
     @classmethod

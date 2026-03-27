@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.3.1)
+VERSION(0.3.2)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-compression/archive/v0.3.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-compression/archive/v0.3.2.tar.gz)
 
 PEERDIR(
     contrib/restricted/aws/aws-c-common

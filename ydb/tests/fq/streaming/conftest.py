@@ -1,4 +1,5 @@
 import os
+import pytest
 import random
 import string
 
@@ -6,41 +7,46 @@ from ydb.tests.fq.streaming.common import Kikimr
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
-import pytest
-
 
 @pytest.fixture(scope="module")
 def kikimr(request):
+    param = getattr(request, "param", {})
+    enable_watermarks = param.get("enable_watermarks", False)
+    enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+
     def get_ydb_config():
+        extra_feature_flags = {
+            "enable_external_data_sources",
+            "enable_streaming_queries",
+            "enable_streaming_queries_counters",
+            "enable_topics_sql_io_operations",
+            "enable_streaming_queries_pq_sink_deduplication"
+        }
+        if enable_shared_reading_in_streaming_queries:
+            extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
+
         config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-                "enable_streaming_queries": True,
-                "enable_streaming_queries_counters": True
-            },
+            pq_client_service_types=["yandex-query"],
+            extra_feature_flags=extra_feature_flags,
             query_service_config={
                 "available_external_data_sources": ["ObjectStorage", "Ydb", "YdbTopics"],
-                "enable_match_recognize": True,
-                "streaming_queries": {
-                    "external_storage": {
-                        "database_connection": {
-                            "endpoint": os.getenv("YDB_ENDPOINT"),
-                            "database": os.getenv("YDB_DATABASE")
-                        }
-                    }
-                }
+                "enable_match_recognize": True
             },
-            table_service_config={},
+            table_service_config={
+                "enable_watermarks": enable_watermarks,
+                "dq_channel_version": 1,
+            },
             default_clusteradmin="root@builtin",
-            use_in_memory_pdisks=False
+            use_in_memory_pdisks=False,
         )
 
         config.yaml_config["log_config"]["default_level"] = 8
 
         return config
 
-    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+    checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
+    os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
     os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
 
     kikimr = Kikimr(get_ydb_config())

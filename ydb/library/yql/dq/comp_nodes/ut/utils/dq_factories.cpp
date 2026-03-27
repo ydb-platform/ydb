@@ -18,6 +18,9 @@ TComputationNodeFactory GetDqNodeFactory(TComputationNodeFactory customFactory) 
         else if (callable.GetType()->GetName() == "DqHashCombine"sv) {
             return WrapDqHashCombine(callable, ctx);
         }
+        else if (callable.GetType()->GetName() == "DqHashAggregate"sv) {
+            return WrapDqHashAggregate(callable, ctx);
+        }
         else if (callable.GetType()->GetName() == "DqScalarHashJoin"sv) {
             return WrapDqScalarHashJoin(callable, ctx);
         }

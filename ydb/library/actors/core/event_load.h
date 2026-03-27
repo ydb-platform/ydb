@@ -26,6 +26,8 @@ namespace NActors {
         size_t Alignment = 0; // required alignment
         bool IsInline = false; // if true, goes through ordinary channel
         bool IsRdmaCapable = false; // if true, could go through RDMA
+
+        TString ToString() const;
     };
 
     struct TEventSerializationInfo {
@@ -33,6 +35,8 @@ namespace NActors {
         std::vector<TEventSectionInfo> Sections;
         // total sum of Size for every section must match actual serialized size of the event
     };
+
+    TString SerializeEventSections(const TEventSerializationInfo& info);
 
     class TEventSerializedData
        : public TThrRefBase

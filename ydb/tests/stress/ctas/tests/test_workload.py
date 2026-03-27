@@ -11,7 +11,6 @@ class TestYdbWorkload(StressFixture):
     def setup(self):
         yield from self.setup_cluster(
             table_service_config={
-                "enable_oltp_sink": True,
                 "enable_olap_sink": True,
                 "enable_create_table_as": True,
                 "enable_data_shard_create_table_as": True,
@@ -29,5 +28,5 @@ class TestYdbWorkload(StressFixture):
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
-            "--duration", "120",
+            "--duration", self.base_duration,
         ])

@@ -326,10 +326,27 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
 
 namespace {
 
-TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node) {
+TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprContext& ctx) {
+    // This is a special case - (just (member $input 'colname)).
+    if (auto maybeUnaryOp = node.Maybe<TKqpOlapFilterUnaryOp>()) {
+        const auto unaryOp = maybeUnaryOp.Cast();
+        if (unaryOp.Operator().StringValue() == "just") {
+            if (auto maybeColumnArg = unaryOp.Arg().Maybe<TKqpOlapApplyColumnArg>()) {
+                // We want to rewrite it to - (just ('colname)).
+                // clang-format off
+                return Build<TKqpOlapFilterUnaryOp>(ctx, node.Pos())
+                    .Operator().Value("just", TNodeFlags::Default).Build()
+                    .Arg(maybeColumnArg.Cast().ColumnName())
+                .Done();
+                // clang-format on
+            }
+        }
+    }
+
     if (const auto& maybeColumnArg = node.Maybe<TKqpOlapApplyColumnArg>()) {
         return maybeColumnArg.Cast().ColumnName();
     }
+
     return node;
 }
 
@@ -423,8 +440,8 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos, pushdownOptions)) {
                 return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                         .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
-                        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first))
-                        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second))
+                        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first, ctx))
+                        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second, ctx))
                         .OpType(ExpandType(node.Pos(), *(arithmetic.Ptr()->GetTypeAnn()), ctx))
                         .Done();
             }
@@ -438,7 +455,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                 // clang-format off
                 return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
                     .Operator().Value(oper, TNodeFlags::Default).Build()
-                    .Arg(UnwrapOptionalTKqpOlapApplyColumnArg(params.front()))
+                    .Arg(UnwrapOptionalTKqpOlapApplyColumnArg(params.front(), ctx))
                 .Done();
                 // clang-format on
             }
@@ -585,8 +602,8 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
-        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first))
-        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second))
+        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first, ctx))
+        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second, ctx))
         .OpType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx))
         .Done();
 }
@@ -648,8 +665,8 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
         for (ui32 j = 0; j < i; ++j) {
             andConditions.emplace_back(Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                 .Operator().Value("eq", TNodeFlags::Default).Build()
-                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].first))
-                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].second))
+                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].first, ctx))
+                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].second, ctx))
                 .Done());
         }
 
@@ -967,7 +984,7 @@ TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOp
 TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx, NYql::IGraphTransformer &typeAnn)
 {
-    const TPushdownOptions pushdownOptions(kqpCtx.Config->EnableOlapScalarApply, kqpCtx.Config->EnableOlapSubstringPushdown);
+    const TPushdownOptions pushdownOptions(kqpCtx.Config->GetEnableOlapScalarApply(), kqpCtx.Config->GetEnableOlapSubstringPushdown());
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }
@@ -1010,7 +1027,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     TOLAPPredicateNode predicateTree;
     predicateTree.ExprNode = predicate.Ptr();
-    CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body().Ptr()->GetTypeAnn(), pushdownOptions);
+    CollectPredicates(predicate, predicateTree, &lambdaArg, lambdaArg.GetTypeAnn(), pushdownOptions);
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
     auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
@@ -1024,7 +1041,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         for (const auto &predicateExprHolder : remaining) {
             // Closure an original predicate, we cannot call `Peephole` for free args.
             TVector<const TTypeAnnotationNode *> argTypes{lambda.Args().Arg(0).Ptr()->GetTypeAnn()};
-            auto olapPredicateClosure = Build<TKqpOlapPredicateClosure>(ctx, node.Pos())
+            auto olapPredicateClosure = Build<TKqpPredicateClosure>(ctx, node.Pos())
                 .Lambda<TCoLambda>()
                     .Args({"arg"})
                     .Body<TCoOptionalIf>()
@@ -1054,7 +1071,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
             YQL_CLOG(TRACE, ProviderKqp) << "[KQP_PUSH_OLAP_FILTER] After peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx);
 
-            auto lambda = TExprBase(afterPeephole).Cast<TKqpOlapPredicateClosure>().Lambda();
+            auto lambda = TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda();
             auto &lArg = lambda.Args().Arg(0).Ref();
 
             const auto maybeIf = lambda.Body().Maybe<TCoIf>();
@@ -1066,7 +1083,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             predicate = maybeIf.Cast().Predicate();
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
-            CollectPredicates(predicate, predicateTree, &lArg, lambda.Body().Ptr()->GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
+            CollectPredicates(predicate, predicateTree, &lArg, lArg.GetTypeAnn(), {true, pushdownOptions.PushdownSubstring});
 
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
             auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);

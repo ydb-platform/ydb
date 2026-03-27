@@ -1,5 +1,6 @@
 #include "client_impl.h"
 #include "helpers.h"
+#include "atomic_throttlers.h"
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/src/core/lib/gpr/string.h>
@@ -43,7 +44,8 @@ namespace NUnifiedAgent::NPrivate {
         , ForkProtector(forkProtector)
         , Counters(parameters.Counters ? parameters.Counters : MakeIntrusive<TClientCounters>())
         , Log(parameters.Log)
-        , MainLogger(Log, MakeFMaybe(Parameters.LogRateLimitBytes))
+        , MainLogger(Log, MakeFMaybe(Parameters.LogRateLimitBytes),
+                     TLogger::TCounters{.DroppedBytes = &Counters->ClientLogDroppedBytes})
         , Logger(MainLogger.Child(Sprintf("ua_%" PRIu64, Id.fetch_add(1))))
         , Channel(nullptr)
         , Stub(nullptr)
@@ -54,8 +56,6 @@ namespace NUnifiedAgent::NPrivate {
         , Destroyed(false)
         , Lock()
     {
-        MainLogger.SetDroppedBytesCounter(&Counters->ClientLogDroppedBytes);
-
         if (ForkProtector != nullptr) {
             ForkProtector->Register(*this);
         }
@@ -531,13 +531,26 @@ namespace NUnifiedAgent::NPrivate {
             }
             if (InflightBytes.load() + messageSize > MaxInflightBytes) {
                 g.Release();
-                YLOG_ERR(Sprintf("max inflight of [%zu] bytes reached, [%zu] bytes dropped",
-                    MaxInflightBytes, messageSize));
+
+                // Update counters first before potentially slow logging operations
                 --Counters->InflightMessages;
                 Counters->InflightBytes -= messageSize;
                 ++Counters->DroppedMessages;
                 Counters->DroppedBytes += messageSize;
                 ++Counters->ErrorsCount;
+
+                // Check log level and increment error counter before throttling check.
+                // We use non-silent mode (false) to ensure ALL errors are counted in metrics,
+                // even if they don't get logged due to throttling. This provides accurate
+                // monitoring of the real error rate.
+                if (auto* log = Logger.Accept(TLOG_ERR, false); log != nullptr) {
+                    if (InflightErrorThrottler.Do()) {
+                        Logger.Log(*log, TLOG_ERR,
+                            std::format("max inflight of [{}] bytes reached, [{}] bytes dropped",
+                                MaxInflightBytes, messageSize));
+                    }
+                }
+
                 return;
             }
             InflightBytes.fetch_add(messageSize);
@@ -1281,3 +1294,4 @@ namespace NUnifiedAgent {
         return MakeIntrusive<NPrivate::TClient>(parameters, forkProtector);
     }
 }
+

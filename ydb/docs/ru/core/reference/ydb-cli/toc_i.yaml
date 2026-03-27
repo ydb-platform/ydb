@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link

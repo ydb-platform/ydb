@@ -220,6 +220,8 @@ message TPQConfig {
     }
 
     optional TCompactionConfig CompactionConfig = 58;
+    optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
+    optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
 }
 
 message TChannelProfile {
@@ -270,6 +272,7 @@ message TPartitionConfig {
 
     optional uint64 WriteSpeedInBytesPerSecond = 7 [default = 50000000];
     optional uint64 BurstSize = 8 [default = 50000000];
+    optional uint64 WriteMessageDeduplicationIdPerSecond = 17 [default = 100000];
 
     message TReadQuota {
         optional string ClientId = 1;
@@ -396,6 +399,12 @@ message TPQTabletConfig {
         optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
         optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 17; // For MLP consumers
+        optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
+        optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+
+        optional uint32 MetricsLevel = 21;
+        // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
+        optional string MonitoringProjectId = 22;
     }
 
     repeated TConsumer Consumers = 37;
@@ -471,6 +480,10 @@ message TPQTabletConfig {
 
     // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
     optional string MonitoringProjectId = 41;
+
+    optional string TimestampType = 42;
+
+    optional bool ContentBasedDeduplication = 43 [default = false];
 }
 
 message THeartbeat {
@@ -790,6 +803,10 @@ message TAggregatedCounters {
         optional uint64 DeletedByRetentionPolicy = 5;
         optional uint64 DeletedByDeadlinePolicy = 6;
         optional uint64 DeletedByMovedToDLQ = 7;
+
+        optional uint64 CPUUsage = 8;
+
+        repeated uint64 WaitingLockingDurationValues = 9;
     }
 }
 
@@ -884,6 +901,7 @@ message TStatusResponse {
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
         optional string CommittedMetadata = 12;
+        optional bool UseForReading = 13;
     }
 
 
@@ -1011,6 +1029,7 @@ message TPartitionOperation {
     optional string ReadSessionId = 10;
     optional bool KafkaTransaction = 11 [default = false];
     optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
+    optional bool SkipConflictCheck = 13;
 };
 
 message TWriteId {
@@ -1130,12 +1149,14 @@ message TEvReadingPartitionFinishedRequest {
     optional uint32 PartitionId = 2;
     optional bool ScaleAwareSDK = 3;
     optional bool StartedReadingFromEndOffset = 4;
+    optional NActorsProto.TActorId PipeClient = 5;
 };
 
 // The consumer's reading of the partition is started (from ReadSession)
 message TEvReadingPartitionStartedRequest {
     optional string Consumer = 1;
     optional uint32 PartitionId = 2;
+    optional NActorsProto.TActorId PipeClient = 3;
 };
 
 message TPartitionScaleParticipants {
@@ -1293,6 +1314,8 @@ message TMLPMessageId {
 message TMLPMessageMeta {
     optional string MessageGroupId = 1;
     optional uint64 SentTimestampMilliseconds = 2;
+    optional uint32 ApproximateReceiveCount = 3;
+    optional uint64 ApproximateFirstReceiveTimestampMilliseconds = 4;
 };
 
 message TMLPMessage {
@@ -1317,6 +1340,7 @@ message TEvMLPGetPartitionResponse {
 message TEvMLPErrorResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     optional string ErrorMessage = 2;
+    optional uint32 PartitionId = 3;
 }
 
 // To PQTablet
@@ -1325,7 +1349,7 @@ message TEvMLPReadRequest {
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
     optional uint64 WaitDeadlineMilliseconds = 4;
-    optional uint64 VisibilityDeadlineMilliseconds = 5; // Если к указанному времени не произойдет подтверждения обработки сообщения, то сообщение вернется в очередь (может указывать в настройках консьюмера?)
+    optional uint64 ProcessingTimeoutMilliseconds = 5;
     // The maximum number of messages to return.
     optional uint32 MaxNumberOfMessages = 6;
 }
@@ -1364,16 +1388,42 @@ message TEvMLPUnlockResponse {
 // To PQTablet
 // Изменяет дедлайн сообщения
 message TEvMLPChangeMessageDeadlineRequest {
+    message TOffsetWithDeadline {
+        optional uint64 Offset = 1;
+        optional uint64 DeadlineTimestampSeconds = 2;
+    }
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 DeadlineTimestampSeconds = 4;
-    repeated uint64 Offset = 5;
+    repeated TOffsetWithDeadline Message = 6;
 }
 
 // From PQTablet
 message TEvMLPChangeMessageDeadlineResponse {
 }
+
+// To PQTablet
+message TEvMLPPurgeRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// From PQTablet
+message TEvMLPPurgeResponse {
+    optional uint32 PartitionId = 1;
+}
+
+message TEvMLPConsumerStatus {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 Messages = 5;
+    optional bool UseForReading = 6;
+    optional uint32 Generation = 7;
+    optional uint64 Cookie = 8;
+}
+
 
 message TMLPMetrics {
     optional uint64 TotalCommittedMessageCount = 2;
@@ -1382,6 +1432,27 @@ message TMLPMetrics {
     optional uint64 TotalPurgedMessageCount = 4;
     optional uint64 TotalDeletedByDeadlinePolicyMessageCount = 5;
     optional uint64 TotalDeletedByRetentionMessageCount = 6;
+}
+
+enum EReadWithKeepOrder {
+    READ_WITH_KEEP_ORDER_UNSPECIFIED = 0;
+    READ_WITH_KEEP_ORDER_BLOCK_ALL = 1; /* reading from a partition returns an empty list of messages */
+    READ_WITH_KEEP_ORDER_ALLOW_ALL = 3; /* no reading restrictions */
+}
+
+message TExternalLockedMessageGroupsId {
+    optional uint32 ParentPartitionId = 1;
+    optional uint64 Generation = 2;
+    optional uint64 ConsumerGeneration = 3; /* increases when the consumer is recreated */
+    optional uint64 Step = 4; /* increases when the new full state is sent */
+
+    optional EReadWithKeepOrder Mode = 5;
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
 }
 
 message TMLPStorageSnapshot {
@@ -1409,6 +1480,8 @@ message TMLPStorageSnapshot {
     optional bytes Messages = 6;
     optional bytes SlowMessages = 7;
     optional bytes DLQMessages = 8;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 9;
 }
 
 message TMLPStorageWAL {
@@ -1432,6 +1505,8 @@ message TMLPStorageWAL {
 
     optional bytes AddedToDLQMessages = 14;
     optional uint64 FirstDLQSeqNo = 15;
+
+    repeated TExternalLockedMessageGroupsId ExternalLockedMessageGroupsId = 16;
 }
 
 message TMessageDeduplicationIdWAL {

@@ -2,9 +2,8 @@ UNITTEST_FOR(ydb/library/yql/dq/runtime)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     dq_arrow_helpers_ut.cpp

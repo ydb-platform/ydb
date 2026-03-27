@@ -45,6 +45,7 @@ const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
 
 namespace NActors {
     struct THeSingleSystemEnv { };
+    class IHarmonizer;
 
     struct TTestActorSetupCmd { // like TActorSetupCmd, but not owning the Actor
         TTestActorSetupCmd(IActor* actor, TMailboxType::EType mailboxType, ui32 poolId)
@@ -325,6 +326,7 @@ namespace NActors {
         virtual void Initialize();
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
+        static void ResetFirstNodeId();
         ui64 AllocateLocalId();
         ui32 InterconnectPoolId() const;
         TString GetTempDir();
@@ -466,7 +468,7 @@ namespace NActors {
 
         TActorSystem* SingleSys() const;
         TActorSystem* GetAnyNodeActorSystem();
-        TActorSystem* GetActorSystem(ui32 nodeId);
+        TActorSystem* GetActorSystem(ui32 nodeIdx);
         template <typename TEvent>
         TEvent* GrabEdgeEventIf(TAutoPtr<IEventHandle>& handle, std::function<bool(const TEvent&)> predicate, TDuration simTimeout = TDuration::Max()) {
             handle.Destroy();

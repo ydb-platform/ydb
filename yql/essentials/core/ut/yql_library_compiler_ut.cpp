@@ -6,9 +6,9 @@ namespace NYql {
 
 Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 
-static const char* alias = "/lib/ut.yql";
+const char* alias = "/lib/ut.yql";
 
-static bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
+bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
     NSQLTranslation::TTranslators translators(
         nullptr,
         nullptr,

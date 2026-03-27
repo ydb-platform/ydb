@@ -191,9 +191,10 @@ TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) 
 
 IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
     const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-    const std::optional<ui64> shardingVersion, const bool hasDeletions)
+    const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
     : Type(type)
     , SourceIdx(sourceIdx)
+    , DeprecatedPortionId(deprecatedPortionId)
     , RecordSnapshotMin(recordSnapshotMin)
     , RecordSnapshotMax(recordSnapshotMax)
     , Context(context)

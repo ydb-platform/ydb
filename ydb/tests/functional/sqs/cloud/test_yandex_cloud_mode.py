@@ -803,9 +803,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         }
         assert_that(self._get_counter_value(counters, labels), equal_to(1))
 
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    def test_yc_events_processor(self, tables_format):
-        self._init_with_params(tables_format=tables_format)
+    def test_yc_events_processor(self):
+        self._init_with_params(tables_format=1)
         queue_name1 = 'queue1'
         queue_name2 = 'queue2'
         self._sqs_api = self._create_api_for_user(self._username, raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)

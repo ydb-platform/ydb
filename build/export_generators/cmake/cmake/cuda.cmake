@@ -3,6 +3,10 @@ if (HAVE_CUDA)
       message(FATAL_ERROR "Build with CUDA requires at least cmake 3.17.0")
   endif()
 
+  if (NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES "35-virtual;50-virtual;60-virtual;61-real;70-virtual;75-real;80-real;86-real;89-real;90")
+  endif()
+
   enable_language(CUDA)
 
   include(global_flags)
@@ -157,7 +161,7 @@ if (HAVE_CUDA)
   find_package(CUDAToolkit REQUIRED)
 
   if(${CMAKE_CUDA_COMPILER_VERSION} VERSION_GREATER_EQUAL "11.2")
-    string(APPEND CMAKE_CUDA_FLAGS " --threads 0")
+    string(APPEND CMAKE_CUDA_FLAGS " --threads 2")
   endif()
 
   message(VERBOSE "CMAKE_CUDA_FLAGS = \"${CMAKE_CUDA_FLAGS}\"")

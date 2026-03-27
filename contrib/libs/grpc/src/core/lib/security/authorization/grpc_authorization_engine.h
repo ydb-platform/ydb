@@ -24,12 +24,16 @@
 #include <util/string/cast.h>
 #include <vector>
 
+#include <grpc/grpc_audit_logging.h>
+
 #include "src/core/lib/security/authorization/authorization_engine.h"
 #include "src/core/lib/security/authorization/evaluate_args.h"
 #include "src/core/lib/security/authorization/matchers.h"
 #include "src/core/lib/security/authorization/rbac_policy.h"
 
 namespace grpc_core {
+
+using experimental::AuditLogger;
 
 // GrpcAuthorizationEngine can be either an Allow engine or Deny engine. This
 // engine makes authorization decisions to Allow or Deny incoming RPC request
@@ -40,7 +44,8 @@ namespace grpc_core {
 class GrpcAuthorizationEngine : public AuthorizationEngine {
  public:
   // Builds GrpcAuthorizationEngine without any policies.
-  explicit GrpcAuthorizationEngine(Rbac::Action action) : action_(action) {}
+  explicit GrpcAuthorizationEngine(Rbac::Action action)
+      : action_(action), audit_condition_(Rbac::AuditCondition::kNone) {}
   // Builds GrpcAuthorizationEngine with allow/deny RBAC policy.
   explicit GrpcAuthorizationEngine(Rbac policy);
 
@@ -52,6 +57,14 @@ class GrpcAuthorizationEngine : public AuthorizationEngine {
   // Required only for testing purpose.
   size_t num_policies() const { return policies_.size(); }
 
+  // Required only for testing purpose.
+  Rbac::AuditCondition audit_condition() const { return audit_condition_; }
+
+  // Required only for testing purpose.
+  const std::vector<std::unique_ptr<AuditLogger>>& audit_loggers() const {
+    return audit_loggers_;
+  }
+
   // Evaluates incoming request against RBAC policy and makes a decision to
   // whether allow/deny this request.
   Decision Evaluate(const EvaluateArgs& args) const override;
@@ -61,8 +74,12 @@ class GrpcAuthorizationEngine : public AuthorizationEngine {
     TString name;
     std::unique_ptr<AuthorizationMatcher> matcher;
   };
+
+  TString name_;
   Rbac::Action action_;
   std::vector<Policy> policies_;
+  Rbac::AuditCondition audit_condition_;
+  std::vector<std::unique_ptr<AuditLogger>> audit_loggers_;
 };
 
 }  // namespace grpc_core

@@ -16,8 +16,47 @@ TFmrUserJobLauncher::TFmrUserJobLauncher(const TFmrUserJobLauncherOptions& optio
 {
 }
 
-std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& job) {
+void TFmrUserJobLauncher::InitializeJobEnvironment(
+    const TString& jobEnvironmentDir,
+    const std::vector<TFileInfo>& jobFiles,
+    const std::vector<TYtResourceInfo>& jobYtResources,
+    const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+) {
+    YQL_ENSURE(!jobEnvironmentDir.empty());
+    std::vector<std::pair<TString, TString>> filePaths; // LocalPath, FileAlias
+
+    for (auto& fileInfo: jobFiles) {
+        TString filePath = fileInfo.Alias.empty() ? fileInfo.LocalPath : fileInfo.Alias;
+        filePaths.emplace_back(fileInfo.LocalPath, filePath);
+    }
+
+    for (auto& remoteFileInfo: jobYtResources) {
+        YQL_ENSURE(remoteFileInfo.RichPath.FileName_.Defined());
+        filePaths.emplace_back(remoteFileInfo.LocalPath, *remoteFileInfo.RichPath.FileName_);
+    }
+
+    for (auto& fmrResourceInfo: jobFmrResources) {
+        filePaths.emplace_back(fmrResourceInfo.LocalPath, fmrResourceInfo.Alias);
+    }
+
+    for (auto& [localPath, alias]: filePaths) {
+        YQL_ENSURE(!localPath.empty());
+        auto jobFilePath = TFsPath(jobEnvironmentDir) / alias;
+        YQL_CLOG(DEBUG, FastMapReduce) << "Setting hardlink from local path " << localPath << " to new path " << jobFilePath.GetPath();
+        NFs::SetExecutable(localPath, true);
+        NFs::HardLink(localPath, jobFilePath);
+    }
+}
+
+std::variant<TFmrError, TStatistics> TFmrUserJobLauncher::LaunchJob(
+    TFmrUserJob& job,
+    const TMaybe<TString>& jobEnvironmentDir,
+    const std::vector<TFileInfo>& jobFiles,
+    const std::vector<TYtResourceInfo>& jobYtResources,
+    const std::vector<TFmrResourceTaskInfo>& jobFmrResources)
+{
     if (!RunInSeparateProcess_) {
+        YQL_ENSURE(jobFiles.empty() && jobYtResources.empty(), "Fmr job with linked resource files should be launched only in separate process");
         return job.DoFmrJob(TFmrUserJobOptions{.WriteStatsToFile = false});
     }
 
@@ -25,12 +64,17 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& jo
     YQL_ENSURE(!TableDataServiceDiscoveryFilePath_.empty());
     YQL_ENSURE(GatewayType_ == "native" || GatewayType_ == "file");
     // serialize to temporary file
-    TTempDir tmpDir;
-    TFile jobStateFile(tmpDir.Path().Child("fmrjob.bin"), CreateNew | RdWr);
-    TFile mapResultStatsFile(tmpDir.Path().Child("stats.bin"), CreateNew | RdWr);
 
-    TString tmpDirTableDataServiceDiscoveryPath = "table_data_service_discovery.txt";
-    NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, tmpDir.Path().Child(tmpDirTableDataServiceDiscoveryPath));
+    YQL_ENSURE(jobEnvironmentDir.Defined());
+    auto jobtmpDir = TFsPath(*jobEnvironmentDir);
+
+    InitializeJobEnvironment(*jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+
+    TFile jobStateFile(jobtmpDir.Child("fmrjob.bin"), CreateNew | RdWr);
+    TFile mapResultStatsFile(jobtmpDir.Child("stats.bin"), CreateNew | RdWr);
+
+    TString tmpDirTableDataServiceDiscoveryPath = "tds_discovery.txt";
+    NFs::HardLinkOrCopy(TableDataServiceDiscoveryFilePath_, jobtmpDir.Child(tmpDirTableDataServiceDiscoveryPath));
     job.SetTableDataService(tmpDirTableDataServiceDiscoveryPath);
 
     job.SetYtJobServiceType(GatewayType_);
@@ -44,20 +88,17 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& jo
     TStringStream fmrJobOutputStream, fmrJobErrorStream;
     opts.SetUseShell(false).SetDetachSession(false).SetOutputStream(&fmrJobOutputStream).SetErrorStream(&fmrJobErrorStream);
 
-    TShellCommand command(FmrJobBinaryPath_, {}, opts, tmpDir.Path());
+    TShellCommand command(FmrJobBinaryPath_, {}, opts, jobtmpDir);
     command.Run();
     command.Wait();
 
     auto code = command.GetExitCode();
     if (code != 0) {
         TString errorStr = fmrJobErrorStream.Str();
-        TStringBuf errorMessage = errorStr;
-        TryParseTerminationMessage(errorMessage);
+        EFmrErrorReason errorReason = ParseFmrReasonFromErrorMessage(errorStr);
 
-        if (errorMessage.size() < errorStr.size()) {
-            ythrow yexception() << "Process terminated with error: " << errorMessage;
-        }
-        return TError{
+        return TFmrError{
+            .Reason = errorReason,
             .ErrorMessage = TStringBuilder() << "Process terminated with exit code " << code << " and error message " << fmrJobErrorStream.Str()
         };
     }
@@ -74,6 +115,5 @@ std::variant<TError, TStatistics> TFmrUserJobLauncher::LaunchJob(TFmrUserJob& jo
 bool TFmrUserJobLauncher::RunInSeperateProcess() const {
     return RunInSeparateProcess_;
 }
-
 
 } // namespace NYql::NFmr

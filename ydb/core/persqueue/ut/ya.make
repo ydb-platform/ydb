@@ -8,9 +8,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(40)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -34,6 +35,7 @@ SRCS(
     counters_ut.cpp
     pqtablet_mock.cpp
     internals_ut.cpp
+    inflight_limiter_ut.cpp
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp
@@ -41,12 +43,12 @@ SRCS(
     partition_ut.cpp
     partitiongraph_ut.cpp
     pqtablet_ut.cpp
-    quota_tracker_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
     pqrb_describes_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
+    events_ut.cpp
 )
 
 RESOURCE(
@@ -61,6 +63,13 @@ RESOURCE(
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_write.html first_class_citizen_after_write.html
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/after_read.html first_class_citizen_after_read.html
     ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen/turned_off.html first_class_citizen_turned_off.html
+
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/after_write.html federation_with_monitoring_project_id_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/after_read.html federation_with_monitoring_project_id_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/federation_with_monitoring_project_id/turned_off.html federation_with_monitoring_project_id_turned_off.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_write.html first_class_citizen_with_monitoring_project_id_after_write.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/after_read.html first_class_citizen_with_monitoring_project_id_after_read.html
+    ydb/core/persqueue/ut/resources/partition_counters/first_class_citizen_with_monitoring_project_id/turned_off.html first_class_citizen_with_monitoring_project_id_turned_off.html
 
     ydb/core/persqueue/ut/resources/counters_pqproxy.html counters_pqproxy.html
 

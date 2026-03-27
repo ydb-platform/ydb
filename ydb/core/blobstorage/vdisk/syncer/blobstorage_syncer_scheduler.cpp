@@ -293,13 +293,13 @@ namespace NKikimr {
 
                 TActorId sstWriterId;
 #ifdef USE_NEW_FULL_SYNC_SCHEME
-                auto sstWriterActor = std::make_unique<TIndexSstWriterActor>(
+                auto* sstWriterActor = new TIndexSstWriterActor(
                     SyncerContext->VCtx,
                     SyncerContext->PDiskCtx,
                     SyncerContext->LevelIndexLogoBlob,
                     SyncerContext->LevelIndexBlock,
                     SyncerContext->LevelIndexBarrier);
-                sstWriterId = ctx.Register(sstWriterActor.get());
+                sstWriterId = ctx.Register(sstWriterActor);
                 ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 #endif
                 auto task = std::make_unique<TSyncerJobTask>(TSyncerJobTask::EJustSync, GInfo->GetVDiskId(tmp->OrderNumber),

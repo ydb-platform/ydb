@@ -6,7 +6,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template<bool LLVM>
+template<bool LLVM, bool Spilling>
 void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultCollector& printout);
 std::vector<std::string> GetColumnConfigurationNames();
 

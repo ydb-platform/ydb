@@ -6,7 +6,7 @@ ADDINCL(
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -14,6 +14,8 @@ ENDIF()
 SRCS(
     kafka_test_client.cpp
     kafka_test_client.h
+    test_server.cpp
+    ut_auth.cpp
     ut_kafka_functions.cpp
     ut_protocol.cpp
     ut_serialization.cpp
@@ -28,6 +30,7 @@ PEERDIR(
     ydb/core/kafka_proxy
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/library/testlib/service_mocks
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
 
 )

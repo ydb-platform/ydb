@@ -7,6 +7,12 @@
 namespace NKikimr::NTabletFlatExecutor {
 
 class TVacuumLogic {
+    struct TVacuumTableInfo {
+        ui32 TableId = Max<ui32>();
+        ui64 CompactionId = 0;
+    };
+
+public:
     enum class EVacuumState {
         Idle,
         PendingCompaction,
@@ -18,11 +24,6 @@ class TVacuumLogic {
         WaitAllGCs,
         WaitTabletGC,
         WaitLogGC,
-    };
-
-    struct TVacuumTableInfo {
-        ui32 TableId = Max<ui32>();
-        ui64 CompactionId = 0;
     };
 
 public:
@@ -46,6 +47,7 @@ public:
 
 private:
     void CompleteVacuum(const TActorContext& ctx);
+    void ChangeState(EVacuumState to);
 
 private:
     IOps* Ops;

@@ -19,7 +19,7 @@ namespace NKikimr::NMiniKQL {
 template <bool isScalar, bool isOptional>
 Y_FORCE_INLINE bool GetBit(const ui8* bitMask, size_t offset) {
     if constexpr (isScalar || !isOptional) {
-        return 1;
+        return true;
     } else {
         return arrow::BitUtil::GetBit(bitMask, offset);
     }
@@ -43,7 +43,7 @@ TType* GetScalar(const arrow::Datum& datum) {
 template <typename TType>
 class TDatumStorageView {
 public:
-    TDatumStorageView(const arrow::Datum& datum)
+    explicit TDatumStorageView(const arrow::Datum& datum)
         : Datum_(datum)
     {
     }

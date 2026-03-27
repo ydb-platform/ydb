@@ -8,20 +8,18 @@
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
 class TTransformationPipeline {
 public:
-    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx,
-                            TTypeAnnCallableFactory typeAnnCallableFactory = {});
+    explicit TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx,
+                                     TTypeAnnCallableFactory typeAnnCallableFactory = {});
 
     TTransformationPipeline& AddServiceTransformers(EYqlIssueCode issueCode = TIssuesIds::CORE_GC);
     TTransformationPipeline& AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode = TIssuesIds::CORE_PARAM_EVALUATION);

@@ -268,7 +268,7 @@ private:
         } else if (auto* leaf = dynamic_cast<TYtJoinNodeLeaf*>(node.Get())) {
             return OnLeaf(leaf, sizeInfo);
         } else {
-            YQL_ENSURE("Unknown node type");
+            YQL_ENSURE(false, "Unknown node type");
             return nullptr;
         }
     }

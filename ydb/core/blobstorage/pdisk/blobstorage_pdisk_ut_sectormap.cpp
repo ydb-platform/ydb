@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TSectorMapPerformance) {
 
         auto deviceType = NPDisk::NSectorMap::DiskModeToDeviceType(diskMode);
         ui64 diskRate;
-        const auto& performanceParams = NPDisk::DevicePerformance.at(deviceType);
+        const auto& performanceParams = NPDisk::TDevicePerformanceParams::Get(deviceType);
         if (operationType == EOperationType::OperationRead) {
             diskRate = (sectorPosition == ESectorPosition::SectorFirst)
                     ? performanceParams.FirstSectorReadBytesPerSec

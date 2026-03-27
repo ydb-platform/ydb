@@ -4,10 +4,14 @@ SRCS(
     query_utils.cpp
     util.cpp
     view_utils.cpp
+    replication_utils.cpp
+    external_data_source_utils.cpp
+    external_table_utils.cpp
 )
 
 PEERDIR(
     ydb/public/lib/ydb_cli/common
+    ydb/public/sdk/cpp/src/client/cms
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table

@@ -220,7 +220,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     case ESysViewType::EQuerySessions:
         return CreateSessionsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ECompileCacheQueries:
-        return CreateCompileCacheQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
+        return CreateCompileCacheQueriesScan(ownerId, scanId, database, sysViewDescription, tableRange, columns, std::move(userToken));
     case ESysViewType::ETopQueriesByDurationOneMinute:
     case ESysViewType::ETopQueriesByDurationOneHour:
     case ESysViewType::ETopQueriesByReadBytesOneMinute:

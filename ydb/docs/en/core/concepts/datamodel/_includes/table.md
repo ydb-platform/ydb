@@ -41,7 +41,7 @@ You can create a row-oriented table through the {{ ydb-short-name }} web interfa
 
 By default, when creating a row-oriented table, all columns are optional and can have `NULL` values. This behavior can be modified by setting the `NOT NULL` conditions for key columns that are part of the primary key. Primary keys are unique, and row-oriented tables are always sorted by this key. This means that point reads by the key, as well as range queries by key or key prefix, are efficiently executed (essentially using an index). It's permissible to create a table consisting solely of key columns. When choosing a key, it's crucial to be careful, so we recommend reviewing the article: ["Choosing a Primary Key for Maximum Performance"](../../../dev/primary-key/row-oriented.md).
 
-### Partitioning Row-Oriented Tables {#partitioning}
+### Partitioning Row-Oriented Tables {#partitioning_row_table}
 
 A row-oriented database table can be partitioned by primary key value ranges. Each partition of the table is responsible for a specific section of primary keys. Key ranges served by different partitions do not overlap. Different table partitions can be served by different cluster nodes (including ones in different locations). Partitions can also move independently between servers to enable rebalancing or ensure partition operability if servers or network equipment goes offline.
 

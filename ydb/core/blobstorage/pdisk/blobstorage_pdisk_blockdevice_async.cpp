@@ -299,6 +299,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Submit(IAsyncIoOperation *op) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
             if (!Device.QuitCounter.Increment()) {
                 Device.FreeOperation(op);
@@ -306,18 +307,18 @@ class TRealBlockDevice : public IBlockDevice {
                 SubmitCondVar.Signal();
                 return;
             }
-            Device.IdleCounter.Increment();
-
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
+
+            Device.IdleCounter.Increment();
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -463,9 +464,11 @@ class TRealBlockDevice : public IBlockDevice {
                 LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
             }
 
+            const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.MarkComplete(completionAction->OperationIdx);
+            Device.DecrementMonInFlight(op->GetType(), opSize);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
@@ -474,8 +477,6 @@ class TRealBlockDevice : public IBlockDevice {
 
             bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
 
-            const ui64 opSize = op->GetSize();
-            Device.DecrementMonInFlight(op->GetType(), opSize);
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
                     Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,
@@ -608,8 +609,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         bool Submit(IAsyncIoOperation *op, i64 *inFlight) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.TrySchedule();
+            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -638,7 +640,7 @@ class TRealBlockDevice : public IBlockDevice {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
 
-            if (op->GetSize() == 0) {
+            if (opSize == 0) {
                 TAsyncIoOperationResult result;
                 result.Operation = op;
                 result.Result = EIoResult::Ok;
@@ -647,7 +649,7 @@ class TRealBlockDevice : public IBlockDevice {
                 return true;
             }
 
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -805,8 +807,6 @@ protected:
     TPDiskMon &Mon;
     TString Path;
 
-    TPDiskConfig cfg{0, 0, 0};
-
 private:
     THolder<TCompletionThreads> CompletionThreads;
     THolder<TTrimThread> TrimThread;
@@ -835,7 +835,8 @@ private:
     static constexpr int MaxEvents = 32;
 
     ui64 DeviceInFlight;
-    TFlightControl FlightControl;
+    ui64 PDiskBufferSize;
+    TFlightControlFace FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
@@ -847,7 +848,8 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize, bool readOnly,
+            bool useBytesFlightControl)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -866,10 +868,12 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(CountTrailingZeroBits(DeviceInFlight))
+        , PDiskBufferSize(pDiskBufferSize)
+        , FlightControl(DeviceInFlight, useBytesFlightControl, 2ull * PDiskBufferSize)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
     {
+        Y_VERIFY(PDiskBufferSize > 0);
         if (sectorMap) {
             DriveData = TDriveData();
             DriveData->Path = path;
@@ -891,7 +895,7 @@ protected:
         }
 
         Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>(), PCtx->PDiskLogPrefix);
-        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory, PCtx->PDiskLogPrefix); 
+        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory, PCtx->PDiskLogPrefix);
         auto *factory = PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory;
         IoContext = factory->CreateAsyncIoContext(Path, PCtx->PDiskId, Flags, SectorMap);
         if (Flags & TDeviceMode::UseSpdk) {
@@ -970,10 +974,12 @@ protected:
             case IAsyncIoOperation::EType::PWrite:
                 (*Mon.DeviceInFlightBytesWrite) += size;
                 Mon.DeviceInFlightWrites->Inc();
+                Mon.MaxDeviceInFlightWrites.Collect(*Mon.DeviceInFlightWrites);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) += size;
                 Mon.DeviceInFlightReads->Inc();
+                Mon.MaxDeviceInFlightReads.Collect(*Mon.DeviceInFlightReads);
                 break;
             default:
                 break;
@@ -1043,7 +1049,7 @@ protected:
         doneEvent.WaitI();
     }
 
-    void TrimSync(ui32 size, ui64 offset) override {
+    void TrimSync(ui64 size, ui64 offset) override {
         Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
@@ -1129,7 +1135,7 @@ protected:
         CompletionThreads->ScheduleHackForLogReader(completionAction);
     }
 
-    void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
+    void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
         Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized || QuitCounter.IsBlocked()) {
             return;
@@ -1169,6 +1175,14 @@ protected:
 
     ui32 GetPDiskId() override {
         return PCtx->PDiskId;
+    }
+
+    TFileHandle DuplicateFd() override {
+        TFileHandle *handle = IoContext->GetFileHandle();
+        if (!handle) {
+            return {};
+        }
+        return TFileHandle(handle->Duplicate());
     }
 
     virtual ~TRealBlockDevice() {
@@ -1357,9 +1371,11 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+            TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, readOnly,
+                useBytesFlightControl)
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1495,14 +1511,18 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, pdisk, readOnly,
+            useBytesFlightControl);
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, 512ull << 10,
+            pdisk, readOnly, useBytesFlightControl);
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

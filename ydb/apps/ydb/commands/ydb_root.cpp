@@ -2,15 +2,13 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
+#include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
-#include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
-
 #include <filesystem>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TClientCommandRoot::TClientCommandRoot(const TString& name, const TClientSettings& settings)
     : TClientCommandRootCommon(name, settings)
@@ -76,7 +74,7 @@ namespace {
             }
         }
     }
-}
+} // anonymous namespace
 
 void TYdbClientCommandRoot::Config(TConfig& config) {
     TClientCommandRoot::Config(config);
@@ -112,5 +110,4 @@ int NewYdbClient(int argc, char** argv) {
     return commandsRoot->Process(config);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

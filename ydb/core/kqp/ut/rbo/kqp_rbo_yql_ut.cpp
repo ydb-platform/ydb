@@ -1,10 +1,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/core/statistics/ut_common/ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
@@ -19,6 +19,9 @@ namespace {
 
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+using namespace NYdb;
+using namespace NYdb::NTable;
+using namespace NStat;
 
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
@@ -34,7 +37,7 @@ double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nItera
     }
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
-    return elapsed_time / nIterations;        
+    return elapsed_time / nIterations;
 }
 
 double TimeQuery(TString schema, TString query, int nIterations) {
@@ -55,7 +58,7 @@ double TimeQuery(TString schema, TString query, int nIterations) {
     }
 
     elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
-    return elapsed_time / nIterations;        
+    return elapsed_time / nIterations;
 }
 
 }
@@ -102,6 +105,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             CREATE TABLE `/Root/foo` (
                 id Int64 NOT NULL,
 	            name String,
+                b Int64,
                 primary key(id)
             )
         )";
@@ -121,6 +125,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 .BeginStruct()
                 .AddMember("id").Int64(i)
                 .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
                 .EndStruct();
         }
         rows.EndList();
@@ -129,13 +134,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
-            R"(
+             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT id as id2 FROM `/Root/foo` WHERE name != '3_name' order by id;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 SELECT id as id2 FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, name FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b not in [1, 2] order by b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b in [1, 2] order by b;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -146,7 +163,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> results = {
             R"([[0];[1];[2];[4];[5];[6];[7];[8];[9]])",
             R"([[3]])",
-            R"([[3;["3_name"]]])"
+            R"([[3;["3_name"]]])",
+            R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
+            R"([[1;[1]];[2;[2]]])",
+            R"([[3;["3_name"];[3]]])",
         };
 
         auto tableClient = kikimr.GetTableClient();
@@ -157,6 +177,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
         }
     }
 
@@ -254,6 +275,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 a Int64 NOT NULL,
 	            b Int64,
                 c Int64,
+                d Decimal(14, 3),
+                e Decimal(12, 2) NOT NULL,
                 primary key(a)
             ))";
         if (columnStore) {
@@ -269,6 +292,46 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         db = kikimr.GetTableClient();
         auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queriesOnEmptyColumns = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1;
+            )",
+            // non optional, optional coumn
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(t1.a), count(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a), sum(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select min(t1.a), min(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.a), avg(t1.b) from `/Root/t1` as t1;
+            )",
+        };
+        std::vector<std::string> resultsEmptyColumns = {
+            R"([[0u]])",
+            R"([[0u;0u]])",
+            R"([[#;#]])",
+            R"([[#;#]])",
+            R"([[#;#]])"
+        };
+
+        for (ui32 i = 0; i < queriesOnEmptyColumns.size(); ++i) {
+            const auto& query = queriesOnEmptyColumns[i];
+            // Cout << query << Endl;
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), resultsEmptyColumns[i]);
+        }
 
         NYdb::TValueBuilder rowsTableT1;
         rowsTableT1.BeginList();
@@ -293,6 +356,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 .AddMember("a").Int64(i)
                 .AddMember("b").Int64(i & 1 ? 1 : 2)
                 .AddMember("c").Int64(2)
+                .AddMember("d").Decimal(TDecimalValue(ToString(i + 0.1), 14, 3))
+                .AddMember("e").Decimal(TDecimalValue(ToString(i + 0.2), 12, 2))
                 .EndStruct();
         }
         rowsTableT2.EndList();
@@ -301,24 +366,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
 
         std::vector<std::string> queries = {
-            // sum, min, max
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, sum(t2.d), sum(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, min(t2.d), max(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, count(t2.d), count(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t2.b, avg(t2.d), avg(t2.e) from `/Root/t2` as t2 group by t2.b order by t2.b;
+            )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 select t1.b, sum(t1.c) from `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a group by t1.b order by t1.b;
-            )",
-            */
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select sum(t1.c) as sum from t1 group by t1.b
-                union all
-                select sum(t1.b) as sum from t1
-                order by sum;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -333,8 +403,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 select t1.b, count(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
-                select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.b) maxb, min(t1.a) from `/Root/t1` as t1 order by maxb;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -348,8 +418,81 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select max(t1.a) as maxa, min(t1.a), min(t1.b) as min_b from `/Root/t1` as t1 order by maxa;
             )",
-            // distinct all
-            /*
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from `/Root/t1` as t1 group by t1.b order by sumExpr0;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(distinct t1.b) as sum, t1.a from `/Root/t1` as t1 group by t1.a order by sum, t1.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.a) + 1, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(distinct t1.a), t1.b from `/Root/t1` as t1 group by t1.b, t1.c order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.b) from `/Root/t1` as t1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select avg(t1.a) as avgA, avg(t1.c) as avgC from `/Root/t1` as t1 group by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select sum(t1.b) as sumb from `/Root/t1` as t1 group by t1.b order by sumb;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*), sum(t1.a) as result from `/Root/t1` as t1 order by result;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) as result from `/Root/t1` as t1 order by result;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.b, count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select
+                       sum(case when t1.b > 0
+                            then 1
+                            else 0 end) as count1,
+                       sum(case when t1.b < 0
+                            then 1
+                            else 0 end) count2 from `/Root/t1` as t1 group by t1.b order by count1, count2;
+            )",
+            R"(
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.a), min(t1.a) from `/Root/t1` as t1;
+            )",
+            R"(
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.a), min(t1.a) from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.a), min(t1.a) from `/Root/t1` as t1 group by t1.a order by t1.a;
+            )",
+            R"(
+                 PRAGMA YqlSelect = 'force';
+                 select max(t1.a) from `/Root/t1` as t1 group by t1.b, t1.a order by t1.a, t1.b;
+            )",
+            /* NOT SUPPORTED IN YQLSELECT
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select count(*) from `/Root/t1` as t1 group by t1.b + 1 order by t1.b + 1;
+            )",
             R"(
                 PRAGMA YqlSelect = 'force';
                 select distinct t1.a, t1.b from `/Root/t1` as t1 order by t1.a;
@@ -362,13 +505,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select distinct min(t1.a) as min_a, max(t1.a) as max_a from `/Root/t1` as t1 group by t1.b order by min_a;
             )",
-            */
-            // aggregation on expressions and group by with expressions
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.a + 1 + t1.c) as sumExpr0, sum(t1.c + 2) as sumExpr1 from `/Root/t1` as t1 group by t1.b order by sumExpr0;
-            )",
-            /*
             R"(
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.c) as sum0, sum(t1.a + 3) as sum1 from `/Root/t1` as t1 group by t1.b + 1 order by sum0;
@@ -380,15 +516,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"(
                 PRAGMA YqlSelect = 'force';
                 select sum(t1.c + 2) as sum0 from `/Root/t1` as t1 group by t1.b + t1.a order by sum0;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(distinct t1.b) as sum, t1.a from `/Root/t1` as t1 group by t1.a order by sum, t1.a;
-            )",
-            // expressions on aggregations
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.a) + 1, t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -407,81 +534,45 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
-                select count(distinct t1.a), t1.b from `/Root/t1` as t1 group by t1.b, t1.c order by t1.b;
+                select sum(t1.c) as sum from `/Root/t1` as t1 group by t1.b
+                union all
+                select sum(t1.b) as sum from `/Root/t1` as t1
+                order by sum;
             )",
-            */
-            // avg
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select avg(t1.b) from `/Root/t1` as t1;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select avg(t1.a) as avgA, avg(t1.c) as avgC from `/Root/t1` as t1 group by t1.b;
-            )",
-            // self aggregation
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select sum(t1.b) as sumb from `/Root/t1` as t1 group by t1.b order by sumb;
-            )",
-            // count(*)
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select count(*), sum(t1.a) as result from `/Root/t1` as t1 order by result;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select count(*) as result from `/Root/t1` as t1 order by result;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select t1.b, count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                select count(*) from `/Root/t1` as t1 group by t1.b order by t1.b;
-            )",
-            /*
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                select count(*) from t1 group by t1.b + 1 order by t1.b + 1;
-            )"
             */
         };
 
         std::vector<std::string> results = {
-            R"([[[1];[4]];[[2];[6]]])",
-            //R"([["1";"4"];["2";"6"]])",
-            R"([["4"];["6"];["8"]])",
-            R"([[[1];1];[[2];0]])",
-            R"([[[1];3];[[2];4]])",
-            R"([[[1];2u];[[2];3u]])",
-            R"([[[2];0]])",
-            R"([[4];[6]])",
-            R"([[[4];[1]];[[6];[2]]])",
-            R"([[4;0;[1]]])",
-            //R"([["0";"2"];["1";"1"];["2";"2"];["3";"1"];["4";"2"]])",
-            //R"([["4";"4"];["6";"6"]])",
-            //R"([["0";"4"];["1";"3"]])",
-            R"([[[10];[8]];[[15];[12]]])",
-            //R"([["4";"10"];["6";"15"]])",
-            //R"([["4";"2";"4"];["6";"3";"4"]])",
-            //R"([["4"];["8"];["8"]])",
-            //R"([["1";"1"];["1";"3"];["2";"0"];["2";"2"];["2";"4"]])",
-            //R"([["5";"1"];["7";"2"]])",
-            //R"([["3";"4";"3"];["3";"6";"4"]])",
-            //R"([["1"];["2"]])",
-            //R"([["2";"1"];["3";"2"]])",
-            R"([[[1.6]]])",
-            R"([[2.;[2.]];[2.;[2.]]])",
-            R"([[[2]];[[6]]])",
-            R"([[5u;10]])",
-            R"([[5u]])",
-            R"([[[1];2u];[[2];3u]])",
-            R"([[2u];[3u]])",
-            R"([[2u];[3u]])",
-        };
+                                            R"([[[1];["4.2"];"4.4"];[[2];["6.3"];"6.6"]])",
+                                            R"([[[1];["1.1"];"3.2"];[[2];["0.1"];"4.2"]])",
+                                            R"([[[1];2u;2u];[[2];3u;3u]])",
+                                            R"([[[1];["2.1"];"2.2"];[[2];["2.1"];"2.2"]])",
+                                            R"([[[1];[4]];[[2];[6]]])",
+                                            R"([[[1];[4]];[[2];[6]]])",
+                                            R"([[[1];1];[[2];0]])",
+                                            R"([[[1];3];[[2];4]])",
+                                            R"([[[1];2u];[[2];3u]])",
+                                            R"([[[2];[0]]])",
+                                            R"([[4];[6]])",
+                                            R"([[[4];[1]];[[6];[2]]])",
+                                            R"([[[4];[0];[1]]])",
+                                            R"([[[10];[8]];[[15];[12]]])",
+                                            R"([[[1];1];[[1];3];[[2];0];[[2];2];[[2];4]])",
+                                            R"([[5;[1]];[7;[2]]])",
+                                            R"([[2u;[1]];[3u;[2]]])",
+                                            R"([[[1.6]]])",
+                                            R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[[2]];[[6]]])",
+                                            R"([[5u;[10]]])",
+                                            R"([[5u]])",
+                                            R"([[[1];2u];[[2];3u]])",
+                                            R"([[2u];[3u]])",
+                                            R"([[2;0];[3;0]])",
+                                            R"([[[4];[0]]])",
+                                            R"([[3;1];[4;0]])",
+                                            R"([[0;0];[1;1];[2;2];[3;3];[4;4]])",
+                                            R"([[0];[1];[2];[3];[4]])",
+                                        };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
@@ -598,6 +689,26 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA AnsiImplicitCrossJoin;
                 SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1, `/Root/t2` as t2, `/Root/t3` as t3 order by t1.a, t2.a, t3.a;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b > 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a and t2.b = 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b = 2 order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a inner join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a and t3.b = 2 order by t1.a, t2.a, t3.b;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -606,6 +717,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[0;0;0];[1;1;1];[2;2;2]])",
             R"([[0;0;0];[0;0;1];[0;0;2];[0;0;3];[0;0;4];[1;1;0];[1;1;1];[1;1;2];[1;1;3];[1;1;4];[2;2;0];[2;2;1];[2;2;2];[2;2;3];[2;2;4]])",
             R"([[0;0;0];[0;0;1];[0;0;2];[0;0;3];[0;0;4];[0;1;0];[0;1;1];[0;1;2];[0;1;3];[0;1;4];[0;2;0];[0;2;1];[0;2;2];[0;2;3];[0;2;4];[1;0;0];[1;0;1];[1;0;2];[1;0;3];[1;0;4];[1;1;0];[1;1;1];[1;1;2];[1;1;3];[1;1;4];[1;2;0];[1;2;1];[1;2;2];[1;2;3];[1;2;4];[2;0;0];[2;0;1];[2;0;2];[2;0;3];[2;0;4];[2;1;0];[2;1;1];[2;1;2];[2;1;3];[2;1;4];[2;2;0];[2;2;1];[2;2;2];[2;2;3];[2;2;4];[3;0;0];[3;0;1];[3;0;2];[3;0;3];[3;0;4];[3;1;0];[3;1;1];[3;1;2];[3;1;3];[3;1;4];[3;2;0];[3;2;1];[3;2;2];[3;2;3];[3;2;4]])",
+            R"([[0;#];[1;#];[2;[2]];[3;#]])",
+            R"([[0;#];[1;[1]];[2;#];[3;#]])",
+            R"([[1;1]])",
+            R"([[1;1;1]])",
+            R"([[0;[0];#];[1;[1];[1]];[2;[2];#];[3;#;#]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -614,6 +730,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+
+        // Not supported.
+        std::vector<std::string> queriesNotSupported = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b != t2.b order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.a and t1.b > 1 or t2.b > 2 order by t1.a, t2.a;
+            )"
+        };
+
+        for (ui32 i = 0; i < queriesNotSupported.size(); ++i) {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const auto &query = queriesNotSupported[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
         }
     }
 
@@ -659,7 +794,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.b == 2 order by t1.a; 
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.b == 2 order by t1.a;
             )",
             R"(
                 PRAGMA YqlSelect = 'force';
@@ -667,13 +802,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
         };
 
-        auto tableClient = kikimr.GetTableClient();
-        auto session2 = tableClient.GetSession().GetValueSync().GetSession();
-
+        auto queryClient = kikimr.GetQueryClient();
         for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+            // Explain.
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down. Query: " << query);
+
+            // Execute.
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
     }
@@ -701,9 +848,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return buffer.str();
     }
 
-    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
-        std::string query = GetFullPath("../join/data/", schemaPath);
-
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& pathPrefix, const TString& schemaPath, bool useColumnStore) {
+        std::string query = GetFullPath(pathPrefix, schemaPath);
         if (useColumnStore) {
             std::regex pattern(R"(CREATE TABLE [^\(]+ \([^;]*\))", std::regex::multiline);
             query = std::regex_replace(query, pattern, "$& WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);");
@@ -714,6 +860,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(res.IsSuccess());
     }
 
+    void CreateTablesFromPath(NYdb::NTable::TSession session, const TString& schemaPath, bool useColumnStore) {
+        CreateTablesFromPath(session, "../join/data/", schemaPath, useColumnStore);
+    }
+
     void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
@@ -721,7 +871,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
- 
+
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -754,40 +904,128 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
        RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
     }
 
-    void RunTPCHYqlBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
+    void PrintStatus(const std::vector<bool>& queries, std::vector<TString>&& errors) {
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const TString status = queries[i] ? "SUCCESS" : "FAIL";
+            Cout << "Q#" << i + 1 << " " << status << ";" << Endl;
+            if (!queries[i]) {
+                Cout << errors[i] << Endl;
+            }
+        }
+    }
+
+    enum EBenchType { TPCH = 0, TPCDS };
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(../join/data/)"};
+    static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
+    static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
+    static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
+
+    void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
+                             const bool printStatus = false, const bool compareResults = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
- 
+
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTablesFromPath(session, "schema/tpch.sql", columnStore);
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
-        if (!queries.size()) {
-            for (ui32 i = 1; i <= 22; ++i) {
-                queries.push_back(i);
+        std::vector<bool> queriesCurrentStatus;
+        std::vector<bool> queriesExpectedStatus;
+        std::vector<TString> errors;
+        for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
+            if (skipList.contains(qId)) {
+                queriesCurrentStatus.emplace_back(false);
+                queriesExpectedStatus.emplace_back(false);
+                errors.emplace_back("Skipped.");
+                continue;
             }
+            queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+
+            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                              .ExtractValueSync();
+            queriesCurrentStatus.emplace_back(result.IsSuccess());
+            errors.emplace_back(result.GetIssues().ToString());
         }
 
-        for (const auto qId : queries) {
-            TString q = GetFullPath("data/yql-tpch/q", ToString(qId) + ".yql");
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExplainDataQuery(q).GetValueSync();
+        if (printStatus) {
+            PrintStatus(queriesCurrentStatus, std::move(errors));
+        }
+
+        if (compareResults) {
+            UNIT_ASSERT_VALUES_EQUAL(queriesExpectedStatus, queriesCurrentStatus);
+        }
+    }
+
+    void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
+
+        {
+            TString q = GetFullPath(BenchmarkQueryPath[type], ToString(queryId) + ".yql");
+            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+
+            q = toDecimal + "\n" + toDecimalMax + "\n" + q;
+
+            auto queryClient = kikimr.GetQueryClient();
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                                .ExtractValueSync();
             Y_ENSURE(result.IsSuccess());
         }
     }
 
     Y_UNIT_TEST(TPCH_YQL) {
-       //RunTPCHYqlBenchmark(/*columnstore*/ true, {}, /*new rbo*/ false);
-       RunTPCHYqlBenchmark(/*columnstore*/ true, {1, 6, 14}, /*new rbo*/ true);
+        // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, /*11,*/ 12, 13, 14, /*15,*/ 16, 17, 18, 19, 20, /*21,*/ 22},
+                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true);
     }
 
-    /*
-    Y_UNIT_TEST(ScalarSubquery) {
+    Y_UNIT_TEST(TPCDS_YQL) {
+        // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  13, 19, 21, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+                                                                     50, 52, 55, 56, 59, 60, 61, 65, 66, 68, 71, 73, 81, 82, 84, 90, 91, 92, 96},
+                           {15, 31, 58, 64, 72, 85}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/false);
+    }
+
+    void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < numRows; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").String(std::to_string(i) + "_b")
+                .AddMember("c").Int64(i + 1)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto resultUpsert = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(ExpressionSubquery) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
@@ -814,7 +1052,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         NYdb::TValueBuilder rowsTableFoo;
         rowsTableFoo.BeginList();
-        for (size_t i = 0; i < 1; ++i) {
+        for (size_t i = 0; i < 4; ++i) {
             rowsTableFoo.AddListItem()
                 .BeginStruct()
                 .AddMember("id").Int64(i)
@@ -846,13 +1084,192 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 PRAGMA YqlSelect = 'force';
-                SELECT bar.id FROM `/Root/bar` where bar.id = (SELECT min(foo.id) FROM `/Root/foo` as foo);
-            )"
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id = (SELECT max(foo.id) FROM `/Root/foo` as foo);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id IN (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 0);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND bar.id NOT IN (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id != 0);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id != 0);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == 0 AND NOT EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == 6);
+            )",
         };
 
         // TODO: The order of result is not defined, we need order by to add more interesting tests.
         std::vector<std::string> results = {
+            R"([[3]])",
             R"([[0]])",
+            R"([[0]])",
+            R"([[0]])",
+            R"([[0]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(CorrelatedSubquery) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,
+                name	String,
+                primary key(id)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/bar` (
+                id	Int64	NOT NULL,
+                lastname	String,
+                primary key(id)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        NYdb::TValueBuilder rowsTableFoo;
+        rowsTableFoo.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rowsTableFoo.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .EndStruct();
+        }
+        rowsTableFoo.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rowsTableFoo.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTableBar;
+        rowsTableBar.BeginList();
+        for (size_t i = 0; i < 4; ++i) {
+            rowsTableBar.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("lastname").String(std::to_string(i) + "_name")
+                .EndStruct();
+        }
+        rowsTableBar.EndList();
+
+        resultUpsert = db.BulkUpsert("/Root/bar", rowsTableBar.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.id == (SELECT max(foo.id) FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);
+            )",
+             R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT bar.id FROM `/Root/bar` as bar where bar.lastname IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.id==1);
+            )",
+        };
+
+        // TODO: The order of result is not defined, we need order by to add more interesting tests.
+        std::vector<std::string> results = {
+            R"([[1]])",
+            R"([[1]])",
+            R"([[1]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(OrderBy) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT a FROM `/Root/t1`
+                ORDER BY a DESC;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT a, c FROM `/Root/t1`
+                ORDER BY a DESC, c ASC;
+            )",
+            /*
+            UnionAll not supported on YqlSelect
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT a FROM `/Root/t1`
+                UNION ALL
+                SELECT a FROM `/Root/t2`
+                ORDER BY a DESC;
+            )"
+            */
+        };
+
+        std::vector<std::string> results = {
+            R"([[3];[2];[1];[0]])",
+            R"([[3;[4]];[2;[3]];[1;[2]];[0;[1]]])",
+            //R"([[3];[2];[2];[1];[1];[0];[0]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -861,6 +1278,647 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
+    }
+
+    Y_UNIT_TEST(MapJoin) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::tuple<std::string, ui32>> tables{{"/Root/t1", 6}, {"/Root/t2", 4}};
+        for (const auto& [table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA ydb.HashJoinMode='map';
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                SELECT t1.a, t2.c FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.c order by t1.a, t2.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA ydb.HashJoinMode='map';
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                SELECT t1.a, t2.c FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.c order by t1.a, t2.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA ydb.HashJoinMode='map';
+                PRAGMA ydb.CostBasedOptimizationLevel='0';
+                SELECT t1.a FROM `/Root/t1` as t1 where t1.a in (select t2.c from `/Root/t2` as t2) order by t1.a;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[1;[1]];[2;[2]];[3;[3]];[4;[4]]])",
+            R"([[0;#];[1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;#]])",
+            R"([[1];[2];[3];[4]])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(JoinOptionalKeys) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+        )").GetValueSync();
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::tuple<std::string, ui32>> tables{{"/Root/t1", 6}, {"/Root/t2", 4}};
+        for (const auto& [table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.c FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.a = t2.c order by t1.a, t2.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.c FROM `/Root/t1` as t1 inner join `/Root/t2` as t2 on t1.c = t2.a order by t1.c, t2.a;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[1;[1]];[2;[2]];[3;[3]];[4;[4]]])",
+            R"([[0;[2]];[1;[3]];[2;[4]]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(LeftJoins) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t3` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/t4` (
+                a Int64 NOT NULL,
+                b String,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 10}, {"/Root/t2", 8}, {"/Root/t3", 6}, {"/Root/t4", 4}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoSchema0(db, table, rowsNum);
+        }
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a order by t1.a, t2.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a order by t1.a, t2.a, t3.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a, t3.a, t4.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a left join `/Root/t3` as t3 on t2.a = t3.a
+                                                                    left join `/Root/t4` as t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c order by t1.a, t2.a, t3.a, t4.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, count(t2.a) FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a group by t1.a order by t1.a;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[0;[0]];[1;[1]];[2;[2]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;#];[9;#]])",
+            R"([[0;[0];[0]];[1;[1];[1]];[2;[2];[2]];[3;[3];[3]];[4;[4];[4]];[5;[5];[5]];[6;[6];#];[7;[7];#];[8;#;#];[9;#;#]])",
+            R"([[0;[0];[0];[0]];[1;[1];[1];[1]];[2;[2];[2];[2]];[3;[3];[3];[3]];[4;[4];[4];#];[5;[5];[5];#];[6;[6];#;#];[7;[7];#;#];[8;#;#;#];[9;#;#;#]])",
+            R"([[0;1u];[1;1u];[2;1u];[3;1u];[4;1u];[5;1u];[6;1u];[7;1u];[8;0u];[9;0u]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(Having) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                c Int64,
+                primary key(a)
+            ) with (Store = Column);
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::TValueBuilder rowsTableT1;
+        rowsTableT1.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rowsTableT1.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i & 1 ? 1 : 2)
+                .AddMember("c").Int64(i + 1)
+                .EndStruct();
+        }
+        rowsTableT1.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rowsTableT1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.c) > 0 order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.c) < 10 order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.c), t1.b FROM `/Root/t1` as t1 group by t1.b having sum(t1.a) >= 1 and sum(t1.c) <= 10 order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.c), t1.a FROM `/Root/t1` as t1 group by t1.a having sum(t1.c) > 1 and sum(t1.c) < 3 order by t1.a;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 1) >= 1 order by t1.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a) + 2 >= 2 order by t1.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 3) + 2 >= 5 order by t1.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a), t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 1) + sum(t1.a + 2) >= 5 order by t1.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a + 1) + 11, t1.c FROM `/Root/t1` as t1 group by t1.c having sum(t1.a + 1) + sum(t1.a + 2) >= 5 order by t1.c;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a) as a_sum FROM `/Root/t1` as t1 having sum(t1.a) >= 5 order by a_sum;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a) FROM `/Root/t1` as t1 having sum(t1.b) >= 5 order by sum(t1.a)
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT sum(t1.a) FROM `/Root/t1` as t1 group by t1.c having sum(t1.b) >= 5 order by t1.c;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[[30];[1]];[[25];[2]]])",
+            R"([])",
+            R"([])",
+            R"([[[2];1]])",
+            R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
+            R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
+            R"([[0;[1]];[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
+            R"([[1;[2]];[2;[3]];[3;[4]];[4;[5]];[5;[6]];[6;[7]];[7;[8]];[8;[9]];[9;[10]]])",
+            R"([[13;[2]];[14;[3]];[15;[4]];[16;[5]];[17;[6]];[18;[7]];[19;[8]];[20;[9]];[21;[10]]])",
+            R"([[[45]]])",
+            R"([[[45]]])",
+            R"([])",
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ColumnStatistics, ColumnStore) {
+        auto enableNewRbo = [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableNewRBO(true);
+            // Fallback is enabled, because analyze uses UDAF which are not supported in NEW RBO.
+            settings.AppConfig->MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+            settings.AppConfig->MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+            settings.AppConfig->MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        };
+
+        TTestEnv env(1, 1, true, enableNewRbo);
+        CreateDatabase(env, "Database");
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/Database/t1` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            )
+        )";
+
+        if (ColumnStore) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto result = session.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTable;
+        rowsTable.BeginList();
+        for (size_t i = 0, e = (1 << 4); i < e; ++i) {
+            rowsTable.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i + 1)
+                .EndStruct();
+        }
+        rowsTable.EndList();
+
+        auto resultUpsert = client.BulkUpsert("/Root/Database/t1", rowsTable.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "t1")).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.a, t1.b from `/Root/Database/t1` as t1 where t1.a > 10;
+            )",
+        };
+
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    void TestQueryClient(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id, b FROM `/Root/foo` WHERE b not in [1, 2] order by b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
+            R"([[3;["3_name"];[3]]])",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+            // Explain.
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            // Execute.
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+     Y_UNIT_TEST_TWIN(QueryClient, ColumnStore) {
+        TestQueryClient(ColumnStore);
+    }
+
+    void TestLimit(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (true || columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id FROM `/Root/foo` order by id limit 1 + 2;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT id FROM `/Root/foo` order by id limit 5;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[0];[1];[2]])",
+            R"([[0];[1];[2];[3];[4]])"
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
+     Y_UNIT_TEST_TWIN(Limit, ColumnStore) {
+        TestLimit(ColumnStore);
+    }
+
+    /*
+    void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < numRows; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("join_id").Int64(i + 1)
+                .AddMember("c").Int64(i + 2)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto resultUpsert = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+    }
+
+    void AliasesRenamesTest(bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_0` (
+                id Int64 NOT NULL,
+                join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/foo_1` (
+                id Int64	NOT NULL,
+                join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            ) with (Store = Column);
+
+            CREATE TABLE `/Root/foo_2` (
+                id Int64 NOT NULL,
+                join_id Int64 NOT NULL,
+                c Int64,
+                primary key(id)
+            ) with (Store = Column);
+
+        )").GetValueSync();
+
+        std::vector<std::pair<std::string, int>> tables{{"/Root/foo_0", 4}, {"/Root/foo_1", 3}, {"/Root/foo_2", 2}};
+        for (const auto &[table, rowsNum] : tables) {
+            InsertIntoAliasesRenames(db, table, rowsNum);
+        }
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            --!syntax_pg
+            SET TablePathPrefix = "/Root/";
+
+            WITH cte as (
+                SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
+
+            SELECT X1.id2, X2.id2
+            FROM
+               (SELECT id2
+               FROM foo_1, cte
+               WHERE foo_1.join_id = cte.join_id) as X1,
+
+               (SELECT id2
+               FROM foo_2, cte
+               WHERE foo_2.join_id = cte.join_id) as X2;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
+    }
+
+    Y_UNIT_TEST(AliasesRenames) {
+        AliasesRenamesTest(true);
+        AliasesRenamesTest(false);
     }
 
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
@@ -946,22 +2004,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
-    }
-
-    void InsertIntoSchema0(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
-        NYdb::TValueBuilder rows;
-        rows.BeginList();
-        for (size_t i = 0; i < numRows; ++i) {
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("a").Int64(i)
-                .AddMember("b").String(std::to_string(i) + "_b")
-                .AddMember("c").Int64(i + 1)
-                .EndStruct();
-        }
-        rows.EndList();
-        auto resultUpsert = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
-        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(UnionAll) {
@@ -1055,230 +2097,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
         }
-    }
-
-    Y_UNIT_TEST(OrderBy) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64 NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-
-            CREATE TABLE `/Root/t2` (
-                a Int64	NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-        )").GetValueSync();
-
-
-        db = kikimr.GetTableClient();
-        auto session2 = db.CreateSession().GetValueSync().GetSession();
-        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}};
-        for (const auto &[table, rowsNum] : tables) {
-            InsertIntoSchema0(db, table, rowsNum);
-        }
-
-        std::vector<std::string> queries = {
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT a FROM `/Root/t1`
-                ORDER BY a DESC;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT a,c FROM `/Root/t1`
-                ORDER BY a DESC, c ASC;
-            )",
-            R"(
-                PRAGMA YqlSelect = 'force';
-                SELECT a FROM `/Root/t1`
-                UNION ALL
-                SELECT a FROM `/Root/t2`
-                ORDER BY a DESC;
-            )"
-        };
-
-        std::vector<std::string> results = {
-            R"([[3];[2];[1];[0]])",
-            R"([[3;4];[2;3];[1;2];[0;1]])",
-            R"([[3];[2];[2];[1];[1];[0];[0]])"
-        };
-
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
-        }
-    }
-
-    Y_UNIT_TEST(LeftJoinToKqpOpJoin) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64 NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-
-            CREATE TABLE `/Root/t2` (
-                a Int64	NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-
-            CREATE TABLE `/Root/t3` (
-                a Int64 NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-
-            CREATE TABLE `/Root/t4` (
-                a Int64 NOT NULL,
-                b String,
-                c Int64,
-                primary key(a)
-            );
-        )").GetValueSync();
-
-
-        db = kikimr.GetTableClient();
-        auto session2 = db.CreateSession().GetValueSync().GetSession();
-        std::vector<std::pair<std::string, int>> tables{{"/Root/t1", 4}, {"/Root/t2", 3}, {"/Root/t3", 2}, {"/Root/t4", 1}};
-        for (const auto &[table, rowsNum] : tables) {
-            InsertIntoSchema0(db, table, rowsNum);
-        }
-
-        std::vector<std::string> queries = {
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a where t2.b = '0_b';
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a where t3.b = '0_b';
-            )",
-            R"(
-                --!syntax_pg
-                SET TablePathPrefix = "/Root/";
-                SELECT t1.a FROM t1 left join t2 on t1.a = t2.a left join t3 on t2.a = t3.a left join t4 on t3.a = t4.a and t4.c = t2.c and t1.c = t4.c where
-t4.b = '0_b';
-            )",
-        };
-
-        std::vector<std::string> results = {
-            R"([["0"]])",
-            R"([["0"]])",
-            R"([["0"]])"
-        };
-
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
-            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
-        }
-    }
-
-    void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
-        NYdb::TValueBuilder rows;
-        rows.BeginList();
-        for (size_t i = 0; i < numRows; ++i) {
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("id").Int64(i)
-                .AddMember("join_id").Int64(i + 1)
-                .AddMember("c").Int64(i + 2)
-                .EndStruct();
-        }
-        rows.EndList();
-        auto resultUpsert = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
-        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
-    }
-
-    void AliasesRenamesTest(bool newRbo) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/foo_0` (
-                id Int64 NOT NULL,
-                join_id Int64 NOT NULL,
-                c Int64,
-                primary key(id)
-            );
-
-            CREATE TABLE `/Root/foo_1` (
-                id Int64	NOT NULL,
-                join_id Int64 NOT NULL,
-                c Int64,
-                primary key(id)
-            );
-
-            CREATE TABLE `/Root/foo_2` (
-                id Int64 NOT NULL,
-                join_id Int64 NOT NULL,
-                c Int64,
-                primary key(id)
-            );
-
-        )").GetValueSync();
-
-        std::vector<std::pair<std::string, int>> tables{{"/Root/foo_0", 4}, {"/Root/foo_1", 3}, {"/Root/foo_2", 2}};
-        for (const auto &[table, rowsNum] : tables) {
-            InsertIntoAliasesRenames(db, table, rowsNum);
-        }
-        db = kikimr.GetTableClient();
-        auto session2 = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session2.ExecuteDataQuery(R"(
-            --!syntax_pg
-            SET TablePathPrefix = "/Root/";
-
-            WITH cte as (
-                SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
-
-            SELECT X1.id2, X2.id2
-            FROM
-               (SELECT id2
-               FROM foo_1, cte
-               WHERE foo_1.join_id = cte.join_id) as X1,
-
-               (SELECT id2
-               FROM foo_2, cte
-               WHERE foo_2.join_id = cte.join_id) as X2;
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
-    }
-
-    Y_UNIT_TEST(AliasesRenames) {
-        AliasesRenamesTest(true);
-        AliasesRenamesTest(false);
     }
 
     Y_UNIT_TEST(Bench_Select) {

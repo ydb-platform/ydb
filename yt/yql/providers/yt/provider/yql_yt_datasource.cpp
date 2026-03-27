@@ -171,6 +171,18 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    TMaybe<TString> ResolveClusterToken(const TString& cluster) override {
+        if (!State_->Configuration->IsValidCluster(cluster)) {
+            return {};
+        }
+
+        return State_->ResolveClusterToken(cluster);
+    }
+
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
             if (!EnsureArgsCount(node, 2, ctx)) {
@@ -189,6 +201,12 @@ public:
                     }
 
                     cluster = TString(node.Child(1)->Content());
+                    if (to_lower(*cluster) == "default") {
+                        cluster = State_->Gateway->GetDefaultClusterName();
+                        node.ChildRef(1) = ctx.NewAtom(node.Pos(), *cluster);
+                        return true;
+                    }
+
                     const bool validate = State_->Configuration->ValidateClusters.Get().GetOrElse(DEFAULT_VALIDATE_CLUSTERS);
                     if (validate && *cluster != "$all" && *cluster != YtUnspecifiedCluster && !State_->Gateway->GetClusterServer(*cluster)) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unknown cluster: " << *cluster));

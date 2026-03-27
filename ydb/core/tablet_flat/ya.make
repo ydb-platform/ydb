@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    defs.cpp
     defs.h
     flat_backup.cpp
     flat_backup.h
@@ -22,6 +23,8 @@ SRCS(
     flat_executor.h
     flat_executor_backup.cpp
     flat_executor_backup.h
+    flat_executor_backup_common.cpp
+    flat_executor_backup_common.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
@@ -92,6 +95,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
 GENERATE_ENUM_SERIALIZATION(flat_executor_recovery.h)
+GENERATE_ENUM_SERIALIZATION(flat_executor_vacuum_logic.h)
 GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
@@ -119,6 +123,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
+    library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/control/lib
     ydb/core/protos

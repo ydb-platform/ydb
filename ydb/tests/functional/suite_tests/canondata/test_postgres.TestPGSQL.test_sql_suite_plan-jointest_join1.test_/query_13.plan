@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "Limit-Filter",
+                                        "Node Type": "Limit-Filter-LeftJoin (Lookup)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -52,11 +52,19 @@
                                             {
                                                 "Inputs": [
                                                     {
-                                                        "ExternalPlanNodeId": 5
+                                                        "InternalOperatorId": 2
                                                     }
                                                 ],
                                                 "Name": "Filter",
                                                 "Predicate": "item.J2_TBL.k == 1"
+                                            },
+                                            {
+                                                "Inputs": [
+                                                    {
+                                                        "ExternalPlanNodeId": 5
+                                                    }
+                                                ],
+                                                "Name": "LeftJoin (Lookup)"
                                             }
                                         ],
                                         "PlanNodeId": 6,

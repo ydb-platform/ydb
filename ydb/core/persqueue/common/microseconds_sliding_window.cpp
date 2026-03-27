@@ -3,7 +3,7 @@
 namespace NKikimr::NPQ {
 
 TMicrosecondsSlidingWindow::TMicrosecondsSlidingWindow(size_t partsNum, TDuration length)
-    : 
+    :
     Buckets(partsNum, 0),
     Length(length),
     MicroSecondsPerBucket(length.MicroSeconds()/partsNum)

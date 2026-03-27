@@ -39,8 +39,7 @@ public:
         : Owner(owner)
         , TxId(txId)
         , ShardIds(std::move(shardIds))
-        , UseFollowers(useFollowers)
-        , TabletResolver(MakePipePerNodeCacheID(UseFollowers))
+        , TabletResolver(MakePipePerNodeCacheID(useFollowers))
     {}
 
     void Bootstrap() {
@@ -102,7 +101,7 @@ private:
 
     void ReplyAndDie() {
         auto replyEv = std::make_unique<NShardResolver::TEvShardsResolveStatus>();
-        replyEv->ShardNodes = std::move(Result);
+        replyEv->ShardsToNodes = std::move(Result);
         Send(Owner, replyEv.release());
         PassAway();
     }
@@ -111,7 +110,6 @@ private:
     const TActorId Owner;
     const ui64 TxId;
     const TSet<ui64> ShardIds;
-    const bool UseFollowers;
     const TActorId TabletResolver;
     TMap<ui64, ui32> RetryCount;
     TMap<ui64, ui64> Result;

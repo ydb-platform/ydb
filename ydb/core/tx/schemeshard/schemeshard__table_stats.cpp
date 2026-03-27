@@ -356,6 +356,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             return true;
         }
 
+        if (!Self->Tables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            return true;
+        }
+
         table = Self->Tables[pathId];
         table->UpdateShardStatsForFollower(followerId, shardIdx, newStats);
 
@@ -421,6 +426,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TDiskSpaceUsageDelta diskSpaceUsageDelta;
 
     if (isDataShard) {
+        if (!Self->Tables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            return true;
+        }
+
         table = Self->Tables[pathId];
         table->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
 
@@ -443,6 +453,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
         Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
     } else if (isOlapStore) {
+        if (!Self->OlapStores.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Olap store not found: " << pathId);
+            return true;
+        }
+
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
         updateSubdomainInfo = true;
@@ -473,6 +488,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         );
 
     } else if (isColumnTable) {
+        if (!Self->ColumnTables.contains(pathId)) {
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Column table not found: " << pathId);
+            return true;
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
@@ -528,12 +548,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const TTableIndexInfo* index = Self->Indexes.Value(pathElement->ParentPathId, nullptr).Get();
     const TTableInfo* mainTableForIndex = (index ? Self->GetMainTableForIndex(pathId) : nullptr);
 
-    TString errStr;
+    // Save CPU resources when potential merge will certainly be immediately rejected by Self->IgniteOperation()
+    // and potential split will probably be rejected later.
+    TString inflightLimitErrStr;
+    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        return true;
+    }
+
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, errStr)
         && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, Self->ShardInfos[shardIdx].TabletID, shardsToMerge, mainTableForIndex, now, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);
@@ -619,9 +645,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     bool collectKeySample
 ) {
     // NOTE: intentionally avoid using TPath.Check().{PathShardsLimit,ShardsLimit}() here.
-    // PathShardsLimit() performs pedantic validation by recalculating shard count through
-    // iteration over entire ShardInfos, which is too slow for this hot spot. It also performs
-    // additional lookups we want to avoid.
+    // PathShardsLimit() no longer performs full shard count validation by iterating all ShardInfos
+    // (too slow for this hot path), but still does additional lookups we want to avoid.
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {

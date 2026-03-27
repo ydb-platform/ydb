@@ -1,0 +1,39 @@
+# This file contains cursorindexingignore rules for accounts where
+# the indexing limit is lower than the project size.
+#
+# If you hit the Cursor indexing file limit, create a symlink:
+#   ln -sf .cursorindexingignore-personal .cursorindexingignore
+
+# .cpp/.cc/.c files from library/util implementation directories are excluded from indexing.
+# .h/.hpp files are kept so the agent can see types and interfaces.
+/library/**/*.cpp
+/library/**/*.cc
+/library/**/*.c
+/util/**/*.cpp
+/util/**/*.cc
+/util/**/*.c
+
+# Go dependencies
+/contrib/go/
+/vendor/
+
+# Python dependencies, exclude files with extension only for prevent ignore directories
+# and allow return some dependencies to index with ! pattern
+/contrib/python/**/*.* 
+!/contrib/python/ydb/**
+
+# Large dependencies
+/contrib/libs/llvm16/
+/contrib/tools/
+/contrib/libs/linux-headers/
+/contrib/restricted/grpc_py2/
+/contrib/libs/cxxsupp/
+/contrib/restricted/boost/
+
+# Test and temporary files
+**/canondata/
+*.yqls
+*.result
+*.out
+*.err
+*.report

@@ -120,11 +120,11 @@ Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
     if (EnabledSpilling) {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+        UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() > 0);
+        UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() > 0);
     } else {
-        UNIT_ASSERT(counters.SpillingWriteBlobs->Val() == 0);
-        UNIT_ASSERT(counters.SpillingReadBlobs->Val() == 0);
+        UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() == 0);
+        UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() == 0);
     }
 }
 
@@ -176,6 +176,7 @@ Y_UNIT_TEST(SelfJoinQueryService) {
     auto query = R"(
         --!syntax_v1
         PRAGMA ydb.CostBasedOptimizationLevel='0';
+        PRAGMA ydb.DqChannelVersion='1';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Value = t2.Value
         order by t1.Key
@@ -204,8 +205,8 @@ Y_UNIT_TEST(SelfJoinQueryService) {
     ])", FormatResultSetYson(result.GetResultSet(0)));
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-    UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+    UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() + counters.ChannelSpilling.WriteBlobs->Val() > 0);
+    UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() + counters.ChannelSpilling.ReadBlobs->Val() > 0);
 }
 
 Y_UNIT_TEST(SelfJoin) {
@@ -237,6 +238,7 @@ Y_UNIT_TEST(SelfJoin) {
     auto query = R"(
         --!syntax_v1
         PRAGMA ydb.CostBasedOptimizationLevel='0';
+        PRAGMA ydb.DqChannelVersion='1';
         select t1.Key, t1.Value, t2.Key, t2.Value
         from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Key = t2.Key
         order by t1.Key
@@ -259,8 +261,8 @@ Y_UNIT_TEST(SelfJoin) {
     ])", StreamResultToYson(it));
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-    UNIT_ASSERT(counters.SpillingWriteBlobs->Val() > 0);
-    UNIT_ASSERT(counters.SpillingReadBlobs->Val() > 0);
+    UNIT_ASSERT(counters.ComputeSpilling.WriteBlobs->Val() + counters.ChannelSpilling.WriteBlobs->Val() > 0);
+    UNIT_ASSERT(counters.ComputeSpilling.ReadBlobs->Val() + counters.ChannelSpilling.ReadBlobs->Val() > 0);
 }
 
 } // suite

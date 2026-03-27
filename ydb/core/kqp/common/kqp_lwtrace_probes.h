@@ -87,10 +87,10 @@ struct TQueryAction {
         TYPES(ui64), \
         NAMES("TxId")) \
     PROBE(KqpDataExecuterStartTasksAndTxs, GROUPS("KQP"), \
-        TYPES(ui64, ui64, ui64), \
+        TYPES(ui64, ui64), \
         NAMES("TxId", "tasksSize", "TxsSize")) \
     PROBE(KqpDataExecuterFinalize, GROUPS("KQP"), \
-        TYPES(ui64, ui64, ui64, ui64), \
+        TYPES(ui64, ui64, ui64), \
         NAMES("TxId", "lastCompletedShard", "ResultRows", "resultSize")) \
     PROBE(KqpScanExecuterStartExecute, GROUPS("KQP"), \
         TYPES(ui64), \

@@ -213,7 +213,7 @@ class ErrorsCollector:
 
         host_matches = defaultdict(lambda: [])
         for h, exec in core_processes.items():
-            exec.wait(check_exit_code=False)
+            exec.wait(check_exit_code=False, timeout=1200)
             if exec.returncode != 0:
                 logging.error(f'Error while process VERIFY fails on host {h}: {exec.stderr}')
             else:

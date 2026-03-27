@@ -16,4 +16,10 @@ ADDINCL(
     GLOBAL FOR cython contrib/python/numpy/include/numpy/core/include/numpy
 )
 
+IF (PYTHON_TYPE_FOR_CYTHON == "PY3")
+    ADDINCL(
+        GLOBAL FOR cython contrib/python/numpy/py3
+    )
+ENDIF()
+
 END()

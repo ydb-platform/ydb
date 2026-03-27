@@ -486,7 +486,8 @@ private:
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
-            name == "KqpReadTable") {
+            name == "KqpReadTable" ||
+            name == "MultiHoppingCore") {
             PatternNodes->SuitableForCache = false;
         }
 
@@ -615,7 +616,8 @@ public:
                                               ValueBuilder.Get(),
                                               CompOpts,
                                               PatternNodes->GetMutables(),
-                                              *NYql::NUdf::GetYqlMemoryPool()));
+                                              *NYql::NUdf::GetYqlMemoryPool(),
+                                              NotConsumedLinear_));
             Ctx->ExecuteLLVM = Codegen.get() != nullptr;
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
@@ -811,6 +813,10 @@ public:
         MKQL_ENSURE(state.Empty(), "Serialized state is corrupted - extra bytes left: " << state.Size());
     }
 
+    TMaybe<NUdf::TSourcePosition> GetNotConsumedLinear() override {
+        return NotConsumedLinear_;
+    }
+
 private:
     const TPatternNodes::TPtr PatternNodes;
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
@@ -821,6 +827,7 @@ private:
     NYql::NCodegen::ICodegen::TSharedPtr Codegen;
     bool IsPrepared = false;
     std::optional<TArrowKernelsTopology> KernelsTopology;
+    TMaybe<NUdf::TSourcePosition> NotConsumedLinear_;
 };
 
 class TComputationPatternImpl final: public IComputationPattern {

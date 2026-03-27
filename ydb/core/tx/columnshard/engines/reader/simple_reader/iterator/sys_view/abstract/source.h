@@ -137,6 +137,10 @@ private:
         return TConclusionStatus::Fail("incorrect method usage DoCheckHeader");
     }
 
+    std::optional<ui64> GetPortionIdOptional() const override {
+        return std::nullopt;
+    }
+
 protected:
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override {
         const ui32 recordsCount = GetRecordsCount();
@@ -161,7 +165,7 @@ public:
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false)
+        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
         , TabletId(tabletId)
         , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())

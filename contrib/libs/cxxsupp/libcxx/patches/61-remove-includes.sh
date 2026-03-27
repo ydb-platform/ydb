@@ -3,3 +3,5 @@ sed -i 's|#\( *\)include <__locale_dir/locale_base_api/solaris.h>|#error #\1incl
 
 sed -i 's|#\( *\)include <ptrauth.h>|#error #\1include <ptrauth.h>|' src/include/overridable_function.h
 sed -i 's|#\( *\)include <sys/futex.h>|#error #\1include <sys/futex.h>|' src/atomic.cpp
+
+sed -i 's|#\( *\)include <picolibc.h>|#error #\1include <picolibc.h>|' include/__configuration/platform.h

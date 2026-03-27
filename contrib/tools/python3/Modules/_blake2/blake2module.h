@@ -2,7 +2,7 @@
 #define Py_BLAKE2MODULE_H
 
 #ifdef HAVE_LIBB2
-#error #include <blake2.h>
+#include <blake2.h>
 
 #else
 // use vendored copy of blake2
@@ -33,11 +33,11 @@
 #define blake2sp_init_key  PyBlake2_blake2sp_init_key
 #define blake2sp_update    PyBlake2_blake2sp_update
 
-#include "impl/blake2.h"
+#error #include "impl/blake2.h"
 
 #endif // HAVE_LIBB2
 
 // for secure_zero_memory(), store32(), store48(), and store64()
-#include "impl/blake2-impl.h"
+#include "contrib/libs/blake2/src/blake2-impl.h"
 
 #endif // Py_BLAKE2MODULE_H

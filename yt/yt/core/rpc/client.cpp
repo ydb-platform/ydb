@@ -658,7 +658,7 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
 
     if (attachmentCodecId == NCompression::ECodec::None) {
         Attachments_ = compressedAttachments.ToVector();
-        return VoidFuture;
+        return OKFuture;
     } else {
         return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
             .AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {

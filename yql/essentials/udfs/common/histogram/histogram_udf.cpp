@@ -122,12 +122,12 @@ public:
 template <typename THistogramType, const char* ResourceName>
 class THistogram_Create: public TBoxedValue {
 public:
-    THistogram_Create(TSourcePosition pos)
+    explicit THistogram_Create(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Create";
@@ -174,12 +174,12 @@ private:
 template <typename THistogramType, const char* ResourceName>
 class THistogram_AddValue: public TBoxedValue {
 public:
-    THistogram_AddValue(TSourcePosition pos)
+    explicit THistogram_AddValue(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_AddValue";
@@ -226,12 +226,12 @@ private:
 template <typename THistogramType, const char* ResourceName>
 class THistogram_Serialize: public TBoxedValue {
 public:
-    THistogram_Serialize(TSourcePosition pos)
+    explicit THistogram_Serialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Serialize";
@@ -279,12 +279,12 @@ private:
 template <typename THistogramType, const char* ResourceName>
 class THistogram_Deserialize: public TBoxedValue {
 public:
-    THistogram_Deserialize(TSourcePosition pos)
+    explicit THistogram_Deserialize(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Deserialize";
@@ -333,12 +333,12 @@ private:
 template <typename THistogramType, const char* ResourceName>
 class THistogram_Merge: public TBoxedValue {
 public:
-    THistogram_Merge(TSourcePosition pos)
+    explicit THistogram_Merge(TSourcePosition pos)
         : Pos_(pos)
     {
     }
 
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     static const TStringRef& Name() {
         static auto Name = TString(ResourceName).substr(10) + "Histogram_Merge";
@@ -387,7 +387,7 @@ struct THistogramIndexes {
     static constexpr ui32 BinFieldsCount = 2U;
     static constexpr ui32 ResultFieldsCount = 5U;
 
-    THistogramIndexes(IFunctionTypeInfoBuilder& builder) {
+    explicit THistogramIndexes(IFunctionTypeInfoBuilder& builder) {
         const auto binStructType = builder.Struct(BinFieldsCount)->AddField<double>("Position", &Position).AddField<double>("Frequency", &Frequency).Build();
         const auto binsList = builder.List()->Item(binStructType).Build();
         ResultStructType = builder.Struct(ResultFieldsCount)->AddField<char*>("Kind", &Kind).AddField<double>("Min", &Min).AddField<double>("Max", &Max).AddField<double>("WeightsSum", &WeightsSum).AddField("Bins", binsList, &Bins).Build();
@@ -408,7 +408,7 @@ struct THistogramIndexes {
 template <typename THistogramType, const char* ResourceName>
 class THistogram_GetResult: public TBoxedValue {
 public:
-    typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
+    using THistogramResource = TBoxedResource<THistogramType, ResourceName>;
 
     THistogram_GetResult(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
         : HistogramIndexes_(histogramIndexes)
@@ -626,7 +626,7 @@ bool THistogram_Deserialize<TLogarithmicHistogram, LogarithmicHistogramResourceN
 
 class THistogramPrint: public TBoxedValue {
 public:
-    THistogramPrint(const THistogramIndexes& histogramIndexes)
+    explicit THistogramPrint(const THistogramIndexes& histogramIndexes)
         : HistogramIndexes_(histogramIndexes)
     {
     }
@@ -723,7 +723,7 @@ private:
 
 class THistogramToCumulativeDistributionFunction: public TBoxedValue {
 public:
-    THistogramToCumulativeDistributionFunction(const THistogramIndexes& histogramIndexes)
+    explicit THistogramToCumulativeDistributionFunction(const THistogramIndexes& histogramIndexes)
         : HistogramIndexes_(histogramIndexes)
     {
     }
@@ -795,7 +795,7 @@ private:
 
 class THistogramNormalize: public TBoxedValue {
 public:
-    THistogramNormalize(const THistogramIndexes& histogramIndexes)
+    explicit THistogramNormalize(const THistogramIndexes& histogramIndexes)
         : HistogramIndexes_(histogramIndexes)
     {
     }

@@ -1,12 +1,12 @@
-#include <ydb/tests/fq/pq_async_io/ut_helpers.h>
-
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/overloaded.h>
 
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql::NDq {
 
@@ -54,6 +54,7 @@ public:
                 nullptr,
                 actor.SelfId(),
                 actor.GetHolderFactory(),
+                nullptr,
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 CreatePqNativeGateway(std::move(pqServices)),
                 1,
@@ -195,7 +196,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         InitSource(topicName);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         bool failed = false;
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);

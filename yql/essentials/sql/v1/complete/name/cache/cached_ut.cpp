@@ -10,7 +10,7 @@ using namespace NSQLComplete;
 
 class TFailableCache: public ICache<TString, TString> {
 public:
-    NThreading::TFuture<TEntry> Get(const TString& key) const try {
+    NThreading::TFuture<TEntry> Get(const TString& key) const override try {
         if (IsGetFailing) {
             ythrow yexception() << "O_O";
         }
@@ -19,7 +19,7 @@ public:
         return NThreading::MakeErrorFuture<TEntry>(std::current_exception());
     }
 
-    NThreading::TFuture<void> Update(const TString& /* key */, TString /* value */) const try {
+    NThreading::TFuture<void> Update(const TString& /* key */, TString /* value */) const override try {
         if (IsUpdateFailing) {
             ythrow yexception() << "O_O";
         }

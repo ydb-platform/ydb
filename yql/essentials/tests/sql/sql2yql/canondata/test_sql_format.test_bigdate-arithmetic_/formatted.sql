@@ -9,6 +9,7 @@ $interval64_max = unwrap(CAST(9223339708799999999 AS interval64));
 $interval64_plus1 = unwrap(CAST(1 AS interval64));
 $interval64_minus1 = unwrap(CAST(-1 AS interval64));
 $interval64_zero = unwrap(CAST(0 AS interval64));
+
 $date_max_value = 49673l;
 $date_max = unwrap(CAST($date_max_value - 1 AS date));
 $datetime_max = unwrap(CAST($date_max_value * 86400 - 1 AS datetime));
@@ -17,6 +18,7 @@ $interval_min = unwrap(CAST(-$date_max_value * 86400 * 1000000 + 1 AS interval))
 $interval_max = unwrap(CAST($date_max_value * 86400 * 1000000 - 1 AS interval));
 $interval_plus1 = unwrap(CAST(1 AS interval));
 $interval_minus1 = unwrap(CAST(-1 AS interval));
+
 $i64_max = 9223372036854775807l;
 $ui64_max = 18446744073709551615ul;
 

@@ -47,8 +47,6 @@ std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions
 
 class TAlterPQ: public TSubOperation {
     // Make sure we make decisions using a consistent runtime value
-    const bool EnableTopicSplitMerge = AppData()->FeatureFlags.GetEnableTopicSplitMerge();
-
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -92,8 +90,7 @@ public:
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
             TString& errStr)
     {
-        bool splitMergeEnabled = EnableTopicSplitMerge
-            && NPQ::SplitMergeEnabled(*tabletConfig)
+        bool splitMergeEnabled = NPQ::SplitMergeEnabled(*tabletConfig)
             && (!alter.HasPQTabletConfig() || !alter.GetPQTabletConfig().HasPartitionStrategy() || NPQ::SplitMergeEnabled(alter.GetPQTabletConfig()));
 
         TTopicInfo::TPtr params = new TTopicInfo();
@@ -629,8 +626,7 @@ public:
 
         alterData->ActivePartitionCount = topic->ActivePartitionCount;
 
-        bool splitMergeEnabled = EnableTopicSplitMerge
-                && NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
+        bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(tabletConfig)
                 && NKikimr::NPQ::SplitMergeEnabled(newTabletConfig);
 
         THashSet<ui32> involvedPartitions;

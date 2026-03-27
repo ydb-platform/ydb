@@ -326,6 +326,10 @@ license. See [LICENSE](LICENSE) for more information.
 
 
 ====================COPYRIGHT====================
+// Copyright 2025 Google Inc. All Rights Reserved.
+
+
+====================COPYRIGHT====================
 // Copyright 2025 The Abseil Authors
 
 

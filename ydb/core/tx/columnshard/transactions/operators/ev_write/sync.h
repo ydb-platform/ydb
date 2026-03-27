@@ -29,6 +29,29 @@ private:
 public:
     using TBase::TBase;
 
+    static std::unique_ptr<TEvTxProcessing::TEvReadSetAck> MakeBrokenFlagAck(ui64 step, ui64 txId, ui64 tabletSource, ui64 tabletDest) {
+        return std::make_unique<TEvTxProcessing::TEvReadSetAck>(step, txId, tabletSource, tabletDest, tabletSource, 0);
+    }
+
+    static bool SendBrokenFlagAck(TColumnShard& owner, std::unique_ptr<TEvTxProcessing::TEvReadSetAck> event) {
+        const ui64 tabletDest = event->Record.GetTabletDest();
+        const ui64 txId = event->Record.GetTxId();
+        return SendPersistent(owner, std::move(event), tabletDest, txId);
+    }
+
+    static bool SendPersistent(TColumnShard& owner, std::unique_ptr<IEventBase> event, ui64 tabletDest, ui64 cookie) {
+        return owner.Send(
+            MakePipePerNodeCacheID(EPipePerNodeCache::Persistent),
+            new TEvPipeCache::TEvForward(event.release(), tabletDest, true),
+            IEventHandle::FlagTrackDelivery, cookie
+        );
+    }
+
+    static bool SendBrokenFlagAck(TColumnShard& owner, ui64 step, ui64 txId, ui64 tabletDest) {
+        const ui64 tabletSource = owner.TabletID();
+        return SendBrokenFlagAck(owner, MakeBrokenFlagAck(step, txId, tabletSource, tabletDest));
+    }
+
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveResultAckTx(TColumnShard& owner, const ui64 recvTabletId) const = 0;
     virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> CreateReceiveBrokenFlagTx(
         TColumnShard& owner, const ui64 sendTabletId, const bool broken) const = 0;

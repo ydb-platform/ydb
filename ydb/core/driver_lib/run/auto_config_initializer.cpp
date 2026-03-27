@@ -241,6 +241,7 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetCpuCount(cpuCount);
 
         bool useSharedThreads = config->GetUseSharedThreads();
+        bool useUnitedPool = config->GetUseUnitedPool();
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
@@ -287,10 +288,10 @@ namespace NKikimr::NAutoConfigInitializer {
             assignPool(batchExecutor, "Batch", 10, false);
             assignPool(icExecutor, "IC", 40, true);
 
-            batchExecutor->SetForcedForeignSlots(1);
-            userExecutor->SetForcedForeignSlots(2);
-            icExecutor->SetForcedForeignSlots(2);
-            systemExecutor->SetForcedForeignSlots(2);
+            batchExecutor->SetForcedForeignSlots(0);
+            userExecutor->SetForcedForeignSlots(cpuCount - 1);
+            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
 
             if (cpuCount >= 2) {
                 userExecutor->AddAdjacentPools(2);
@@ -380,6 +381,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
+            executor->SetAllThreadsAreShared(useUnitedPool);
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);

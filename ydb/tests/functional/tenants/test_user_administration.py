@@ -134,6 +134,25 @@ def test_user_can_change_password_for_himself(ydb_endpoint, prepared_root_db, pr
             session.execute_scheme(f"alter user {subject_user} password '4321'")
 
     user_auth_token = login_user(ydb_endpoint, database_path, subject_user, '4321')
+    credentials = ydb.AuthTokenCredentials(user_auth_token)
+
+    with ydb_client(database_path, credentials=credentials) as driver:
+        driver.wait()
+
+        pool = ydb.SessionPool(driver)
+        with pool.checkout() as session:
+            password_hash = """{
+                "hash": "p4ffeMugohqyBwyckYCK1TjJfz3LIHbKiGL+t+oEhzw=",
+                "salt": "U+tzBtgo06EBQCjlARA6Jg==",
+                "type": "argon2id"
+            }"""
+
+            try:
+                session.execute_scheme(f"alter user {subject_user} hash '{password_hash}'")
+                assert subject_user == 'dbadmin4'
+            except ydb.issues.Unauthorized as ex:
+                assert subject_user == 'ordinaryuser'
+                assert 'Access denied for' in ex.message
 
 
 def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):

@@ -18,19 +18,18 @@
 
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
-    typedef TSaver<TRuntimeTypeSaver> TBase;
+    using TBase = TSaver<TRuntimeTypeSaver>;
 
     struct TCallableAdaptor {
         const NKikimr::NMiniKQL::TCallableType* Type;
         NKikimr::NMiniKQL::TTypeInfoHelper TypeHelper;
         NKikimr::NUdf::TCallableTypeInspector CallableInspector;
 
-        TCallableAdaptor(const NKikimr::NMiniKQL::TCallableType* type)
+        explicit TCallableAdaptor(const NKikimr::NMiniKQL::TCallableType* type)
             : Type(type)
             , TypeHelper()
             , CallableInspector(TypeHelper, Type)
@@ -67,7 +66,7 @@ class TRuntimeTypeSaver: public TSaver<TRuntimeTypeSaver<TSaver>> {
     };
 
 public:
-    TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
+    explicit TRuntimeTypeSaver(typename TBase::TConsumer& consumer)
         : TBase(consumer, false)
     {
     }
@@ -172,7 +171,7 @@ TString WriteTypeToYson(const NKikimr::NMiniKQL::TType* type, NYson::EYsonFormat
 }
 
 struct TRuntimeTypeLoader {
-    typedef NKikimr::NMiniKQL::TType* TType;
+    using TType = NKikimr::NMiniKQL::TType*;
 
     NKikimr::NMiniKQL::TProgramBuilder& Builder;
     IOutputStream& Err;
@@ -189,6 +188,12 @@ struct TRuntimeTypeLoader {
         return Builder.NewNull().GetStaticType();
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
+        return Builder.NewVoid().GetStaticType();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Builder.NewVoid().GetStaticType();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
         return Builder.NewVoid().GetStaticType();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
@@ -325,7 +330,7 @@ NKikimr::NMiniKQL::TType* ParseTypeFromYson(const NYT::TNode& node, NKikimr::NMi
 }
 
 struct TOrderAwareRuntimeTypeLoader: public TRuntimeTypeLoader {
-    typedef NKikimr::NMiniKQL::TType* TType;
+    using TType = NKikimr::NMiniKQL::TType*;
 
     NCommon::TCodecContext& Ctx;
 
@@ -365,5 +370,4 @@ NKikimr::NMiniKQL::TType* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TC
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(nullptr);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

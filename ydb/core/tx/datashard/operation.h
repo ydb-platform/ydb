@@ -525,9 +525,9 @@ public:
 
     virtual ~TValidatedTx() = default;
 
-    enum class EType { 
+    enum class EType {
         DataTx,
-        WriteTx 
+        WriteTx,
     };
 
 public:
@@ -991,7 +991,7 @@ public:
 public:
     // Orbit used for tracking operation progress
     NLWTrace::TOrbit Orbit;
-    
+
     NWilson::TSpan OperationSpan;
 };
 

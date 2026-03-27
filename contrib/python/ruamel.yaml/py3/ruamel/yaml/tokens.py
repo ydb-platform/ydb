@@ -126,7 +126,7 @@ class Token:
         # don't push beyond last element
         if isinstance(target, (StreamEndToken, DocumentStartToken)):
             return
-        delattr(self, '_comment')
+        delattr(self, '_comment')  # NOQA
         tc = target.comment
         if not tc:  # target comment, just insert
             # special for empty value in key: value issue 25
@@ -158,7 +158,7 @@ class Token:
             return None  # nothing to do
         ret_val = [comment[0], None]
         if comment[1] is None:
-            delattr(self, '_comment')
+            delattr(self, '_comment')  # NOQA
         return ret_val
 
     def move_new_comment(self, target: Any, empty: bool = False) -> Any:
@@ -173,7 +173,7 @@ class Token:
         # don't push beyond last element
         if isinstance(target, (StreamEndToken, DocumentStartToken)):
             return
-        delattr(self, '_comment')
+        delattr(self, '_comment')  # NOQA
         tc = target.comment
         if not tc:  # target comment, just insert
             # special for empty value in key: value issue 25
@@ -356,7 +356,7 @@ class CommentToken(Token):
 
     def reset(self) -> None:
         if hasattr(self, 'pre_done'):
-            delattr(self, 'pre_done')
+            delattr(self, 'pre_done')  # NOQA
 
     def __repr__(self) -> Any:
         v = f'{self.value!r}'

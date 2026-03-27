@@ -36,7 +36,7 @@ namespace {
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
     Y_UNIT_TEST(CreateSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(DropSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(CreateExistingSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDifferentSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -153,9 +153,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateDirWithSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true)
-                                               .EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime, TTestEnvOptions().EnableSystemNamesProtection(true));
         ui64 txId = 100;
+
+        auto sysDirDesc = DescribePath(runtime, "/MyRoot/.sys");
+        TestForceDropUnsafe(runtime, ++txId, sysDirDesc.GetPathId());
+        env.TestWaitNotification(runtime, txId);
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", ".sys");
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -179,7 +182,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncCreateSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -208,7 +211,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(AsyncDropSameSysView) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -233,7 +236,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(ReadOnlyMode) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         SetSchemeshardReadOnlyMode(runtime, true);
@@ -264,7 +267,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 
     Y_UNIT_TEST(EmptyName) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
@@ -280,7 +283,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
     Y_UNIT_TEST(CreateDirWithDomainSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.sys"), {NLs::Finished, NLs::HasOwner("metadata@system")});
 
@@ -311,7 +314,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
 
     Y_UNIT_TEST(RestoreAbsentSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestLs(runtime, "/MyRoot/.sys/partition_stats", false, NLs::PathExist);
@@ -345,7 +348,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewsUpdateTest) {
 
     Y_UNIT_TEST(DeleteObsoleteSysViews) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestLs(runtime, "/MyRoot/.sys/partition_stats", false, NLs::PathExist);

@@ -78,10 +78,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST_TWIN(MissingOptionalParameter, UseSink) {
-        auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(MissingOptionalParameter) {
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -140,7 +138,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitParameterTypes) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -165,7 +162,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     Y_UNIT_TEST(CheckQueryCacheForPreparedQuery) {
         // All params are declared in the text
         auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -203,7 +199,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     Y_UNIT_TEST(CheckQueryCacheForUnpreparedQuery) {
         // Some params are declared in text, some by user
         auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -324,7 +319,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
     Y_UNIT_TEST(CheckQueryCacheForExecuteAndPreparedQueries) {
         // All params are declared in the text
         auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -874,7 +868,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitSameParameterTypesQueryCacheCheck) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -901,7 +894,6 @@ Y_UNIT_TEST_SUITE(KqpParams) {
 
     Y_UNIT_TEST(ImplicitDifferentParameterTypesQueryCacheCheck) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1155,10 +1147,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST_QUAD(Decimal, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, appConfig);
+    Y_UNIT_TEST_TWIN(Decimal, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
         auto tableClient = kikimr.GetTableClient();
         auto queryClient = kikimr.GetQueryClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -1469,32 +1459,24 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
 
             auto query = prepareResult.GetQuery();
-            auto params = query.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = query.Execute(
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                 std::move(params)).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch: first incompatibility at root: expected List, actual EmptyList");
         }
 
         // Test with ExecuteDataQuery directly
         {
-            auto params = db.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = session.ExecuteDataQuery(Q1_(R"(
                 DECLARE $x AS List<Uint32>;
@@ -1504,32 +1486,8 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 UNION ALL
                 SELECT * FROM `/Root/Test` WHERE Group IN $y;
             )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
-        }
-
-        // Test with non-empty list to ensure normal lists still work
-        {
-            auto params = db.GetParamsBuilder()
-                .AddParam("$x")
-                    .BeginList()
-                    .AddListItem().Uint32(1)
-                    .EndList()
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
-
-            auto result = session.ExecuteDataQuery(Q1_(R"(
-                DECLARE $x AS List<Uint32>;
-                DECLARE $y AS List<Uint32>;
-
-                SELECT * FROM `/Root/Test` WHERE Group IN $x
-                UNION ALL
-                SELECT * FROM `/Root/Test` WHERE Group IN $y;
-            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch: first incompatibility at root: expected List, actual EmptyList");
         }
     }
 
@@ -1537,18 +1495,13 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         // Test that EmptyList can be passed for List<?> parameters in ExecuteQuery
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
-        auto tableClient = kikimr.GetTableClient();
 
         // Test with ExecuteQuery
         {
-            auto params = tableClient.GetParamsBuilder()
-                .AddParam("$x")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+            Ydb::Type type;
+            type.set_empty_list_type(google::protobuf::NULL_VALUE);
+            std::map<std::string, TType> typeInfo = {{"$x", TType(type)}, {"$y", TType(type)}};
+            auto params = NYdb::TParamsBuilder(typeInfo).Build();
 
             auto result = queryClient.ExecuteQuery(Q1_(R"(
                 DECLARE $x AS List<Uint32>;
@@ -1558,34 +1511,191 @@ Y_UNIT_TEST_SUITE(KqpParams) {
                 UNION ALL
                 SELECT * FROM `/Root/Test` WHERE Group IN $y;
             )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "type mismatch: first incompatibility at root: expected List, actual EmptyList");
         }
+    }
 
-        // Test with non-empty list to ensure normal lists still work
-        {
-            auto params = tableClient.GetParamsBuilder()
-                .AddParam("$x")
-                    .BeginList()
-                    .AddListItem().Uint32(1)
-                    .EndList()
-                    .Build()
-                .AddParam("$y")
-                    .EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Uint32).Build())
-                    .Build()
-                .Build();
+    Y_UNIT_TEST(ListStructParameterMemberTypeMismatch) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-            auto result = queryClient.ExecuteQuery(Q1_(R"(
-                DECLARE $x AS List<Uint32>;
-                DECLARE $y AS List<Uint32>;
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("x").Int32(1)
+                            .AddMember("y").OptionalUint32(2)
+                            .AddMember("z").String("abc")
+                        .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
 
-                SELECT * FROM `/Root/Test` WHERE Group IN $x
-                UNION ALL
-                SELECT * FROM `/Root/Test` WHERE Group IN $y;
-            )"), NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32,z:String>>;
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.<list>.y: expected Uint32, actual Optional<Uint32>");
+    }
+
+    Y_UNIT_TEST(ListStructParameterNestedStructMemberTypeMismatch) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("x").Int32(1)
+                            .AddMember("y").OptionalUint32(2)
+                            .AddMember("z")
+                                .BeginStruct()
+                                    .AddMember("a").Int32(1)
+                                    .AddMember("b").Int32(2)
+                                .EndStruct()
+                        .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32?,z:Struct<a:Int32,b:Int32?>>>;
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.<list>.z.b: expected Optional<Int32>, actual Int32");
+    }
+
+    Y_UNIT_TEST(TripleNestedStructParameterMemberTypeMismatch) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginStruct()
+                    .AddMember("x").Int32(1)
+                    .AddMember("y").OptionalUint32(2)
+                    .AddMember("z")
+                        .BeginStruct()
+                            .AddMember("a").Int32(1)
+                            .AddMember("b").OptionalInt32(2)
+                            .AddMember("c")
+                                .BeginStruct()
+                                    .AddMember("q").Int32(1)
+                                    .AddMember("p").Uint32(2)
+                                .EndStruct()
+                        .EndStruct()
+                .EndStruct()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS Struct<x:Int32,y:Uint32?,z:Struct<a:Int32,b:Int32?,c:Struct<q:Int32,p:Int32>>>;
+            SELECT * FROM AS_TABLE([ $items ]);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.z.c.p: expected Int32, actual Uint32");
+    }
+
+    Y_UNIT_TEST(ListStructParameterMissingMember) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("x").Int32(1)
+                            .AddMember("z").String("abc")
+                        .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32,z:String>>;
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.<list>: missing member 'y' in actual Struct");
+    }
+
+    Y_UNIT_TEST(ListStructParameterNestedStructMissingMember) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("x").Int32(1)
+                            .AddMember("y").Uint32(2)
+                            .AddMember("z")
+                                .BeginStruct()
+                                    .AddMember("a").Int32(1)
+                                    .AddMember("b").Int32(2)
+                                .EndStruct()
+                        .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32,z:Struct<a:Int32,b:Int32,c:Int32?>>>;
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.<list>.z: missing member 'c' in actual Struct");
+    }
+
+    Y_UNIT_TEST(ListStructParameterExtraMember) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = db.GetParamsBuilder()
+            .AddParam("$items")
+                .BeginList()
+                    .AddListItem()
+                        .BeginStruct()
+                            .AddMember("x").Int32(1)
+                            .AddMember("y").Uint32(2)
+                            .AddMember("z").String("abc")
+                            .AddMember("w").Uint64(5)
+                        .EndStruct()
+                .EndList()
+                .Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $items AS List<Struct<x:Int32,y:Uint32,z:String>>;
+            SELECT * FROM AS_TABLE($items);
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Parameter $items type mismatch: first incompatibility at root.<list>: unexpected member 'w' in actual Struct");
     }
 
 }

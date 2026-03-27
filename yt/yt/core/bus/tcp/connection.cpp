@@ -155,9 +155,9 @@ void TTcpConnection::Close()
     {
         auto guard = Guard(Lock_);
 
-        if (Error_.Load().IsOK()) {
-            Error_.Store(TError(NBus::EErrorCode::TransportError, "Bus terminated")
-                << *EndpointAttributes_);
+        if (Error_.IsOK()) {
+            Error_ = TError(NBus::EErrorCode::TransportError, "Bus terminated")
+                << *EndpointAttributes_;
         }
 
         if (State_ == EState::Open) {
@@ -552,8 +552,7 @@ void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
         }
 
         State_ = EState::Aborted;
-
-        Error_.Store(detailedError);
+        Error_ = detailedError;
 
         // Prevent starting new OnSocketRead/OnSocketWrite and Retry.
         // Already running will continue, Unregister will drain them.
@@ -855,7 +854,7 @@ void TTcpConnection::Terminate(const TError& error)
 
     auto guard = Guard(Lock_);
 
-    if (!Error_.Load().IsOK() ||
+    if (!Error_.IsOK() ||
         State_ == EState::Aborted ||
         State_ == EState::Closed)
     {
@@ -869,7 +868,7 @@ void TTcpConnection::Terminate(const TError& error)
     YT_LOG_DEBUG("Sending termination request");
 
     // Save error for OnTerminate().
-    Error_.Store(detailedError);
+    Error_ = detailedError;
 
     // Arm calling OnTerminate() from OnEvent().
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Terminate)));
@@ -895,12 +894,6 @@ void TTcpConnection::UnsubscribeTerminated(const TCallback<void(const TError&)>&
 
 void TTcpConnection::OnEvent(EPollControl control)
 {
-    auto multiplexingBand = MultiplexingBand_.load();
-    if (multiplexingBand != ActualMultiplexingBand_) {
-        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
-        ActualMultiplexingBand_ = multiplexingBand;
-    }
-
     EPollControl action;
     {
         auto rawPendingControl = PendingControl_.load(std::memory_order::acquire);
@@ -947,6 +940,12 @@ void TTcpConnection::OnEvent(EPollControl control)
     }
 
     YT_LOG_TRACE("Event processing started");
+
+    // Update execution pool if needed.
+    if (auto multiplexingBand = MultiplexingBand_.load(); multiplexingBand != ActualMultiplexingBand_) {
+        Poller_->SetExecutionPool(this, FormatEnum(multiplexingBand));
+        ActualMultiplexingBand_ = multiplexingBand;
+    }
 
     // Proceed with pending ssl handshake prior to reads or writes.
     if (PendingSslHandshake_) {
@@ -1003,7 +1002,10 @@ void TTcpConnection::OnShutdown()
     // Perform the initial cleanup (the final one will be in dtor).
     Close();
 
-    auto error = Error_.Load();
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
+
     YT_LOG_DEBUG(error, "Connection terminated");
 
     Terminated_.Fire(error);
@@ -1102,7 +1104,7 @@ void TTcpConnection::OnSocketRead()
 
 bool TTcpConnection::HasUnreadData() const
 {
-    return Decoder_->IsInProgress();
+    return Decoder_->IsInProgress() || !UnackedPackets_.empty();
 }
 
 ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
@@ -1113,9 +1115,7 @@ ssize_t TTcpConnection::DoReadSocket(char* buffer, size_t size)
         case ESslState::Established: {
             auto result = SSL_read(Ssl_.get(), buffer, size);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_read");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -1422,7 +1422,7 @@ TFuture<void> TTcpConnection::SendViaLocalBypass(TSharedRefArray message, const 
     LocalBypassHandler_->HandleMessage(std::move(message), LocalBypassReplyBus_);
 
     // No delivery tracking for local bypass.
-    return VoidFuture;
+    return OKFuture;
 }
 
 TTcpConnection::TPacket* TTcpConnection::EnqueuePacket(
@@ -1502,9 +1502,7 @@ ssize_t TTcpConnection::DoWriteFragments(const std::vector<struct iovec>& vec)
             YT_ASSERT(vec.size() == 1);
             auto result = SSL_write(Ssl_.get(), vec[0].iov_base, vec[0].iov_len);
             if (PendingSslHandshake_ && result > 0) {
-                YT_LOG_DEBUG("TLS/SSL connection has been established by SSL_write");
-                PendingSslHandshake_ = false;
-                ReadyPromise_.TrySet();
+                PendingSslHandshake_ = DoSslHandshake();
             }
             return result;
         }
@@ -1801,7 +1799,11 @@ void TTcpConnection::OnTerminate()
 
     YT_LOG_DEBUG("Termination request received");
 
-    Abort(Error_.Load());
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
+
+    Abort(error);
 }
 
 void TTcpConnection::ProcessQueuedMessages()
@@ -1840,9 +1842,8 @@ void TTcpConnection::ProcessQueuedMessages()
 
 void TTcpConnection::DiscardOutcomingMessages()
 {
-    auto error = Error_.Load();
-
-    auto guard = Guard(QueuedMessagesDiscardLock_);
+    auto guard = Guard(Lock_);
+    auto error = Error_;
     auto queuedMessages = QueuedMessages_.DequeueAll();
     guard.Release();
 
@@ -1857,8 +1858,9 @@ void TTcpConnection::DiscardOutcomingMessages()
 
 void TTcpConnection::DiscardUnackedMessages()
 {
-    auto error = Error_.Load();
-
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
 
     while (!UnackedPackets_.empty()) {
         auto& message = UnackedPackets_.front();
@@ -2058,7 +2060,9 @@ void TTcpConnection::CloseSslSession(ESslState newSslState)
             // Nothing to do.
             return;
         case ESslState::Established:
-            SSL_shutdown(Ssl_.get());
+            if (!PendingSslHandshake_) {
+                DoSslShutdown();
+            }
             break;
         case ESslState::Error:
             break;
@@ -2109,6 +2113,33 @@ bool TTcpConnection::DoSslHandshake()
     Abort(GetLastSslError("Failed to establish TLS/SSL session")
         << TErrorAttribute("sys_error", TError::FromSystem(LastSystemError())));
     return false;
+}
+
+void TTcpConnection::DoSslShutdown()
+{
+    for (int i = 0;; ++i) {
+        YT_VERIFY(i < 2);
+
+        auto result = SSL_shutdown(Ssl_.get());
+        switch (result) {
+            case 0:
+                // SSL_shutdown may sometimes ask us to run itself a second time.
+                break;
+            case 1:
+                // Shutdown is finished.
+                YT_LOG_DEBUG("SSL_shutdown successful");
+                return;
+            default:
+                int error = SSL_get_error(Ssl_.get(), result);
+                YT_LOG_WARNING(
+                    GetLastSslError("TLS/SSL shutdown error"),
+                    "Could not perform SSL_shutdown (SslErrorCode: %v)",
+                    error);
+
+                // We did our best under the circumstances.
+                return;
+        }
+    }
 }
 
 size_t TTcpConnection::GetSslAckPacketSize()
@@ -2174,7 +2205,13 @@ void TTcpConnection::TryEstablishSslSession()
     // FIXME(khlebnikov): Stop constructing SSL context from scratch for each connection.
     auto sslContext = New<TSslContext>();
 
-    sslContext->ApplyConfig(Config_, pathResolver);
+    try {
+        sslContext->ApplyConfig(Config_, pathResolver);
+    } catch (const std::exception& ex) {
+        Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
+            << TError(ex));
+        return;
+    }
 
     if (Config_->CipherList) {
         sslContext->SetCipherList(*Config_->CipherList);

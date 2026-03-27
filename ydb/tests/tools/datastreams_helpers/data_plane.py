@@ -44,9 +44,9 @@ def write_stream(path, data, partition_key=None, database=None, endpoint=None):
 
 
 #  Data plane grpc API is not implemented in datastreams.
-def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=READ_TOOL_TIMEOUT, database=None, endpoint=None):
+def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=None, database=None, endpoint=None):
     result_file_name = "{}-{}-read-result-{}-{}-out".format(
-        os.getenv("PYTEST_CURRENT_TEST").replace(":", "_").replace(" (call)", ""),
+        os.getenv("PYTEST_CURRENT_TEST").rsplit('/', 1)[-1].replace(":", "_").replace(" (call)", ""),
         path.replace("/", "_"),
         consumer_name,
         uuid.uuid4()
@@ -55,6 +55,8 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
         database = os.getenv("YDB_DATABASE")
     if endpoint is None:
         endpoint = os.getenv("YDB_ENDPOINT")
+    if timeout is None:
+        timeout = READ_TOOL_TIMEOUT
     result_file = yatest.common.output_path(result_file_name)
     cmd = [
         yatest.common.binary_path("ydb/tests/tools/pq_read/pq_read"),

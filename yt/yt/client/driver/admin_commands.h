@@ -78,6 +78,20 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TResetDynamicallyPropagatedMasterCellsCommand
+    : public TTypedCommand<NApi::TResetDynamicallyPropagatedMasterCellsOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TResetDynamicallyPropagatedMasterCellsCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TDiscombobulateNonvotingPeersCommand
     : public TTypedCommand<NApi::TDiscombobulateNonvotingPeersOptions>
 {

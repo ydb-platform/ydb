@@ -3,6 +3,8 @@
 #include <util/generic/yexception.h>
 #include <util/system/shellcommand.h>
 #include <util/system/env.h>
+#include <util/folder/tempdir.h>
+#include <util/stream/str.h>
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 #include <util/string/split.h>
@@ -10,6 +12,8 @@
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <memory>
 
 TString GetYdbEndpoint()
 {
@@ -24,14 +28,34 @@ TString GetYdbDatabase()
 class TShellCommandEnvScope {
 public:
     explicit TShellCommandEnvScope(const THashMap<TString, TString>& env) {
-        if (!env.contains("YDB_ENDPOINT")) {
-            Unset("YDB_ENDPOINT");
-        }
-        if (!env.contains("YDB_DATABASE")) {
-            Unset("YDB_DATABASE");
+        const TStringBuf varsToUnset[] = {
+            "YDB_ENDPOINT",
+            "YDB_DATABASE",
+            "YDB_USER",
+            "YDB_PASSWORD",
+            "YDB_TOKEN",
+            "IAM_TOKEN",
+            "YC_TOKEN",
+            "USE_METADATA_CREDENTIALS",
+            "SA_KEY_FILE",
+            "YDB_OAUTH2_KEY_FILE",
+            "YDB_CA_FILE",
+            "YDB_CLIENT_CERT_FILE",
+            "YDB_CLIENT_CERT_KEY_FILE",
+            "YDB_CLIENT_CERT_KEY_PASSWORD",
+            "YDB_CLIENT_CERT_KEY_PASSWORD_FILE",
+        };
+        for (const TStringBuf var : varsToUnset) {
+            if (!env.contains(TString{var})) {
+                Unset(TString{var});
+            }
         }
         for (const auto& [key, value] : env) {
             Set(key, value);
+        }
+        if (!env.contains("HOME")) {
+            TempHomeDir = std::make_unique<TTempDir>();
+            Set("HOME", TempHomeDir->Name());
         }
     }
 
@@ -56,11 +80,47 @@ public:
     }
 
     THashMap<TString, TMaybe<TString>> Env;
+    std::unique_ptr<TTempDir> TempHomeDir;
 };
 
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
 {
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
+
+    if (autoAddEndpointAndDatabase) {
+        command << "-e" << ("grpc://" + GetYdbEndpoint());
+        command << "-d" << ("/" + GetYdbDatabase());
+    }
+
+    for (auto& arg : args1) {
+        command << arg;
+    }
+
+    for (auto& arg : args2) {
+        command << arg;
+    }
+
+    TShellCommandEnvScope envScope(env);
+    command.Run().Wait();
+
+    if (checkExitCode && (command.GetExitCode() != expectedExitCode)) {
+        ythrow yexception() << Endl <<
+            "command: " << command.GetQuotedCommand() << Endl <<
+            "exitcode: " << command.GetExitCode() << Endl <<
+            "stdout: " << Endl << command.GetOutput() << Endl <<
+            "stderr: " << Endl << command.GetError() << Endl;
+    }
+
+    return command.GetOutput();
+}
+
+TString RunYdbWithInput(const TList<TString>& args1, const TList<TString>& args2, const TString& input, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
+{
+    TShellCommandOptions options;
+    TStringInput inputStream(input);
+    options.InputStream = &inputStream;
+    options.SetCloseInput(true);
+    TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")), options);
 
     if (autoAddEndpointAndDatabase) {
         command << "-e" << ("grpc://" + GetYdbEndpoint());

@@ -46,7 +46,7 @@ void OnPayload(const NYT::TSharedRef& block, size_t i, std::vector<TStreamSchema
     }
 }
 
-TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster, const TString& token, const NYT::TTransactionId& tx, const std::vector<TTableInferSchemaRequest>& requests, TAsyncQueue::TPtr queue) {
+TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster, const TString& token, const NYT::TTransactionId& tx, const std::vector<TTableInferSchemaRequest>& requests, TAsyncQueue::TWeakPtr queue) {
     const ui32 Timeout = 300'000;
     auto connectionConfig = NYT::New<NYT::NApi::NRpcProxy::TConnectionConfig>();
     connectionConfig->ClusterUrl = cluster;
@@ -83,7 +83,7 @@ TVector<TMaybe<NYT::TNode>> InferSchemaFromTablesContents(const TString& cluster
                 promises[i].Set(res);
                 return;
             }
-            Y_UNUSED(queue->Async([&inferers, &promises, &runRead, i = i, block = std::move(res.Value())] {
+            Y_UNUSED(TAsyncQueue::Async(queue, [&inferers, &promises, &runRead, i = i, block = std::move(res.Value())] {
                 OnPayload(block, i, inferers, promises);
                 runRead(i);
             }));

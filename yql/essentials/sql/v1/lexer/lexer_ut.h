@@ -15,19 +15,19 @@
         static_cast<void (*)(NUnitTest::TTestContext&)>(&N<ANSI, ANTLR4, ELexerFlavor::FLAVOR>), \
         /* forceFork = */ false)
 
-#define Y_UNIT_TEST_ON_EACH_LEXER(N)                                     \
-    template <bool ANSI, bool ANTLR4, ELexerFlavor FLAVOR>               \
-    void N(NUnitTest::TTestContext&);                                    \
-    struct TTestRegistration##N {                                        \
-        TTestRegistration##N() {                                         \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, true, Default); \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, true, Default);  \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, true, Pure);    \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, true, Pure);     \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, false, Regex);  \
-            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, false, Regex);   \
-        }                                                                \
-    };                                                                   \
-    static TTestRegistration##N testRegistration##N;                     \
-    template <bool ANSI, bool ANTLR4, ELexerFlavor FLAVOR>               \
+#define Y_UNIT_TEST_ON_EACH_LEXER(N)                                                            \
+    template <bool ANSI, bool ANTLR4, ELexerFlavor FLAVOR>                                      \
+    void N(NUnitTest::TTestContext&);                                                           \
+    struct TTestRegistration##N {                                                               \
+        TTestRegistration##N() {                                                                \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, true, Default);                        \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, true, Default);                         \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, true, Pure);                           \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, true, Pure);                            \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, false, false, Regex);                         \
+            Y_UNIT_TEST_ON_EACH_LEXER_ADD_TEST(N, true, false, Regex);                          \
+        }                                                                                       \
+    };                                                                                          \
+    static TTestRegistration##N testRegistration##N; /* NOLINT(misc-use-anonymous-namespace) */ \
+    template <bool ANSI, bool ANTLR4, ELexerFlavor FLAVOR>                                      \
     void N(NUnitTest::TTestContext&)

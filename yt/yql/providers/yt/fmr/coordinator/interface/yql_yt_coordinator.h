@@ -22,18 +22,35 @@ struct THeartbeatResponse {
 };
 
 struct TStartOperationRequest {
-    ETaskType TaskType;
+    EOperationType OperationType;
     TOperationParams OperationParams;
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
     ui32 NumRetries = 1; // Not supported yet
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections = {};
     TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
+    std::vector<TFileInfo> Files = {};
+    std::vector<TYtResourceInfo> YtResources = {};
+    std::vector<TFmrResourceOperationInfo> FmrResources = {};
 };
 
 struct TStartOperationResponse {
     EOperationStatus Status;
     TString OperationId;
+    std::vector<TFmrError> ErrorMessages = {};
+};
+
+struct TPrepareOperationRequest {
+    EOperationType OperationType;
+    TOperationParams OperationParams;
+    std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections;
+    TMaybe<NYT::TNode> FmrOperationSpec;
+};
+
+struct TPrepareOperationResponse {
+    TString PartitionId;
+    ui64 TasksNum;
+    std::vector<TFmrError> ErrorMessages = {};
 };
 
 struct TGetOperationRequest {
@@ -44,6 +61,7 @@ struct TGetOperationResponse {
     EOperationStatus Status;
     std::vector<TFmrError> ErrorMessages = {};
     std::vector<TTableStats> OutputTablesStats = {};
+    std::vector<TString> OperationResultsYson = {};
 };
 
 struct TDeleteOperationRequest {
@@ -124,6 +142,8 @@ public:
     virtual NThreading::TFuture<TPingSessionResponse> PingSession(const TPingSessionRequest& request) = 0;
 
     virtual NThreading::TFuture<TListSessionsResponse> ListSessions(const TListSessionsRequest& request) = 0;
+
+    virtual NThreading::TFuture<TPrepareOperationResponse> PrepareOperation(const TPrepareOperationRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

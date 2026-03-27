@@ -137,30 +137,30 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
     }
 }
 
-Ydb::Import::ImportFromS3Settings::IndexFillingMode TProtoAccessor::GetProto(NImport::EIndexFillingMode value) {
+Ydb::Import::ImportFromS3Settings::IndexPopulationMode TProtoAccessor::GetProto(NImport::EIndexPopulationMode value) {
     switch (value) {
-    case NImport::EIndexFillingMode::Build:
-        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD;
-    case NImport::EIndexFillingMode::Import:
-        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
-    case NImport::EIndexFillingMode::Auto:
-        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO;
+    case NImport::EIndexPopulationMode::Build:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD;
+    case NImport::EIndexPopulationMode::Import:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
+    case NImport::EIndexPopulationMode::Auto:
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO;
     default:
-        return Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_UNSPECIFIED;
+        return Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED;
     }
 }
 
-NImport::EIndexFillingMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS3Settings::IndexFillingMode value) {
+NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS3Settings::IndexPopulationMode value) {
     switch (value) {
-    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_UNSPECIFIED:
-    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
-        return NImport::EIndexFillingMode::Build;
-    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        return NImport::EIndexFillingMode::Import;
-    case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
-        return NImport::EIndexFillingMode::Auto;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED:
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
+        return NImport::EIndexPopulationMode::Build;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        return NImport::EIndexPopulationMode::Import;
+    case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
+        return NImport::EIndexPopulationMode::Auto;
     default:
-        return NImport::EIndexFillingMode::Unknown;
+        return NImport::EIndexPopulationMode::Unknown;
     }
 }
 

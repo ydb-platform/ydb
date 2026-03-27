@@ -79,6 +79,8 @@ public:                                                                         
                 COUNTER_INIT(LsmCompactionWriteRequests, true);
                 COUNTER_INIT(LsmHugeBytesWritten, true);
                 COUNTER_INIT(LsmLogBytesWritten, true);
+                COUNTER_INIT(LsmCompactionWaitingTimeSeconds, false);
+                COUNTER_INIT(LsmCompactionWorkingTimeSeconds, false);
             }
 
             COUNTER_DEF(LsmCompactionBytesRead)
@@ -87,6 +89,8 @@ public:                                                                         
             COUNTER_DEF(LsmCompactionWriteRequests)
             COUNTER_DEF(LsmHugeBytesWritten)
             COUNTER_DEF(LsmLogBytesWritten)
+            COUNTER_DEF(LsmCompactionWaitingTimeSeconds)
+            COUNTER_DEF(LsmCompactionWorkingTimeSeconds)
         };
 
 
@@ -198,6 +202,18 @@ public:                                                                         
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeCanBeFreedChunks, false);
                 COUNTER_INIT_IF_EXTENDED(HugeLockedChunks, false);
+                COUNTER_INIT(NormalizedOccupancyPerMille, false);
+                COUNTER_INIT(VDiskSlotUsagePerMille, false);
+                COUNTER_INIT(VDiskRawUsagePerMille, false);
+                COUNTER_INIT(CapacityAlertGreen, false);
+                COUNTER_INIT(CapacityAlertCyan, false);
+                COUNTER_INIT(CapacityAlertLightYellow, false);
+                COUNTER_INIT(CapacityAlertYellow, false);
+                COUNTER_INIT(CapacityAlertLightOrange, false);
+                COUNTER_INIT(CapacityAlertPreOrange, false);
+                COUNTER_INIT(CapacityAlertOrange, false);
+                COUNTER_INIT(CapacityAlertRed, false);
+                COUNTER_INIT(CapacityAlertBlack, false);
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -208,6 +224,18 @@ public:                                                                         
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
             COUNTER_DEF(HugeLockedChunks);
+            COUNTER_DEF(NormalizedOccupancyPerMille);
+            COUNTER_DEF(VDiskSlotUsagePerMille);
+            COUNTER_DEF(VDiskRawUsagePerMille);
+            COUNTER_DEF(CapacityAlertGreen);
+            COUNTER_DEF(CapacityAlertCyan);
+            COUNTER_DEF(CapacityAlertLightYellow);
+            COUNTER_DEF(CapacityAlertYellow);
+            COUNTER_DEF(CapacityAlertLightOrange);
+            COUNTER_DEF(CapacityAlertPreOrange);
+            COUNTER_DEF(CapacityAlertOrange);
+            COUNTER_DEF(CapacityAlertRed);
+            COUNTER_DEF(CapacityAlertBlack);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -290,6 +318,10 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(ReplTotalBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplPhantomBlobsWithProblems, false);
                 COUNTER_INIT_IF_EXTENDED(ReplMadeNoProgress, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskWriteThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeRequestThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplNodeResponseThrottledMicroseconds, false);
+                COUNTER_INIT_IF_EXTENDED(ReplPDiskReadThrottledMicroseconds, false);
             }
 
             COUNTER_DEF(SyncerVSyncMessagesSent);
@@ -315,6 +347,10 @@ public:                                                                         
             COUNTER_DEF(ReplTotalBlobsWithProblems);
             COUNTER_DEF(ReplPhantomBlobsWithProblems);
             COUNTER_DEF(ReplMadeNoProgress);
+            COUNTER_DEF(ReplPDiskWriteThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeRequestThrottledMicroseconds);
+            COUNTER_DEF(ReplNodeResponseThrottledMicroseconds);
+            COUNTER_DEF(ReplPDiskReadThrottledMicroseconds);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -541,7 +577,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(PutTotalBytes, true);
                 COUNTER_INIT_IF_EXTENDED(GetTotalBytes, true);
             }
-                
+
             void MinHugeBlobInBytes(ui32 size) {
                 auto getCounter = [&](ui32 size) {
                     return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
@@ -720,7 +756,7 @@ public:                                                                         
             COUNTER_DEF(PutTabletLog);
             COUNTER_DEF(PutUserData);
             COUNTER_DEF(PutAsyncBlob);
-            
+
             ::NMonitoring::TDeprecatedCounter &GetCounter(const std::optional<NKikimrBlobStorage::EGetHandleClass>& handleClass) {
                 if (!handleClass) {
                     return Undefined();
@@ -832,6 +868,7 @@ public:                                                                         
                 COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
+                COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
             COUNTER_DEF(UserDiskCost);
@@ -840,6 +877,7 @@ public:                                                                         
             COUNTER_DEF(DefragDiskCost);
             COUNTER_DEF(InternalDiskCost);
             COUNTER_DEF(DiskTimeAvailableCtr);
+            COUNTER_DEF(DiskTimeFairShareNs);
         };
 
         class TScrubGroup : public TBase {
@@ -902,6 +940,8 @@ public:                                                                         
                 COUNTER_INIT(BlobsPromoteSsts, true);
                 COUNTER_INIT(BlobsExplicit, true);
                 COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsBalanceLevel, true);
+                COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
@@ -918,6 +958,8 @@ public:                                                                         
             COUNTER_DEF(BlobsPromoteSsts);
             COUNTER_DEF(BlobsExplicit);
             COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsBalanceLevel);
+            COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
             COUNTER_DEF(BlobsSqueeze);
 

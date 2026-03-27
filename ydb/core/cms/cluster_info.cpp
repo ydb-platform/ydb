@@ -29,20 +29,21 @@ using namespace NKikimrCms;
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
 {
-    if (State == RESTART) {
-        Y_ABORT_UNLESS(Lock.Defined());
+    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
-                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
-        error.Deadline = Lock->ActionDeadline;
+                               PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
+        error.Deadline = Locks.begin()->ActionDeadline;
         return true;
     }
 
-    if (Lock.Defined()) {
+    if (HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has planned shutdown (permission %s owned by %s)",
-                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
-        error.Deadline = Lock->ActionDeadline;
+                               PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
+        error.Deadline = Locks.begin()->ActionDeadline;
         return true;
     }
 
@@ -61,12 +62,11 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         return true;
     }
 
-    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < DeactivatedLocksPriority) {
+    if (!ScheduledLocks.empty() && ScheduledLocks.begin()->Priority < PriorityToCheck) {
         error.Code = TStatus::DISALLOW_TEMP;
-        error.Reason = Sprintf("%s has scheduled action %s owned by %s (priority %" PRIi32 " vs %" PRIi32 ")",
+        error.Reason = Sprintf("%s has scheduled action %s owned by %s",
                                PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
-                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Priority,
-                               DeactivatedLocksPriority);
+                               ScheduledLocks.begin()->Owner.data());
         error.Deadline = now + defaultRetryTime;
         return true;
     }
@@ -84,12 +84,12 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
 
 bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 {
-    if (State == RESTART) {
-        Y_ABORT_UNLESS(Lock.Defined());
+    if (State == RESTART && HasSameOrHigherPriorityLock(Locks, PriorityToCheck)) {
+        Y_ABORT_UNLESS(!Locks.empty());
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s is restarting (permission %s owned by %s)",
-                               PrettyItemName().data(), Lock->PermissionId.data(), Lock->Owner.data());
-        error.Deadline = Lock->ActionDeadline;
+                               PrettyItemName().data(), Locks.begin()->PermissionId.data(), Locks.begin()->Owner.data());
+        error.Deadline = Locks.begin()->ActionDeadline;
         return true;
     }
 
@@ -105,28 +105,50 @@ bool TLockableItem::IsDown(TErrorInfo &error, TInstant defaultDeadline) const
 
 void TLockableItem::RollbackLocks(ui64 point)
 {
-    for (auto it = TempLocks.begin(); it != TempLocks.end(); ++it)
+    for (auto it = TempLocks.begin(); it != TempLocks.end();) {
         if (it->RollbackPoint >= point) {
-            TempLocks.erase(it, TempLocks.end());
-            break;
+            RemoveLockByRequest(it->RequestId);
+            it = TempLocks.erase(it);
+        } else {
+            ++it;
         }
+    }
 }
 
-void TLockableItem::ReactivateScheduledLocks()
+void TLockableItem::ResetPriorityToCheck()
 {
-    DeactivatedLocksPriority = Max<i32>();
+    PriorityToCheck = Max<i32>();
 }
 
-void TLockableItem::DeactivateScheduledLocks(i32 priority)
+void TLockableItem::SetPriorityToCheck(i32 priority)
 {
-    DeactivatedLocksPriority = priority;
+    PriorityToCheck = priority;
 }
 
 void TLockableItem::RemoveScheduledLocks(const TString &requestId)
 {
     ScheduledLocks.remove_if([&requestId](auto &lock) {
-            return lock.RequestId == requestId;
-        });
+        return lock.RequestId == requestId;
+    });
+    RemoveLockByRequest(requestId);
+}
+
+void TLockableItem::AddLockByRequest(const TString &requestId)
+{
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    LockedByRequests.insert(requestId);
+}
+
+void TLockableItem::RemoveLockByRequest(const TString &requestId)
+{
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    LockedByRequests.erase(requestId);
+}
+
+bool TLockableItem::IsLockedByRequest(const TString &requestId) const
+{
+    Y_DEBUG_ABORT_UNLESS(!requestId.empty());
+    return LockedByRequests.contains(requestId);
 }
 
 void TLockableItem::MigrateOldInfo(const TLockableItem &old)
@@ -139,8 +161,8 @@ void TLockableItem::MigrateOldInfo(const TLockableItem &old)
 
 void TLockableItem::DebugLocksDump(IOutputStream &ss, const TString &prefix) const
 {
-    if (Lock.Defined())
-        ss << prefix << "Locked by permission " << Lock->PermissionId << Endl;
+    for (auto &lock : Locks)
+        ss << prefix << "Locked by permission " << lock.PermissionId;
 
     for (auto &lock : ExternalLocks)
         ss << prefix << "External lock by notifications " << lock.NotificationId;
@@ -309,29 +331,29 @@ void TVDiskInfo::MigrateOldInfo(const TLockableItem &old)
 
 TStateStorageRingInfo::RingState TStateStorageRingInfo::CountState(TInstant now,
                                                                    TDuration retryTime,
-                                                                   TDuration duration) const
+                                                                   TDuration duration,
+                                                                   const TString &requestId) const
 {
     if (IsDisabled) {
         return Disabled;
     }
 
-    ui32 unavailableReplicas = 0;
     bool hasTimeout = false;
     TErrorInfo error;
     for (auto &node : Replicas) {
         if (node->IsDown(error, now + retryTime)
             || node->IsLocked(error, retryTime, now, duration)) {
-            ++unavailableReplicas;
-            continue;
+
+            if (node->IsLockedByRequest(requestId)) {
+                return RestartByThisRequest;
+            } else {
+                return Restart;
+            }
         }
 
         if (now <= node->StartTime + Timeout) {
             hasTimeout = true;
         }
-    }
-
-    if (unavailableReplicas > 0) {
-        return Restart;
     }
 
     if (hasTimeout) {
@@ -604,22 +626,22 @@ void TClusterInfo::AddNodeTenants(ui32 nodeId, const NKikimrTenantPool::TTenantP
     TenantToNodeId.emplace(nodeTenant, nodeId);
 }
 
-void TClusterInfo::AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action)
+void TClusterInfo::AddNodeTempLock(ui32 nodeId, const NKikimrCms::TAction &action, const TString &requestId)
 {
     auto &node = NodeRef(nodeId);
-    node.TempLocks.push_back({RollbackPoint, action});
+    node.AddTempLock({RollbackPoint, action, requestId});
 }
 
-void TClusterInfo::AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action)
+void TClusterInfo::AddPDiskTempLock(TPDiskID pdiskId, const NKikimrCms::TAction &action, const TString &requestId)
 {
     auto &pdisk = PDiskRef(pdiskId);
-    pdisk.TempLocks.push_back({RollbackPoint, action});
+    pdisk.AddTempLock({RollbackPoint, action, requestId});
 }
 
-void TClusterInfo::AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action)
+void TClusterInfo::AddVDiskTempLock(TVDiskID vdiskId, const NKikimrCms::TAction &action, const TString &requestId)
 {
     auto &vdisk = VDiskRef(vdiskId);
-    vdisk.TempLocks.push_back({RollbackPoint, action});
+    vdisk.AddTempLock({RollbackPoint, action, requestId});
 }
 
 static TServices MakeServices(const NKikimrCms::TAction &action) {
@@ -639,11 +661,13 @@ static TServices MakeServices(const NKikimrCms::TAction &action) {
     return services;
 }
 
-void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
+void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority, const TString &requestId)
 {
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         return;
     }
+
+    TNodeLockContext ctx(priority, requestId);
 
     switch (action.GetType()) {
     case TAction::RESTART_SERVICES:
@@ -652,8 +676,8 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
         if (auto nodes = NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(node->NodeId)) {
-                        nodeGroup->LockNode(node->NodeId);
+                    if (!nodeGroup->IsNodeLocked(node->NodeId, priority)) {
+                        nodeGroup->LockNode(node->NodeId, ctx);
                     }
                 }
             }
@@ -664,17 +688,17 @@ void TClusterInfo::ApplyActionWithoutLog(const NKikimrCms::TAction &action)
             if (HasPDisk(device)) {
                 auto pdisk = &PDiskRef(device);
                 for (auto &nodeGroup: NodeRef(pdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
-                        nodeGroup->LockNode(pdisk->NodeId);
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId, priority)) {
+                        nodeGroup->LockNode(pdisk->NodeId, ctx);
                     }
                 }
             } else if (HasVDisk(device)) {
                 auto vdisk = &VDiskRef(device);
                 for (auto &nodeGroup: NodeRef(vdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
-                        nodeGroup->LockNode(vdisk->NodeId);
+                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId, priority)) {
+                        nodeGroup->LockNode(vdisk->NodeId, ctx);
                     }
-                } 
+                }
             }
         }
         break;
@@ -785,7 +809,7 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
         }
     }
 
-    ApplyActionWithoutLog(permission.Action);
+    ApplyActionWithoutLog(permission.Action, permission.Priority, permission.RequestId);
 
     return locks;
 }
@@ -795,7 +819,7 @@ ui64 TClusterInfo::AddExternalLocks(const TNotificationInfo &notification, const
     ui64 locks = 0;
     for (const auto &action : notification.Notification.GetActions()) {
         auto items = FindLockedItems(action, ctx);
-        ApplyActionWithoutLog(action);
+        ApplyActionWithoutLog(action, 0, notification.NotificationId);
 
         for (auto item : items) {
             if (ctx)
@@ -851,14 +875,14 @@ void TClusterInfo::UpdateDowntimes(TDowntimes &downtimes, const TActorContext &c
     }
 }
 
-ui64 TClusterInfo::AddTempLocks(const NKikimrCms::TAction &action, const TActorContext *ctx)
+ui64 TClusterInfo::AddTempLocks(const NKikimrCms::TAction &action, i32 priority, const TString &requestId, const TActorContext *ctx)
 {
     auto items = FindLockedItems(action, ctx);
 
-    LogManager.ApplyAction(action, this);
+    LogManager.ApplyAction(action, priority, requestId, this);
 
     for (auto item : items)
-        item->TempLocks.push_back({RollbackPoint, action});
+        item->AddTempLock({RollbackPoint, action, requestId});
 
     return items.size();
 }
@@ -884,16 +908,16 @@ void TClusterInfo::UnscheduleActions(const TString &requestId)
         entry.second->RemoveScheduledLocks(requestId);
 }
 
-void TClusterInfo::DeactivateScheduledLocks(i32 priority)
+void TClusterInfo::SetPriorityToCheck(i32 priority)
 {
     for (auto &entry : LockableItems)
-        entry.second->DeactivateScheduledLocks(priority);
+        entry.second->SetPriorityToCheck(priority);
 }
 
-void TClusterInfo::ReactivateScheduledLocks()
+void TClusterInfo::ResetPriorityToCheck()
 {
     for (auto &entry : LockableItems)
-        entry.second->ReactivateScheduledLocks();
+        entry.second->ResetPriorityToCheck();
 }
 
 void TClusterInfo::RollbackLocks(ui64 point)
@@ -1036,7 +1060,7 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
         auto &group = entry.second;
         ss << "BSGroup {" << Endl
            << "  Id: " << group.GroupId << Endl;
-        if (group.Erasure.GetErasure() == TErasureType::ErasureSpeciesCount)
+        if (!TBlobStorageGroupType::ErasureNames.contains(group.Erasure.GetErasure()))
             ss << "  Erasure: UNKNOWN" << Endl;
         else
             ss << "  Erasure: " << group.Erasure.ToString() << Endl;
@@ -1047,9 +1071,11 @@ void TClusterInfo::DebugDump(const TActorContext &ctx) const
     }
 }
 
-void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
-                                      TClusterInfoPtr clusterState)
+void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action, i32 priority,
+                                       const TString &requestId, TClusterInfoPtr clusterState)
 {
+    TNodeLockContext ctx(priority, requestId);
+
     switch (action.GetType()) {
     case NKikimrCms::TAction::RESTART_SERVICES:
     case NKikimrCms::TAction::SHUTDOWN_HOST:
@@ -1057,10 +1083,10 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
         if (auto nodes = clusterState->NodePtrs(action.GetHost(), MakeServices(action))) {
             for (const auto node : nodes) {
                 for (auto &nodeGroup: node->NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(node->NodeId)) {
-                        AddNodeLockOperation(node->NodeId, nodeGroup);
+                    if (!nodeGroup->IsNodeLocked(node->NodeId, priority)) {
+                        AddNodeLockOperation(node->NodeId, ctx, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;
@@ -1069,17 +1095,17 @@ void TOperationLogManager::ApplyAction(const NKikimrCms::TAction &action,
             if (clusterState->HasPDisk(device)) {
                 auto pdisk = &clusterState->PDisk(device);
                 for (auto &nodeGroup: clusterState->NodeRef(pdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId)) {
-                        AddNodeLockOperation(pdisk->NodeId, nodeGroup);
+                    if (!nodeGroup->IsNodeLocked(pdisk->NodeId, priority)) {
+                        AddNodeLockOperation(pdisk->NodeId, ctx, nodeGroup);
                     }
-                }       
+                }
             } else if (clusterState->HasVDisk(device)) {
                 auto vdisk = &clusterState->VDisk(device);
                 for (auto &nodeGroup: clusterState->NodeRef(vdisk->NodeId).NodeGroups) {
-                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId)) {
-                        AddNodeLockOperation(vdisk->NodeId, nodeGroup);
+                    if (!nodeGroup->IsNodeLocked(vdisk->NodeId, priority)) {
+                        AddNodeLockOperation(vdisk->NodeId, ctx, nodeGroup);
                     }
-                }     
+                }
             }
         }
         break;

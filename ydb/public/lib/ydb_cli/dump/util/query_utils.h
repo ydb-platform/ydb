@@ -34,4 +34,23 @@ TString GetBackupRoot(const TString& query);
 TString GetDatabase(const TString& query);
 TVector<TSecretSetting> GetSecretSettings(const TString& query);
 
+std::string KeyValueToString(std::string_view key, std::string_view value);
+
+bool IsSchemaSecret(TStringBuf secretName);
+
+void RewriteSecretSettings(
+    TVector<TSecretSetting>& secretSettings,
+    const TString& database,
+    const TString& dbRestoreRoot);
+
+bool RewriteQuerySecrets(
+    TString& query,
+    TVector<TSecretSetting>& secretSettings,
+    NYql::TIssues issues);
+
+bool RewriteQuerySecretsNoCheck(
+    TString& query,
+    const TString& dbRestoreRoot,
+    NYql::TIssues& issues);
+
 } // NYdb::NDump

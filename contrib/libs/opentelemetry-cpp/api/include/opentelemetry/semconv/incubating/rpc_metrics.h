@@ -21,29 +21,60 @@ namespace rpc
 {
 
 /**
-  Measures the duration of outbound RPC.
+  Measures the duration of outbound remote procedure calls (RPC).
   <p>
-  While streaming RPCs may record this metric as start-of-batch
-  to end-of-batch, it's hard to interpret in practice.
-  <p>
-  <strong>Streaming</strong>: N/A.
+  When this metric is reported alongside an RPC client span, the metric value
+  SHOULD be the same as the RPC client span duration.
   <p>
   histogram
  */
-static constexpr const char *kMetricRpcClientDuration = "rpc.client.duration";
-static constexpr const char *descrMetricRpcClientDuration =
-    "Measures the duration of outbound RPC.";
-static constexpr const char *unitMetricRpcClientDuration = "ms";
+static constexpr const char *kMetricRpcClientCallDuration = "rpc.client.call.duration";
+static constexpr const char *descrMetricRpcClientCallDuration =
+    "Measures the duration of outbound remote procedure calls (RPC).";
+static constexpr const char *unitMetricRpcClientCallDuration = "s";
 
 static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
+CreateSyncInt64MetricRpcClientCallDuration(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Histogram(kMetricRpcClientCallDuration,
+                                      descrMetricRpcClientCallDuration,
+                                      unitMetricRpcClientCallDuration);
+}
+
+static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricRpcClientCallDuration(metrics::Meter *meter)
+{
+  return meter->CreateDoubleHistogram(kMetricRpcClientCallDuration,
+                                      descrMetricRpcClientCallDuration,
+                                      unitMetricRpcClientCallDuration);
+}
+
+/**
+  Deprecated, use @code rpc.client.call.duration @endcode instead. Note: the unit also changed from
+  @code ms @endcode to @code s @endcode.
+
+  @deprecated
+  {"note": "Replaced by @code rpc.client.call.duration @endcode with unit @code s @endcode.",
+  "reason": "uncategorized"} <p> While streaming RPCs may record this metric as start-of-batch to
+  end-of-batch, it's hard to interpret in practice. <p> <strong>Streaming</strong>: N/A. <p>
+  histogram
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricRpcClientDuration =
+    "rpc.client.duration";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricRpcClientDuration =
+    "Deprecated, use `rpc.client.call.duration` instead. Note: the unit also changed from `ms` to "
+    "`s`.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcClientDuration = "ms";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcClientDuration(metrics::Meter *meter)
 {
   return meter->CreateUInt64Histogram(kMetricRpcClientDuration, descrMetricRpcClientDuration,
                                       unitMetricRpcClientDuration);
 }
 
-static inline nostd::unique_ptr<metrics::Histogram<double>> CreateSyncDoubleMetricRpcClientDuration(
-    metrics::Meter *meter)
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricRpcClientDuration(metrics::Meter *meter)
 {
   return meter->CreateDoubleHistogram(kMetricRpcClientDuration, descrMetricRpcClientDuration,
                                       unitMetricRpcClientDuration);
@@ -173,28 +204,60 @@ CreateSyncDoubleMetricRpcClientResponsesPerRpc(metrics::Meter *meter)
 }
 
 /**
-  Measures the duration of inbound RPC.
+  Measures the duration of inbound remote procedure calls (RPC).
   <p>
-  While streaming RPCs may record this metric as start-of-batch
-  to end-of-batch, it's hard to interpret in practice.
-  <p>
-  <strong>Streaming</strong>: N/A.
+  When this metric is reported alongside an RPC server span, the metric value
+  SHOULD be the same as the RPC server span duration.
   <p>
   histogram
  */
-static constexpr const char *kMetricRpcServerDuration     = "rpc.server.duration";
-static constexpr const char *descrMetricRpcServerDuration = "Measures the duration of inbound RPC.";
-static constexpr const char *unitMetricRpcServerDuration  = "ms";
+static constexpr const char *kMetricRpcServerCallDuration = "rpc.server.call.duration";
+static constexpr const char *descrMetricRpcServerCallDuration =
+    "Measures the duration of inbound remote procedure calls (RPC).";
+static constexpr const char *unitMetricRpcServerCallDuration = "s";
 
 static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
+CreateSyncInt64MetricRpcServerCallDuration(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Histogram(kMetricRpcServerCallDuration,
+                                      descrMetricRpcServerCallDuration,
+                                      unitMetricRpcServerCallDuration);
+}
+
+static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricRpcServerCallDuration(metrics::Meter *meter)
+{
+  return meter->CreateDoubleHistogram(kMetricRpcServerCallDuration,
+                                      descrMetricRpcServerCallDuration,
+                                      unitMetricRpcServerCallDuration);
+}
+
+/**
+  Deprecated, use @code rpc.server.call.duration @endcode instead. Note: the unit also changed from
+  @code ms @endcode to @code s @endcode.
+
+  @deprecated
+  {"note": "Replaced by @code rpc.server.call.duration @endcode with unit @code s @endcode.",
+  "reason": "uncategorized"} <p> While streaming RPCs may record this metric as start-of-batch to
+  end-of-batch, it's hard to interpret in practice. <p> <strong>Streaming</strong>: N/A. <p>
+  histogram
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricRpcServerDuration =
+    "rpc.server.duration";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricRpcServerDuration =
+    "Deprecated, use `rpc.server.call.duration` instead. Note: the unit also changed from `ms` to "
+    "`s`.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricRpcServerDuration = "ms";
+
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<uint64_t>>
 CreateSyncInt64MetricRpcServerDuration(metrics::Meter *meter)
 {
   return meter->CreateUInt64Histogram(kMetricRpcServerDuration, descrMetricRpcServerDuration,
                                       unitMetricRpcServerDuration);
 }
 
-static inline nostd::unique_ptr<metrics::Histogram<double>> CreateSyncDoubleMetricRpcServerDuration(
-    metrics::Meter *meter)
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Histogram<double>>
+CreateSyncDoubleMetricRpcServerDuration(metrics::Meter *meter)
 {
   return meter->CreateDoubleHistogram(kMetricRpcServerDuration, descrMetricRpcServerDuration,
                                       unitMetricRpcServerDuration);

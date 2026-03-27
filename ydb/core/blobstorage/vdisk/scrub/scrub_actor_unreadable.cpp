@@ -118,7 +118,7 @@ namespace NKikimr {
                         UnreadableBlobs.erase(it);
                     }
                     ++MonGroup.BlobsFixed();
-                    
+
                 } else {
                     STLOG(PRI_WARN, BS_VDISK_SCRUB, VDS07, VDISKP(LogPrefix, "failed to restore corrupted blob"),
                         (BlobId, item.BlobId), (Status, item.Status));

@@ -9,6 +9,8 @@ items:
   href: selfheal.md
 - name: Декомиссия части кластера
   href: ../../devops/deployment-options/manual/decommissioning.md
+- name: Декомиссия групп с использованием виртуальных групп
+  href: virtual_storage_groups_decommit.md
 - name: Перевоз VDisk'ов
   href: moving_vdisks.md
 - name: Предотвращение выхода за модель отказа

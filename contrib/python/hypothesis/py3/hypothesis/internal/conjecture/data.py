@@ -70,6 +70,7 @@ from hypothesis.internal.intervalsets import IntervalSet
 from hypothesis.internal.observability import PredicateCounts
 from hypothesis.reporting import debug_report
 from hypothesis.utils.conventions import not_set
+from hypothesis.utils.deprecation import note_deprecation
 from hypothesis.utils.threading import ThreadLocal
 
 if TYPE_CHECKING:
@@ -81,7 +82,6 @@ if TYPE_CHECKING:
 
 def __getattr__(name: str) -> Any:
     if name == "AVAILABLE_PROVIDERS":
-        from hypothesis._settings import note_deprecation
         from hypothesis.internal.conjecture.providers import AVAILABLE_PROVIDERS
 
         note_deprecation(
@@ -142,7 +142,7 @@ POOLED_CONSTRAINTS_CACHE: LRUCache[tuple[Any, ...], ChoiceConstraintsT] = LRUCac
 class Span:
     """A span tracks the hierarchical structure of choices within a single test run.
 
-    Spans are created to mark regions of the choice sequence that that are
+    Spans are created to mark regions of the choice sequence that are
     logically related to each other. For instance, Hypothesis tracks:
     - A single top-level span for the entire choice sequence
     - A span for the choices made by each strategy
@@ -646,12 +646,12 @@ class ConjectureData:
         self.overdraw = 0
         self._random = random
 
-        self.length = 0
-        self.index = 0
-        self.output = ""
-        self.status = Status.VALID
-        self.frozen = False
-        self.testcounter = threadlocal.global_test_counter
+        self.length: int = 0
+        self.index: int = 0
+        self.output: str = ""
+        self.status: Status = Status.VALID
+        self.frozen: bool = False
+        self.testcounter: int = threadlocal.global_test_counter
         threadlocal.global_test_counter += 1
         self.start_time = time.perf_counter()
         self.gc_start_time = gc_cumulative_time()
@@ -659,8 +659,8 @@ class ConjectureData:
         self.interesting_origin: InterestingOrigin | None = None
         self.draw_times: dict[str, float] = {}
         self._stateful_run_times: dict[str, float] = defaultdict(float)
-        self.max_depth = 0
-        self.has_discards = False
+        self.max_depth: int = 0
+        self.has_discards: bool = False
 
         self.provider: PrimitiveProvider = (
             provider(self, **provider_kw) if isinstance(provider, type) else provider
@@ -683,9 +683,8 @@ class ConjectureData:
         # examples for reporting purposes.
         self.__spans: Spans | None = None
 
-        # We want the top level span to have depth 0, so we start
-        # at -1.
-        self.depth = -1
+        # We want the top level span to have depth 0, so we start at -1.
+        self.depth: int = -1
         self.__span_record = SpanRecord()
 
         # Slice indices for discrete reportable parts that which-parts-matter can

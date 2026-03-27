@@ -27,7 +27,7 @@ namespace NKikimr::NStorage {
 
     static std::optional<TBridgePileId> ResolveBridgePileId(const TNodeLocation& location,
             const THashMap<TString, TBridgePileId>& bridgePileNameMap) {
-        const auto& bridgePileName = location.GetBridgePileName(); 
+        const auto& bridgePileName = location.GetBridgePileName();
         if (bridgePileName.has_value() != !bridgePileNameMap.empty()) {
             Y_DEBUG_ABORT_S("incorrect node bridge pile name setting Location# " << location.ToString());
             return std::nullopt;

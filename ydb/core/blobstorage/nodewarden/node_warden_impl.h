@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/protos/blobstorage_distributed_config.pb.h>
 #include <ydb/core/util/backoff.h>
@@ -91,6 +93,8 @@ namespace NKikimr::NStorage {
 
         ui32 RefCount = 0;
         bool Temporary = false;
+        ui32 ExpectedSlotCount = 0;
+        ui32 SlotSizeInUnits = 0;
 
         std::optional<ui64> ShredGenerationIssued;
         std::variant<std::monostate, ui64, TString> ShredState; // not issued, finished with generation, aborted
@@ -163,10 +167,12 @@ namespace NKikimr::NStorage {
 
         bool EnableProxyMock = false;
         NKikimrBlobStorage::TMockDevicesConfig MockDevicesConfig;
+        NKikimrBlobStorage::TInferPDiskSlotCountSettings InferPDiskSlotCountSettings;
 
         struct TEvPrivate {
             enum EEv {
                 EvSendDiskMetrics = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvUpdateStats,
                 EvUpdateNodeDrives,
                 EvReadCache,
                 EvGetGroup,
@@ -177,6 +183,7 @@ namespace NKikimr::NStorage {
             };
 
             struct TEvSendDiskMetrics : TEventLocal<TEvSendDiskMetrics, EvSendDiskMetrics> {};
+            struct TEvUpdateStats : TEventLocal<TEvUpdateStats, EvUpdateStats> {};
             struct TEvUpdateNodeDrives : TEventLocal<TEvUpdateNodeDrives, EvUpdateNodeDrives> {};
 
             struct TEvDereferencePDisk : TEventLocal<TEvDereferencePDisk, EvDereferencePDisk> {
@@ -236,9 +243,12 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
 
+        TControlWrapper EnableChunkKeeper;
+
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
         TControlWrapper CommonStaticLogChunks;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
@@ -312,7 +322,6 @@ namespace NKikimr::NStorage {
         void StopInvalidGroupProxy();
         void StartLocalProxy(ui32 groupId);
         void StartVirtualGroupAgent(ui32 groupId);
-        void StartStaticProxies();
         void StartRequestReportingThrottler();
 
         /**
@@ -432,6 +441,7 @@ namespace NKikimr::NStorage {
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;
+                bool DDisk;
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;
@@ -561,6 +571,9 @@ namespace NKikimr::NStorage {
         // if needed
         TIntrusivePtr<TBlobStorageGroupInfo> NeedGroupInfo(ui32 groupId);
 
+        // check if a proxy exists for a given group
+        bool HasGroupProxy(ui32 groupId) const;
+
         // propose group key
         void ProposeKey(ui32 groupId, const TEncryptionKey& mainKey, const NKikimrBlobStorage::TGroupInfo& encryptionParams);
 
@@ -624,6 +637,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&);
         void Handle(TEvPrivate::TEvUpdateNodeDrives ::TPtr&);
         void Handle(TEvPrivate::TEvRetrySaveConfig::TPtr&);
+        void Handle(TEvPrivate::TEvUpdateStats::TPtr&);
 
         void Handle(NMon::TEvHttpInfo::TPtr&);
         void RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& groupIds);
@@ -654,6 +668,10 @@ namespace NKikimr::NStorage {
         void SendScrubRequests();
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::TPtr ev);
+
+        void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr ev);
+        void Handle(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse::TPtr ev);
+        void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge syncer operation
@@ -757,6 +775,43 @@ namespace NKikimr::NStorage {
         bool VDiskStatusChanged = false;
 
         STATEFN(StateOnline);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Inter-pile communication
+
+        struct TInterpileRequest {
+            struct TCommonPart {
+               TActorId Sender;
+                ui64 Cookie;
+                TActorId InterconnectSessionId;
+                ui32 RepliesRemaining = 0;
+                NKikimrBlobStorage::TEvInterpilePutResult Result;
+
+                TCommonPart(TEventHandle<TEvInterpilePut>& ev)
+                    : Sender(ev.Sender)
+                    , Cookie(ev.Cookie)
+                    , InterconnectSessionId(ev.InterconnectSession)
+                {
+                    auto& msg = *ev.Get();
+                    for (size_t i = 0; i < msg.Record.ItemsSize(); ++i) {
+                        Result.AddItems();
+                    }
+                }
+            };
+            std::shared_ptr<TCommonPart> CommonPart;
+            size_t Index;
+
+            TInterpileRequest(std::shared_ptr<TCommonPart> commonPart, size_t index)
+                : CommonPart(std::move(commonPart))
+                , Index(index)
+            {}
+        };
+
+        ui64 NextInterpileRequestCookie = 1;
+        THashMap<ui64, TInterpileRequest> InterpileRequests;
+
+        void Handle(TEvInterpilePut::TPtr ev);
+        void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
     };
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,

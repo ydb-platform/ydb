@@ -258,7 +258,7 @@ private:
             return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
         }
 
-        ShardNodes = std::move(reply.ShardNodes);
+        ShardNodes = std::move(reply.ShardsToNodes);
 
         ProcessDescribeSchemeResult(PendingDescribeResult, ctx);
     }

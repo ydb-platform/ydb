@@ -69,6 +69,14 @@ ui64 GetResultRowsLimit(const TResWriteBase& resWrite) {
     return 0;
 }
 
+bool GetResultDiscard(const TResWriteBase& resWrite) {
+    auto discardSetting = GetSetting(resWrite.Settings().Ref(), "discard");
+    if (discardSetting) {
+        return true;
+    }
+    return false;
+}
+
 enum class TPrimitiveYdbOperation : ui32 {
     Read = 1 << 0,
     Write = 1 << 1
@@ -174,9 +182,10 @@ struct TKiExploreTxResults {
         }
     }
 
-    void AddWriteOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes, bool needMainTableRead) {
+    void AddWriteOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes,
+        bool needMainTableRead, bool isUpdate, const THashSet<std::string_view>& updateColumns) {
         THashMap<TString, TPrimitiveYdbOperations> ops;
-        if (needMainTableRead) {
+        if (needMainTableRead || isUpdate) {
             ops[name] |= TPrimitiveYdbOperation::Read;
         }
         ops[name] |= TPrimitiveYdbOperation::Write;
@@ -190,53 +199,51 @@ struct TKiExploreTxResults {
 
             const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
             TString indexTable;
+            TString dictTable;
+            TString dataTable;
             if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                indexTable = indexTables[1];
+                YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
+                dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextPlain) {
+                YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
+                dataTable = indexTable = indexTables[0];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
+                indexTable = indexTables[3];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                dictTable = indexTables[0];
+                YQL_ENSURE(dictTable.EndsWith(NKikimr::NTableIndex::NFulltext::DictTable));
+                dataTable = indexTables[1];
+                YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
-                indexTable = indexTables[0];
-            }
-            ops[indexTable] = TPrimitiveYdbOperation::Write;
-        }
-
-        AddEffect(effect, ops);
-    }
-
-    void AddUpdateOpToQueryBlock(const TExprBase& effect, const TString& name, const TVector<TIndexDescription>& indexes,
-        const THashSet<std::string_view>& updateColumns) {
-        THashMap<TString, TPrimitiveYdbOperations> ops;
-        // read and upsert rows into main table
-        ops[name] = TPrimitiveYdbOperation::Read | TPrimitiveYdbOperation::Write;
-
-        for (const auto& index : indexes) {
-            if (!index.ItUsedForWrite()) {
-                continue;
+                dataTable = indexTable = indexTables[0];
             }
 
-            const auto indexTables = NKikimr::NKqp::NSchemeHelpers::CreateIndexTablePath(name, index);
-            TString indexTable;
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                indexTable = indexTables[1];
-                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));
-            } else {
-                YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
-                indexTable = indexTables[0];
-            }
-
-            for (const auto& column : index.KeyColumns) {
-                if (updateColumns.contains(column)) {
-                    // delete old index values and upsert rows into index table
-                    ops[indexTable] = TPrimitiveYdbOperation::Write;
-                    break;
+            if (!isUpdate) {
+                ops[indexTable] = TPrimitiveYdbOperation::Write;
+                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                    ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
-            }
-
-            for (const auto& column : index.DataColumns) {
-                if (updateColumns.contains(column)) {
-                    // upsert rows into index table
-                    ops[indexTable] = TPrimitiveYdbOperation::Write;
-                    break;
+            } else {
+                for (const auto& column : index.KeyColumns) {
+                    if (updateColumns.contains(column)) {
+                        // delete old index values and upsert rows into index table
+                        ops[indexTable] = TPrimitiveYdbOperation::Write;
+                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                            ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
+                        }
+                        break;
+                    }
+                }
+                for (const auto& column : index.DataColumns) {
+                    if (updateColumns.contains(column)) {
+                        // upsert rows into index table
+                        ops[dataTable] = TPrimitiveYdbOperation::Write;
+                        break;
+                    }
                 }
             }
         }
@@ -461,14 +468,14 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
 
             const auto& tableData = tablesData->ExistingTable(cluster, table);
             YQL_ENSURE(tableData.Metadata);
-            txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, updateColumns);
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, true, true, updateColumns);
         } else if (tableOp == TYdbOperation::FillTable) {
             // FillTable is used for CTAS.
-            txRes.AddWriteOpToQueryBlock(node, TString(table), {}, tableOp & KikimrReadOps());
+            txRes.AddWriteOpToQueryBlock(node, TString(table), {}, tableOp & KikimrReadOps(), false, {});
         } else {
             const auto& tableData = tablesData->ExistingTable(cluster, table);
             YQL_ENSURE(tableData.Metadata);
-            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps());
+            txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
         }
 
         if (!write.ReturningColumns().Empty()) {
@@ -521,7 +528,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddUpdateOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, updateColumns);
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, true, true, updateColumns);
         if (!update.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, update.Pos())
@@ -559,7 +566,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
             txRes.PrepareForResult();
         }
 
-        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps());
+        txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, tableOp & KikimrReadOps(), false, {});
         if (!del.ReturningColumns().Empty()) {
             txRes.AddResult(
                 Build<TResWrite>(ctx, del.Pos())
@@ -848,6 +855,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
                 .Value(resWrite.Data())
                 .Columns(GetResultColumns(resWrite, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resWrite))
+                .Discard().Build(GetResultDiscard(resWrite))
                 .Done();
 
             queryResults.push_back(kiResult.Ptr());
@@ -1324,6 +1332,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node, const TString& cluster, TExprConte
                 .Value(resFill.Data())
                 .Columns(GetResultColumns(resFill, ctx))
                 .RowsLimit().Build(GetResultRowsLimit(resFill))
+                .Discard().Build(GetResultDiscard(resFill))
                 .Build()
             .Build()
         .Effects()

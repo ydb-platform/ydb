@@ -267,7 +267,7 @@ private:
 
 class TDummyRemoteLayerProvider: public IRemoteLayerProvider {
 public:
-    TDummyRemoteLayerProvider(TString errorMessage)
+    explicit TDummyRemoteLayerProvider(TString errorMessage)
         : ErrorMessage_(std::move(errorMessage))
     {
     }

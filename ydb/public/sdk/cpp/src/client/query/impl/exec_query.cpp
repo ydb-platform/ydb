@@ -287,6 +287,7 @@ public:
     {
         auto rpcSettings = TRpcRequestSettings::Make(settings);
         if (session.has_value()) {
+            rpcSettings.TryUpdateDeadline(session->GetPropagatedDeadline());
             rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
         }
 

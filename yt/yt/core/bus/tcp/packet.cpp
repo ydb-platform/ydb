@@ -246,7 +246,7 @@ public:
         return FixedHeader_.PacketId;
     }
 
-    TSharedRefArray GrabMessage() const override
+    TSharedRefArray GrabMessage() override
     {
         return std::move(Message_);
     }

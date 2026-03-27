@@ -6,8 +6,8 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 const TDictExprType* GetCachedMutDictType(const TStringBuf& resourceTag, const TExprContext& typeCtx);
 IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
@@ -27,5 +27,5 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
 template <bool WithPayload>
 IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

@@ -201,8 +201,8 @@ class TRestoreClient {
     TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
-    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TString& dbRestoreRoot, const TRestoreSettings& settings);
-    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
     TRestoreResult RestoreSysView(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
 
     TRestoreResult CheckExistenceAndType(const TString& dbPath, NScheme::ESchemeEntryType expectedType) const;

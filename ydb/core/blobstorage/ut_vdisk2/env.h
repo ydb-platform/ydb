@@ -128,6 +128,14 @@ namespace NKikimr {
             return r;
         }
 
+        NKikimrBlobStorage::TEvVGetResult GetIndex(const TLogoBlobID& id,
+                NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
+            auto query = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(VDiskId, TInstant::Max(), prio,
+                TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {id.FullID()});
+            return ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
+                GetQueueId(prio));
+        }
+
         NKikimrBlobStorage::TEvVCollectGarbageResult Collect(ui64 tabletId, ui32 gen, ui32 counter,
                 ui8 channel, std::optional<std::pair<ui32, ui32>> collect, bool hard, const TVector<TLogoBlobID>& keep,
                 const TVector<TLogoBlobID>& doNotKeep) {
@@ -144,10 +152,10 @@ namespace NKikimr {
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
-            
+
             auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
             vdiskTypes->Add(std::move(perfConfig));
-            
+
             Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);

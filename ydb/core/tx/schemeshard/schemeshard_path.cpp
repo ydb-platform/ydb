@@ -581,12 +581,12 @@ const TPath::TChecker& TPath::TChecker::IsDirectory(EStatus status) const {
         << " (" << BasicPathInfo(Path.Base()) << ")");
 }
 
-const TPath::TChecker& TPath::TChecker::IsSysViewDirectory(EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsSystemDirectory(EStatus status) const {
     if (Failed) {
         return *this;
     }
 
-    if (Path.Base()->IsDirectory() && Path.Base()->Name == NSysView::SysPathName) {
+    if (Path.Base()->IsSystemDirectory()) {
         return *this;
     }
 
@@ -725,19 +725,21 @@ const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, EStatus status) c
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
     const auto pathsTotal = domainInfo->GetPathsInside();
     const auto backupPaths = domainInfo->GetBackupPaths();
+    const auto systemPaths = domainInfo->GetSystemPaths();
 
-    Y_VERIFY_S(pathsTotal >= backupPaths, "Constraint violation"
+    Y_VERIFY_S(pathsTotal >= backupPaths + systemPaths, "Constraint violation"
         << ": path: " << Path.PathString()
         << ", paths total: " << pathsTotal
-        << ", backup paths: " << backupPaths);
+        << ", backup paths: " << backupPaths
+        << ", system paths: " << systemPaths);
 
-    if (!delta || (pathsTotal - backupPaths) + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
+    if (!delta || (pathsTotal - backupPaths - systemPaths) + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
         return *this;
     }
 
     return Fail(status, TStringBuilder() << "paths count limit exceeded"
         << ", limit: " << domainInfo->GetSchemeLimits().MaxPaths
-        << ", paths: " << (pathsTotal - backupPaths)
+        << ", paths: " << (pathsTotal - backupPaths - systemPaths)
         << ", delta: " << delta);
 }
 
@@ -966,11 +968,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // when we can be certain that the database will never be downgraded to a version
     // which does not support the YQL export process. Otherwise, they will be considered as tables,
     // and we might cause the process to be aborted.
-    if (Path.Base()->IsTable()
-        || (Path.Base()->IsColumnTable() && AppData()->FeatureFlags.GetEnableColumnTablesBackup())
-        || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
-        || Path.Base()->IsPQGroup()
-    )  {
+    if (Path.IsSupportedInExports()) {
         return *this;
     }
 
@@ -986,14 +984,6 @@ const TPath::TChecker& TPath::TChecker::PathShardsLimit(ui64 delta, EStatus stat
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
     const ui64 shardInPath = Path.Shards();
-
-    if (Path.IsResolved() && !Path.IsDeleted()) {
-        const auto allShards = Path.SS->CollectAllShards({Path.Base()->PathId});
-        Y_VERIFY_DEBUG_S(allShards.size() == shardInPath, "pedantic check"
-            << ": CollectAllShards(): " << allShards.size()
-            << ", Path.Shards(): " << shardInPath
-            << ", path: " << Path.PathString());
-    }
 
     if (!delta || shardInPath + delta <= domainInfo->GetSchemeLimits().MaxShardsInPath) {
         return *this;
@@ -1208,17 +1198,17 @@ const TPath::TChecker& TPath::TChecker::Or(TCheckerMethodPtr leftFunc, TCheckerM
     if (Failed) {
         return *this;
     }
-    
+
     TChecker left(*this);
     (left.*leftFunc)(status);
-    
+
     if (!left.Failed) {
         return *this;
     }
-    
+
     TChecker right(*this);
     (right.*rightFunc)(status);
-    
+
     if (right.Failed) {
         return Fail(left.Status, TStringBuilder() << left.Error << " and " << right.Error);
     }
@@ -1571,7 +1561,8 @@ bool TPath::IsUnderOperation() const {
             + (ui32)IsUnderDeleting()
             + (ui32)IsUnderDomainUpgrade()
             + (ui32)IsUnderMoving()
-            + (ui32)IsUnderOutgoingIncrementalRestore();
+            + (ui32)IsUnderOutgoingIncrementalRestore()
+            + (ui32)IsUnderIncomingIncrementalRestore();
         Y_VERIFY_S(sum == 1,
                    "only one operation at the time"
                        << " pathId: " << Base()->PathId
@@ -1664,6 +1655,12 @@ bool TPath::IsUnderOutgoingIncrementalRestore() const {
 
     return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateOutgoingIncrementalRestore
         || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
+}
+
+bool TPath::IsUnderIncomingIncrementalRestore() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    return Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateIncomingIncrementalRestore;
 }
 
 TPath& TPath::RiseUntilOlapStore() {
@@ -1850,6 +1847,32 @@ bool TPath::IsTransfer() const {
     Y_ABORT_UNLESS(IsResolved());
 
     return Base()->IsTransfer();
+}
+
+bool TPath::IsSupportedInExports() const {
+    Y_ABORT_UNLESS(IsResolved());
+
+    switch (Base()->PathType) {
+        case NKikimrSchemeOp::EPathTypeView:
+            return AppData()->FeatureFlags.GetEnableViewExport();
+        case NKikimrSchemeOp::EPathTypeColumnTable:
+            return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+        case NKikimrSchemeOp::EPathTypeReplication:
+            return SS->BackupSettings.S3Settings.EnableAsyncReplicationExport;
+        case NKikimrSchemeOp::EPathTypeTransfer:
+            return SS->BackupSettings.S3Settings.EnableTransferExport;
+        case NKikimrSchemeOp::EPathTypeExternalDataSource:
+            return SS->BackupSettings.S3Settings.EnableExternalDataSourceExport;
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return SS->BackupSettings.S3Settings.EnableExternalTableExport;
+        case NKikimrSchemeOp::EPathTypeSysView:
+            return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        case NKikimrSchemeOp::EPathTypeTable:
+            return true;
+        default:
+            return false;
+    }
 }
 
 ui32 TPath::Depth() const {

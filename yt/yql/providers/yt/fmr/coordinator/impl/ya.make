@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     yql_yt_coordinator_impl.cpp
-    yql_yt_partitioner.cpp
 )
 
 PEERDIR(
@@ -14,6 +13,7 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/impl
+    yt/yql/providers/yt/fmr/coordinator/operation_manager/impl
     yt/yql/providers/yt/fmr/gc_service/impl
     yt/yql/providers/yt/fmr/utils
     yql/essentials/utils

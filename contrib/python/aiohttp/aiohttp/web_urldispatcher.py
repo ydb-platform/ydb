@@ -11,6 +11,7 @@ import re
 import sys
 import warnings
 from functools import wraps
+from importlib.resources.abc import Traversable, TraversalError
 from pathlib import Path
 from types import MappingProxyType
 from typing import (
@@ -559,7 +560,8 @@ class StaticResource(PrefixResource):
     ) -> None:
         super().__init__(prefix, name=name)
         try:
-            directory = Path(directory).expanduser().resolve(strict=True)
+            if not isinstance(directory, Traversable):
+                directory = Path(directory).expanduser().resolve(strict=True)
         except FileNotFoundError as error:
             raise ValueError(f"'{directory}' does not exist") from error
         if not directory.is_dir():
@@ -670,7 +672,10 @@ class StaticResource(PrefixResource):
             # where the static dir is totally different
             raise HTTPForbidden()
 
-        unresolved_path = self._directory.joinpath(filename)
+        try:
+            unresolved_path = self._directory.joinpath(filename)
+        except (FileNotFoundError, TraversalError):
+            unresolved_path = None
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, self._resolve_path_to_response, unresolved_path
@@ -681,6 +686,8 @@ class StaticResource(PrefixResource):
         # Check for access outside the root directory. For follow symlinks, URI
         # cannot traverse out, but symlinks can. Otherwise, no access outside
         # root is permitted.
+        if unresolved_path is None:
+            raise HTTPNotFound()
         try:
             if self._follow_symlinks:
                 normalized_path = Path(os.path.normpath(unresolved_path))

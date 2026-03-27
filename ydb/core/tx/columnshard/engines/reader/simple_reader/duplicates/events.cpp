@@ -5,10 +5,9 @@
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 TEvRequestFilter::TEvRequestFilter(const TPortionDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber)
-    : ExternalTaskId(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetScanIdentifier())
-    , MinPK(source.GetPortionInfo().IndexKeyStart())
+    : MinPK(source.GetPortionInfo().IndexKeyStart())
     , MaxPK(source.GetPortionInfo().IndexKeyEnd())
-    , PortionId(source.GetPortionId())
+    , PortionId(source.GetPortionInfo().GetPortionId())
     , RecordsCount(source.GetRecordsCount())
     , MaxVersion(source.GetContext()->GetCommonContext()->GetReadMetadata()->GetRequestSnapshot())
     , Subscriber(subscriber)

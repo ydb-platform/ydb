@@ -3,8 +3,24 @@
 #include <ydb/public/lib/ydb_cli/common/profile_manager.h>
 #include <ydb/public/lib/ydb_cli/common/root.h>
 
+#include <functional>
+#include <optional>
+#include <vector>
+
 namespace NYdb {
 namespace NConsoleClient {
+
+struct TAiPresetSetting {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenReq {
+    TString Token;
+    bool WasUpdated = false;
+};
 
 struct TClientSettings {
     // Whether to use secure connection or not
@@ -28,6 +44,11 @@ struct TClientSettings {
     std::optional<std::string> StorageUrl = std::nullopt;
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
+
+    // AI Mode Settings
+    std::optional<bool> EnableAiInteractive;
+    std::vector<TAiPresetSetting> AiPredefinedProfiles;
+    std::function<TAiTokenReq()> AiTokenGetter;
 };
 
 class TClientCommandRootCommon : public TClientCommandRootBase {

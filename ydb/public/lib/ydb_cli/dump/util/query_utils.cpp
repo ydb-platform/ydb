@@ -309,7 +309,7 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
 
     google::protobuf::Arena arena;
     const auto* parserProto = NSQLTranslationV1::SqlAST(
-        parsers, queryStr, "query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Antlr4Parser, &arena
+        parsers, queryStr, "query", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, &arena
     );
     if (!parserProto) {
         return false;
@@ -380,6 +380,55 @@ bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::str
 
     issues.AddIssue(TStringBuilder() << "Pattern: \"" << pattern << "\" was not found: " << query.Quote());
     return false;
+}
+
+std::string KeyValueToString(std::string_view key, std::string_view value) {
+    // indented to follow the default YQL formatting
+    return std::format("  {} = '{}'", key, value);
+}
+
+bool IsSchemaSecret(TStringBuf secretName) {
+    return secretName.StartsWith('/');
+}
+
+void RewriteSecretSettings(
+    TVector<TSecretSetting>& secretSettings,
+    const TString& database,
+    const TString& dbRestoreRoot)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (IsSchemaSecret(secretSetting.Value)) {
+            secretSetting.Value = RewriteAbsolutePath(secretSetting.Value, database, dbRestoreRoot);
+        }
+    }
+}
+
+bool RewriteQuerySecrets(
+    TString& query,
+    TVector<TSecretSetting>& secretSettings,
+    NYql::TIssues issues)
+{
+    for (auto& secretSetting : secretSettings) {
+        if (!RewriteCreateQuery(query, secretSetting.Name + " = '{}'", secretSetting.Value, issues)) {
+           return false;
+        }
+    }
+
+    return true;
+}
+
+bool RewriteQuerySecretsNoCheck(
+    TString& query,
+    const TString& dbRestoreRoot,
+    NYql::TIssues& issues)
+{
+    auto secretSettings = GetSecretSettings(query);
+    RewriteSecretSettings(secretSettings, GetDatabase(query), dbRestoreRoot);
+    if (!RewriteQuerySecrets(query, secretSettings, issues)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // NYdb::NDump

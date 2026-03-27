@@ -26,7 +26,11 @@ void TActor::OnTxCompleted(const ui64 /*txId*/) {
 void TActor::OnSessionProgressSaved() {
     SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
     if (ExportSession->GetCursor().IsFinished()) {
-        ExportSession->Finish();
+        if (ErrorMessage) {
+             ExportSession->Abort(ErrorMessage);
+        } else {
+            ExportSession->Finish();
+        }
         SaveSessionState();
     } else {
         AFL_VERIFY(ScanActorId);
@@ -74,8 +78,12 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
-void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/) {
-    AFL_VERIFY(false);
+void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& ev) {
+    ErrorMessage = ev->Get()->ErrorMessage;
+    TOwnedCellVec lastKey;
+    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
+    ExportSession->MutableCursor().InitNext(lastKey, true);
+    SaveSessionProgress();
 }
 
 std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator(const TCursor& cursor) const {
@@ -91,8 +99,9 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
         TSerializedTableRange(TSerializedCellVec::Serialize(*cursor.GetLastKey()), {}, false, false).Serialize(*newRange);
     }
 
-    ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
-    ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
+    // Snapshot will be supported after the implementation of the copy column table
+    // ev->Record.MutableSnapshot()->SetStep(backupTask.GetSnapshotStep());
+    // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
     ev->Record.SetTxId(tablePathId.GetRawValue());
     ev->Record.SetTablePath(backupTask.GetTableName());

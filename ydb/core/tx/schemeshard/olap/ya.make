@@ -13,7 +13,6 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/store
     ydb/core/tx/schemeshard/olap/table
     ydb/core/tx/schemeshard/olap/ttl
-    ydb/core/tx/schemeshard/olap/column_families
 )
 
 END()

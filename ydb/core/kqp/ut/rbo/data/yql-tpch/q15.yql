@@ -1,14 +1,10 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
-/* custom error: no viable alternative at input */
---ignore runonopt plan diff
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 WITH revenue_STREAM_ID (supplier_no, total_revenue) as
     select
         l_suppkey,
-        Sum(l_extendedprice * (1 - l_discount))
+        Sum(l_extendedprice * ($to_decimal(1) - l_discount))
     from
         `/Root/lineitem` as lineitem
     where

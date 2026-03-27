@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/events/get_object.h>
@@ -268,14 +270,14 @@ i32 main(i32 argc, const char** argv) {
             ? NKikimrSchemeOp::TS3Settings::HTTP
             : NKikimrSchemeOp::TS3Settings::HTTPS);
 
-        auto storageCfg = IExternalStorageConfig::Construct(settings);
+        auto storageCfg = IExternalStorageConfig::Construct(NKikimrConfig::TAwsClientConfig(), settings, nullptr);
         auto storageOperator = storageCfg->ConstructStorageOperator(/*verbose*/true);
 
         auto setup = BuildActorSystemSetup(/*threads*/ Max<ui32>(1u, cfg.Threads / 2u));
         THolder<TActorSystem> system(new TActorSystem(setup));
         system->Start();
 
-        const TActorId wrapperId = system->Register(CreateS3Wrapper(storageOperator));
+        const TActorId wrapperId = system->Register(CreateStorageWrapper(storageOperator));
         const ui64 sizeBytes = cfg.RangeSizeBytes ? cfg.RangeSizeBytes : (cfg.SizeMiBPerFile * 1024ull * 1024ull);
         auto done = NThreading::NewPromise<void>();
         auto future = done.GetFuture();

@@ -138,6 +138,12 @@
 
   {% endcut %}
 
+  {% cut "Реализовать получение информации о серверных ошибках `IterateByIssues`" %}
+
+  При работе с {{ ydb-short-name }} через Go SDK вы можете не только включать логирование запросов и ответов, но и программно получать детализированные сведения о серверных ошибках (issues) — дополнительных сообщениях, которые YDB возвращает в составе ответа при ошибках выполнения операций. Для итерации по списку issues, содержащихся в ответе от сервера, используйте метод [IterateByIssues](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3#IterateByIssues).
+
+  {% endcut %}
+
 - Go (database/sql)
 
   Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:
@@ -366,6 +372,16 @@
     'logger' => new \YdbPlatform\Ydb\Logger\SimpleStdLogger(\YdbPlatform\Ydb\Logger\SimpleStdLogger::INFO)
   ]
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
+  ```
+
+- Python
+
+  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
   ```
 
 {% endlist %}

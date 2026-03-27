@@ -27,11 +27,9 @@
 
 #include <functional>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 class IFunctionRegistry;
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
@@ -50,8 +48,9 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TString& runner);
+        TString runner);
 
+    void SetIssueReportTarget(const TString& reportTarget);
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
     void SetVolatileResults();
@@ -86,6 +85,7 @@ public:
     void UnrepeatableRandom();
 
 private:
+    TString IssueReportTarget_;
     const bool UseRepeatableRandomAndTimeProviders_;
     bool UseUnrepeatableRandom_ = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
@@ -121,7 +121,7 @@ public:
     using TFutureStatus = NThreading::TFuture<TStatus>;
 
 public:
-    ~TProgram();
+    ~TProgram() override;
 
     void SetLanguageVersion(TLangVersion version);
     void SetMaxLanguageVersion(TLangVersion version);
@@ -135,6 +135,8 @@ public:
     bool ParseYql();
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
+
+    TStatus TestPartialTypecheck();
 
     bool Compile(const TString& username, bool skipLibraries = false);
 
@@ -363,8 +365,17 @@ public:
         EnableLineage_ = true;
     }
 
+    void SetFuzzUntypedLambda() {
+        FuzzUntypedLambda_ = true;
+    }
+
+    void SetFuzzUniversal() {
+        FuzzUniversal_ = true;
+    }
+
 private:
     TProgram(
+        TString issueReportTarget,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
@@ -373,22 +384,22 @@ private:
         TLangVersion langVer,
         TLangVersion maxLangVer,
         bool volatileResults,
-        const TUserDataTable& userDataTable,
+        TUserDataTable userDataTable,
         const TCredentials::TPtr& credentials,
-        const IModuleResolver::TPtr& modules,
-        const IUrlListerManagerPtr& urlListerManager,
+        IModuleResolver::TPtr modules,
+        IUrlListerManagerPtr urlListerManager,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
+        TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
         const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId,
+        TString filename,
+        TString sourceCode,
+        TString sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
-        const IArrowResolver::TPtr& arrowResolver,
+        IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
         TMaybe<TString> gatewaysForMerge,
@@ -424,6 +435,8 @@ private:
     void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
                                    NSQLTranslation::TTranslationSettings*& currentSettings);
 
+    const TString IssueReportTarget_;
+
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
@@ -438,6 +451,8 @@ private:
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TLangVersion LangVer_;
     TLangVersion MaxLangVer_;
+    TMaybe<NSQLTranslation::TSqlFlags> SqlFlags_;
+
     bool VolatileResults_;
     TAdaptiveLock DataProvidersLock_;
     TVector<TDataProviderInfo> DataProviders_;
@@ -495,6 +510,8 @@ private:
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
     bool EnableLineage_ = false;
+    bool FuzzUntypedLambda_ = false;
+    bool FuzzUniversal_ = false;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 

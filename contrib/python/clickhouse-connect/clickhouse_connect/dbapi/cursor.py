@@ -53,6 +53,13 @@ class Cursor:
         self.data = None
 
     def execute(self, operation: str, parameters=None):
+        if not parameters and isinstance(operation, str):
+            # Per PEP 249 pyformat paramstyle, callers (e.g. SQLAlchemy) escape
+            # literal percent signs as %% in operation strings.  When there are
+            # parameters, Python's % operator in finalize_query handles the
+            # unescaping automatically.  When there are no parameters,
+            # finalize_query short-circuits, so we must unescape here.
+            operation = operation.replace('%%', '%')
         query_result = self.client.query(operation, parameters)
         self.data = query_result.result_set
         self._rowcount = len(self.data)

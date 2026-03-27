@@ -132,9 +132,9 @@ namespace NInterconnect {
         struct TEvPublishResults : TEventLocal<TEvPublishResults, EvPublishResults> {};
 
         struct TMessageInfo {
-            TInstant SendTimestamp;
+            TMonotonic SendTimestamp;
 
-            TMessageInfo(const TInstant& sendTimestamp)
+            TMessageInfo(const TMonotonic& sendTimestamp)
                 : SendTimestamp(sendTimestamp)
             {
             }
@@ -142,7 +142,7 @@ namespace NInterconnect {
 
         const TLoadParams Params;
         const TFinishCallback FinishCallback;
-        TInstant NextMessageTimestamp;
+        TMonotonic NextMessageTimestamp;
         THashMap<TString, TMessageInfo> InFly;
         ui64 NextId = 1;
         TVector<TActorId> Hops;
@@ -180,7 +180,7 @@ namespace NInterconnect {
             Hops.push_back(ctx.SelfID);
 
             Become(&TLoadActor::StateFunc);
-            NextMessageTimestamp = ctx.Now();
+            NextMessageTimestamp = ctx.Monotonic();
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -188,7 +188,7 @@ namespace NInterconnect {
         }
 
         void GenerateMessages(const TActorContext& ctx) {
-            while (InFly.size() < Params.InFlyMax && ctx.Now() >= NextMessageTimestamp) {
+            while (InFly.size() < Params.InFlyMax && ctx.Monotonic() >= NextMessageTimestamp) {
                 // generate payload
                 const ui32 size = Params.SizeMin + RandomNumber(Params.SizeMax - Params.SizeMin + 1);
 
@@ -216,7 +216,7 @@ namespace NInterconnect {
                 ctx.Send(FirstHop, ev.Release(), IEventHandle::MakeFlags(Params.Channel, 0), cookie);
 
                 // register in the map
-                InFly.emplace(id, TMessageInfo(ctx.Now()));
+                InFly.emplace(id, TMessageInfo(ctx.Monotonic()));
 
                 // put item into timeout queue
                 PutTimeoutQueueItem(ctx, id);
@@ -226,13 +226,13 @@ namespace NInterconnect {
                 if (Params.SoftLoad) {
                     NextMessageTimestamp += duration;
                 } else {
-                    NextMessageTimestamp = ctx.Now() + duration;
+                    NextMessageTimestamp = ctx.Monotonic() + duration;
                 }
             }
 
             // schedule next generate messages call
-            if (NextMessageTimestamp > ctx.Now() && InFly.size() < Params.InFlyMax) {
-                ctx.Schedule(NextMessageTimestamp - ctx.Now(), new TEvGenerateMessages);
+            if (NextMessageTimestamp > ctx.Monotonic() && InFly.size() < Params.InFlyMax) {
+                ctx.Schedule(NextMessageTimestamp - ctx.Monotonic(), new TEvGenerateMessages);
             }
         }
 
@@ -241,8 +241,8 @@ namespace NInterconnect {
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
                 // record message rtt
-                const TDuration rtt = ctx.Now() - it->second.SendTimestamp;
-                UpdateHistogram(ctx.Now(), rtt);
+                const TDuration rtt = ctx.Monotonic() - it->second.SendTimestamp;
+                UpdateHistogram(ctx.Monotonic(), rtt);
 
                 // update throughput
                 UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
@@ -260,12 +260,12 @@ namespace NInterconnect {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         const TDuration AggregationPeriod = TDuration::Seconds(20);
-        TDeque<std::pair<TInstant, TDuration>> Histogram;
+        TDeque<std::pair<TMonotonic, TDuration>> Histogram;
 
-        void UpdateHistogram(TInstant when, TDuration rtt) {
+        void UpdateHistogram(TMonotonic when, TDuration rtt) {
             Histogram.emplace_back(when, rtt);
 
-            const TInstant barrier = when - AggregationPeriod;
+            const TMonotonic barrier = when - AggregationPeriod;
             while (Histogram && Histogram.front().first < barrier) {
                 Histogram.pop_front();
             }
@@ -275,7 +275,7 @@ namespace NInterconnect {
         // THROUGHPUT
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TInstant ThroughputFirstSample = TInstant::Zero();
+        TMonotonic ThroughputFirstSample = TMonotonic::Zero();
         ui64 ThroughputSamples = 0;
         ui64 ThroughputBytes = 0;
         ui64 TrafficAtBegin = 0;
@@ -285,7 +285,7 @@ namespace NInterconnect {
             ++ThroughputSamples;
         }
 
-        void ResetThroughput(TInstant when, ui64 traffic) {
+        void ResetThroughput(TMonotonic when, ui64 traffic) {
             ThroughputFirstSample = when;
             ThroughputSamples = 0;
             ThroughputBytes = 0;
@@ -296,23 +296,23 @@ namespace NInterconnect {
         // TIMEOUT QUEUE OPERATIONS
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        TQueue<std::pair<TInstant, TString>> TimeoutQueue;
+        TQueue<std::pair<TMonotonic, TString>> TimeoutQueue;
 
         void PutTimeoutQueueItem(const TActorContext& ctx, TString id) {
-            TimeoutQueue.emplace(ctx.Now() + TDuration::Minutes(1), std::move(id));
+            TimeoutQueue.emplace(ctx.Monotonic() + TDuration::Minutes(1), std::move(id));
             if (TimeoutQueue.size() == 1) {
                 ScheduleWakeup(ctx);
             }
         }
 
         void ScheduleWakeup(const TActorContext& ctx) {
-            ctx.Schedule(TimeoutQueue.front().first - ctx.Now(), new TEvents::TEvWakeup);
+            ctx.Schedule(TimeoutQueue.front().first - ctx.Monotonic(), new TEvents::TEvWakeup);
         }
 
         void HandleWakeup(const TActorContext& ctx) {
             // ui32 numDropped = 0;
 
-            while (TimeoutQueue && TimeoutQueue.front().first <= ctx.Now()) {
+            while (TimeoutQueue && TimeoutQueue.front().first <= ctx.Monotonic()) {
                 /*numDropped += */InFly.erase(TimeoutQueue.front().second);
                 TimeoutQueue.pop();
             }
@@ -335,7 +335,7 @@ namespace NInterconnect {
         }
 
         void PublishResults(const TActorContext& ctx, bool schedule = true) {
-            const TInstant now = ctx.Now();
+            const TMonotonic now = ctx.Monotonic();
 
             TStringStream msg;
 
@@ -409,7 +409,7 @@ namespace NInterconnect {
         }
 
         TString RenderHTML(bool finished, const TActorContext& ctx) {
-            const auto duration = ctx.Now() - ThroughputFirstSample;
+            const auto duration = ctx.Monotonic() - ThroughputFirstSample;
 
             TStringStream msg;
 

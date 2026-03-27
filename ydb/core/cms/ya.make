@@ -27,10 +27,10 @@ SRCS(
     cms_tx_update_config.cpp
     cms_tx_update_downtimes.cpp
     defs.h
-    downtime.h
     downtime.cpp
-    erasure_checkers.h
+    downtime.h
     erasure_checkers.cpp
+    erasure_checkers.h
     error_info.h
     http.cpp
     http.h
@@ -46,12 +46,13 @@ SRCS(
     json_proxy_proto.h
     json_proxy_sentinel.h
     json_proxy_toggle_config_validator.h
+    log_formatter.h
     logger.cpp
     logger.h
     node_checkers.cpp
     node_checkers.h
-    log_formatter.h
     pdiskid.h
+    priority_lock.h
     scheme.h
     sentinel.cpp
     services.cpp

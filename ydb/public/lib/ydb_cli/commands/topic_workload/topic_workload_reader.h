@@ -36,6 +36,7 @@ namespace NYdb {
             size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
             std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
+            size_t PartitionMaxInflightBytes = 0; // zero means no limit
         };
 
         class TTransactionSupport;

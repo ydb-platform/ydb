@@ -35,9 +35,18 @@ enum class EIndexType {
     GlobalAsync,
     GlobalUnique,
     GlobalVectorKMeansTree,
-    GlobalFulltext,
+    GlobalFulltextPlain,
+    GlobalFulltextRelevance,
+    GlobalJson,
 
     Unknown = std::numeric_limits<int>::max()
+};
+
+enum class ECompactState {
+    Unspecified = 0,
+    InProgress = 1,
+    Done = 2,
+    Cancelled = 3,
 };
 
 enum class EChangefeedMode {

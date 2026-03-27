@@ -316,10 +316,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), EnableStreamLookup ? 1 : 2);
     }
 
-    Y_UNIT_TEST_QUAD(Upsert, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(Upsert, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = BuildUpdateParams();
 
@@ -338,17 +336,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
 
         // TODO: Get rid of additional precompute stage for adding optionality to row members
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Replace, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(Replace, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = BuildUpdateParams();
 
@@ -365,17 +361,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         });
 
         // Single-phase REPLACE require additional runtime write callable
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(UpdateOn, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(UpdateOn, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = BuildUpdateParams();
 
@@ -392,17 +386,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         });
 
         // Two-phase UPDATE ON require more complex runtime callables
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Insert, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(Insert, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = BuildInsertParams();
 
@@ -419,17 +411,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         });
 
         // Three-phase INSERT require more complex runtime callables
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(DeleteOn, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(DeleteOn, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = BuildDeleteParams();
 
@@ -446,17 +436,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         });
 
         // TODO: Get rid of additional precompute stage for adding optionality to row members
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 2);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Update, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(Update, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = TParamsBuilder()
             .AddParam("$key").Uint64(201).Build()
@@ -475,17 +463,15 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             .ExpectedUpdates = 1,
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 1);
         }
     }
 
-    Y_UNIT_TEST_QUAD(Delete, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(Delete, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = TParamsBuilder()
             .AddParam("$key").Uint64(201).Build()
@@ -505,16 +491,16 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             .ExpectedDeletes = 1,
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         for (const auto& phase : stats.query_phases()) {
             UNIT_ASSERT(phase.affected_shards() <= 1);
         }
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpsert, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexUpsert, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -530,12 +516,12 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         )"), params);
 
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexReplace, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexReplace, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -550,12 +536,12 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexUpdateOn, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexUpdateOn, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -570,12 +556,12 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
-    Y_UNIT_TEST_QUAD(IndexDeleteOn, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexDeleteOn, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -590,12 +576,12 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 3 : 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 2 : 3);
     }
 
-    Y_UNIT_TEST_QUAD(IndexInsert, QueryService, UseSink) {
+    Y_UNIT_TEST_QUAD(IndexInsert, QueryService, UseStreamIndex) {
         NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
         auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -610,7 +596,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
             SELECT * FROM AS_TABLE($items);
         )"), params);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseStreamIndex ? 1 : 4);
     }
 
     Y_UNIT_TEST_TWIN(IdxLookupJoin, QueryService) {
@@ -694,10 +680,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
     }
 
-    Y_UNIT_TEST_QUAD(MultiDeleteFromTable, QueryService, UseSink) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-        auto kikimr = DefaultKikimrRunner({}, app);
+    Y_UNIT_TEST_TWIN(MultiDeleteFromTable, QueryService) {
+        auto kikimr = DefaultKikimrRunner();
 
         auto params = TParamsBuilder()
             .AddParam("$key1_1").Uint32(101).Build()
@@ -725,7 +709,7 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
 
         CompareYson(R"([[7u]])", FormatResultSetYson(checkResults[0]));
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
         AssertTableStats(stats, "/Root/Join2", {
             .ExpectedReads = 3,

@@ -3,13 +3,14 @@ LIBRARY()
 SRCS(
     mlp_common.cpp
     mlp_consumer.cpp
+    mlp_consumer_app.cpp
+    mlp_consumer_metrics.cpp
+    mlp_consumer_order.cpp
     mlp_dlq_mover.cpp
     mlp_message_enricher.cpp
     mlp_storage.cpp
     mlp_storage__serialization.cpp
 )
-
-
 
 PEERDIR(
     ydb/core/persqueue/events
@@ -17,8 +18,10 @@ PEERDIR(
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/public/write_meta
+    ydb/core/util
 )
 
+GENERATE_ENUM_SERIALIZATION(mlp_consumer_order.h)
 GENERATE_ENUM_SERIALIZATION(mlp_storage.h)
 
 END()

@@ -26,7 +26,7 @@ TDynamicPrototypePtr TDynamicPrototype::Create(const NProtoBuf::FileDescriptorSe
 
 TDynamicPrototype::TDynamicPrototype(const NProtoBuf::FileDescriptorSet& fileDescriptorSet, const TString& messageName, bool yqlHack)
 {
-    const NProtoBuf::FileDescriptor* fileDescriptor;
+    const NProtoBuf::FileDescriptor* fileDescriptor = nullptr;
 
     for (int i = 0; i < fileDescriptorSet.file_size(); ++i) {
         fileDescriptor = Pool.BuildFile(fileDescriptorSet.file(i));
@@ -40,6 +40,7 @@ TDynamicPrototype::TDynamicPrototype(const NProtoBuf::FileDescriptorSet& fileDes
     // Первоначальный вариант поведения, когда тип определялся
     // по имени сообщения верхнего уровня в заданном файле.
     if (yqlHack && !Descriptor) {
+        Y_ENSURE(fileDescriptor, "no descriptor for " << messageName);
         Descriptor = fileDescriptor->FindMessageTypeByName(messageName);
     }
 

@@ -46,7 +46,7 @@ def do(args):
         'UsedSize',
         'AvailableSize',
         'Limit',
-        'TotalSize',
+        'TotalSize',  # legacy
         'VDiskSlotUsage',
         'VDiskRawUsage',
         'NormalizedOccupancy',

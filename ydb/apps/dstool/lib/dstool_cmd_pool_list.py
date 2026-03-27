@@ -90,11 +90,11 @@ def do(args):
         'VDisks_ERROR',
         'VDisks_REPLICATING',
         'VDisks_INIT_PENDING',
-        'Usage',
+        'Usage',  # legacy
         'AvailableSize',
         'UsedSize',
         'Limit',
-        'TotalSize',
+        'TotalSize',  # legacy
         'EstimatedUsage',
         'MaxVDiskEstimatedUsage',
         'MeanVDiskEstimatedUsage',

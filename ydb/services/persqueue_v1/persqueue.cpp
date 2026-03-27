@@ -57,7 +57,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                                 \
         YDB_API_DEFAULT_COUNTER_BLOCK(persistent_queue, methodName), \
         auditMode,                                                   \
-        EEmptyDatabaseMode::EmptyDatabaseAllowed,                    \
+        EEmptyDatabaseMode::EmptyDatabaseForbidden,                  \
         COMMON,                                                      \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,          \
         GRpcRequestProxyId_,                                         \
@@ -76,7 +76,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             requestType,                                                        \
             YDB_API_DEFAULT_STREAM_COUNTER_BLOCK(persistent_queue, methodName), \
             auditMode,                                                          \
-            EEmptyDatabaseMode::EmptyDatabaseAllowed,                           \
+            EEmptyDatabaseMode::EmptyDatabaseForbidden,                         \
             operationCallClass,                                                 \
             GRpcRequestProxyId_,                                                \
             CQ_,                                                                \

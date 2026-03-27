@@ -1275,8 +1275,6 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
-    new_items += " "
-    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 
 
@@ -1304,7 +1302,7 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    new_items = [f'$MOVE_FILE {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
 
     __on_ts_files(unit, in_files, out_files)

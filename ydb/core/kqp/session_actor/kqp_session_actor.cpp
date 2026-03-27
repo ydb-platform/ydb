@@ -601,7 +601,7 @@ public:
             (trace_id, TraceId()));
 
         if (CurrentStateFunc() == &TThis::PostCompileState) {
-            OnSuccessCompileRequest(true);
+            PrepareAndExecuteQuery();
         } else if (CurrentStateFunc() == &TThis::PreCompileState){
             CompileQuery();
         } else {
@@ -645,7 +645,7 @@ public:
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
         if (CurrentStateFunc() == &TThis::PostCompileState) {
-            OnSuccessCompileRequest(true);
+            PrepareAndExecuteQuery();
         } else if (CurrentStateFunc() == &TThis::PreCompileState) {
             CompileQuery();
         } else {
@@ -917,7 +917,7 @@ public:
         return false;
     }
 
-    void OnSuccessCompileRequest(bool skipClassifier = false) {
+    void OnSuccessCompileRequest() {
         if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
             TVector<IKqpGateway::TPhysicalTxData> txs;
             std::map<TString, TString> secureParams;
@@ -1018,11 +1018,7 @@ public:
             co_return ReplyPrepareResult();
         }
 
-        if (!PrepareQueryContext()) {
-            co_return;
-        }
-
-        if (QueryState->QueryClassifier && !skipClassifier) {
+        if (QueryState->QueryClassifier) {
             auto status = QueryState->QueryClassifier->GetPreClassifyResult();
             if (std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(status)) {
                 auto result = QueryState->QueryClassifier->PostCompileClassify(*QueryState->PreparedQuery, QueryState->MaxReadType);
@@ -1051,20 +1047,30 @@ public:
             }
         }
 
+        PrepareAndExecuteQuery();
+    }
+
+    // Called after both compilation and workload classification are complete.
+    // Skips directly to query execution, bypassing EXPLAIN/PREPARE/classifier checks.
+    void PrepareAndExecuteQuery() {
+        if (!PrepareQueryContext()) {
+            return;
+        }
+
         Become(&TKqpSessionActor::ExecuteState);
 
         QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (!CheckScriptExecutionState()) {
-            co_return;
+            return;
         }
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            co_return;
+            return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            co_return;
+            return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState

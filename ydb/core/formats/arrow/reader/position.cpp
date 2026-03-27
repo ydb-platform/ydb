@@ -18,6 +18,14 @@ NJson::TJsonValue TSortableBatchPosition::DebugJson() const {
     return result;
 }
 
+TString TSortableBatchPosition::DebugString() const {
+    auto json = DebugJson();
+    NJsonWriter::TBuf valueWriter;
+    valueWriter.SetIndentSpaces(2);
+    valueWriter.WriteJsonValue(&json);
+    return valueWriter.Str();
+}
+
 std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::FindBound(TRWSortableBatchPosition& position,
     const ui64 posStartExt, const ui64 posFinishExt, const TSortableBatchPosition& forFound, const bool upper) {
     ui64 posStart = posStartExt;

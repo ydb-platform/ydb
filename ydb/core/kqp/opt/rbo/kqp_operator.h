@@ -54,7 +54,7 @@ struct TPhysicalOpProps {
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
-    std::optional<EJoinAlgoType> JoinAlgo;
+    std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 };
 

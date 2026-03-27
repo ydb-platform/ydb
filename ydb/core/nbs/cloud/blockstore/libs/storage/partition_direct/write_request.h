@@ -7,6 +7,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -40,13 +42,17 @@ public:
 
     TWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TExecutorPtr executor,
+        ISchedulerPtr scheduler,
+        ITimerPtr timer,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId,
+        TDuration writeHandoffDelay);
 
     ~TWriteRequestExecutor();
 
@@ -67,6 +73,7 @@ private:
     void Reply(NProto::TError error);
 
     NActors::TActorSystem* ActorSystem;
+    const TExecutorPtr Executor;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;
@@ -74,6 +81,10 @@ private:
     const std::shared_ptr<TWriteBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
     const ui64 Lsn;
+
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
+    const TDuration WriteHandoffDelay;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

@@ -55,4 +55,7 @@ message TStorageServiceConfig
 
     // Timeout for request to PBuffer.
     optional uint32 PBufferReplyTimeoutMicroseconds = 15;
+
+    // Delay (in microseconds) before writing to handoff persistent buffers.
+    optional uint32 WriteHandoffDelay = 16;
 }

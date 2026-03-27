@@ -25,7 +25,10 @@ TRegion::TRegion(
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     ui32 syncRequestsBatchSize,
+    TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
@@ -39,7 +42,10 @@ TRegion::TRegion(
             partitionDirectService,
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
+            scheduler,
+            timer,
             syncRequestsBatchSize,
+            writeHandoffDelay,
             traceSamplePeriod);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));

@@ -7,6 +7,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -40,7 +43,9 @@ public:
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        const NProto::TStorageServiceConfig& storageConfig,
+        std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+        ISchedulerPtr scheduler,
+        ITimerPtr timer,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;

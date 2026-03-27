@@ -77,6 +77,8 @@ constexpr std::array<ELocation, 5> PBufferLocations{
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 
+[[nodiscard]] TString LocationDebugString(ELocation location);
+
 ELocation TranslateDDiskToPBuffer(ELocation location);
 ELocation TranslatePBufferToDDisk(ELocation location);
 

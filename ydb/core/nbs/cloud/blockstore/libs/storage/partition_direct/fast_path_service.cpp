@@ -41,7 +41,9 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const NProto::TStorageServiceConfig& storageConfig)
+    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
@@ -52,8 +54,11 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             partitionDirectService,
             i,
             directBlockGroups,
-            storageConfig.GetSyncRequestsBatchSize(),
-            TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()));
+            scheduler,
+            timer,
+            storageConfig->GetSyncRequestsBatchSize(),
+            storageConfig->GetWriteHandoffDelay(),
+            storageConfig->GetTraceSamplePeriod());
     }
 
     return regions;
@@ -70,7 +75,9 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const NProto::TStorageServiceConfig& storageConfig,
+    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , DiskId(diskId)
@@ -79,12 +86,13 @@ TFastPathService::TFastPathService(
           blockCount,
           blockSize,
           std::move(directBlockGroups),
-          storageConfig))
-    , TraceSamplePeriod(
-          TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
+          storageConfig,
+          std::move(scheduler),
+          std::move(timer)))
+    , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
-          storageConfig.GetDDiskPoolName(),
+          storageConfig->GetDDiskPoolName(),
           tabletId))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskId,
@@ -98,6 +106,7 @@ TFastPathService::TFastPathService(
           storageConfig.GetPBufferReplyTimeoutMicroseconds()
               ? storageConfig.GetPBufferReplyTimeoutMicroseconds()
               : DefaultPBufferReplyTimeoutMicroseconds)
+          .BlocksPerStripe = storageConfig->GetStripeSize()}))
 {
     Y_UNUSED(ActorSystem);
 }

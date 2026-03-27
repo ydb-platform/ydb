@@ -5,6 +5,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -39,14 +42,19 @@ NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
 
 TWriteRequestExecutor::TWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    TExecutorPtr executor,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId)
+    NWilson::TTraceId traceId,
+    TDuration writeHandoffDelay)
     : ActorSystem(actorSystem)
+    , Executor(std::move(executor))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkRange(vChunkRange)
@@ -54,6 +62,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
+    , Scheduler(std::move(scheduler))
+    , Timer(std::move(timer))
+    , WriteHandoffDelay(writeHandoffDelay)
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()

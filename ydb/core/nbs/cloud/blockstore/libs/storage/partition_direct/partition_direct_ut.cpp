@@ -704,6 +704,120 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 expectedData);
         }
     }
+
+    Y_UNIT_TEST(ShouldWriteAndReadFromHandoffPersistentBuffers)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env);
+
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+
+        auto writeRequestsCount = 0;
+        auto readRequestsCount = 0;
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvWritePersistentBuffer::EventType)
+            {
+                if (writeRequestsCount++ < 2) {
+                    runtime->Schedule(
+                        TDuration::Seconds(10),
+                        ev.release(),
+                        nullptr,
+                        nodeId);
+
+                    return false;
+                }
+            }
+
+            if (ev->GetTypeRewrite() ==
+                NDDisk::TEvReadPersistentBuffer::EventType)
+            {
+                if (readRequestsCount++ < 1) {
+                    auto response =
+                        std::make_unique<NDDisk::TEvReadPersistentBufferResult>(
+                            NKikimrBlobStorage::NDDisk::
+                                TReplyStatus_E_INCORRECT_REQUEST,
+                            "Disk not found");
+
+                    runtime->Send(
+                        new IEventHandle(
+                            ev->Sender,
+                            ev->Recipient,
+                            response.release(),
+                            0,
+                            ev->Cookie),
+                        nodeId);
+
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
+        auto expectedData = TString(1024, 'A') + TString(1024, 'B') +
+                            TString(1024, 'C') + TString(1024, 'D');
+        {
+            auto request =
+                std::make_unique<TEvService::TEvWriteBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.MutableBlocks()->AddBuffers(expectedData);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvWriteBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT(res->Get()->Record.MutableError()->GetCode() == S_OK);
+        }
+
+        // Read written block from persistent buffer
+        {
+            auto request = std::make_unique<TEvService::TEvReadBlocksRequest>();
+            request->Record.SetStartIndex(1);
+            request->Record.SetBlocksCount(1);
+
+            runtime->Send(
+                new IEventHandle(loadActorAdapter, edge, request.release()),
+                edge.NodeId());
+
+            auto res =
+                env.WaitForEdgeActorEvent<TEvService::TEvReadBlocksResponse>(
+                    edge,
+                    false);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                S_OK,
+                res->Get()->Record.GetError().GetCode(),
+                FormatError(res->Get()->Record.GetError()));
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                res->Get()->Record.GetBlocks().BuffersSize());
+            UNIT_ASSERT_VALUES_EQUAL(
+                res->Get()->Record.GetBlocks().GetBuffers(0),
+                expectedData);
+        }
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

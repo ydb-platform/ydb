@@ -89,6 +89,14 @@ static std::optional<NKikimrSchemeOp::TModifyScheme> CreateIndexTask(NKikimr::NS
             *operation->MutableFulltextIndexDescription() =
                 std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+            *operation->MutableBloomFilterDescription() =
+                std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+            *operation->MutableBloomNGrammFilterDescription() =
+                std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+            break;
         default:
             return {}; // reject
     }

@@ -350,6 +350,12 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalJson:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
+                case EIndexType::LocalBloomFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomFilterSettings>(indexDesc.GetIndexSettings()));
+                    break;
+                case EIndexType::LocalBloomNgramFilter:
+                    UNIT_ASSERT(std::holds_alternative<TLocalBloomNgramFilterSettings>(indexDesc.GetIndexSettings()));
+                    break;
                 case EIndexType::GlobalVectorKMeansTree: {
                     Ydb::Table::KMeansTreeSettings settings;
                     std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
@@ -2436,6 +2442,87 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    void AssertColumnTableLocalIndexChildren(NYdb::NScheme::TSchemeClient& client, const TString& tablePath) {
+        const auto listed = client.ListDirectory(tablePath).GetValueSync();
+        UNIT_ASSERT_C(listed.IsSuccess(), listed.GetIssues().ToString());
+        THashSet<TString> names;
+        for (const auto& child : listed.GetChildren()) {
+            names.insert(TString{child.Name});
+        }
+        UNIT_ASSERT_VALUES_EQUAL(names.size(), 2u);
+        UNIT_ASSERT_C(names.contains("idx_bloom"), "expected idx_bloom under column table");
+        UNIT_ASSERT_C(names.contains("idx_ngram"), "expected idx_ngram under column table");
+    }
+
+    Y_UNIT_TEST(BackupRestoreColumnTableWithLocalIndexes) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
+        appConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+
+        TKikimrWithGrpcAndRootSchema server(
+            appConfig,
+            /*kqpSettings*/ {},
+            /*logBackend*/ {},
+            /*enableYq*/ false,
+            /*udfFrFactory*/ nullptr,
+            [](auto& s) { s.SetColumnShardAlterObjectEnabled(true); }
+        );
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        TSchemeClient schemeClient(driver);
+
+        TTempDir tempDir;
+        const TFsPath pathToBackup = tempDir.Path();
+
+        constexpr const char* table = "/Root/col_backup_local_idx";
+
+        ExecuteQuery(querySession, TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << table << R"(` (
+                Key Uint32 NOT NULL,
+                Value Utf8,
+                Data Utf8,
+                PRIMARY KEY (Key),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (Value)
+                    WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (Data)
+                    WITH (ngram_size = 3, hashes_count = 3, filter_size_bytes = 512, records_count = 128, case_sensitive = true)
+            )
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", true);
+
+        AssertColumnTableLocalIndexChildren(schemeClient, table);
+
+        {
+            NDump::TClient backupClient(driver);
+            const auto dumpResult = backupClient.Dump(
+                table,
+                pathToBackup,
+                NDump::TDumpSettings().Database("/Root").SchemaOnly(true)
+            );
+            UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
+        }
+
+        ExecuteQuery(querySession, TStringBuilder() << "DROP TABLE `" << table << "`;", true);
+
+        {
+            NDump::TClient backupClient(driver);
+            const auto restoreResult = backupClient.Restore(
+                pathToBackup,
+                "/Root",
+                NDump::TRestoreSettings().RestoreData(false)
+            );
+            UNIT_ASSERT_C(restoreResult.IsSuccess(), restoreResult.GetIssues().ToString());
+        }
+
+        AssertColumnTableLocalIndexChildren(schemeClient, table);
     }
 
     Y_UNIT_TEST(ImportDataShouldHandleErrors) {

@@ -38,6 +38,8 @@ enum class EIndexType {
     GlobalFulltextPlain,
     GlobalFulltextRelevance,
     GlobalJson,
+    LocalBloomFilter,
+    LocalBloomNgramFilter,
 
     Unknown = std::numeric_limits<int>::max()
 };

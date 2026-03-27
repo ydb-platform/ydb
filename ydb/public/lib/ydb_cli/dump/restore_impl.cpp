@@ -146,7 +146,14 @@ TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& pr
 }
 
 TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
-    proto.clear_indexes();
+    auto* indexes = proto.mutable_indexes();
+    for (auto it = indexes->begin(); it != indexes->end(); ) {
+        if (it->has_global_index() || it->has_global_async_index() || it->has_global_unique_index() || it->has_global_vector_kmeans_tree_index() || it->has_global_fulltext_plain_index() || it->has_global_fulltext_relevance_index() || it->has_global_json_index()) {
+            it = indexes->erase(it);
+        } else {
+            ++it;
+        }
+    }
     return TableDescriptionFromProto(proto);
 }
 

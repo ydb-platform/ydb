@@ -8,6 +8,7 @@ RECURSE(
     local_cluster
     mdb_mock
     nemesis
+    nfs_recipe
     pq_read
     s3_bench
     s3_recipe

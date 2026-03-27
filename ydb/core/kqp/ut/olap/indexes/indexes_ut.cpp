@@ -147,6 +147,65 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
+    Y_UNIT_TEST(MinMaxIndexUsedInQueries) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        auto tableClient = kikimr.GetTableClient();
+
+        auto runSchemeQuery = [&](TString query) {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            return session.ExecuteSchemeQuery(query).GetValueSync();
+        };
+
+        auto assertSchemeQueryOk = [&](TString query) {
+            auto res = runSchemeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
+        };
+
+        auto runNonSchemeQuery = [&](TString query) {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            return session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx());
+        };
+
+        
+
+
+
+        assertSchemeQueryOk(R"(
+            CREATE TABLE `minmax_test_applied_applied` (
+                `key` Int32 NOT NULL,
+                `value` Utf8 NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+
+            ALTER OBJECT `/Root/db1/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = value_mm);
+            ALTER OBJECT `/Root/db1/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+
+        )");
+
+        runNonSchemeQuery(R"(            
+            UPSERT INTO my_table (id, name, status)
+            SELECT CAST(value AS Int32) AS id, "Value_" || CAST(value AS Utf8) AS value FROM AS_TABLE(ListFromRange(500001, 1500001));
+
+            UPSERT INTO my_table (id, name, status)
+            SELECT CAST(value AS Int32) AS id, "Value_" || CAST(value AS Utf8) AS value FROM AS_TABLE(ListFromRange(1, 1000001));
+        )")
+
+
+
+        
+
+        
+    }
+
     Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);

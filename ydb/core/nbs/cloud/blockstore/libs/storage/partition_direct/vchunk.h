@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 #include "erase_request.h"
 #include "flush_request.h"
+#include "partition_direct_service.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
@@ -22,6 +23,7 @@ class TVChunk: public std::enable_shared_from_this<TVChunk>
 public:
     TVChunk(
         NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
@@ -71,6 +73,7 @@ private:
     void OnEraseResponse(const TEraseRequestExecutor::TResponse& response);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;

@@ -60,9 +60,10 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
-    auto request = std::make_shared<TWriteBlocksLocalRequest>(
-        TRequestHeaders{},
-        TBlockRange64::WithLength(startIndex, totalSize / DefaultBlockSize));
+    auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .Range = TBlockRange64::WithLength(
+            startIndex,
+            totalSize / DefaultBlockSize)});
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(
@@ -102,9 +103,10 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
         TString::Uninitialized(blocksCount * DefaultBlockSize));
     TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
 
-    auto request = std::make_shared<TReadBlocksLocalRequest>(
-        TRequestHeaders{},
-        TBlockRange64::WithLength(msg->Record.GetStartIndex(), blocksCount));
+    auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+        .Range = TBlockRange64::WithLength(
+            msg->Record.GetStartIndex(),
+            blocksCount)});
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->ReadBlocksLocal(

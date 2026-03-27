@@ -41,14 +41,15 @@ struct TIndexBuildState {
 
 struct TImportState {
     enum ELoadState {
-        ELOAD_INDEXED_TABLES = 0,
+        ELOAD_SMALL_TABLES = 0,
+        ELOAD_INDEXED_TABLES,
         ELOAD_TABLES_BUILD_INDICES,
         EWAIT_INDICES,
         ESUCCESS
     };
 
     explicit TImportState(std::stop_token stopToken)
-        : State(ELOAD_INDEXED_TABLES)
+        : State(ELOAD_SMALL_TABLES)
         , StopToken(stopToken)
     {
     }
@@ -60,10 +61,13 @@ struct TImportState {
         : State(other.State)
         , StopToken() // can't copy: leave unset
         , DataSizeLoaded(other.DataSizeLoaded.load(std::memory_order_relaxed))
+        , SmallTablesLoaded(other.SmallTablesLoaded.load(std::memory_order_relaxed))
         , IndexedRangesLoaded(other.IndexedRangesLoaded.load(std::memory_order_relaxed))
         , RangesLoaded(other.RangesLoaded.load(std::memory_order_relaxed))
         , IndexBuildStates(other.IndexBuildStates)
+        , CompactionStates(other.CompactionStates)
         , CurrentIndex(other.CurrentIndex)
+        , CurrentComapaction(other.CurrentComapaction)
         , ApproximateDataSize(other.ApproximateDataSize)
     {
     }
@@ -73,10 +77,13 @@ struct TImportState {
             State = other.State;
             // StopToken is not copyable — intentionally omitted
             DataSizeLoaded.store(other.DataSizeLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
+            SmallTablesLoaded.store(other.SmallTablesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexedRangesLoaded.store(other.IndexedRangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             RangesLoaded.store(other.RangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexBuildStates = other.IndexBuildStates;
+            CompactionStates = other.CompactionStates;
             CurrentIndex = other.CurrentIndex;
+            CurrentComapaction = other.CurrentComapaction;
             ApproximateDataSize = other.ApproximateDataSize;
         }
         return *this;
@@ -90,13 +97,16 @@ struct TImportState {
 
     std::atomic<size_t> DataSizeLoaded{0};
 
+    std::atomic_bool SmallTablesLoaded{false};
     std::atomic<size_t> IndexedRangesLoaded{0};
     std::atomic<size_t> RangesLoaded{0};
 
     // single threaded
 
     std::vector<TIndexBuildState> IndexBuildStates;
+    std::vector<TIndexBuildState> CompactionStates;
     size_t CurrentIndex = 0;
+    size_t CurrentComapaction = 0;
     size_t ApproximateDataSize = 0;
 };
 

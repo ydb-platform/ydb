@@ -10,7 +10,7 @@
 
 * Добавлена поддержка конфигурации 2 ДЦ с синхронной записью данных (режим [`Bridge`](./concepts/bridge.md)) 
 * Улучшения топиков:
-  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика.
+  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
   * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
 * Улучшения резервного копирования и восстановления:
   * реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.

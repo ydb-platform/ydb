@@ -158,7 +158,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->StorageType = storageType;
 
-    if (!tableData.Metadata->PartitionedByColumns.empty()) {
+    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
         for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
             Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
         }

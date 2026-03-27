@@ -37,8 +37,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     yql/essentials/ast
     yql/essentials/core
-    ydb/core/kqp/opt/cbo
-    ydb/core/kqp/opt/cbo/solver
     yql/essentials/core/issue
     yql/essentials/utils/backtrace
     yql/essentials/utils/failure_injector

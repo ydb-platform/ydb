@@ -1,8 +1,8 @@
 #include "yql_dq_statistics.h"
 #include "yql_dq_state.h"
 
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_stat_transformer_base.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -12,10 +12,10 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TDqsStatisticsTransformer : public NKikimr::NKqp::TDqStatisticsTransformerBase {
+class TDqsStatisticsTransformer : public NDq::TDqStatisticsTransformerBase {
 public:
-    TDqsStatisticsTransformer(const TDqStatePtr& state, const NKikimr::NKqp::IProviderContext& ctx)
-        : NKikimr::NKqp::TDqStatisticsTransformerBase(state->TypeCtx, ctx)
+    TDqsStatisticsTransformer(const TDqStatePtr& state, const IProviderContext& ctx)
+        : NDq::TDqStatisticsTransformerBase(state->TypeCtx, ctx)
         , State(state)
     { }
 
@@ -63,7 +63,7 @@ private:
     TDqStatePtr State;
 };
 
-THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const NKikimr::NKqp::IProviderContext& ctx) {
+THolder<IGraphTransformer> CreateDqsStatisticsTransformer(TDqStatePtr state, const IProviderContext& ctx) {
     return MakeHolder<TDqsStatisticsTransformer>(state, ctx);
 }
 

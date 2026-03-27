@@ -1347,7 +1347,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
 
     auto flatMap = node.Cast<TCoFlatMap>();
 
-    auto read = TReadMatch::MatchIndexedRead(flatMap.Input(), kqpCtx);
+    auto read = TReadMatch::Match(flatMap.Input());
     if (!read) {
         return node;
     }

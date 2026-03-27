@@ -6095,7 +6095,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
-}
 
     Y_UNIT_TEST(CoveringIndexFilterBeforeLookup) {
         auto setting = NKikimrKqp::TKqpSetting();
@@ -6985,7 +6984,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(TopSortOverExtendAutoSelectIndex) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTopSortSelectIndex(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePointPredicateSortAutoSelectIndex(true);
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -7054,7 +7057,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
     Y_UNIT_TEST(AutoSelectIndexWithParameterizedLimitOffset) {
-        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableTopSortSelectIndex(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePointPredicateSortAutoSelectIndex(true);
+        TKikimrRunner kikimr(settings);
         auto queryClient = kikimr.GetQueryClient();
 
         {
@@ -7510,5 +7517,6 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
+}
 }
 }

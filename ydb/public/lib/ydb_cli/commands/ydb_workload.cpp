@@ -74,7 +74,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());
-    AddHiddenCommand(std::make_unique<TCommandFulltext>());
+    AddCommand(std::make_unique<TCommandFulltext>());
     AddHiddenCommand(std::make_unique<TCommandTestShard>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
@@ -220,9 +220,8 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         } else if (queryInfo.UseReadRows) {
             throw TMisuseException() << "Generic query doesn't support readrows. Use data query (--executer data)";
         } else {
-            auto mode = queryInfo.UseStaleRO ? NYdb::NQuery::TTxSettings::StaleRO() : NYdb::NQuery::TTxSettings::SerializableRW();
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
-                NYdb::NQuery::TTxControl::BeginTx(mode).CommitTx(),
+                NYdb::NQuery::TTxControl::NoTx(),
                 queryInfo.Params, genericQuerySettings
             );
             return result;

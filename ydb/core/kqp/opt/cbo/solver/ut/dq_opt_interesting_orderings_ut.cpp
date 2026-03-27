@@ -3,6 +3,8 @@
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
 #include <yql/essentials/utils/log/log.h>
 
+// using namespace NYql;
+// using namespace NNodes;
 using namespace NKikimr::NKqp;
 
 
@@ -206,7 +208,7 @@ Y_UNIT_TEST_SUITE(KqpInterestingOrderingsShuffle) {
 }
 
 Y_UNIT_TEST_SUITE(KqpInterestingOrderingsSorting) {
-    Y_UNIT_TEST(PrefixClosure) {
+    Y_UNIT_TEST(PrefixClosure) { /* checks, that (0, 1) implies (0) */
         auto fsm = MakeFSM({}, { Sorting(0), Sorting(0, 1) }, TOrdering::ESorting);
 
         auto orderings = fsm.CreateState();
@@ -218,6 +220,7 @@ Y_UNIT_TEST_SUITE(KqpInterestingOrderingsSorting) {
         UNIT_ASSERT(orderings.ContainsSorting(0));
         UNIT_ASSERT(orderings.ContainsSorting(1));
     }
+
 
     Y_UNIT_TEST(SimpleImplicationFD) {
         std::vector<TFunctionalDependency> fds = {FD(0, 1)};

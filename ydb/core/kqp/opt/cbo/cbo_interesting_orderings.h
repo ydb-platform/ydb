@@ -14,6 +14,14 @@
 #include <vector>
 #include <optional>
 
+/*
+ * This header contains all essentials to work with Interesting Orderings.
+ * Interesting ordering is an ordering which is produced by a query or tested in the query
+ * At this moment, we process only shuffles, but in future there will be groupings and sortings
+ * For details of the algorithms and examples look at the white papers -
+ * - "An efficient framework for order optimization" / "A Combined Framework for Grouping and Order Optimization" by T. Neumann, G. Moerkotte
+ */
+
 namespace NKikimr::NKqp {
 
 // -------------------------------------------------------------------------
@@ -106,12 +114,28 @@ struct TOrdering {
     std::vector<TItem::EDirection> Directions;
 
     EType Type;
+    /*
+     * Definition was taken from 'Complex Ordering Requirements' section. Not natural orderings are complex join predicates or grouping.
+     * There can occure a problem when we have a natural ordering - shuffling (a, b) of the table and we must aggregate by (b, a, c) - non natural ordering
+     * So for this case (b, a, c) suits for us as well and we must reorder (b, a, c) to (a, b, c). In the section from the white papper this is
+     * described more detailed.
+     */
     bool IsNatural = false;
 };
 
+/*
+ * A relation 'R' satisfies a functional dependency (or FD): A -> B if and only if
+ * forall t1, t2 from the 'R' : t1.A = t2.A -> t1.B = t2.B
+ * Examples:
+ *      b = cos(a) : a -> b
+ *      a = b : a -> b, b -> a
+ *      a = const : {} -> a
+ */
 struct TFunctionalDependency {
     enum EType: uint32_t {
+        /* default fd: a -> b */
         EImplication = 0,
+        /* equivalence: a = b */
         EEquivalence = 1
     };
 
@@ -119,6 +143,7 @@ struct TFunctionalDependency {
     bool IsImplication() const;
     bool IsConstant() const;
 
+    // Returns index of the first matching antecedent item in the ordering, if it matches
     TMaybe<std::size_t> MatchesAntecedentItems(const TOrdering& ordering) const;
     TString ToString() const;
 
@@ -131,6 +156,7 @@ struct TFunctionalDependency {
 
 bool operator==(const TFunctionalDependency& lhs, const TFunctionalDependency& rhs);
 
+// Map of table aliases to their original table names
 struct TTableAliasMap: public TSimpleRefCount<TTableAliasMap> {
 public:
     struct TBaseColumn {
@@ -202,6 +228,9 @@ struct TShuffling {
     std::vector<TJoinColumn> Ordering;
 };
 
+/*
+ * This class contains internal representation of the columns (mapping [column -> int]), FDs and interesting orderings
+ */
 class TFDStorage {
 public:
     i64 FindFDIdx(
@@ -210,7 +239,7 @@ public:
         TFunctionalDependency::EType type,
         TTableAliasMap* tableAliases = nullptr);
 
-public:
+public: // deprecated section, use the section below instead of this
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
@@ -239,7 +268,7 @@ public:
 private:
     std::size_t AddFDImpl(TFunctionalDependency fd);
 
-public:
+public: // deprecated section, use the section below instead of this
     i64 FindInterestingOrderingIdx(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type,
@@ -273,6 +302,7 @@ public:
     TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
     TString ToString() const;
 
+    // look at the IsNatural field at the Ordering struct
     void ApplyNaturalOrderings();
 
     const std::vector<TJoinColumn>& GetColumns() const { return ColumnByIdx_; }
@@ -313,6 +343,26 @@ private:
     std::size_t IdCounter_ = 0;
 };
 
+/*
+ * This class represents Finite-State Machine (FSM) for tracking ordering transformations.
+ * Each state represents a set of available logical orderings that can be derived from functional dependencies.
+ *
+ * The FSM construction follows these steps:
+ *      1) Build NFSM (Non-Deterministic FSM): Create nodes for each interesting ordering and apply
+ *         functional dependencies to generate all possible ordering transformations. This creates
+ *         a graph where nodes are orderings and edges represent FD applications.
+ *
+ *      2) Prune FDs: Remove functional dependencies that cannot lead to any interesting orderings
+ *         to reduce the state space and improve performance.
+ *
+ *      3) Add NFSM edges: Connect orderings through epsilon transitions (prefix relationships)
+ *         and FD transitions (functional dependency applications).
+ *
+ *      4) Convert to DFSM (Deterministic FSM): Since NFSM can have exponential states and is
+ *         hard to work with, we convert it to DFSM using subset construction. Each DFSM state
+ *         represents a set of NFSM states reachable through epsilon transitions and always-active FDs.
+ *         This allows O(1) state transitions and efficient ordering containment checks.
+ */
 class TOrderingsStateMachine {
 private:
     class TDFSM;
@@ -329,6 +379,9 @@ private:
 public:
     using TFDSet = std::bitset<MaxFDCount>;
 
+    /*
+     * This class represents a state of the FSM (node idx in the DFSM and some metadata).
+     */
     class TLogicalOrderings {
     public:
         TLogicalOrderings() = default;
@@ -340,7 +393,7 @@ public:
         {
         }
 
-    public:
+    public: // API
         bool ContainsShuffle(i64 orderingIdx);
         bool ContainsSorting(i64 orderingIdx);
         void InduceNewOrderings(const TFDSet& fds);
@@ -364,8 +417,12 @@ public:
 
     private:
         TDFSM* Dfsm_ = nullptr;
+        /* we can have different args in hash shuffle function, so shuffles can be incompitable in this case */
         i64 ShuffleHashFuncArgsCount_ = -1;
+
         i64 State_ = -1;
+
+        /* Index of the state which was set in SetOrdering */
         i64 InitOrderingIdx_ = -1;
         TFDSet AppliedFDs_{};
     };
@@ -405,6 +462,13 @@ private:
         const std::vector<TOrdering>& interestingOrderings);
 
 private:
+    /*
+     * Non-Deterministic Finite State Machine (NFSM) for ordering transformations.
+     *
+     * The NFSM represents all possible ordering transformations that can be achieved
+     * through functional dependencies. Each node represents a specific ordering (either
+     * interesting or artificially generated), and edges represent transformations via FDs.
+     */
     class TNFSM {
     public:
         friend class TDFSM;
@@ -426,7 +490,7 @@ private:
             std::vector<std::size_t> OutgoingEdges;
 
             TOrdering Ordering;
-            i64 InterestingOrderingIdx;
+            i64 InterestingOrderingIdx; // -1 if node isn't interesting
 
             TString ToString() const;
         };
@@ -436,7 +500,7 @@ private:
             std::size_t DstNodeIdx;
             i64 FdIdx;
 
-            static constexpr i64 Epsilon = -1;
+            static constexpr i64 Epsilon = -1; // eps edges with give us nodes without applying any FDs.
 
             bool operator==(const TEdge& other) const;
 
@@ -464,6 +528,22 @@ private:
         std::vector<TEdge> Edges_;
     };
 
+    /*
+     * Deterministic Finite State Machine (DFSM) for efficient ordering operations.
+     *
+     * The DFSM is constructed from NFSM using subset construction algorithm. Each DFSM state
+     * represents a set of NFSM states that are reachable through epsilon transitions and
+     * always-active functional dependencies.
+     *
+     * Key benefits over NFSM:
+     * - Deterministic: Exactly one transition per FD from each state
+     * - Efficient: O(1) state transitions using precomputed transition matrix
+     * - Compact: Significantly fewer states than NFSM through state merging
+     * - Fast containment checks: Bitset operations for ordering membership tests
+     *
+     * The DFSM enables efficient runtime queries like "does current state contain ordering X?"
+     * and "what orderings become available after applying FD set Y?".
+     */
     class TDFSM {
     public:
         friend class TLogicalOrderings;
@@ -519,6 +599,10 @@ private:
         std::vector<TInitState> InitStateByOrderingIdx_;
     };
 
+    /*
+     * For equivalences we build equivalence classes and if item belongs to the class, which has no interesting
+     * orderings, so we can easily prune it.
+     */
     std::vector<TFunctionalDependency> PruneFDs(
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings);
@@ -529,9 +613,9 @@ private:
 
 private:
     TNFSM Nfsm_;
-    TSimpleSharedPtr<TDFSM> Dfsm_;
+    TSimpleSharedPtr<TDFSM> Dfsm_; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 
-    std::vector<i64> FdMapping_;
+    std::vector<i64> FdMapping_; // We to remap FD idxes after the pruning
     std::vector<TItemInfo> ItemInfo_;
     bool Built_ = false;
 };

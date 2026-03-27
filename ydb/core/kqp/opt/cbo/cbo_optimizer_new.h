@@ -41,11 +41,22 @@ static constexpr auto AllJoinAlgos = {
     EJoinAlgoType::MergeJoin
 };
 
+/**
+ * OptimizerNodes are the internal representations of operators inside the
+ * Cost-based optimizer. Currently we only support RelOptimizerNode - a node that
+ * is an input relation to the equi-join, and JoinOptimizerNode - an inner join
+ * that connects two sets of relations.
+ */
 enum EOptimizerNodeKind: ui32 {
     RelNodeType,
     JoinNodeType
 };
 
+/**
+ * BaseOptimizerNode is a base class for the internal optimizer nodes
+ * It records a pointer to statistics and records the current cost of the
+ * operator tree, rooted at this node
+ */
 class IBaseOptimizerNode {
 public:
     EOptimizerNodeKind Kind;
@@ -71,8 +82,8 @@ enum EJoinKind: ui32 {
     LeftJoin,
     RightJoin,
     OuterJoin,
-    LeftOnly,
-    RightOnly,
+    LeftOnly /* == LeftAntiJoin */,
+    RightOnly /* == RightAntiJoin */,
     LeftSemi,
     RightSemi,
     Cross,
@@ -202,9 +213,21 @@ struct TOptimizerHints {
 
     TVector<TString> GetUnappliedString();
 
+    /*
+     *   The function accepts string with four type of expressions: array of (JoinAlgo | Rows | Bytes | JoinOrder):
+     *   1) JoinAlgo(t1 t2 ... tn Map | Grace | Lookup) to change join algo for join, where these labels take part
+     *   2) Rows(t1 t2 ... tn (*|/|+|-|#) Number) to change cardinality for join, where these labels take part or labels only
+     *   3) Bytes(t1 t2 ... tn (*|/|+|-|#) Number) to change byte size for join, where these labels take part or labels only
+     *   4) JoinOrder( (t1 t2) (t3 (t4 ...)) ) - fixate this join subtree in the general join tree
+     */
     static TOptimizerHints Parse(const TString&);
 };
 
+/**
+ * This is a temporary structure for KQP provider
+ * We will soon be supporting multiple providers and we will need to design
+ * some interfaces to pass provider-specific context to the optimizer
+ */
 struct IProviderContext {
     virtual ~IProviderContext() = default;
 
@@ -256,6 +279,9 @@ struct IProviderContext {
         EJoinKind joinKind) = 0;
 };
 
+/**
+ * Default provider context with default cost and stats computation.
+ */
 struct TBaseProviderContext: public IProviderContext {
     TBaseProviderContext() {}
 
@@ -309,6 +335,10 @@ struct TBaseProviderContext: public IProviderContext {
     static const TBaseProviderContext& Instance();
 };
 
+/**
+ * RelOptimizerNode adds a label to base class
+ * This is the label assinged to the input by equi-Join
+ */
 struct TRelOptimizerNode: public IBaseOptimizerNode {
     TString Label;
 
@@ -324,6 +354,12 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
     void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
+/**
+ * JoinOptimizerNode records the left and right arguments of the join
+ * as well as the set of join conditions.
+ * It also has methods to compute the statistics and cost of a join,
+ * based on pre-computed costs and statistics of the children.
+ */
 struct TJoinOptimizerNode: public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
@@ -331,8 +367,10 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
     TVector<TJoinColumn> RightJoinKeys;
     EJoinKind JoinType;
     EJoinAlgoType JoinAlgo;
+    /////////////////// 'ANY' flag means leaving only one row from the join side.
     bool LeftAny;
     bool RightAny;
+    ///////////////////
     bool IsReorderable;
 
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,

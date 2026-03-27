@@ -153,6 +153,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         TVector<TJoinColumn> leftKeys = {TJoinColumn("a3", "1337")};
         TVector<TJoinColumn> rightKeys = {TJoinColumn("b1", "1337")};
 
+        // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2
         auto root = std::make_shared<TJoinOptimizerNode>(
             lhs, rhs, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
         );
@@ -165,6 +166,8 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
 
         rhs = CreateChain(2, "228", "c");
 
+        // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2 --123-- c1 --228-- c2
+        // ^ we don't want to have transitive closure between c and a
         root = std::make_shared<TJoinOptimizerNode>(
             root, rhs, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
         );
@@ -216,6 +219,8 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         Y_UNREACHABLE();
     }
 
+
+    /* Example of usage: Join("A", "B", "A.id=B.id,A.kek=B.kek,A=B") (only equijoin supported)*/
     template<typename TLhsArg, typename TRhsArg>
     std::shared_ptr<IBaseOptimizerNode> Join(const TLhsArg& lhsArg, const TRhsArg& rhsArg, TString on="", EJoinKind kind = EJoinKind::InnerJoin) {
         if constexpr (std::is_convertible_v<TLhsArg, std::string> && std::is_convertible_v<TRhsArg, std::string>) {
@@ -233,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         TVector<TJoinColumn> leftJoinCond;
         TVector<TJoinColumn> rightJoinCond;
         for (const TString& cond: conds) {
-            std::string lhsCond, rhsCond;
+            std::string lhsCond, rhsCond; // "A.id B.id"
             Split(cond, "=", lhsCond, rhsCond);
 
             if (lhsCond.contains(".") && rhsCond.contains(".")) {
@@ -320,49 +325,50 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
     }
 
     Y_UNIT_TEST(AnyJoinConstraints1) {
-        auto anyJoin = Join(Join("A", "B"), "C", "B=C");
+        auto anyJoin = Join(Join("A", "B"), "C", /*on=*/ "B=C");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
-        auto join = Join(anyJoin, "D", "A=D");
+        auto join = Join(anyJoin, "D", /*on=*/"A=D");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() != graph.GetSimpleEdges().size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
 
         Enumerate(join);
     }
 
+
     Y_UNIT_TEST(AnyJoinConstraints2) {
-        auto anyJoin = Join(Join(Join("A", "B"), "C", "B=C"), "D", "C=D");
+        auto anyJoin = Join(Join(Join("A", "B"), "C", /*on=*/ "B=C"), "D", "C=D");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
-        auto join = Join(anyJoin, "E", "A=E");
+        auto join = Join(anyJoin, "E", /*on=*/ "A=E");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() != graph.GetSimpleEdges().size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
 
         Enumerate(join);
     }
 
     Y_UNIT_TEST(AnyJoinConstraints3) {
-        auto anyJoin = Join(Join("A", "B"), Join("C", "D"), "B=C");
+        auto anyJoin = Join(Join("A", "B"), Join("C", "D"), /*on=*/"B=C");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->RightAny = true;
-        auto join = Join(anyJoin, "E", "C=E");
+        auto join = Join(anyJoin, "E", /*on=*/ "C=E");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() != graph.GetSimpleEdges().size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
 
         Enumerate(join);
     }
 
     Y_UNIT_TEST(IsReorderableConstraint) {
-        auto nonReorderable = Join(Join(Join("A", "B"), "C", "B=C"), "D", "C=D");
+        auto nonReorderable = Join(Join(Join("A", "B"), "C", /*on=*/ "B=C"), "D", "C=D");
         std::static_pointer_cast<TJoinOptimizerNode>(nonReorderable)->IsReorderable = false;
-        auto join = Join(nonReorderable, "E", "A=E");
+        auto join = Join(nonReorderable, "E", /*on=*/ "A=E");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
-        UNIT_ASSERT(graph.GetEdges().size() != graph.GetSimpleEdges().size());
+        UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
 
         Enumerate(join);
     }
@@ -387,6 +393,10 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
     }
 
     Y_UNIT_TEST(CrossJoinEliminationSimple) {
+        // A simple tree A - C - B. The inner join A=C,B=C will be split
+        // into two inner joins. And cross join {A}->{B} should be
+        // eliminated completely, leaving only two edges.
+
         auto join = Join(CrossJoin("A", "B"), "C", "C=A,C=B");
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
@@ -398,15 +408,45 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         auto B = graph.GetNodesByRelNames({"B"});
         auto C = graph.GetNodesByRelNames({"C"});
 
+        // Inner join should split into two:
         UNIT_ASSERT(graph.FindEdgeBetween(A, C));
         UNIT_ASSERT(graph.FindEdgeBetween(C, B));
 
+        // Cross join should be eliminated:
         UNIT_ASSERT(!graph.FindEdgeBetween(A, B));
 
         Enumerate(join);
     }
 
     Y_UNIT_TEST(CrossJoinEliminationComplex) {
+        // Significantly more elaborate example, which contains
+        // 5 cross joins, only two of which are real.
+
+        // Not only that, it requires two passes of AddCrossJoins method,
+        // which makes it a good test of correctness of connectivity logic.
+        //
+        // Why does it require two passes?
+        //
+        // 1. First edge that will be generated in the hypergraph is
+        //    left join  {A, B}->{M}. This happens because the tree
+        //    is traversed depth-first left-to-right and all cross
+        //    joins are skipped in the initial hypergraph (and added
+        //    back later only if it is absolutely necessary).
+        // 2. This edge is disabled on the first pass, because A and B
+        //    are not yet connected (they will be connected later
+        //    by outside inner joins {F}->{A}, {F}->{B})
+        // 3. Because of that no cross joins can be enabled on the
+        //    first connectivity pass (both of them depend on A,B,M
+        //    all being connected). Therefore single pass will not
+        //    suffice -- if we stopped there, resulting graph would
+        //    have 3 separate connected components.
+        // 4. On the second pass {A, B}->{M} will be enabled, which
+        //    then will allow both real cross joins to be added too
+
+
+        // So this example has real and fake cross joins below and
+        // above a hyperedge (caused by left join)
+
         auto join =
             CrossJoin(
                 Join(
@@ -479,6 +519,7 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         UNIT_ASSERT(HaveSameConditions(optimizedJoin, join));
     }
 
+    /* We shouldn't have complex edges in inner equijoins */
     Y_UNIT_TEST(TransitiveClosurePlusCycle) {
         auto join = Join("A", Join("B", Join("C", "D", "C.c0=D.d"), "B.b=C.c,B.b0=D.d1"), "A.a=B.b");
 
@@ -555,10 +596,14 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         auto B = graph.GetNodesByRelNames({"B"});
         auto C = graph.GetNodesByRelNames({"C"});
 
+        // Check that edge lhsNodes -> rhsNodes exists and has the same
+        // condition as specified in expectedCondition in format:
+        // "a_a=b_b,a_b=b_b" (note lhs, rhs are sorted and conditions are sorted)
         auto checkConditions = [&graph](auto lhsNodes, auto rhsNodes, const std::string& expectedCondition) {
             auto* edge = graph.FindEdgeBetween(lhsNodes, rhsNodes);
             UNIT_ASSERT(edge);
 
+            // Extract actual join key names from hyperedge
             UNIT_ASSERT_EQUAL(edge->LeftJoinKeys.size(), edge->RightJoinKeys.size());
             std::vector<std::pair<std::string, std::string>> actualJoinKeys;
             for (ui32 i = 0; i < edge->LeftJoinKeys.size(); ++ i) {
@@ -574,9 +619,11 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
                 if (!actualCondition.empty()) {
                     actualCondition += ",";
                 }
+
                 actualCondition += lhs + "=" + rhs;
             }
 
+            // Ensure expected and actual join keys are the same
             UNIT_ASSERT_STRINGS_EQUAL(actualCondition, expectedCondition);
         };
 
@@ -640,7 +687,8 @@ Y_UNIT_TEST_SUITE(KqpHypergraphBuild) {
         #elif !defined(NDEBUG)
             enum { CliqueSize = 6, StarSize = 6, ChainSize = 6 };
         #else
-            enum { CliqueSize = 10, StarSize = 14, ChainSize = 28 };
+            enum { CliqueSize = 10, StarSize = 14, ChainSize = 28 }; // after
+            // enum { CliqueSize = 15, StarSize = 20, ChainSize = 165, }; // before
         #endif
 
         TVector<double> cliqueTime{};

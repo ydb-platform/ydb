@@ -11,6 +11,10 @@ namespace NKikimr::NKqp {
 using namespace NYql::NNodes;
 
 namespace {
+    /***
+     * We maintain a white list of callables that we consider part of constant expressions
+     * All other callables will not be evaluated
+     */
     THashSet<TString> ConstantFoldingWhiteList = {
         "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
@@ -19,8 +23,14 @@ namespace {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
     TVector<TString> UdfBlackList = {
-        "RandomNumber", "Random", "RandomUuid", "Now",
-        "CurrentUtcDate", "CurrentUtcDatetime", "CurrentUtcTimestamp"};
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
 
     bool IsConstantUdf(const TExprNode::TPtr& input, bool withParams = false);
     bool IsConstantExprPg(const TExprNode::TPtr& input);
@@ -1134,6 +1144,13 @@ bool IsLiteralDataExpr(TExprBase node) {
     return false;
 }
 
+/***
+ * Check if the expression is a constant expression
+ * Its type annotation need to specify that its a data type, and then we check:
+ *   - If its a literal, its a constant expression
+ *   - If its a callable in the while list and all children are constant expressions, then its a constant expression
+ *   - If one of the child is a type expression, it also passes the check
+ */
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);

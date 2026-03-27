@@ -156,6 +156,9 @@ private:
 };
 
 bool NeedCalc(TExprBase node);
+// Returns true if the expression is already a fully-evaluated literal
+// (TCoDataCtor, TCoNothing, or TCoJust wrapping a literal) and
+// does not need further evaluation via EvaluateExpr.
 bool IsLiteralDataExpr(TExprBase node);
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs = true);
 bool IsConstantExprWithParams(const TExprNode::TPtr& input);

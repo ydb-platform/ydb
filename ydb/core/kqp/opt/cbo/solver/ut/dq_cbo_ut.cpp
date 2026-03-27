@@ -122,6 +122,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
 }
 
 Y_UNIT_TEST(JoinSearchYQL19363) {
+    // Verify that JoinSearch() correctly handles dot and comma characters.
     TBaseProviderContext pctx;
     NYql::TExprContext dummyCtx;
 
@@ -170,6 +171,7 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
     relName1 = generateSpecialCharacters() + ".a";
     relName2 = generateSpecialCharacters() + ".b";
 
+    // Verify that arbitrary characters are correctly handled and preserved
     rel1 = std::make_shared<TRelOptimizerNode>(relName1,
         TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
     rel2 = std::make_shared<TRelOptimizerNode>(relName2,

@@ -61,7 +61,6 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .IsCommonSensePath()
                 .IsTheSameDomain(subdomainPath);
 
             if (!checks) {

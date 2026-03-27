@@ -141,6 +141,10 @@ AWS_MQTT_API uint64_t aws_mqtt_hash_uint16_t(const void *item);
 
 AWS_MQTT_API bool aws_mqtt_compare_uint16_t_eq(const void *a, const void *b);
 
+AWS_MQTT_API uint64_t aws_mqtt_hash_uint64_t(const void *item);
+
+AWS_MQTT_API bool aws_mqtt_compare_uint64_t_eq(const void *a, const void *b);
+
 AWS_MQTT_API bool aws_mqtt_byte_cursor_hash_equality(const void *a, const void *b);
 
 AWS_MQTT_API struct aws_event_loop *aws_mqtt_client_connection_get_event_loop(

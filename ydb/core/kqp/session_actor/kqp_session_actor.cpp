@@ -2558,7 +2558,7 @@ public:
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
 
-    void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
 
         STLOG_I("Got TEvAbortExecution, send it to Executer",
@@ -2583,6 +2583,10 @@ public:
         } else {
             ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "", MessageFromIssues(issues));
         }
+    }
+
+    void HandleExecute(TEvKqp::TEvAbortExecution::TPtr& ev) {
+        HandleAbortExecution(ev);
     }
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -3186,41 +3190,28 @@ public:
         CleanupAndPassAway();
     }
 
-    void HandleAdmissionAbort(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
-        auto& msg = ev->Get()->Record;
-        auto issues = ev->Get()->GetIssues();
-
-        STLOG_I("Got TEvAbortExecution, aborting query",
-            (status_code, NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())),
-            (state, CurrentStateFuncName()),
-            (trace_id, TraceId()));
-
-        ReplyQueryError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), "", MessageFromIssues(issues));
-    }
-
-    void HandleAdmission(TEvKqp::TEvCloseSessionRequest::TPtr&) {
-        STLOG_I("Session closed while waiting for WLM admission", (trace_id, TraceId()));
-        YQL_ENSURE(QueryState);
-        QueryState->KeepSession = false;
-
-        CleanupAndPassAway();
-    }
-
-    void HandleCompile(TEvKqp::TEvCloseSessionRequest::TPtr&) {
-        STLOG_I("Session closed while compiling query", (trace_id, TraceId()));
-        YQL_ENSURE(QueryState);
-        QueryState->KeepSession = false;
-
-        CleanupAndPassAway();
-    }
-
-    void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr&) {
+    void HandleCloseSession(TEvKqp::TEvCloseSessionRequest::TPtr&) {
         YQL_ENSURE(QueryState);
         QueryState->KeepSession = false;
         {
             auto abort = MakeHolder<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Query execution is cancelled because session was requested to be closed.");
             Send(SelfId(), abort.Release());
         }
+    }
+
+    void HandleExecute(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        STLOG_D("Session closed while executing query", (trace_id, TraceId()));
+        HandleCloseSession(ev);
+    }
+
+    void HandleAdmission(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        STLOG_D("Session closed while waiting for WLM admission", (trace_id, TraceId()));
+        HandleCloseSession(ev);
+    }
+
+    void HandleCompile(TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+        STLOG_D("Session closed while compiling query", (trace_id, TraceId()));
+        HandleCloseSession(ev);
     }
 
     void HandleCleanup(TEvKqp::TEvCloseSessionRequest::TPtr&) {
@@ -3573,7 +3564,8 @@ public:
             hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
             hFunc(TEvKqp::TEvQueryRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);
-            hFunc(TEvKqpBuffer::TEvError, Handle);
+            // NOTE: TEvKqpBuffer::TEvError is NOT here because CleanupState
+            // needs HandleCleanup, not Handle.  Each state dispatches it individually.
             default:
                 return false;
         }
@@ -3597,6 +3589,7 @@ public:
 
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 
             default:
@@ -3615,11 +3608,12 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleAdmission);
 
                 // cancel/abort during WLM admission wait
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAdmissionAbort);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
 
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
                 return true;
             default:
                 return false;
@@ -3656,10 +3650,11 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
 
                 // cancel/abort during compilation
-                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);
 
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
             default:
                 UnexpectedEvent("CompileState", ev);
             }
@@ -3679,6 +3674,7 @@ public:
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
+                hFunc(TEvKqpBuffer::TEvError, Handle);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleExecute);
                 hFunc(NGRpcService::TEvClientLost, HandleClientLost);

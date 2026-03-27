@@ -363,7 +363,7 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, ui64 tabletId)
     TrackMemory();
 }
 
-TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self)
+TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const NWilson::TTraceId& traceId)
     : TWriteOperation(op, self->TabletID())
 {
     Recipient = ev->Recipient;
@@ -375,6 +375,7 @@ TWriteOperation::TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::T
 
     Orbit = std::move(evPtr->MoveOrbit());
     WriteRequest.reset(evPtr.Release());
+    WriteRequestTraceId = traceId.Clone();
 
     BuildWriteTx(self);
 
@@ -468,6 +469,7 @@ bool TWriteOperation::TrySetTxBody(const TString& txBody) {
     }
 
     WriteRequest.reset(writeRequest);
+    WriteRequestTraceId = NWilson::TTraceId();
     return true;
 }
 
@@ -479,6 +481,7 @@ void TWriteOperation::SetTxBody(const TString& txBody) {
 void TWriteOperation::ClearTxBody() {
     UntrackMemory();
     WriteRequest.reset();
+    WriteRequestTraceId = NWilson::TTraceId();
     TrackMemory();
 }
 
@@ -486,7 +489,7 @@ bool TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
         Y_ENSURE(WriteRequest);
-        WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, GetTraceId(), IsMvccSnapshotRead());
+        WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, WriteRequestTraceId, IsMvccSnapshotRead());
     }
     return bool(WriteTx);
 }
@@ -555,7 +558,7 @@ ui64 TWriteOperation::GetMemoryConsumption() const {
     return res;
 }
 
-ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDatabase& db, const NWilson::TTraceId& traceId)
+ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDatabase& db)
 {
     if (!WriteTx) {
         ReleasedTxDataSize = 0;
@@ -576,6 +579,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
         bool ok = self->TransQueue.LoadTxDetails(niceDb, GetTxId(), Target, txBody, locks, ArtifactFlags);
         if (!ok) {
             WriteRequest.reset();
+            WriteRequestTraceId = NWilson::TTraceId();
             ArtifactFlags = 0;
             return ERestoreDataStatus::Restart;
         }
@@ -592,7 +596,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     bool extractKeys = WriteTx->IsTxInfoLoaded();
 
-    WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, traceId, IsMvccSnapshotRead());
+    WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, WriteRequestTraceId, IsMvccSnapshotRead());
     if (WriteTx->Ready() && extractKeys) {
         WriteTx->ExtractKeys(db.GetScheme(), true);
     }

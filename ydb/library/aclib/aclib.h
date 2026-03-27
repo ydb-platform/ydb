@@ -196,7 +196,7 @@ public:
 
     TUserContext(const TString& userSID, const NWilson::TTraceId& userTraceId):
         UserSID(userSID),
-        UserTraceId(userTraceId.Clone())
+        UserTraceId(userTraceId ? userTraceId.Clone() : NWilson::TTraceId())
     {}
 
     const TString& GetUserSID() const {
@@ -233,7 +233,7 @@ public:
     }
 
     TUserContextBuilder WithUserTraceId(const NWilson::TTraceId& userTraceId) {
-        UserTraceId = userTraceId.Clone();
+        UserTraceId = userTraceId ? userTraceId.Clone() : NWilson::TTraceId();
         return *this;
     }
 

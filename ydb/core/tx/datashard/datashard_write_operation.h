@@ -152,7 +152,7 @@ public:
     static TWriteOperation* TryCastWriteOperation(TOperation::TPtr op);
 
     explicit TWriteOperation(const TBasicOpInfo& op, ui64 tabletId);
-    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self);
+    explicit TWriteOperation(const TBasicOpInfo& op, NEvents::TDataEvents::TEvWrite::TPtr&& ev, TDataShard* self, const NWilson::TTraceId& traceId);
     ~TWriteOperation();
 
     void FillTxData(TValidatedWriteTx::TPtr dataTx);
@@ -220,7 +220,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider);
-    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db, const NWilson::TTraceId& traceId);
+    ERestoreDataStatus RestoreTxData(TDataShard* self, NTable::TDatabase& db);
 
     // TOperation iface.
     void BuildExecutionPlan(bool loaded) override;
@@ -289,6 +289,7 @@ private:
 
 private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
+    NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
 
     TValidatedWriteTx::TPtr WriteTx;

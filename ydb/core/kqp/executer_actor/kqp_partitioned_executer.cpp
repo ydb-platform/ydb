@@ -53,7 +53,6 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.RlPath = from.RlPath;
     request.NeedTxId = from.NeedTxId;
     request.UseImmediateEffects = from.UseImmediateEffects;
-    request.UserTraceId = from.UserTraceId;
     request.OutputChunkMaxSize = from.OutputChunkMaxSize;
 }
 

@@ -1124,6 +1124,10 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
                                               : NKikimrKqp::QUERY_TYPE_SQL_DDL);
     request->Record.MutableRequest()->SetQuery(sql);
     request->Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
+
+    if (userCtx != nullptr && userCtx->GetUserTraceId()) {
+        request->Record.SetTraceId(userCtx->GetUserTraceId().GetHexTraceId());
+    }
     return request;
 }
 
@@ -2122,7 +2126,12 @@ void ExecSQL(Tests::TServer::TPtr server,
 {
     auto &runtime = *server->GetRuntime();
     auto request = MakeSQLRequest(sql, dml, userCtx);
-    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
+    NWilson::TTraceId traceId;
+    if (userCtx != nullptr && userCtx->GetUserTraceId()) {
+        traceId = userCtx->GetUserTraceId().Clone();
+    }
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr, std::move(traceId)));
+
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
     auto& issues = response.GetResponse().GetQueryIssues();

@@ -1486,8 +1486,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             if (!userCtx->GetUserSID().empty()) {
                 payload.WriteKey("user").WriteString(userCtx->GetUserSID());
             }
-            if (!userCtx->GetUserTraceId().empty()) {
-                payload.WriteKey("traceId").WriteString(userCtx->GetUserTraceId());
+            if (userCtx->GetUserTraceId()) {
+                payload.WriteKey("traceId").WriteString(userCtx->GetUserTraceId().GetHexTraceId());
             }
         }
         payload.EndObject();
@@ -1654,7 +1654,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }, true, NACLib::TUserContextBuilder().WithUserSID("user@test").Build());
     }
 
+    NWilson::TTraceId GetTestTraceId() {
+        const TString hexTraceId = "6A4ABE11C2D44B6576C8476461CC167F0000000000000000FFFF0000";
+        NWilson::TTraceId::TSerializedTraceId serializedTrace{};
+        HexDecode(hexTraceId.c_str(), hexTraceId.size(), &serializedTrace);
+
+        return NWilson::TTraceId(serializedTrace);
+    }
+
     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserTraceId, PqRunner, YdsRunner, TopicRunner) {
+
+        auto userCtx = NACLib::TUserContextBuilder().WithUserTraceId(GetTestTraceId()).Build();
+
         TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1668,14 +1679,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
         )", R"(
             DELETE FROM `/Root/Table` WHERE key = 1;
         )"}, {
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":10},"key":[1]})",
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":20},"key":[2]})",
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":30},"key":[3]})",
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
-            R"({"traceId":"trace-id-value","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
-            R"({"traceId":"trace-id-value","erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, NACLib::TUserContextBuilder().WithUserTraceId("trace-id-value").Build());
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"traceId":"6A4ABE11C2D44B6576C8476461CC167F","erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, userCtx);
     }
 
     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserTraceIdDisabled, PqRunner, YdsRunner, TopicRunner) {
@@ -1699,7 +1710,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
             R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
             R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
-        }, true, NACLib::TUserContextBuilder().WithUserTraceId("trace-id-value").Build());
+        }, true, NACLib::TUserContextBuilder().WithUserTraceId(GetTestTraceId()).Build());
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
@@ -1767,14 +1778,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserTraceId) {
         auto userCtx = NACLib::TUserContextBuilder()
-            .WithUserTraceId("trace-id")
+            .WithUserTraceId(GetTestTraceId())
             .Build();
         CheckLogDebezium(userCtx, userCtx, true);
     }
 
     Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserTraceIdDisabled) {
         auto userCtx = NACLib::TUserContextBuilder()
-            .WithUserTraceId("trace-id")
+            .WithUserTraceId(GetTestTraceId())
             .Build();
         auto checkUserCtx = NACLib::TUserContextBuilder().Build();
         CheckLogDebezium(userCtx, checkUserCtx, true, false);

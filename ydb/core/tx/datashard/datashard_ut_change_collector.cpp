@@ -215,12 +215,13 @@ struct TStructRecordBase {
     }
 
     NWilson::TTraceId GetUserTraceId() const {
-        return UserCtx != nullptr ? UserCtx->GetUserTraceId().Clone() : NWilson::TTraceId();
+        return (UserCtx != nullptr && UserCtx->GetUserTraceId()) ? UserCtx->GetUserTraceId().Clone() : NWilson::TTraceId();
     }
 
     bool operator==(const TStructRecordBase<SK>& rhs) const {
         return Kind == rhs.Kind
             && GetUserSID() == rhs.GetUserSID()
+            && GetUserTraceId().GetHexTraceId() == rhs.GetUserTraceId().GetHexTraceId()
             && Rop == rhs.Rop
             && Key == rhs.Key
             && Update == rhs.Update
@@ -1068,7 +1069,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     }
 
     namespace {
-        constexpr static NWilson::TTraceId TestTraceId(0xF1F2F3F4F5F6F7);
+        const static NWilson::TTraceId TestTraceId = NWilson::TTraceId::NewTraceId(15, 4095);
     }
 
     Y_UNIT_TEST(PassUserTraceId) {

@@ -1147,7 +1147,7 @@ private:
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {
                 NKikimrTxDataShard::TEvKqpInputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
-                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                NDataIntegrity::LogIntegrityTrails("InputActorResult", Request.TraceId ? Request.TraceId.GetHexTraceId() : TString(), TxId, info, TlsActivationContext->AsActorContext());
                 ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
                     ? info.GetDeferredVictimQuerySpanId() : 0;
                 for (auto& lock : info.GetLocks()) {
@@ -1183,7 +1183,7 @@ private:
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
-                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
+                NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.TraceId ? Request.TraceId.GetHexTraceId() : TString(), TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
                     const auto& task = TasksGraph.GetTask(taskId);
                     const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);

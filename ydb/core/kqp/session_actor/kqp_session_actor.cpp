@@ -517,6 +517,7 @@ public:
         }
 
         MakeNewQueryState(ev);
+
         TTimerGuard timer(this);
         YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
@@ -1435,7 +1436,6 @@ public:
         if (queryState) {
             request.Snapshot = queryState->TxCtx->GetSnapshot();
             request.IsolationLevel = *queryState->TxCtx->EffectiveIsolationLevel;
-            request.UserTraceId = queryState->UserRequestContext->TraceId;
         } else {
             request.IsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
         }
@@ -1949,10 +1949,9 @@ public:
             builder.WithUserSID(UserCtx->GetUserSID());
         }
 
-        if (QueryState != nullptr) {
-            builder.WithUserTraceId(QueryState->UserTraceId);
+        if (QueryState != nullptr && QueryState->KqpSessionSpan) {
+            builder.WithUserTraceId(QueryState->KqpSessionSpan.GetTraceId());
         }
-
         return builder.Build();
     }
 
@@ -1969,6 +1968,7 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+
         request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;

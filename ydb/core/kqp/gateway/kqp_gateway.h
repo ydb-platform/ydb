@@ -164,7 +164,6 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
-        TString UserTraceId; // Remove it!
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 
         NTopic::TTopicOperations TopicOperations;

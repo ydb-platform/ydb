@@ -294,7 +294,7 @@ public:
         TTransactionContext& txc
     )
     {
-        return writeOp->RestoreTxData(Self, txc.DB, writeOp->GetTraceId());
+        return writeOp->RestoreTxData(Self, txc.DB);
     }
 
     void RegisterDistributedWrites(const TOperation::TPtr& op, NTable::TDatabase& db);

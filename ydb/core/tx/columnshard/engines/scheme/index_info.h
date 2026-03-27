@@ -8,7 +8,6 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -416,7 +415,7 @@ public:
     const std::vector<TNameTypeInfo>& GetPrimaryKeyColumns() const {
         return PKColumns;
     }
-    
+
     const std::vector<TNameTypeInfo>& GetColumns() const {
         return Columns;
     }

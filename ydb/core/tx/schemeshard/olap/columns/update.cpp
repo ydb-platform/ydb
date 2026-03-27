@@ -145,16 +145,19 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
     }
 
     if (columnSchema.HasDataAccessorConstructor()) {
-        if (!AccessorConstructor.DeserializeFromProto(columnSchema.GetDataAccessorConstructor())) {
-            errors.AddError("cannot parse accessor constructor from proto");
-            return false;
-        }
-    }
-    if (AccessorConstructor && AccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
-        if (!IsAllowedDictionaryType(Type.GetTypeId())) {
-            errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
-                << "DICTIONARY encoding is not supported for type '" << TypeName << "' of column '" << Name << "'");
-            return false;
+        const auto& dacProto = columnSchema.GetDataAccessorConstructor();
+        if (dacProto.GetClassName() != NArrow::NAccessor::TGlobalConst::UndefinedAccessorName) {
+            if (dacProto.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+                if (!IsAllowedDictionaryType(Type.GetTypeId())) {
+                    errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder()
+                        << "DICTIONARY encoding is not supported for type '" << TypeName << "' of column '" << Name << "'");
+                    return false;
+                }
+            }
+            if (!AccessorConstructor.DeserializeFromProto(dacProto)) {
+                errors.AddError("cannot parse accessor constructor from proto");
+                return false;
+            }
         }
     }
 

@@ -841,7 +841,7 @@ void CompactTable(
         return;
     }
     NTable::TTableClient client(driver);
-    auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "comapct table " << table,
+    auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
         NTable::TAlterTableSettings()
             .Compact(NTable::TCompact(false, 1000))
     );
@@ -1057,28 +1057,11 @@ public:
             }
 
             switch (LoadState.State) {
-            case NYdb::NTPCC::TImportState::ELOAD_SMALL_TABLES: {
-                if (LoadState.SmallTablesLoaded.load(std::memory_order_relaxed)) {
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_ITEM, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_DISTRICT, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_WAREHOUSE, Log.get());
-                    if (GetGlobalInterruptSource().stop_requested()) {
-                        break;
-                    }
-
-                    LOG_I("Small tables loaded, will be compacted in background. Continuing with remaining tables");
-                    LoadState.State = TImportState::ELOAD_INDEXED_TABLES;
-                    lastIndexProgressCheck = now;
-                }
-                break;
-            }
             case TImportState::ELOAD_INDEXED_TABLES: {
                 // Check if all indexed ranges are loaded and start index creation
                 size_t indexedRangesLoaded = LoadState.IndexedRangesLoaded.load(std::memory_order_relaxed);
                 if (indexedRangesLoaded >= threadCount) {
                     CreateIndices(drivers[0], Config.Path, LoadState, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_CUSTOMER, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_OORDER, Log.get());
                     for (const auto& state: LoadState.IndexBuildStates) {
                         if (state.Id.GetKind() == TOperation::TOperationId::UNUSED) {
                             GetGlobalInterruptSource().request_stop();
@@ -1100,10 +1083,6 @@ public:
                 size_t rangesLoaded = LoadState.RangesLoaded.load(std::memory_order_relaxed);
                 if (rangesLoaded >= threadCount) {
                     LOG_I("All tables loaded successfully. Waiting for indices to be ready");
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_STOCK, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_ORDER_LINE, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_HISTORY, Log.get());
-                    CompactTable(drivers.front(), LoadState, Config, TABLE_NEW_ORDER, Log.get());
                     LoadState.State = TImportState::EWAIT_INDICES;
                 }
                 [[fallthrough]];
@@ -1126,14 +1105,36 @@ public:
                     }
                     indexState.Progress = *progress;
                     if (i == LoadState.CurrentIndex && indexState.Progress == 100.0) {
-/*
-                        TStringBuilder indexImplTable;
-                        indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
-                        CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
-*/
                         ++LoadState.CurrentIndex;
                     }
                 }
+
+                if (LoadState.State == TImportState::EWAIT_INDICES &&
+                    LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()
+                ) {
+                    LOG_I("Indices created successfully");
+                    for (const auto& table: TPCC_TABLES) {
+                        CompactTable(drivers.front(), LoadState, Config, table, Log.get());
+                    }
+/*
+                    for (const auto& indexState: LoadState.IndexBuildStates) {
+                        TStringBuilder indexImplTable;
+                        indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
+                        CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
+                    }
+*/
+                    LoadState.State = TImportState::EWAIT_COMPACTION;
+                    continue;
+                }
+                break;
+            }
+            case TImportState::EWAIT_COMPACTION: {
+                auto timeSinceLastCheck = now - lastIndexProgressCheck;
+                if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
+                    break;
+                }
+                lastIndexProgressCheck = now;
+
                 for (size_t i = 0; i < LoadState.CompactionStates.size(); ++i) {
                     auto& compactionState = LoadState.CompactionStates[i];
                     auto progress = GetOperationProgress<NTable::TCompactionOperation, NTable::ECompactState>(operationClient, compactionState.Id, Log.get());
@@ -1143,19 +1144,17 @@ public:
                         break;
                     }
                     compactionState.Progress = *progress;
-                    if (i == LoadState.CurrentComapaction && compactionState.Progress == 100.0) {
-                        ++LoadState.CurrentComapaction;
+                    if (i == LoadState.CurrentCompaction && compactionState.Progress == 100.0) {
+                        ++LoadState.CurrentCompaction;
                     }
                 }
                 if (GetGlobalInterruptSource().stop_requested()) {
                     break;
                 }
-
-                if (LoadState.State == TImportState::EWAIT_INDICES &&
-                    LoadState.CurrentIndex >= LoadState.IndexBuildStates.size() &&
-                    LoadState.CurrentComapaction >= LoadState.CompactionStates.size()
+                if (LoadState.State == TImportState::EWAIT_COMPACTION &&
+                    LoadState.CurrentCompaction >= LoadState.CompactionStates.size()
                 ) {
-                    LOG_I("Indices created successfully");
+                    LOG_I("Tables compacted successfully");
                     LoadState.State = TImportState::ESUCCESS;
                     continue;
                 }

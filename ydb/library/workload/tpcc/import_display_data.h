@@ -41,15 +41,15 @@ struct TIndexBuildState {
 
 struct TImportState {
     enum ELoadState {
-        ELOAD_SMALL_TABLES = 0,
-        ELOAD_INDEXED_TABLES,
+        ELOAD_INDEXED_TABLES = 0,
         ELOAD_TABLES_BUILD_INDICES,
         EWAIT_INDICES,
+        EWAIT_COMPACTION,
         ESUCCESS
     };
 
     explicit TImportState(std::stop_token stopToken)
-        : State(ELOAD_SMALL_TABLES)
+        : State(ELOAD_INDEXED_TABLES)
         , StopToken(stopToken)
     {
     }
@@ -67,7 +67,7 @@ struct TImportState {
         , IndexBuildStates(other.IndexBuildStates)
         , CompactionStates(other.CompactionStates)
         , CurrentIndex(other.CurrentIndex)
-        , CurrentComapaction(other.CurrentComapaction)
+        , CurrentCompaction(other.CurrentCompaction)
         , ApproximateDataSize(other.ApproximateDataSize)
     {
     }
@@ -83,7 +83,7 @@ struct TImportState {
             IndexBuildStates = other.IndexBuildStates;
             CompactionStates = other.CompactionStates;
             CurrentIndex = other.CurrentIndex;
-            CurrentComapaction = other.CurrentComapaction;
+            CurrentCompaction = other.CurrentCompaction;
             ApproximateDataSize = other.ApproximateDataSize;
         }
         return *this;
@@ -106,7 +106,7 @@ struct TImportState {
     std::vector<TIndexBuildState> IndexBuildStates;
     std::vector<TIndexBuildState> CompactionStates;
     size_t CurrentIndex = 0;
-    size_t CurrentComapaction = 0;
+    size_t CurrentCompaction = 0;
     size_t ApproximateDataSize = 0;
 };
 

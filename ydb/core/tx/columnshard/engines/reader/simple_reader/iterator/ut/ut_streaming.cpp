@@ -1124,6 +1124,82 @@ void TestNonStreamingWithEmptyIntermediatePageContinue() {
     UNIT_ASSERT_GT(iterationsCount, 1u);
 }
 
+// Regression test for the dual-path streaming activation in IDataSource::Finalize().
+// Streaming pages are computed early by TDecideStreamingModeStep. Finalize() must
+// not rebuild a different page set and independently flip streaming mode later.
+//
+// This scenario stays on the streaming-safe projection path: one large portion,
+// no predicate/range filtering, deterministic paging, and a bounded in-flight
+// window. If Finalize() regresses to the late activation path, page accounting
+// and iteration behavior become inconsistent.
+void TestStreamingEarlyPagesNoLateRebuildConflict() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(2);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TBackpressureController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    csControllerGuard->SetConfiguredLimit(2);
+    // Force non-in-memory reading so early pages are computed deterministically.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    const ui32 numRecords = 100000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui32 iterationsCount = reader.GetIterationsCount();
+    const ui64 totalPagesCreated = csControllerGuard->GetTotalPagesCreated();
+    const ui64 maxObserved = csControllerGuard->GetMaxPagesInFlightObserved();
+    const ui64 timesLimitReached = csControllerGuard->GetTimesLimitReached();
+
+    Cerr << "StreamingEarlyPagesNoLateRebuildConflict: iterations=" << iterationsCount
+         << ", rows=" << rb->num_rows()
+         << ", totalPagesCreated=" << totalPagesCreated
+         << ", maxPagesInFlightObserved=" << maxObserved
+         << ", timesLimitReached=" << timesLimitReached << Endl;
+
+    // Multiple pages prove the early-page streaming path was actually used.
+    UNIT_ASSERT_GT(totalPagesCreated, 1u);
+    UNIT_ASSERT_GT(iterationsCount, 1u);
+    // The bounded in-flight window must still hold; a late rebuild path would
+    // bypass the intended per-page streaming behavior.
+    UNIT_ASSERT_LE(maxObserved, 2u);
+    UNIT_ASSERT_GT(timesLimitReached, 0u);
+}
+
 // Verifies that prefetchTriggered correctly prevents double-advance.
 // In streaming mode with MaxPagesInFlight > 1, prefetch triggers ContinueCursor
 // to start fetching the next page while the current one is sent to the client.
@@ -1440,6 +1516,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(NonStreamingWithEmptyIntermediatePageContinue) {
         TestNonStreamingWithEmptyIntermediatePageContinue();
+    }
+
+    Y_UNIT_TEST(StreamingEarlyPagesNoLateRebuildConflict) {
+        TestStreamingEarlyPagesNoLateRebuildConflict();
     }
 
     Y_UNIT_TEST(PrefetchNoDoubleAdvance) {

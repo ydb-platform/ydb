@@ -248,7 +248,8 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
 
     StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
 
-    if (HasEarlyPages() && StreamingMode) {
+    if (HasEarlyPages()) {
+        AFL_VERIFY(StreamingMode);
         // Streaming pages were computed earlier. Build StageResult for the current
         // page only; ContinueCursor() will reset it for the next page.
         // Keep the absolute IndexStart for resumed-scan checks; TBuildResultStep
@@ -259,7 +260,11 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     } else if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
-        StreamingMode = TStreamingConfigHelper::ShouldUseStreamingMode();
+        // Keep the legacy multi-page fallback non-streaming unless streaming was
+        // already decided by the early-page path above. This preserves the old
+        // page iteration behavior while preventing late activation from flipping
+        // the source into streaming mode independently.
+        StreamingMode = false;
     } else {
         // No memory limit or in-memory source: one page for the whole portion.
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });

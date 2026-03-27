@@ -220,7 +220,6 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
-    // TODO рассмотреть вариант переиспольщование общего с TWriteToPBuffer кода
     using TProtoEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TProtoEvWriteToManyPersistentBuffers =
@@ -250,8 +249,7 @@ struct TEvTransportPrivate
             const NKikimr::NDDisk::TBlockSelector& selector,
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
-            const std::vector<
-                NKikimr::NDDisk::TPersistentBufferId>&   // TODO move?
+            const std::vector<NKikimr::NDDisk::TPersistentBufferId>&
                 persistentBufferIds,
             const ui32 replyTimeoutMicroseconds,
             const TGuardedSgList& data,

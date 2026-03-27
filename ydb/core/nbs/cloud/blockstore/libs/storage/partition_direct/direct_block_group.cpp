@@ -364,6 +364,8 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
+    constexpr ui32 ReplyTimeoutMicroseconds =
+        50000;   // TODO make it configurable
     auto future = StorageTransport->WriteToManyPBuffers(
         PBufferConnections[hostIndexes[0]].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -373,7 +375,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         disksIds,
-        100000,   // TODO give a name
+        ReplyTimeoutMicroseconds,
         guardedSglist,
         childSpan);
 

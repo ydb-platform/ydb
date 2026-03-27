@@ -111,18 +111,19 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
     if (CompletedWrites.Count() + handoffLocations.size() <
         QuorumDirectBlockGroupHostCount)
     {
-        auto resultError = MakeError(E_FAIL, "ololo");   // TODO
+        auto resultError =
+            MakeError(E_FAIL, "Hand-offs retries are not available");
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. All hand-offs attempts are over. %s",
+            "TWriteRequestExecutor: %s",
             FormatError(resultError).c_str());
 
         Reply(resultError);
         return;
     }
 
-    // при 1-2 ошибках отправляем единичные запросы в HO
+    // Sending request to handoff in case of 1-2 errors
     for (size_t i = 0;
          i < QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
          ++i)

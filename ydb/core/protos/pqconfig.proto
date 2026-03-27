@@ -25,8 +25,8 @@ message TPartitionCounterData {
 }
 
 message TPartitionMeta {
-    //optional uint64 StartOffset = 1;
-    //optional uint64 EndOffset = 2;
+    reserved 1; // optional uint64 StartOffset = 1;
+    reserved 2; // optional uint64 EndOffset = 2;
     optional bool SubDomainOutOfSpace = 3 [default = false];
     optional TPartitionCounterData CounterData = 4;
     optional uint64 EndWriteTimestamp = 5;

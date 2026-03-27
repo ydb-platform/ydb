@@ -22,8 +22,6 @@ meta:
 
   grafana:
     endpoint: https://grafana.example.net
-    # Name of secret from generic.auth.tokens.secret_info used as Grafana API token.
-    secret_name: "secret-name"
 
   support_links:
     cluster:

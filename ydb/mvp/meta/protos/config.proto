@@ -8,8 +8,6 @@ message TMetaConfig {
     message TGrafanaConfig {
         // Grafana base URL used to resolve relative Grafana links.
         optional string Endpoint = 1;
-        // Name of secret in auth token config with Grafana API token.
-        optional string SecretName = 2;
     }
 
     message TSupportLinksConfig {

@@ -323,38 +323,6 @@ struct TYdbLocation {
     std::unique_ptr<NYdb::NScripting::TScriptingClient> GetScriptingClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
     std::unique_ptr<NYdb::NQuery::TQueryClient> GetQueryClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NQuery::TClientSettings& settings = NYdb::NQuery::TClientSettings()) const;
 
-    TString GetPath(const TRequest& request) const {
-        TString path = request.Parameters["path"];
-        if (!path.StartsWith('/')) {
-            path.insert(path.begin(), '/');
-        }
-        TString database = request.Parameters["database"];
-        if (!database.empty()) {
-            path = RootDomain + '/' + database + path;
-        } else {
-            path = RootDomain + path;
-        }
-        if (path.EndsWith('/')) {
-            path.resize(path.size() - 1);
-        }
-        if (path.find_first_of("]") != TString::npos) {
-            return TString();
-        }
-        return path;
-    }
-
-    TString GetName(const TRequest& request) const {
-        TString name = request.Parameters["name"];
-        if (!name.StartsWith('/')) {
-            name.insert(name.begin(), '/');
-        }
-        name = RootDomain + name;
-        if (name.find_first_of("]") != TString::npos) {
-            return TString();
-        }
-        return name;
-    }
-
     TString GetDatabaseName(const TRequest& request) const;
     TString GetServerlessProxyUrl(const TString& database) const;
 

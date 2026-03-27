@@ -84,8 +84,11 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                         ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
                         ("reverse", source->GetAs<IDataSource>()->GetContext()->GetReadMetadata()->IsDescSorted());
                     auto* simpleSource = source->MutableAs<IDataSource>();
-                    simpleSource->ContinueCursor(source);
+                    // Set prefetch flag BEFORE starting ContinueCursor to prevent race:
+                    // If ContinueCursor completes synchronously and re-enters OnSourceReady,
+                    // Continue() must not call ContinueCursor again (which would skip a page).
                     simpleSource->SetPrefetchTriggered(true);
+                    simpleSource->ContinueCursor(source);
                 } else {
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "backpressure_limit_reached")
                         ("source_idx", source->GetSourceIdx())

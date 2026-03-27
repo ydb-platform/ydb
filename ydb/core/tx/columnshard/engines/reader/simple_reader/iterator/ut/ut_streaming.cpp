@@ -1278,6 +1278,105 @@ void TestPrefetchNoDoubleAdvance() {
     UNIT_ASSERT_GT(batchCount, 1u);
 }
 
+// Tests the race condition between ContinueCursor() and SetPrefetchTriggered(true).
+//
+// BUG: In TSyncPointResult::OnSourceReady() at line 77-78:
+//   simpleSource->ContinueCursor(source);      // line 77
+//   simpleSource->SetPrefetchTriggered(true);  // line 78
+//
+// ContinueCursor() resets ScriptCursor and starts an async task. When the async
+// task completes and calls back into OnSourcePrepared -> OnSourceReady, the source
+// is still at the front of SourcesSequentially (because ESourceAction::Wait was
+// returned). The new page's result will be processed, but PrefetchTriggered is set
+// to true AFTER ContinueCursor already started the async work.
+//
+// If the async task completes synchronously (e.g., in-memory data), OnSourceReady
+// could be re-entered before SetPrefetchTriggered(true) executes. When Continue()
+// is later called (after the client ack), it checks PrefetchTriggered to decide
+// whether to skip ContinueCursor(). If the flag wasn't set yet, Continue() might
+// call ContinueCursor() again, causing a double-advance and skipping a page.
+//
+// This test uses MaxPagesInFlight=1 and forces in-memory reading to maximize the
+// chance of triggering the race condition. All pages must be read correctly.
+void TestPrefetchTriggeredRaceCondition() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    // Enable streaming with MaxPagesInFlight=1 to force sequential processing.
+    // This maximizes the chance of the race: each page must be acked before
+    // the next prefetch starts.
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(1);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Use a small memory limit to force multiple streaming pages.
+    // Combined with MaxPagesInFlight=1, this creates the race condition scenario.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write enough data to produce multiple streaming pages.
+    // With small memory limit, this should produce many pages.
+    const ui32 numRecords = 10000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    UNIT_ASSERT(reader.InitializeScanner());
+    reader.Ack();
+
+    // Receive all batches and verify correct completion.
+    // If the race condition occurs (PrefetchTriggered not set before Continue is called),
+    // ContinueCursor would be called again and we'd skip a page, resulting in fewer rows.
+    ui32 batchCount = 0;
+    while (true) {
+        bool hasMore = reader.Receive();
+        if (!hasMore) {
+            break;
+        }
+        reader.Ack();
+        ++batchCount;
+    }
+
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    auto rb = reader.GetResult();
+    UNIT_ASSERT(rb);
+    
+    // The bug would cause some pages to be skipped, resulting in fewer rows than expected.
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    Cerr << "PrefetchTriggeredRaceCondition: batches=" << batchCount
+         << ", rows=" << rb->num_rows()
+         << ", iterations=" << reader.GetIterationsCount() << Endl;
+
+    // With 10000 records and streaming, we expect multiple batches.
+    UNIT_ASSERT_GT(batchCount, 1u);
+}
+
 // Verifies page-boundary correctness in streaming mode:
 // - NeedFetchColumns() should only fetch chunks that intersect [pageStart, pageEnd)
 // - DoAssembleColumns() should only assemble rows from the current page
@@ -1524,6 +1623,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(PrefetchNoDoubleAdvance) {
         TestPrefetchNoDoubleAdvance();
+    }
+
+    Y_UNIT_TEST(PrefetchTriggeredRaceCondition) {
+        TestPrefetchTriggeredRaceCondition();
     }
 
     Y_UNIT_TEST(StreamingPageBoundaryCorrectness) {

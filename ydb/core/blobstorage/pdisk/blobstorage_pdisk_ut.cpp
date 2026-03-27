@@ -2084,6 +2084,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->StatusFlags), TColor::GREEN);
         UNIT_ASSERT_VALUES_EQUAL(StatusFlagToSpaceColor(evCheckSpaceResult->LogStatusFlags), TColor::ORANGE);
 
+        bool foundPDiskCapacityAlert = false;
         for (int num_inspect = 10; num_inspect > 0; --num_inspect) {
             const auto evPDiskStateUpdate = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
             NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = evPDiskStateUpdate.Get()->Record;
@@ -2092,8 +2093,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
                 continue;
             }
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), TColor::ORANGE);
+            foundPDiskCapacityAlert = true;
             break;
         }
+        UNIT_ASSERT_C(foundPDiskCapacityAlert, "No TEvPDiskStateUpdate with PDiskCapacityAlert received");
     }
 
     Y_UNIT_TEST(TestChunkWriteCrossOwner) {

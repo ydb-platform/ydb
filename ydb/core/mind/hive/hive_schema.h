@@ -334,6 +334,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
     };
 
+    struct Group : Table<23> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct StoragePool : Column<2, NScheme::NTypeIds::String> {};
+        struct Active : Column<3, NScheme::NTypeIds::Bool> { static constexpr bool Default = true; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, StoragePool, Active>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -351,7 +360,8 @@ struct Schema : NIceDb::Schema {
                                 TabletOwners,
                                 TabletAvailabilityRestrictions,
                                 OperationsLog,
-                                BridgePile
+                                BridgePile,
+                                Group
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

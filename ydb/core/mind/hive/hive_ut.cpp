@@ -9189,6 +9189,54 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         BalanceTablets(runtime, hiveTablet);
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
+
+    Y_UNIT_TEST(TestShrinkStoragePoolReply) {
+
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 5);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId senderA = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        std::unordered_set<ui32> usedGroups;
+        {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+
+            const auto& tablet = response->Record.GetTablets().Get(0);
+            const auto& channels = tablet.GetTabletChannels();
+            auto groupsRange = channels | std::views::transform([](auto& channel) { return channel.GetHistory().Get(0).GetGroup(); });
+            usedGroups.insert(groupsRange.begin(), groupsRange.end());
+        }
+
+        auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus) {
+            auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
+            request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
+            request->Record.MutableSubDomain()->SetPathId(1);
+            request->Record.SetStoragePool("def1");
+            request->Record.SetNewSize(newSize);
+            runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), expectedStatus);
+            return response->Record.GetGroupsToRemove();
+        };
+
+        auto groupsToRemove = makeRequest(3, NKikimrProto::OK);
+        UNIT_ASSERT(std::ranges::none_of(groupsToRemove, [&](auto groupId) { return usedGroups.contains(groupId); }));
+        makeRequest(10, NKikimrProto::ERROR);
+        makeRequest(0, NKikimrProto::ERROR);
+        makeRequest(5, NKikimrProto::OK);
+    }
 }
 
 Y_UNIT_TEST_SUITE(THeavyPerfTest) {

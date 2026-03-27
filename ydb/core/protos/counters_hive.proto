@@ -188,4 +188,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_PILES = 68                              [(TxTypeOpts) = {Name: "TxUpdatePiles"}];
     TXTYPE_MON_SET_DOMAIN = 69                            [(TxTypeOpts) = {Name: "TxMonSetDomain"}];
     TXTYPE_PROCESS_TABLET_METRICS = 70                    [(TxTypeOpts) = {Name: "TxProcessTabletMetrics"}];
+    TXTYPE_SHRINK_POOL = 71                               [(TxTypeOpts) = {Name: "TxShrinkPool"}];
 }

@@ -48,6 +48,7 @@ struct TStorageGroupInfo {
     TStorageResources AcquiredResources;
     TStorageResources MaximumResources;
     NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters GroupParameters;
+    bool Active = true;
 
     TStorageGroupInfo(const TStoragePoolInfo& storagePool, TStorageGroupId id);
     TStorageGroupInfo(const TStorageGroupInfo&) = delete;

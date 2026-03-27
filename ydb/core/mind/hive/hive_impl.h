@@ -242,6 +242,7 @@ protected:
     friend class TTxSetDown;
     friend class TTxProcessTabletMetrics;
     friend class TTxUpdateLastReassign;
+    friend class TTxShrinkPoolReply;
 
     friend class TDeleteTabletActor;
 
@@ -315,6 +316,8 @@ protected:
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
     ITransaction* CreateProcessTabletMetrics();
+    ITransaction* CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& event);
+    ITransaction* CreateShrinkPoolReply(TEvHive::TEvShrinkStoragePoolReply::TPtr event);
 
 public:
     TDomainsView DomainsView;
@@ -322,6 +325,7 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
+    TActorId CmsPipe;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;
@@ -351,6 +355,7 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(TDomainInfo* domain);
     std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
@@ -618,6 +623,8 @@ protected:
     void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
     void Handle(TEvHive::TEvSetDown::TPtr& ev);
     void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev);
+    void Handle(TEvHive::TEvShrinkStoragePoolReply::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);

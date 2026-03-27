@@ -41,6 +41,9 @@ void TStorageGroupInfo::UpdateStorageGroup(const TEvControllerSelectGroupsResult
 }
 
 bool TStorageGroupInfo::IsMatchesParameters(const TGroupFilter& filter) const {
+    if (!Active) {
+        return false;
+    }
     const auto& groupParameters = filter.GroupParameters;
     if (groupParameters.GetStoragePoolSpecifier().GetName() != GroupParameters.GetStoragePoolName()) {
         return false;

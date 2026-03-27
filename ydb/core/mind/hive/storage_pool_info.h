@@ -56,6 +56,7 @@ struct TStoragePoolInfo {
     TVector<TTabletId> TabletsWaiting;
     ui32 ConfigurationGeneration = 0; // used to discard cache across configuration changes
     ui32 RefreshRequestInFlight = 0;
+    TVector<TStorageGroupId> InactiveGroups;
 
     TStoragePoolInfo(const TString& name, THiveSharedSettings* hive);
     TStoragePoolInfo(const TStoragePoolInfo&) = delete;

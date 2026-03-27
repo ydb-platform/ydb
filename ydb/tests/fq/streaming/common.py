@@ -62,12 +62,13 @@ class StreamingTestBase(TestYdsBase):
         return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False):
+        shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
         kikimr.ydb_client.query(f"""
             CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
                 SOURCE_TYPE = "Ydb",
                 LOCATION = "{os.getenv("YDB_ENDPOINT")}",
                 DATABASE_NAME = "{os.getenv("YDB_DATABASE")}",
-                SHARED_READING = "{shared}",
+                {shared_opt}
                 AUTH_METHOD = "NONE"
             );
         """)

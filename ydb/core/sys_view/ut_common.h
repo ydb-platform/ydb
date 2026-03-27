@@ -28,7 +28,11 @@ struct TTestEnvSettings {
     bool EnableOlapCompression = false;
     bool EnableTableCacheModes = false;
     bool EnableFulltextIndex = false;
+<<<<<<< HEAD
     TMaybe<bool> EnableRealSystemViewPaths;
+=======
+    bool EnableCsDictionaryEncoding = false;
+>>>>>>> b8744e7d637 (Add Dictionary Encoding support (#34784))
     NKikimrProto::TAuthConfig AuthConfig = {};
     TMaybe<ui32> DataShardStatsReportIntervalSeconds;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

@@ -123,11 +123,12 @@ namespace NTabletFlatExecutor {
             if (BackupState.Writer) {
                 Y_ENSURE(Ops, "Commit manager is not started");
                 Ops->Send(BackupState.Writer, new TEvents::TEvPoisonPill());
-                BackupState = TBackupState();
             }
+            BackupState = TBackupState();
         }
 
         void DecBackupInFlight(ui64 bytes) {
+            Y_ENSURE(BackupState.InFlightBytes >= bytes);
             BackupState.InFlightBytes -= bytes;
         }
 

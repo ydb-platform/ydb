@@ -5171,8 +5171,14 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
-    ++BackupInfo.ChangelogWriterSeqNo;
+    // Ensure that no backup snapshot is in progress
+    Y_ENSURE(!BackupInfo.SnapshotWriter);
     BackupInfo.SnapshotCompleted = false;
+
+    // Stop the old backup changelog
+    CommitManager->StopBackup();
+    ++BackupInfo.ChangelogWriterSeqNo;
+    BackupInfo.ChangelogWriter = TActorId();
 
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
@@ -5204,6 +5210,7 @@ void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    BackupInfo.SnapshotWriter = TActorId();
     BackupInfo.SnapshotCompleted = true;
     if (ev->Get()->Success) {
         Owner->BackupSnapshotComplete(OwnerCtx());
@@ -5231,6 +5238,7 @@ void TExecutor::FailBackup(const TString& error) {
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, error);
     CommitManager->StopBackup();
     ++BackupInfo.ChangelogWriterSeqNo;
+    BackupInfo.ChangelogWriter = TActorId();
 
     if (BackupInfo.SnapshotCompleted) {
         auto retryTimeout = TDuration::Seconds(backupConfig.GetRetryBackupTimeoutSeconds());

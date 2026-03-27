@@ -19,7 +19,6 @@
 #### Исправления ошибок
 
 * Колоночные таблицы:
-  * [Исправлена]([https://github.com/ydb-platform/ydb/pull/16061](https://github.com/ydb-platform/ydb/pull/16061)) инициализация служебных колонок в PLAIN reader, необходимых для выполнения запросов.
   * [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
 * Векторные индексы:
   * [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
@@ -27,8 +26,7 @@
   * [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
   * [Исправлено](https://github.com/ydb-platform/ydb/pull/18234) нарушение сериализуемости в read-write транзакциях после рестартов шарда.
 * Топики: 
-  * [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) утечка памяти при коммите оффсета в топике с включённым автопартиционированием.
-  * [Устранены](https://github.com/ydb-platform/ydb/pull/20084) неожиданные ошибки `PathErrorUnknown` при подтверждении offset'ов.
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) ошибка управления памятью при коммите offset в топиках со включённым автоматическим партиционированием.
 * Распределённое хранилище:
   * [Добавлены](https://github.com/ydb-platform/ydb/pull/18698) проверки включённого шифрования в zero-copy передаче.
   * [Исправлена](https://github.com/ydb-platform/ydb/pull/20519) ошибка, приводящая к зависанию VDisk в local recovery после ошибки `ChunkRead`.

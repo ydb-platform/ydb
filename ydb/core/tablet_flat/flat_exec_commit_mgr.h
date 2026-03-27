@@ -97,16 +97,28 @@ namespace NTabletFlatExecutor {
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
 
-        void SetBackupWriter(TActorId backupWriter) {
+        void StartBackup(TActorId backupOwner, TActorId backupWriter, ui64 seqNo, ui64 inFlightBytesLimit) {
+            StopBackup();
+            BackupOwner = backupOwner;
+            BackupWriter = backupWriter;
+            BackupSeqNo = seqNo;
+            BackupInFlightBytesLimit = inFlightBytesLimit;
+        }
+
+        void StopBackup() {
             if (BackupWriter) {
                 Y_ENSURE(Ops, "Commit manager is not started");
                 Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
             }
-            BackupWriter = backupWriter;
+            BackupOwner = TActorId();
+            BackupWriter = TActorId();
+            BackupInFlightBytes = 0;
+            BackupSeqNo = 0;
+            BackupInFlightBytesLimit = Max<ui64>();
         }
 
-        TActorId GetBackupWriter() const noexcept {
-            return BackupWriter;
+        void DecBackupInFlight(ui64 bytes) {
+            BackupInFlightBytes -= bytes;
         }
 
         ui64 Stamp() const noexcept
@@ -185,7 +197,14 @@ namespace NTabletFlatExecutor {
         void SendCommitEv(TLogCommit &commit)
         {
             if (BackupWriter && commit.Type == ECommit::Redo) {
-                Ops->Send(BackupWriter, new NBackup::TEvWriteChangelog(commit.Step, commit.Embedded, commit.Refs));
+                auto backupEv = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
+                if (BackupInFlightBytes + backupEv->GetTotalSize() <= BackupInFlightBytesLimit) {
+                    BackupInFlightBytes += backupEv->GetTotalSize();
+                    Ops->Send(BackupWriter, backupEv.Release());
+                } else {
+                    Ops->Send(BackupOwner, new NBackup::TEvChangelogFailed(BackupSeqNo, "Backup changelog in flight bytes limit exceeded"));
+                    StopBackup();
+                }
             }
 
             const bool snap = (commit.Type == ECommit::Snap);
@@ -221,8 +240,12 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-        TActorId BackupWriter;
 
+        TActorId BackupOwner;
+        TActorId BackupWriter;
+        ui64 BackupSeqNo = 0;
+        ui64 BackupInFlightBytes = 0;
+        ui64 BackupInFlightBytesLimit = Max<ui64>();
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;

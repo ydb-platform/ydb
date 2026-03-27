@@ -976,13 +976,60 @@ Y_UNIT_TEST_SUITE(Backup) {
         TEnv env;
 
         TFsPath(env->GetTempDir()).Child("dummy").MkDir(S_IRUSR);
-        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        TBlockEvents<TEvChangelogFailed> blockChangelog(env.Env);
+        TBlockEvents<TEvSnapshotCompleted> blockSnapshot(env.Env, [](const TEvSnapshotCompleted::TPtr& ev) {
+            return !ev->Get()->Success;
+        });
 
         Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
 
-        Cerr << "...waiting tablet death" << Endl;
-        env.WaitForGone(); // crash on IO error
+        env->WaitFor("snapshot completed with error", [&]{ return !blockSnapshot.empty(); });
+        blockSnapshot.Stop().Unblock();
+        blockChangelog.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+
+        TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+    }
+
+    Y_UNIT_TEST(ChangelogIOError) {
+        TEnv env;
+
+        TFsPath(env->GetTempDir()).Child("dummy").MkDir(S_IRUSR);
+
+        TBlockEvents<TEvChangelogFailed> blockChangelog(env.Env);
+        TBlockEvents<TEvSnapshotCompleted> blockSnapshot(env.Env, [](const TEvSnapshotCompleted::TPtr& ev) {
+            return !ev->Get()->Success;
+        });
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        env->WaitFor("changelog failed", [&]{ return !blockChangelog.empty(); });
+        blockChangelog.Stop().Unblock();
+        blockSnapshot.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(1), 10);
+
+        TFsPath(env->GetTempDir()).Child("dummy").ForceDelete();
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
     }
 
     Y_UNIT_TEST(EmptyData) {
@@ -3110,6 +3157,59 @@ Y_UNIT_TEST_SUITE(Backup) {
         env.DryRunRestoreBackup(backup,  /*skipChecksumValidation=*/ true);
         env.RestartTablet(TestTabletFlags);
         assertState();
+    }
+
+    Y_UNIT_TEST(ChangelogInFlightLimitExceeded) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetChangelogInFlightBytesLimit(1);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        TBlockEvents<TEvChangelogFailed> block(env.Env);
+
+        Cerr << "...writing data (should exceed in-flight limit)" << Endl;
+        env.InitSchema();
+        env.WriteValue(1, 10);
+
+        env->WaitFor("changelog failed", [&]{ return !block.empty(); });
+        block.Stop().Unblock();
+
+        Cerr << "...verifying tablet is alive" << Endl;
+        env.WriteValue(3, 30);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(3), 30);
+
+        Cerr << "...backup retry should start automatically" << Endl;
+        auto retryTimeout = TDuration::Seconds(env->GetAppData().SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        env.Env.AdvanceCurrentTime(retryTimeout);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+    }
+
+    Y_UNIT_TEST(ChangelogInFlightLimit) {
+        TEnv env;
+        env->GetAppData().SystemTabletBackupConfig.SetChangelogInFlightBytesLimit(1_MB);
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        bool changelogFailed = false;
+        auto failObserver = env.Env.AddObserver<TEvChangelogFailed>(
+            [&changelogFailed](TEvChangelogFailed::TPtr&) {
+                changelogFailed = true;
+        });
+
+        Cerr << "...writing data in many commits" << Endl;
+        TString data(1'000, 'a'); // make commit large enough
+        for (int i = 0; i < 1'000; ++i) {
+            env.WriteBinaryValue(i, data);
+        }
+
+        UNIT_ASSERT_C(!changelogFailed, "In-flight limit must not be exceeded");
     }
 }
 

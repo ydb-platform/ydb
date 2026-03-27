@@ -4380,7 +4380,8 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
-        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
+        hFunc(NBackup::TEvStartNewBackup, Handle);
+        hFunc(NBackup::TEvWriteChangelogAck, Handle);
     default:
         break;
     }
@@ -5170,36 +5171,79 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
+    ++BackupInfo.ChangelogWriterSeqNo;
+    BackupInfo.SnapshotCompleted = false;
+
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
-    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
+    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), BackupInfo.ChangelogWriterSeqNo, backupConfig, tabletType,
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        BackupInfo.SnapshotWriter = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
                 continue;
             }
 
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-            QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
+            QueueScan(tableId, NBackup::CreateSnapshotScan(BackupInfo.SnapshotWriter, tableId, table.Columns, exclusion), 0, opts);
         }
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+        BackupInfo.ChangelogWriter = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        auto inFlightLimit = backupConfig.GetChangelogInFlightBytesLimit();
+        CommitManager->StartBackup(SelfId(), BackupInfo.ChangelogWriter, BackupInfo.ChangelogWriterSeqNo, inFlightLimit);
     }
 }
 
-void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
-    Owner->BackupSnapshotComplete(OwnerCtx());
+void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
+    if (ev->Get()->SeqNo != BackupInfo.ChangelogWriterSeqNo) {
+        return;
+    }
 
-    if (CommitManager) {
-        Forward(ev, CommitManager->GetBackupWriter());
+    CommitManager->DecBackupInFlight(ev->Get()->ProcessedBytes);
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    BackupInfo.SnapshotCompleted = true;
+    if (ev->Get()->Success) {
+        Owner->BackupSnapshotComplete(OwnerCtx());
+        Forward(ev, BackupInfo.ChangelogWriter);
+    } else {
+        FailBackup("Backup snapshot failed: " + ev->Get()->Error);
     }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
-    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
+    if (ev->Get()->SeqNo != BackupInfo.ChangelogWriterSeqNo) {
+        return;
+    }
+
+    FailBackup("Backup changelog failed: " + ev->Get()->Error);
+}
+
+void TExecutor::FailBackup(const TString& error) {
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+
+    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_CRASH) {
+        Y_TABLET_ERROR(error);
+    }
+
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, error);
+    CommitManager->StopBackup();
+    ++BackupInfo.ChangelogWriterSeqNo;
+
+    if (BackupInfo.SnapshotCompleted) {
+        auto retryTimeout = TDuration::Seconds(backupConfig.GetRetryBackupTimeoutSeconds());
+        Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
+    if (ev->Get()->SeqNo && ev->Get()->SeqNo != BackupInfo.ChangelogWriterSeqNo) {
+        return;
+    }
+
+    StartNewBackup();
 }
 
 }

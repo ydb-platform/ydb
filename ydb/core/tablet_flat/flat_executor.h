@@ -503,6 +503,8 @@ class TExecutor
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
+    NBackup::TBackupInfo BackupInfo;
+
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
 
@@ -557,6 +559,7 @@ class TExecutor
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
+    void FailBackup(const TString& error);
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -613,6 +616,8 @@ class TExecutor
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
     void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
     void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
+    void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
+    void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

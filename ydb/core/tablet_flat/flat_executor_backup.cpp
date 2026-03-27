@@ -751,14 +751,12 @@ private:
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
     struct TEvPrivate {
         enum EEv {
-            EvMailboxCleaned = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvFlush,
+            EvFlush = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
 
-        struct TEvMailboxCleaned : TEventLocal<TEvMailboxCleaned, EvMailboxCleaned> {};
         struct TEvFlush : TEventLocal<TEvFlush, EvFlush> {
             TEvFlush(ui64 cookie)
                 : Cookie(cookie)
@@ -768,9 +766,10 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IAc
         };
     };
 public:
-    TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
+    TChangelogWriter(TActorId owner, ui64 seqNo, const TFsPath& path, const TScheme& schema,
                      TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
+        , SeqNo(seqNo)
         , ChangelogPath(path.Child("changelog.json"))
         , ChangelogChecksumPath(path.Child("changelog.json.sha256"))
         , Schema(schema)
@@ -801,8 +800,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
             hFunc(TEvPrivate::TEvFlush, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, CleanMailbox);
-            cFunc(TEvPrivate::TEvMailboxCleaned::EventType, FlushAndDie);
+            cFunc(TEvents::TEvPoisonPill::EventType, FlushAndDie);
             hFunc(TEvSnapshotCompleted, Handle);
         }
     }
@@ -815,6 +813,7 @@ public:
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
         const auto* msg = ev->Get();
+        ui64 msgSize = msg->GetTotalSize();
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -911,6 +910,11 @@ public:
 
             size_t changesSize = Buffer.Size() - changesStart;
             Checksum.Update(Buffer.data() + changesStart, changesSize);
+
+            InFlightRedoBytes += msgSize;
+        } else {
+            // generated no new changes, send ack immediately
+            Send(Owner, new TEvWriteChangelogAck(SeqNo, msgSize));
         }
 
         if (Buffer.Size() >= 1_MB) {
@@ -961,26 +965,27 @@ public:
                 return;
             }
 
+            Send(Owner, new TEvWriteChangelogAck(SeqNo, InFlightRedoBytes));
+            InFlightRedoBytes = 0;
+
             if (NeedNewBackup()) {
-                Send(Owner, new TEvStartNewBackup);
+                Send(Owner, new TEvStartNewBackup(SeqNo));
             }
         }
         Schedule(TDuration::Seconds(5), new TEvPrivate::TEvFlush(++ExpectedFlushCookie));
     }
 
-    void CleanMailbox() {
-        Dying = true;
-        Send(SelfId(), new TEvPrivate::TEvMailboxCleaned());
-    }
-
     void FlushAndDie() {
+        Dying = true;
         Flush();
         PassAway();
     }
 
     void ReplyAndDie(const TString& error) {
-        Send(Owner, new TEvChangelogFailed(error));
-        PassAway();
+        if (!Dying) {
+            Send(Owner, new TEvChangelogFailed(SeqNo, error));
+            PassAway();
+        }
     }
 
     void WriteChangelogChecksum() {
@@ -999,6 +1004,7 @@ public:
 
 private:
     TActorId Owner;
+    ui64 SeqNo;
 
     TFsPath ChangelogPath;
     TFsPath ChangelogChecksumPath;
@@ -1011,6 +1017,7 @@ private:
     ui64 ExpectedFlushCookie = 0;
 
     bool Dying = false;
+    ui64 InFlightRedoBytes = 0;
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
 
@@ -1037,14 +1044,14 @@ IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<
     return new TBackupSnapshotScan(snapshotWriter, tableId, columns, exclusion);
 }
 
-IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
+IActor* CreateChangelogWriter(TActorId owner, ui64 seqNo, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                               const TScheme& schema, TIntrusiveConstPtr<TBackupExclusion> exclusion)
 {
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TChangelogWriter(owner, path, schema, exclusion);
+        return new TChangelogWriter(owner, seqNo, path, schema, exclusion);
     } else {
         return nullptr;
     }

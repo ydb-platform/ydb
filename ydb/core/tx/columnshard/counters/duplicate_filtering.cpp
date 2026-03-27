@@ -6,9 +6,15 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , MergeRowsAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsAccepted"))
     , MergeRowsRejected(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsRejected"))
     , MergeRowsBulkAccepted(TBase::GetDeriviative("DuplicateFiltering/SourcesMerging/RowsBulkAccepted"))
-    , IntersectingPortionsPerRequest(TBase::GetHistogram("DuplicateFiltering/IntersectingPortions", NMonitoring::ExponentialHistogram(18, 2, 1)))
-    , FilterCacheHits(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Hits"))
-    , FilterCacheMisses(TBase::GetDeriviative("DuplicateFiltering/FilterCache/Misses"))
+    , LeftBorders(TBase::GetValue("DuplicateFiltering/Borders/Left"))
+    , WaitingBorders(TBase::GetValue("DuplicateFiltering/Borders/Waiting"))
+    , ReadyBorders(TBase::GetValue("DuplicateFiltering/Borders/Ready"))
+    , IntervalsPerRequest(TBase::GetHistogram("DuplicateFiltering/Intervals/CountPerRequest", NMonitoring::ExponentialHistogram(18, 2, 1)))
+    , RequestCacheHits(TBase::GetDeriviative("DuplicateFiltering/Request/CacheHits"))
+    , RequestCacheMisses(TBase::GetDeriviative("DuplicateFiltering/Request/CacheMisses"))
+    , RequestCacheWaiting(TBase::GetDeriviative("DuplicateFiltering/Request/CacheWaiting"))
+    , RequestInflight(TBase::GetValue("DuplicateFiltering/Request/Inflight"))
+    , RequestLatency(TBase::GetHistogram("DuplicateFiltering/Request/LatencyMs", NMonitoring::ExponentialHistogram(18, 2, 1)))
 {
 }
 }   // namespace NKikimr::NColumnShard

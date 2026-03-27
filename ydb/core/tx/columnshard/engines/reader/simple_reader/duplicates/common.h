@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/formats/arrow/rows/view.h>
@@ -12,6 +13,7 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+<<<<<<< HEAD
 struct TPortionIntervalTreeValueTraits: NRangeTreap::TDefaultValueTraits<std::shared_ptr<TPortionInfo>> {
     struct TValueHash {
         ui64 operator()(const std::shared_ptr<TPortionInfo>& value) const {
@@ -130,6 +132,10 @@ public:
     }
 };
 
+=======
+class TPortionStore;
+
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
 class TPortionStore: TMoveOnly {
 private:
     THashMap<ui64, TPortionInfo::TConstPtr> Portions;
@@ -147,6 +153,7 @@ public:
     }
 };
 
+<<<<<<< HEAD
 class TIntervalBordersView {
 private:
     TPortionBorderView Begin;
@@ -182,6 +189,8 @@ public:
     }
 };
 
+=======
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
 class TSortableBorders {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>, Begin);
@@ -195,6 +204,10 @@ public:
     {
         AFL_VERIFY(Begin->Compare(*End) != std::partial_ordering::greater)("borders", DebugString());
     }
+    
+    operator size_t() const {
+        return CombineHashes((size_t)*Begin, (size_t)*End);
+    }
 
     TString DebugString() const {
         TStringBuilder sb;
@@ -203,14 +216,46 @@ public:
     }
 };
 
+class TIntervalBorders {
+private:
+    TSortableBorders Interval;
+
+public:
+    TIntervalBorders(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& begin, const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& end)
+        : Interval(begin, end)
+    {
+    }
+
+    const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& GetBegin() const {
+        return Interval.GetBegin();
+    }
+    const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& GetEnd() const {
+        return Interval.GetEnd();
+    }
+    
+    operator size_t() const {
+        return (size_t)Interval;
+    }
+    
+    bool operator==(const TIntervalBorders& other) const {
+        return Interval.GetBegin() == other.Interval.GetBegin() && Interval.GetEnd() == other.Interval.GetEnd();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{Begin=" << GetBegin()->DebugString() << ";End=" << GetEnd()->DebugString() << "}";
+        return sb;
+    }
+};
+
 class TDuplicateMapInfo {
 private:
     TSnapshot MaxVersion;
-    TIntervalBordersView Interval;
+    TIntervalBorders Interval;
     YDB_READONLY_DEF(ui64, PortionId);
 
 public:
-    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBordersView& interval, const ui64 portionId)
+    TDuplicateMapInfo(const TSnapshot& maxVersion, const TIntervalBorders& interval, const ui64 portionId)
         : MaxVersion(maxVersion)
         , Interval(interval)
         , PortionId(portionId)
@@ -232,7 +277,7 @@ public:
         return TStringBuilder() << "MaxVersion=" << MaxVersion.DebugString() << ";PortionId=" << PortionId;
     }
 
-    const TIntervalBordersView& GetInterval() const {
+    const TIntervalBorders& GetInterval() const {
         return Interval;
     }
 };
@@ -273,10 +318,6 @@ public:
         return TStringBuilder() << "{" << (IsLast ? "Last:" : "First:") << "Portion=" << PortionId << ";Data=" << Key->GetSorting()->DebugJson(0)
                                 << "}";
     }
-
-    TPortionBorderView MakeView() const {
-        return IsLast ? TPortionBorderView::Last(PortionId) : TPortionBorderView::First(PortionId);
-    }
 };
 
 class TIntervalInfo {
@@ -316,9 +357,14 @@ public:
         return IntersectingPortionsCount == 0;
     }
 
-    TIntervalBordersView MakeView() const {
-        return TIntervalBordersView(Begin.MakeView(), End.MakeView());
+    TIntervalBorders MakeInterval() const {
+        return TIntervalBorders(Begin.GetKey(), End.GetKey());
     }
+};
+
+struct TPortionColumnFilter {
+    ui64 Offset = 0;
+    NArrow::TColumnFilter Filter;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -3,8 +3,8 @@
 #include "common.h"
 #include "context.h"
 #include "events.h"
+#include "filters.h"
 #include "private_events.h"
-#include "splitter.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
@@ -29,6 +29,7 @@ class TDuplicateManager: public NActors::TActor<TDuplicateManager> {
     friend class TMergeableInterval;
 
 private:
+<<<<<<< HEAD
     class TFilterSizeProvider {
     public:
         size_t operator()(const NArrow::TColumnFilter& filter) {
@@ -111,30 +112,59 @@ private:
     inline static const ui64 FILTER_CACHE_SIZE = 10000000;   // 10 MiB
     inline static const ui64 BORDER_CACHE_SIZE_COUNT = 10000;
 
+=======
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
     const std::shared_ptr<ISnapshotSchema> LastSchema;
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
-    const TPortionIntervalTree Intervals;
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
+    NArrow::NMerger::TMergePartialStream Merger;
+    TFiltersBuilder FiltersBuilder;
+    
+    struct TBorderInfo {
+        std::vector<ui64> Start;
+        std::vector<ui64> Finish;
+    };
+    std::map<NArrow::TSimpleRow, TBorderInfo> Borders;
+    THashSet<ui64> CurrentPortions;
+    THashSet<ui64> ProcessedPortions;
+    std::map<NArrow::TSimpleRow, ui32> WaitingBorders;
+    std::optional<NArrow::TSimpleRow> PreviousBorder;
+    
+    std::optional<NArrow::TSimpleRow> LastBorder;
 
-    TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter, TNoopDelete, TFilterSizeProvider> FiltersCache;
-    TLRUCache<ui64, TSortableBorders> MaterializedBordersCache;
-    THashMap<TIntervalBordersView, TIntervalInFlightInfo> IntervalsInFlight;
-    ui64 ExpectedIntersectionCount = 0;
+    std::unordered_map<ui64, NArrow::TColumnFilter> ReadyFilters; // PortionId -> TColumnFilter
     std::shared_ptr<TAtomicCounter> AbortionFlag;
+    ui64 PrevRowsAdded = 0;
+    ui64 PrevRowsSkipped = 0;
+    std::unordered_set<ui64> ExclusivePortions;
 
 private:
+<<<<<<< HEAD
     static TPortionIntervalTree MakeIntervalTree(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
         TPortionIntervalTree intervals;
         for (const auto& portion : portions) {
             intervals.AddRange(TPortionIntervalTree::TOwnedRange(portion->IndexKeyStart(), true, portion->IndexKeyEnd(), true), portion);
+=======
+    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
+        NArrow::TGeneralContainer batch(1);
+        IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
+        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+    };
+
+    static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
+        THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
+        for (const auto& portion: portions) {
+            AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
         }
-        return intervals;
+        return std::make_shared<TPortionStore>(std::move(portionsStore));
     }
 
+<<<<<<< HEAD
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const TPortionIntervalTree& intervals) {
         THashMap<ui64, TPortionInfo::TConstPtr> portions;
         intervals.EachRange(
@@ -152,14 +182,17 @@ private:
             inFlight.ValidateProgress();
         }
     }
+=======
+    bool IsExclusiveInterval(const ui64 portionId) const;
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
 
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
-            hFunc(NPrivate::TEvFilterConstructionResult, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
+            hFunc(TEvIntervalConstructionResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -167,48 +200,37 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
+<<<<<<< HEAD
     void Handle(const NPrivate::TEvFilterConstructionResult::TPtr&);
 
+=======
+    void Handle(const TEvIntervalConstructionResult::TPtr&);
+>>>>>>> 40c8babe329 (Deduplication based on merge (#36186))
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        Counters->OnLeftBorders(-1 * static_cast<i64>(Borders.size()));
+        Counters->OnWaitingBorders(-1 * static_cast<i64>(WaitingBorders.size()));
         AbortAndPassAway("aborted by actor system");
     }
 
-    void AbortAndPassAway(const TString& reason) {
+    void AbortAndPassAway(const TString& error) {
         AbortionFlag->Inc();
-        for (auto& [_, info] : IntervalsInFlight) {
-            info.OnError(reason);
-        }
+        FiltersBuilder.Abort(error);
         PassAway();
     }
 
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
         std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-        {
-            for (const auto& columnId : PKColumns->GetColumnIds()) {
-                fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-            }
-            for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-                fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-            }
+        for (const auto& columnId : PKColumns->GetColumnIds()) {
+            fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
+        }
+        for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+            fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
         }
         return fieldsByColumn;
     }
-
-    TSortableBorders GetBorders(const ui64 portionId) {
-        auto findCached = MaterializedBordersCache.Find(portionId);
-        if (findCached != MaterializedBordersCache.End()) {
-            return findCached.Value();
-        }
-        const auto& portion = Portions->GetPortionVerified(portionId);
-        TSortableBorders result =
-            TSortableBorders(std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyStart().BuildSortablePosition()),
-                std::make_shared<NArrow::NMerger::TSortableBatchPosition>(portion->IndexKeyEnd().BuildSortablePosition()));
-        MaterializedBordersCache.Insert(portionId, result);
-        return result;
-    }
-
-    TIntervalsIterator StartIntervalProcessing(
-        const THashSet<ui64>& intersectingPortions, const std::shared_ptr<TFilterAccumulator>& constructor);
+    
+private:
+    void BuildExclusivePortions();
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

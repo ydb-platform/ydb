@@ -199,13 +199,7 @@ struct TShuffling {
     {
     }
 
-    TShuffling& SetNatural() {
-        IsNatural = true;
-        return *this;
-    }
-
     std::vector<TJoinColumn> Ordering;
-    bool IsNatural = false;
 };
 
 class TFDStorage {

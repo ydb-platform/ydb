@@ -538,11 +538,11 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
-const THashMap<EJoinAlgoType,TString> AlgoNames = {
-    {EJoinAlgoType::LookupJoin, "Lookup"},
-    {EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
-    {EJoinAlgoType::MapJoin, "Map"},
-    {EJoinAlgoType::GraceJoin, "Shuffle"}};
+const THashMap<NKqp::EJoinAlgoType,TString> AlgoNames = {
+    {NKqp::EJoinAlgoType::LookupJoin, "Lookup"},
+    {NKqp::EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
+    {NKqp::EJoinAlgoType::MapJoin, "Map"},
+    {NKqp::EJoinAlgoType::GraceJoin, "Shuffle"}};
 
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);

@@ -75,7 +75,7 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
                     : col;
                 shuffledBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
             }
-            fdStorage.AddShuffling(TShuffling(shuffledBy).SetNatural(), &tableAliasMap);
+            fdStorage.AddShuffling(TShuffling(shuffledBy), &tableAliasMap);
         }
 
         if (!metadata.KeyColumns.empty()) {

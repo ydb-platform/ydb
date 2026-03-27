@@ -771,7 +771,7 @@ public:
         }
         ++state->RetryAttempt;
 
-        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry);
+        auto delay = CalcDelay(state->RetryAttempt, allowInstantRetry); // TODO: account potential quota shortage
         if (delay == TDuration::Zero()) {
             return DoRetryRead(id);
         }

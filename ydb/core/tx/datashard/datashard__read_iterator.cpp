@@ -3561,6 +3561,9 @@ public:
             Reader->UpdateState(state, useful);
             if (!state.IsExhausted()) {
                 state.ReadContinuePending = true;
+
+                // TODO: check WM Scheduler quota here - and delay message if no quota.
+
                 ctx.Send(
                     Self->SelfId(),
                     new TEvDataShard::TEvReadContinue(LocalReadId));
@@ -3720,6 +3723,9 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         }
         isHeadRead = false;
     }
+
+    // TODO: check WM Scheduler quota here - and reply overloaded in case no quota.
+    // TODO: make sure there is no instant re-read from KqpReadActor.
 
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {

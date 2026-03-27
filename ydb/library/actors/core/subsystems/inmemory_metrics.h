@@ -127,7 +127,9 @@ namespace NActors {
         explicit TInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
         ~TInMemoryMetricsRegistry() override;
 
-        TLineWriter GetOrCreateLine(TStringBuf name, std::span<const TLabel> labels);
+        // Single-writer contract: a line can be created only once for a key.
+        // Duplicate CreateLine() calls return a noop writer.
+        TLineWriter CreateLine(TStringBuf name, std::span<const TLabel> labels);
         TSnapshot Snapshot() const;
 
         ui64 GetReuseWatermark() const noexcept;

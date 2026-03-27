@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         });
 
         TLabel label{"kind", "basic"};
-        auto writer = registry.GetOrCreateLine("line", std::span<const TLabel>(&label, 1));
+        auto writer = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
         UNIT_ASSERT(writer);
 
         UNIT_ASSERT(writer.Append(10));
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 4,
         });
 
-        auto writer = registry.GetOrCreateLine("line", NoLabels());
+        auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer.Append(42));
         writer.Close();
         UNIT_ASSERT(!writer.Append(43));
@@ -97,8 +97,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 1,
         });
 
-        auto first = registry.GetOrCreateLine("first", NoLabels());
-        auto second = registry.GetOrCreateLine("second", NoLabels());
+        auto first = registry.CreateLine("first", NoLabels());
+        auto second = registry.CreateLine("second", NoLabels());
 
         UNIT_ASSERT(first);
         UNIT_ASSERT(!second);
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 4,
         });
 
-        auto writer = registry.GetOrCreateLine("line", NoLabels());
+        auto writer = registry.CreateLine("line", NoLabels());
         for (ui64 value = 1; value <= 5; ++value) {
             UNIT_ASSERT(writer.Append(value));
         }
@@ -133,22 +133,20 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         }
     }
 
-    Y_UNIT_TEST(ReopenClosedLineBySameKey) {
+    Y_UNIT_TEST(DuplicateKeyReturnsNoopWriter) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 256,
             .ChunkSizeBytes = 64,
             .MaxLines = 4,
         });
 
-        auto first = registry.GetOrCreateLine("line", NoLabels());
-        UNIT_ASSERT(first.Append(10));
-        const ui32 lineId = first.GetLineId();
-        first.Close();
+        auto first = registry.CreateLine("line", NoLabels());
+        auto duplicate = registry.CreateLine("line", NoLabels());
 
-        auto second = registry.GetOrCreateLine("line", NoLabels());
-        UNIT_ASSERT(second);
-        UNIT_ASSERT_VALUES_EQUAL(second.GetLineId(), lineId);
-        UNIT_ASSERT(second.Append(20));
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(!duplicate);
+        UNIT_ASSERT(!duplicate.Append(20));
+        UNIT_ASSERT(first.Append(10));
 
         auto snapshot = registry.Snapshot();
         auto lines = snapshot.Lines();
@@ -159,9 +157,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         lines[0].ForEachRecord([&](const TRecordView& record) {
             values.push_back(record.Value);
         });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
-        UNIT_ASSERT_VALUES_EQUAL(values[1], 20);
     }
 
     Y_UNIT_TEST(ZeroMemoryWriterDrops) {
@@ -171,7 +168,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 1,
         });
 
-        auto writer = registry.GetOrCreateLine("line", NoLabels());
+        auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
         UNIT_ASSERT_VALUES_EQUAL(registry.Snapshot().Lines().size(), 0);
@@ -184,7 +181,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 1,
         });
 
-        auto writer = registry.GetOrCreateLine("line", NoLabels());
+        auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
         UNIT_ASSERT_VALUES_EQUAL(registry.Snapshot().Lines().size(), 0);
@@ -197,12 +194,12 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 2,
         });
 
-        auto first = registry.GetOrCreateLine("first", NoLabels());
+        auto first = registry.CreateLine("first", NoLabels());
         for (ui64 value = 1; value <= 5; ++value) {
             UNIT_ASSERT(first.Append(value));
         }
 
-        auto second = registry.GetOrCreateLine("second", NoLabels());
+        auto second = registry.CreateLine("second", NoLabels());
         UNIT_ASSERT(second.Append(100));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
@@ -230,6 +227,35 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(secondValues[0], 100);
     }
 
+    Y_UNIT_TEST(ClosedWritableChunkBecomesReusable) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 64,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 2,
+        });
+
+        auto first = registry.CreateLine("first", NoLabels());
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(first.Append(1));
+        first.Close();
+
+        auto second = registry.CreateLine("second", NoLabels());
+        UNIT_ASSERT(second);
+        UNIT_ASSERT(second.Append(2));
+        UNIT_ASSERT(registry.GetReuseWatermark() > 0);
+
+        auto lines = registry.Snapshot().Lines();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Name, "second");
+
+        TVector<ui64> values;
+        lines[0].ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
+    }
+
     Y_UNIT_TEST(ConcurrentAppendAndSnapshot) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 32768,
@@ -237,7 +263,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             .MaxLines = 4,
         });
 
-        auto writer = registry.GetOrCreateLine("line", NoLabels());
+        auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
 
         constexpr ui64 writes = 1000;
@@ -296,7 +322,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         TVector<TLineWriter> writers;
         writers.reserve(writersCount);
         for (ui32 i = 0; i < writersCount; ++i) {
-            writers.push_back(registry.GetOrCreateLine(Sprintf("line-%u", i), NoLabels()));
+            writers.push_back(registry.CreateLine(Sprintf("line-%u", i), NoLabels()));
             UNIT_ASSERT(writers.back());
         }
 

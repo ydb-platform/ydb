@@ -314,13 +314,12 @@ namespace NActors {
         }
     }
 
-    TLineWriter TInMemoryMetricsRegistry::GetOrCreateLine(TStringBuf name, std::span<const TLabel> labels) {
+    TLineWriter TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
         auto key = MakeLineKey(name, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
-        if (auto it = Impl->LinesByKey.find(key); it != Impl->LinesByKey.end()) {
-            it->second->State.store(ELineState::Open, std::memory_order_release);
-            return TLineWriter(this, it->second.get());
+        if (Impl->LinesByKey.contains(key)) {
+            return {};
         }
 
         if (Impl->LinesByKey.size() >= Impl->MaxLines) {
@@ -584,12 +583,29 @@ namespace NActors {
         }
 
         bool shouldDrop = false;
+        TChunk* sealedChunk = nullptr;
+        TChunk* freeChunk = nullptr;
         {
             TGuard<TMutex> guard(line->Lock);
             line->State.store(ELineState::Closed, std::memory_order_release);
+            if (TChunk* writable = line->Writable.exchange(nullptr, std::memory_order_acq_rel)) {
+                if (writable->CommittedBytes.load(std::memory_order_acquire)) {
+                    writable->State.store(EChunkState::Sealed, std::memory_order_release);
+                    sealedChunk = writable;
+                } else {
+                    RemoveChunkFromLineLocked(line, writable);
+                    freeChunk = writable;
+                }
+            }
             shouldDrop = line->Chunks.empty();
         }
 
+        if (sealedChunk) {
+            PublishSealedChunk(sealedChunk);
+        }
+        if (freeChunk) {
+            ReturnChunkToFree(freeChunk);
+        }
         if (shouldDrop) {
             MaybeDropClosedLine(line);
         }

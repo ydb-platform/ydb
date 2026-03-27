@@ -292,6 +292,7 @@ class TJsonInMemoryMetrics : public TViewerPipeClient {
     };
 
     TVector<TString> Targets;
+    mutable std::optional<TString> Error;
 
 public:
     TJsonInMemoryMetrics(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -459,12 +460,17 @@ private:
         if (TryParseGraphiteFunction(expression, functionName, args)) {
             if (functionName == "aliasSub" && args.size() == 3) {
                 auto series = EvaluateTarget(args[0], linesByTarget, from, until, maxDataPoints);
-                const std::string patternString(UnquoteGraphiteString(args[1]).c_str());
-                const std::regex pattern(patternString);
-                const std::string replacement(ConvertGraphiteReplacementToStdRegex(UnquoteGraphiteString(args[2])).c_str());
-                for (auto& line : series) {
-                    const std::string source(line.Target.c_str());
-                    line.Target = std::regex_replace(source, pattern, replacement).c_str();
+                try {
+                    const std::string patternString(UnquoteGraphiteString(args[1]).c_str());
+                    const std::regex pattern(patternString);
+                    const std::string replacement(ConvertGraphiteReplacementToStdRegex(UnquoteGraphiteString(args[2])).c_str());
+                    for (auto& line : series) {
+                        const std::string source(line.Target.c_str());
+                        line.Target = std::regex_replace(source, pattern, replacement).c_str();
+                    }
+                } catch (const std::regex_error& error) {
+                    Error = TString(TStringBuilder() << "invalid aliasSub regex: " << error.what());
+                    return {};
                 }
                 return series;
             }
@@ -508,6 +514,9 @@ private:
             series.insert(series.end(),
                 std::make_move_iterator(resolved.begin()),
                 std::make_move_iterator(resolved.end()));
+        }
+        if (Error) {
+            return GetHTTPBADREQUEST("text/plain", *Error);
         }
 
         NJson::TJsonValue json;

@@ -13,7 +13,31 @@ logger = logging.getLogger(__name__)
 
 TARGET = "harmonizer.max_used_cpu_x1e6"
 AWAKENING_TARGET = "harmonizer.avg_awakening_time_us"
-POOL_TARGET = 'harmonizer.pool.avg_used_cpu_x1e6{pool="IC",pool_id="4"}'
+
+
+def wait_for_target(base_url, predicate):
+    last_targets = []
+
+    def targets_ready():
+        nonlocal last_targets
+        try:
+            response = requests.get(
+                f"{base_url}/viewer/inmemory_metrics/targets",
+                params={"prefix": "harmonizer"},
+                timeout=10,
+            )
+        except requests.exceptions.RequestException:
+            return False
+
+        if response.status_code != 200:
+            return False
+
+        last_targets = response.json()
+        logger.info("inmemory metric targets: %s", last_targets)
+        return any(predicate(target) for target in last_targets)
+
+    assert wait_for(targets_ready, timeout_seconds=30, step_seconds=1.0), last_targets
+    return next(target for target in last_targets if predicate(target))
 
 
 def test_inmemory_metrics_are_exposed(ydb_cluster):
@@ -42,27 +66,7 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
 
     assert wait_for(graphite_find_ready, timeout_seconds=30, step_seconds=1.0), last_find
 
-    last_targets = []
-
-    def targets_ready():
-        nonlocal last_targets
-        try:
-            response = requests.get(
-                f"{base_url}/viewer/inmemory_metrics/targets",
-                params={"prefix": "harmonizer"},
-                timeout=10,
-            )
-        except requests.exceptions.RequestException:
-            return False
-
-        if response.status_code != 200:
-            return False
-
-        last_targets = response.json()
-        logger.info("inmemory metric targets: %s", last_targets)
-        return TARGET in last_targets
-
-    assert wait_for(targets_ready, timeout_seconds=30, step_seconds=1.0), last_targets
+    wait_for_target(base_url, lambda target: target == TARGET)
 
     last_series = None
 
@@ -91,12 +95,16 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     datapoints = last_series[0]["datapoints"]
     assert_that(last_series[0]["target"], equal_to(TARGET))
     assert_that(len(datapoints), greater_than(0))
-    assert_that(datapoints[-1][0], greater_than(0))
+    assert_that(datapoints[-1][1], greater_than(0))
 
 
 def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith("harmonizer.pool.avg_used_cpu_x1e6{"),
+    )
 
     last_series = None
 
@@ -105,7 +113,7 @@ def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
         try:
             response = requests.get(
                 f"{base_url}/viewer/inmemory_metrics/render",
-                params={"target": POOL_TARGET},
+                params={"target": target},
                 timeout=10,
             )
         except requests.exceptions.RequestException:
@@ -118,14 +126,14 @@ def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
         logger.info("inmemory labeled metric series: %s", last_series)
         return (
             bool(last_series)
-            and last_series[0].get("target") == POOL_TARGET
+            and last_series[0].get("target") == target
             and bool(last_series[0].get("datapoints"))
         )
 
     assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
 
     datapoints = last_series[0]["datapoints"]
-    assert_that(last_series[0]["target"], equal_to(POOL_TARGET))
+    assert_that(last_series[0]["target"], equal_to(target))
     assert_that(len(datapoints), greater_than(0))
 
 

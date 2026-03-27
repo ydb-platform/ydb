@@ -55,12 +55,6 @@ public:
         DecreasingThreadsByStarvedState,
         DecreasingThreadsByHoggishState,
         DecreasingThreadsByExchange,
-        ReceivedHalfThreadByNeedyState,
-        GivenHalfThreadByOtherStarvedState,
-        GivenHalfThreadByHoggishState,
-        GivenHalfThreadByOtherNeedyState,
-        ReturnedHalfThreadByStarvedState,
-        ReturnedHalfThreadByOtherHoggishState,
         MaxUsedCpuX1e6,
         MinUsedCpuX1e6,
         AvgUsedCpuX1e6,
@@ -159,12 +153,6 @@ namespace {
         "harmonizer.pool.decreasing_threads_by_starved_state",
         "harmonizer.pool.decreasing_threads_by_hoggish_state",
         "harmonizer.pool.decreasing_threads_by_exchange",
-        "harmonizer.pool.received_half_thread_by_needy_state",
-        "harmonizer.pool.given_half_thread_by_other_starved_state",
-        "harmonizer.pool.given_half_thread_by_hoggish_state",
-        "harmonizer.pool.given_half_thread_by_other_needy_state",
-        "harmonizer.pool.returned_half_thread_by_starved_state",
-        "harmonizer.pool.returned_half_thread_by_other_hoggish_state",
         "harmonizer.pool.max_used_cpu_x1e6",
         "harmonizer.pool.min_used_cpu_x1e6",
         "harmonizer.pool.avg_used_cpu_x1e6",
@@ -211,7 +199,7 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
 
     const std::span<const TLabel> noLabels;
     for (size_t idx = 0; idx < GlobalMetricNames.size(); ++idx) {
-        InMemoryMetrics.Global[idx] = registry->GetOrCreateLine(GlobalMetricNames[idx], noLabels);
+        InMemoryMetrics.Global[idx] = registry->CreateLine(GlobalMetricNames[idx], noLabels);
     }
 
     InMemoryMetrics.Pools.clear();
@@ -224,7 +212,7 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
         }};
         auto& writers = InMemoryMetrics.Pools[poolIdx];
         for (size_t idx = 0; idx < PoolMetricNames.size(); ++idx) {
-            writers[idx] = registry->GetOrCreateLine(PoolMetricNames[idx], labels);
+            writers[idx] = registry->CreateLine(PoolMetricNames[idx], labels);
         }
     }
 
@@ -258,12 +246,6 @@ void THarmonizer::ReportInMemoryMetrics() {
         writers[static_cast<size_t>(EPoolMetric::DecreasingThreadsByStarvedState)].Append(poolStats.DecreasingThreadsByStarvedState);
         writers[static_cast<size_t>(EPoolMetric::DecreasingThreadsByHoggishState)].Append(poolStats.DecreasingThreadsByHoggishState);
         writers[static_cast<size_t>(EPoolMetric::DecreasingThreadsByExchange)].Append(poolStats.DecreasingThreadsByExchange);
-        writers[static_cast<size_t>(EPoolMetric::ReceivedHalfThreadByNeedyState)].Append(poolStats.ReceivedHalfThreadByNeedyState);
-        writers[static_cast<size_t>(EPoolMetric::GivenHalfThreadByOtherStarvedState)].Append(poolStats.GivenHalfThreadByOtherStarvedState);
-        writers[static_cast<size_t>(EPoolMetric::GivenHalfThreadByHoggishState)].Append(poolStats.GivenHalfThreadByHoggishState);
-        writers[static_cast<size_t>(EPoolMetric::GivenHalfThreadByOtherNeedyState)].Append(poolStats.GivenHalfThreadByOtherNeedyState);
-        writers[static_cast<size_t>(EPoolMetric::ReturnedHalfThreadByStarvedState)].Append(poolStats.ReturnedHalfThreadByStarvedState);
-        writers[static_cast<size_t>(EPoolMetric::ReturnedHalfThreadByOtherHoggishState)].Append(poolStats.ReturnedHalfThreadByOtherHoggishState);
         writers[static_cast<size_t>(EPoolMetric::MaxUsedCpuX1e6)].Append(EncodeFloatMetric(poolStats.MaxUsedCpu));
         writers[static_cast<size_t>(EPoolMetric::MinUsedCpuX1e6)].Append(EncodeFloatMetric(poolStats.MinUsedCpu));
         writers[static_cast<size_t>(EPoolMetric::AvgUsedCpuX1e6)].Append(EncodeFloatMetric(poolStats.AvgUsedCpu));

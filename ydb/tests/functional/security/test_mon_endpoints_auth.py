@@ -455,12 +455,10 @@ def test_database_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforc
 
 
 DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
-    '/operation/forget',
     '/operation/get',
     '/operation/list',
     '/query/script/fetch',
     '/viewer/browse',
-    '/viewer/commit_offset',
     '/viewer/describe_consumer',
     '/viewer/describe_replication',
     '/viewer/describe_topic',
@@ -469,7 +467,9 @@ DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
     '/viewer/metainfo',
     '/viewer/topic_data',
     '/operation/list?database=%2FRoot',
-    # Endpoints below grant excessive rights.
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/operation/forget',
+    '/viewer/commit_offset',
     '/operation/cancel',
     '/query/script/execute',
     '/scheme/directory',
@@ -519,3 +519,87 @@ def test_database_endpoints_with_unstable_empty_request_handling_with_enforce_us
             },
         },
     )
+
+
+VIEWER_ENDPOINTS_LIST = [
+    '/storage/groups',
+    '/viewer/bsgroupinfo',
+    '/viewer/groups',
+    '/viewer/multipart_counter',
+    '/viewer/nodeinfo',
+    '/viewer/nodes',
+    '/viewer/pdiskinfo',
+    '/viewer/peers',
+    '/viewer/simple_counter',
+    '/viewer/sse_counter',
+    '/viewer/sysinfo',
+    '/viewer/tabletinfo',
+    '/viewer/v2/json/nodeinfo',
+    '/viewer/v2/json/pdiskinfo',
+    '/viewer/v2/json/sysinfo',
+    '/viewer/v2/json/tabletinfo',
+    '/viewer/v2/json/vdiskinfo',
+    '/viewer/vdiskinfo',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/viewer/autocomplete',
+    '/viewer/describe',
+    '/viewer/feature_flags',
+    '/viewer/nodelist',
+    '/viewer/query',
+    '/viewer/tenantinfo',
+    '/viewer/whoami',
+]
+
+
+
+def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in VIEWER_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
+    '/viewer/render',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/pdisk/info',
+    '/pdisk/restart',
+    '/pdisk/status',
+    '/vdisk/blobindexstat',
+    '/vdisk/evict',
+    '/vdisk/getblob',
+    '/vdisk/vdiskstat',
+    '/viewer/acl',
+    '/viewer/check_access',
+    '/viewer/database_stats',
+    '/viewer/describe',
+    '/viewer/hotkeys',
+    '/viewer/query',
+    '/viewer/storage_stats',
+]
+
+
+def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 400,
+            'monitoring@builtin': 400,
+            'root@builtin': 400,
+        }
+        for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+

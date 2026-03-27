@@ -137,6 +137,54 @@ private:
             }
         }
 
+        // Assign temporary IDs to columns so we can reference them in indexes
+        ui32 nextColId = 1;
+        THashMap<TString, ui32> colNameToId;
+        for (auto& col : *schema->MutableColumns()) {
+            if (!col.HasId()) {
+                col.SetId(nextColId);
+            }
+            colNameToId[col.GetName()] = col.GetId();
+            nextColId = col.GetId() + 1;
+        }
+        schema->SetNextColumnId(nextColId);
+
+        ui32 nextIndexId = 1;
+        for (const auto& index : req.indexes()) {
+            auto* olapIndex = schema->AddIndexes();
+            olapIndex->SetId(nextIndexId++);
+            olapIndex->SetName(index.name());
+            if (index.has_local_bloom_filter_index()) {
+                olapIndex->SetClassName("BLOOM_FILTER");
+                auto* bloom = olapIndex->MutableBloomFilter();
+                if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                    bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
+                }
+                for (const auto& colName : index.index_columns()) {
+                    auto it = colNameToId.find(colName);
+                    if (it != colNameToId.end()) {
+                        bloom->AddColumnIds(it->second);
+                    }
+                }
+            } else if (index.has_local_bloom_ngram_filter_index()) {
+                olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                auto* ngram = olapIndex->MutableBloomNGrammFilter();
+                const auto& idxProto = index.local_bloom_ngram_filter_index();
+                if (idxProto.ngram_size()) ngram->SetNGrammSize(idxProto.ngram_size());
+                if (idxProto.hashes_count()) ngram->SetHashesCount(idxProto.hashes_count());
+                if (idxProto.filter_size_bytes()) ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
+                if (idxProto.records_count()) ngram->SetRecordsCount(idxProto.records_count());
+                if (idxProto.has_case_sensitive()) ngram->SetCaseSensitive(idxProto.case_sensitive());
+                for (const auto& colName : index.index_columns()) {
+                    auto it = colNameToId.find(colName);
+                    if (it != colNameToId.end()) {
+                        ngram->SetColumnId(it->second);
+                        break; // only one column supported
+                    }
+                }
+            }
+        }
+
         return true;
     }
 

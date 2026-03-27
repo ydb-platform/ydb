@@ -1066,6 +1066,14 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
                     break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
                 default:
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }

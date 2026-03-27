@@ -36,7 +36,9 @@ TVChunk::TVChunk(
     , BlocksCount(VChunkSize / DefaultBlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , TraceSamplePeriod(traceSamplePeriod)
-{}
+{
+    Y_UNUSED(PartitionDirectService);
+}
 
 TVChunk::~TVChunk() = default;
 
@@ -64,8 +66,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "Range %s, Region range %s, VChunk range %s",
-        request->Range.Print().c_str(),
+        "ReadBlocksLocal. Range %s, Region range %s, VChunk range %s",
+        request->Headers.Range.Print().c_str(),
         request->RegionRange.Print().c_str(),
         request->VChunkRange.Print().c_str());
 
@@ -111,8 +113,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "Range %s, Region range %s, VChunk range %s",
-        request->Range.Print().c_str(),
+        "WriteBlocksLocal. Range %s, Region range %s, VChunk range %s",
+        request->Headers.Range.Print().c_str(),
         request->RegionRange.Print().c_str(),
         request->VChunkRange.Print().c_str());
 
@@ -272,7 +274,6 @@ void TVChunk::DoWriteBlocksLocal(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
-        PartitionDirectService->GenerateSequenceNumber(),
         range,
         std::move(callContext),
         std::move(request),

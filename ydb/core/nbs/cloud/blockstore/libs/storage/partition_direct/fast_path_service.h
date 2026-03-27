@@ -55,14 +55,9 @@ public:
 
     void ReportIOError() override;
 
-    // IPartitionDirectService implementation
-    ui64 GenerateSequenceNumber() override;
-
 private:
+    ui64 GenerateSequenceNumber();
     NWilson::TTraceId SpanTrace();
-
-    static size_t GetRegionIndex(ui64 blockIndex);
-    static size_t GetRegionOffset(ui64 blockIndex);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

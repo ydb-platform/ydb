@@ -10,7 +10,6 @@
 #include "dq_opt_join_tree_node.h"
 
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
-#include <yql/essentials/core/yql_cost_function.h>
 #include <library/cpp/iterator/zip.h>
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>

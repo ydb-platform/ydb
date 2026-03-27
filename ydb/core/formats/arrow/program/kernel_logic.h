@@ -11,6 +11,7 @@ namespace NKikimr::NArrow::NSSA {
 enum class ECalculationHardness {
     JustAccessorUsage = 1,
     NotSpecified = 3,
+    LessOrGreater = 4,
     Equals = 5,
     StringMatching = 10,
     Unknown = 8
@@ -211,6 +212,42 @@ public:
 
     virtual TString GetClassName() const override {
         return "EQUALS";
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return !IsSimpleFunction;
+    }
+};
+
+class TLogicLessOrGreater: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        TAccessorsCollection& /*resources*/) const override {
+        return false;
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return TIndexCheckOperation(Op, true);
+    }
+    const bool IsSimpleFunction;
+    const TIndexCheckOperation::EOperation Op;
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::LessOrGreater;
+    }
+
+public:
+    TLogicLessOrGreater(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
+        : IsSimpleFunction(isSimpleFunction), Op(op) {
+        AFL_VERIFY(op == TIndexCheckOperation::EOperation::Less || 
+                   op == TIndexCheckOperation::EOperation::LessOrEqual || 
+                   op == TIndexCheckOperation::EOperation::Greater || 
+                   op == TIndexCheckOperation::EOperation::GreaterOrEqual
+                );
+    }
+
+    virtual TString GetClassName() const override {
+        return TStringBuilder() << "TLogicLessOrGreater{" << Op << "}";
     }
 
     virtual bool IsBoolInResult() const override {

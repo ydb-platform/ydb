@@ -44,6 +44,14 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, false);
         } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
             kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, false);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less) {
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(false, TIndexCheckOperation::EOperation::Less);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual) {
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(false, TIndexCheckOperation::EOperation::LessOrEqual);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater) {
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(false, TIndexCheckOperation::EOperation::Greater);
+        } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual) {
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(false, TIndexCheckOperation::EOperation::GreaterOrEqual);
         }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
         if (!kernelFunction) {
@@ -82,12 +90,16 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         case TId::FUNC_CMP_NOT_EQUAL:
             return std::make_shared<TSimpleFunction>(EOperation::NotEqual);
         case TId::FUNC_CMP_LESS:
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(true, TIndexCheckOperation::EOperation::Less);
             return std::make_shared<TSimpleFunction>(EOperation::Less);
         case TId::FUNC_CMP_LESS_EQUAL:
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(true, TIndexCheckOperation::EOperation::LessOrEqual);
             return std::make_shared<TSimpleFunction>(EOperation::LessEqual);
         case TId::FUNC_CMP_GREATER:
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(true, TIndexCheckOperation::EOperation::Greater);
             return std::make_shared<TSimpleFunction>(EOperation::Greater);
         case TId::FUNC_CMP_GREATER_EQUAL:
+            kernelLogic = std::make_shared<TLogicLessOrGreater>(true, TIndexCheckOperation::EOperation::GreaterOrEqual);
             return std::make_shared<TSimpleFunction>(EOperation::GreaterEqual);
         case TId::FUNC_IS_NULL:
             return std::make_shared<TSimpleFunction>(EOperation::IsNull);

@@ -363,7 +363,7 @@ void TVChunk::DoErase()
 
     auto hints = BlocksDirtyMap.MakeEraseHint(SyncRequestsBatchSize);
 
-    for (auto& [location, hint]: hints) {
+    for (auto& [location, hint]: hints.TakeAllHints()) {
         Y_ABORT_UNLESS(IsPBuffer(location));
 
         auto eraseExecutor = std::make_shared<TEraseRequestExecutor>(

@@ -1239,6 +1239,58 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true); 
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessage({}, 400);
+        DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
+        DeleteMessage({{"QueueUrl", 123}}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessage({{"QueueUrl", queueUrl}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", "unknown-receipt-handle"}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", ""}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", 123}}, 400);
+
+        auto body = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "sqs_consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {
+            {"ApproximateNumberOfMessages", "0"},
+            {"ApproximateNumberOfMessagesNotVisible", "0"}
+        });
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessage_TableImplementation, THttpProxyTestMock) {
         DeleteMessage({}, 400);
         DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
         DeleteMessage({{"QueueUrl", 123}}, 400);
@@ -1475,6 +1527,100 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessageBatch({}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonMap{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {""}}
+        }, 400);
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-0"}, {"MessageDeduplicationId", "MessageDeduplicationId-0"}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageDeduplicationId", "MessageDeduplicationId-1"}}
+            }}
+        });
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+
+        TVector<NJson::TJsonValue> messages;
+        for (int i = 0; i < 20; ++i) {
+            auto json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+            if (!json.GetMapSafe().empty()) {
+                for (auto& m : json["Messages"].GetArray()) {
+                    messages.push_back(m);
+                }
+            }
+            if (messages.size() >= 2) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle0.empty());
+        auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle1.empty());
+
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "sqs_consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 2);
+        }
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageBatch_TableImplementation, THttpProxyTestMock) {
         DeleteMessageBatch({}, 400);
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});

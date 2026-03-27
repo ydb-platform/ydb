@@ -42,20 +42,26 @@ void TVectorWorkloadGenerator::Init() {
 }
 
 std::string TVectorWorkloadGenerator::GetDDLQueries() const {
+    TStringBuilder extraColumns;
+    if (Params.KmeansTreePrefixed) {
+        extraColumns << "prefix Uint64 NOT NULL,\n";
+    }
     return std::format(R"_(--!syntax_v1
             CREATE TABLE `{0}/{1}`(
                 id Uint64 NOT NULL,
                 embedding String,
+                {2}
                 PRIMARY KEY(id))
             WITH (
                 AUTO_PARTITIONING_BY_SIZE = ENABLED,
-                AUTO_PARTITIONING_BY_LOAD = {2},
-                AUTO_PARTITIONING_PARTITION_SIZE_MB = {3},
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {4}
+                AUTO_PARTITIONING_BY_LOAD = {3},
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = {4},
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = {5}
             )
         )_",
         Params.DbPath.c_str(),
         Params.TableOpts.Name.c_str(),
+        extraColumns.c_str(),
         Params.TablePartitioningOpts.AutoPartitioningByLoad ? "ENABLED" : "DISABLED",
         Params.TablePartitioningOpts.PartitionSize,
         Params.TablePartitioningOpts.MinPartitions

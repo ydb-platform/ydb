@@ -258,6 +258,7 @@ private:
     const TVectorWorkloadParams& Params;
     const NVector::TVectorOpts& VectorOpts;
     const size_t RowCount;
+    const size_t PrefixCount;
 
     std::mt19937 RandomGenerator;
     std::uniform_real_distribution<float> Distribution;
@@ -289,11 +290,12 @@ private:
     }
 
 public:
-    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const uint32_t randomSeed)
+    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const size_t prefixCount, const uint32_t randomSeed)
         : IBulkDataGenerator(params.TableOpts.Name, rowCount)
         , Params(params)
         , VectorOpts(vectorOpts)
         , RowCount(rowCount)
+        , PrefixCount(prefixCount)
         , RandomGenerator(randomSeed)
         , Distribution(0.0f, 1.0f)
     { }
@@ -305,6 +307,7 @@ public:
 
             arrow::UInt64Builder idsBuilder;
             arrow::StringBuilder embeddingsBuilder;
+            arrow::UInt64Builder prefixesBuilder;
 
             std::function<TStringBuilder()> generateEmbedding;
             if (VectorOpts.VectorType == "float") {
@@ -319,6 +322,7 @@ public:
                 ythrow yexception() << "Unknown vector type: " << VectorOpts.VectorType;
             }
 
+            const bool prefixed = Params.KmeansTreePrefixed;
             size_t currentBatchSize;
             for (currentBatchSize = 0; currentBatchSize < PORTION_SIZE && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
                 if (const auto status = idsBuilder.Append(static_cast<uint64_t>(DoneRows)); !status.ok()) {
@@ -328,6 +332,13 @@ public:
                 TStringBuilder buffer = generateEmbedding();
                 if (const auto status = embeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
                     ythrow yexception() << status.ToString();
+                }
+
+                if (prefixed) {
+                    const uint64_t prefix = PrefixCount > 0 ? (DoneRows % PrefixCount) : 0;
+                    if (const auto status = prefixesBuilder.Append(prefix); !status.ok()) {
+                        ythrow yexception() << status.ToString();
+                    }
                 }
             }
             if (currentBatchSize == 0) {
@@ -346,10 +357,21 @@ public:
             }
             resultColumns.push_back(std::move(newEmbeddingColumn));
 
-            const auto schema = arrow::schema({
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
                 arrow::field("id", arrow::uint64()),
                 arrow::field("embedding", arrow::binary()),
-            });
+            };
+
+            if (prefixed) {
+                std::shared_ptr<arrow::UInt64Array> newPrefixColumn;
+                if (const auto status = prefixesBuilder.Finish(&newPrefixColumn); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
+                resultColumns.push_back(std::move(newPrefixColumn));
+                fields.push_back(arrow::field("prefix", arrow::uint64()));
+            }
+
+            const auto schema = arrow::schema(fields);
             const auto recordBatch = arrow::RecordBatch::Make(
                 schema,
                 currentBatchSize,
@@ -477,7 +499,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, RandomSeed)};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed)};
 }
 
 } // namespace NYdbWorkload

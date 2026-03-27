@@ -46,6 +46,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     case TWorkloadParams::ECommandType::Init:
         NVector::ConfigureTableOpts(opts, &TableOpts);
         NVector::ConfigureTablePartitioningOpts(opts, &TablePartitioningOpts);
+        opts.AddLongOption("prefixed", "Add prefix column to the table")
+            .StoreTrue(&KmeansTreePrefixed);
         break;
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);

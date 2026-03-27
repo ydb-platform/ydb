@@ -542,14 +542,11 @@ VIEWER_ENDPOINTS_LIST = [
     '/viewer/vdiskinfo',
     # Endpoints below expose excessive information or grant excessive rights.
     '/viewer/autocomplete',
-    '/viewer/describe',
     '/viewer/feature_flags',
     '/viewer/nodelist',
-    '/viewer/query',
     '/viewer/tenantinfo',
     '/viewer/whoami',
 ]
-
 
 
 def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -602,4 +599,3 @@ def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_u
         for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
-

@@ -11,6 +11,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/string/split.h>
 
@@ -93,6 +94,54 @@ namespace {
         }
 
         return queryPos == query.size();
+    }
+
+    inline void SplitGraphiteTargets(TStringBuf raw, TVector<TString>& targets) {
+        size_t start = 0;
+        int bracesDepth = 0;
+        bool inQuotes = false;
+        bool escaped = false;
+
+        auto flush = [&](size_t end) {
+            const TStringBuf piece = StripString(raw.SubString(start, end - start));
+            if (!piece.empty()) {
+                targets.emplace_back(piece);
+            }
+        };
+
+        for (size_t pos = 0; pos < raw.size(); ++pos) {
+            const char ch = raw[pos];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inQuotes && ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (!inQuotes) {
+                if (ch == '{') {
+                    ++bracesDepth;
+                    continue;
+                }
+                if (ch == '}') {
+                    if (bracesDepth > 0) {
+                        --bracesDepth;
+                    }
+                    continue;
+                }
+                if (ch == ',' && bracesDepth == 0) {
+                    flush(pos);
+                    start = pos + 1;
+                }
+            }
+        }
+
+        flush(raw.size());
     }
 
 } // namespace
@@ -191,7 +240,7 @@ private:
                 break;
             }
 
-            StringSplitter(raw).Split(',').SkipEmpty().AddTo(&Targets);
+            SplitGraphiteTargets(raw, Targets);
         }
     }
 

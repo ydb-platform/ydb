@@ -12,6 +12,7 @@ from ydb.tests.library.common.wait_for import wait_for
 logger = logging.getLogger(__name__)
 
 TARGET = "harmonizer.max_used_cpu_x1e6"
+POOL_TARGET = 'harmonizer.pool.avg_used_cpu_x1e6{pool="IC",pool_id="4"}'
 
 
 def test_inmemory_metrics_are_exposed(ydb_cluster):
@@ -90,3 +91,38 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     assert_that(last_series[0]["target"], equal_to(TARGET))
     assert_that(len(datapoints), greater_than(0))
     assert_that(datapoints[-1][0], greater_than(0))
+
+
+def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+
+    last_series = None
+
+    def series_ready():
+        nonlocal last_series
+        try:
+            response = requests.get(
+                f"{base_url}/viewer/inmemory_metrics/render",
+                params={"target": POOL_TARGET},
+                timeout=10,
+            )
+        except requests.exceptions.RequestException:
+            return False
+
+        if response.status_code != 200:
+            return False
+
+        last_series = response.json()
+        logger.info("inmemory labeled metric series: %s", last_series)
+        return (
+            bool(last_series)
+            and last_series[0].get("target") == POOL_TARGET
+            and bool(last_series[0].get("datapoints"))
+        )
+
+    assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
+
+    datapoints = last_series[0]["datapoints"]
+    assert_that(last_series[0]["target"], equal_to(POOL_TARGET))
+    assert_that(len(datapoints), greater_than(0))

@@ -357,6 +357,16 @@ private:
             TVector<TString> lhsLabels = ApplyHintsToSubgraph(join->Lhs);
             TVector<TString> rhsLabels = ApplyHintsToSubgraph(join->Rhs);
 
+            // Construct hint name for error name, e.g. ({A B C} {D E}), i.e.
+            // this particular "level" of this particular hint implies that
+            // subtree containing {A B C} and subtree containing {D E} should
+            // be joined together, which is not satisfiable.
+
+            // Possible reasons include:
+            // 1. The edge that represents this join is absent, creating
+            //    it requires inserting a cross join, which is usually not desirable
+            // 2. There exits an edge that is the reverse of what is hinted
+            //    and it's not commutative -> hint contradicts semantics
             auto describeHintedPart = [&]() {
                 return Sprintf(
                     "({{%s}} {{%s}})",
@@ -375,6 +385,8 @@ private:
                     continue;
                 }
 
+                // A non-commutative reversed edge bridges (lhs, rhs) but its canonical
+                // direction is (rhs, lhs) — the hint contradicts a mandatory edge.
                 if (!edges[i].IsCommutative && edges[i].IsReversed) {
                     Y_ENSURE(false,
                         Sprintf("Hinted join %s breaks semantics by contradicting"
@@ -402,6 +414,8 @@ private:
                 edge.IsReversed = false;
                 revEdge.IsReversed = true;
 
+                // Hint selects a certain direction, therefore
+                // now edge is no longer commutative
                 edge.IsCommutative = revEdge.IsCommutative = false;
 
                 Graph_.UpdateEdgeSides(edgeIdx, lhs, rhs);

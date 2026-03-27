@@ -34,7 +34,8 @@ public:
     IKernelLogic() = default;
 
     IKernelLogic(const ui32 yqlOperationId)
-        : YqlOperationId(yqlOperationId) {
+        : YqlOperationId(yqlOperationId)
+    {
     }
 
     virtual ~IKernelLogic() = default;
@@ -76,7 +77,8 @@ private:
 public:
     TSimpleKernelLogic() = default;
     TSimpleKernelLogic(const ui32 yqlOperationId)
-        : TBase(yqlOperationId) {
+        : TBase(yqlOperationId)
+    {
     }
 
     virtual TString SignalDescription() const override;
@@ -121,7 +123,8 @@ public:
     TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
         : Operation(operation)
         , CaseSensitive(caseSensitive)
-        , IsSimpleFunction(isSimpleFunction) {
+        , IsSimpleFunction(isSimpleFunction)
+    {
     }
 
     virtual TString SignalDescription() const override {
@@ -145,7 +148,8 @@ private:
 
 public:
     TLogicMatchAsciiEqualsIgnoreCase()
-        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false)
+    {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEqualsIgnoreCase>(GetClassNameStatic());
 };
@@ -158,7 +162,8 @@ private:
 
 public:
     TLogicMatchAsciiContainsIgnoreCase()
-        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false) {
+        : TLogicMatchString(TIndexCheckOperation::EOperation::Contains, false, false)
+    {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiContainsIgnoreCase>(GetClassNameStatic());
 };
@@ -171,7 +176,8 @@ private:
 
 public:
     TLogicMatchAsciiStartsWithIgnoreCase()
-        : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false) {
+        : TLogicMatchString(TIndexCheckOperation::EOperation::StartsWith, false, false)
+    {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiStartsWithIgnoreCase>(GetClassNameStatic());
 };
@@ -184,7 +190,8 @@ private:
 
 public:
     TLogicMatchAsciiEndsWithIgnoreCase()
-        : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false) {
+        : TLogicMatchString(TIndexCheckOperation::EOperation::EndsWith, false, false)
+    {
     }
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
 };
@@ -207,7 +214,8 @@ private:
 
 public:
     TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction) {
+        : IsSimpleFunction(isSimpleFunction)
+    {
     }
 
     virtual TString GetClassName() const override {
@@ -238,7 +246,9 @@ private:
 
 public:
     TLogicLessOrGreater(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
-        : IsSimpleFunction(isSimpleFunction), Op(op) {
+        : IsSimpleFunction(isSimpleFunction)
+        , Op(op)
+    {
         AFL_VERIFY(op == TIndexCheckOperation::EOperation::Less || 
                    op == TIndexCheckOperation::EOperation::LessOrEqual || 
                    op == TIndexCheckOperation::EOperation::Greater || 
@@ -280,7 +290,8 @@ private:
     public:
         TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
             : InputAccessor(inputAccessor)
-            , JsonPath(jsonPath) {
+            , JsonPath(jsonPath)
+        {
         }
 
         const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {

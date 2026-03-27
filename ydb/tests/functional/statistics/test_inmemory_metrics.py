@@ -18,6 +18,28 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
 
+    last_find = None
+
+    def graphite_find_ready():
+        nonlocal last_find
+        try:
+            response = requests.get(
+                f"{base_url}/viewer/inmemory_metrics/metrics/find",
+                params={"query": TARGET},
+                timeout=10,
+            )
+        except requests.exceptions.RequestException:
+            return False
+
+        if response.status_code != 200:
+            return False
+
+        last_find = response.json()
+        logger.info("inmemory graphite find: %s", last_find)
+        return any(item.get("id") == TARGET for item in last_find)
+
+    assert wait_for(graphite_find_ready, timeout_seconds=30, step_seconds=1.0), last_find
+
     last_targets = []
 
     def targets_ready():
@@ -46,10 +68,9 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
         nonlocal last_series
         try:
             response = requests.get(
-                f"{base_url}/viewer/inmemory_metrics",
+                f"{base_url}/viewer/inmemory_metrics/render",
                 params={
                     "target": TARGET,
-                    "format": "graphite",
                 },
                 timeout=10,
             )
@@ -68,5 +89,4 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     datapoints = last_series[0]["datapoints"]
     assert_that(last_series[0]["target"], equal_to(TARGET))
     assert_that(len(datapoints), greater_than(0))
-    assert_that(datapoints[-1][1], greater_than(0))
-
+    assert_that(datapoints[-1][0], greater_than(0))

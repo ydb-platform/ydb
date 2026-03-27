@@ -52,6 +52,49 @@ namespace {
         return target;
     }
 
+    inline TVector<TString> CollectInMemoryMetricTargets(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        TVector<TString> targets;
+        const auto snapshot = inMemoryMetrics.Snapshot();
+        targets.reserve(snapshot.Lines().size());
+        for (const auto& line : snapshot.Lines()) {
+            targets.push_back(BuildInMemoryMetricTarget(line));
+        }
+        Sort(targets);
+        return targets;
+    }
+
+    inline bool MatchGraphiteQuery(TStringBuf query, TStringBuf value) {
+        if (query.empty()) {
+            return value.empty();
+        }
+
+        size_t queryPos = 0;
+        size_t valuePos = 0;
+        size_t lastStar = TStringBuf::npos;
+        size_t lastMatch = 0;
+
+        while (valuePos < value.size()) {
+            if (queryPos < query.size() && (query[queryPos] == value[valuePos] || query[queryPos] == '?')) {
+                ++queryPos;
+                ++valuePos;
+            } else if (queryPos < query.size() && query[queryPos] == '*') {
+                lastStar = queryPos++;
+                lastMatch = valuePos;
+            } else if (lastStar != TStringBuf::npos) {
+                queryPos = lastStar + 1;
+                valuePos = ++lastMatch;
+            } else {
+                return false;
+            }
+        }
+
+        while (queryPos < query.size() && query[queryPos] == '*') {
+            ++queryPos;
+        }
+
+        return queryPos == query.size();
+    }
+
 } // namespace
 
 class TJsonInMemoryMetrics : public TViewerPipeClient {
@@ -374,16 +417,13 @@ private:
         const TString prefix = GetPrefix();
         const ui32 limit = GetLimit();
 
-        const auto snapshot = inMemoryMetrics.Snapshot();
-        for (const auto& line : snapshot.Lines()) {
-            TString target = BuildInMemoryMetricTarget(line);
+        for (TString target : CollectInMemoryMetricTargets(inMemoryMetrics)) {
             if (!prefix.empty() && !target.StartsWith(prefix)) {
                 continue;
             }
             targets.push_back(std::move(target));
         }
 
-        Sort(targets);
         if (limit && targets.size() > limit) {
             targets.resize(limit);
         }
@@ -391,6 +431,77 @@ private:
         NJson::TJsonValue json(NJson::JSON_ARRAY);
         for (const auto& target : targets) {
             json.AppendValue(target);
+        }
+
+        return GetHTTPOKJSON(json);
+    }
+};
+
+class TJsonInMemoryMetricsGraphiteFind : public TViewerPipeClient {
+    using TThis = TJsonInMemoryMetricsGraphiteFind;
+    using TBase = TViewerPipeClient;
+    using TBase::ReplyAndPassAway;
+
+public:
+    TJsonInMemoryMetricsGraphiteFind(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TViewerPipeClient(viewer, ev)
+    {
+        NeedRedirect = false;
+        CheckDatabase = false;
+    }
+
+    void Bootstrap() override {
+        const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
+        if (!inMemoryMetrics) {
+            NJson::TJsonValue json;
+            json["status"] = "error";
+            json["error"] = "In-memory metrics subsystem is not registered";
+            return ReplyAndPassAway(GetHTTPOKJSON(json));
+        }
+
+        ReplyAndPassAway(BuildResponseJson(*inMemoryMetrics));
+    }
+
+    void ReplyAndPassAway() override {}
+
+    static YAML::Node GetSwagger() {
+        TSimpleYamlBuilder yaml({
+            .Method = "get",
+            .Tag = "viewer",
+            .Summary = "Graphite metric discovery for in-memory metrics",
+            .Description = "Returns Graphite-compatible metric discovery payload for in-memory metrics",
+        });
+        yaml.AddParameter({
+            .Name = "query",
+            .Description = "Graphite wildcard query",
+            .Type = "string",
+            .Required = true,
+        });
+        return yaml;
+    }
+
+private:
+    TString GetQuery() const {
+        return Params.Get("query");
+    }
+
+    TString BuildResponseJson(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+        const TString query = Params.Has("query") ? GetQuery() : "*";
+        NJson::TJsonValue json(NJson::JSON_ARRAY);
+
+        for (const TString& target : CollectInMemoryMetricTargets(inMemoryMetrics)) {
+            if (!MatchGraphiteQuery(query, target)) {
+                continue;
+            }
+
+            NJson::TJsonValue& item = json.AppendValue({});
+            item["text"] = target;
+            item["id"] = target;
+            item["path"] = target;
+            item["name"] = target;
+            item["leaf"] = 1;
+            item["expandable"] = 0;
+            item["allowChildren"] = 0;
         }
 
         return GetHTTPOKJSON(json);

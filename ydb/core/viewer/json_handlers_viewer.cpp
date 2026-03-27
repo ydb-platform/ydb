@@ -300,7 +300,9 @@ void InitViewerGraphJsonHandler(TJsonHandlers &handlers) {
 
 void InitViewerInMemoryMetricsJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/inmemory_metrics", new TJsonHandler<TJsonInMemoryMetrics>(TJsonInMemoryMetrics::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/render", new TJsonHandler<TJsonInMemoryMetrics>(TJsonInMemoryMetrics::GetSwagger()));
     handlers.AddHandler("/viewer/inmemory_metrics/targets", new TJsonHandler<TJsonInMemoryMetricsTargets>(TJsonInMemoryMetricsTargets::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/metrics/find", new TJsonHandler<TJsonInMemoryMetricsGraphiteFind>(TJsonInMemoryMetricsGraphiteFind::GetSwagger()));
 }
 
 void InitViewerRenderJsonHandler(TJsonHandlers& handlers) {

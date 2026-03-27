@@ -10,7 +10,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/tx/schemeshard/ut_base_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
@@ -35,7 +34,6 @@ ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_s
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-1_and_stable-25-4-1]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_prestable-26-1-column]
 ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_prestable-26-1-row]
-ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-25-4-1_to_prestable-26-1]
 ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-4-1_to_prestable-26-1-row-False]
 ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-25-4-1_to_prestable-26-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-25-4-1_to_prestable-26-1]

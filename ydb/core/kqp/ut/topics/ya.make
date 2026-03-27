@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/ut/common
-    ydb/library/actors/wilson/test_util
+    ydb/core/kqp/topics
     yql/essentials/sql/pg_dummy
 )
 

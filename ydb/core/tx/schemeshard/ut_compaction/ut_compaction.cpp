@@ -1912,6 +1912,18 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         );
     }
 
+    Y_UNIT_TEST(SchemeshardShouldNotCompactWrongPath) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex", 1, Ydb::StatusIds::BAD_REQUEST);
+    }
+
     Y_UNIT_TEST(SchemeshardShouldCompactAfterRestart) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

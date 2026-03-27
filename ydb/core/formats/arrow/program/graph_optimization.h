@@ -3,7 +3,6 @@
 #include "graph_execute.h"
 
 #include <library/cpp/json/writer/json_value.h>
-#include <util/stream/output.h>
 #include <util/digest/fnv.h>
 #include <util/digest/numeric.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -241,8 +240,7 @@ public:
             Finished = true;
             TGraph graph(std::move(Processors), Resolver);
             graph.Collapse();
-            auto res = graph.Compile();
-            return res;
+            return graph.Compile();
         }
     };
 };

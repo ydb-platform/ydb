@@ -16,6 +16,19 @@ message TCompression {
     optional int64 Level = 2;
 }
 
+message TEncoding {
+    message TPlain {
+    }
+
+    message TDictionary {
+    }
+
+    oneof Implementation {
+        TPlain Plain = 1;
+        TDictionary Dictionary = 2;
+    }
+}
+
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
@@ -39,4 +52,5 @@ message TKqpColumnMetadataProto {
     optional bool IsBuildInProgress = 11 [default = false];
     optional TKqpPathIdProto DefaultFromSequencePathId = 12;
     optional TCompression Compression = 13;
+    repeated TEncoding Encoding = 14;
 };

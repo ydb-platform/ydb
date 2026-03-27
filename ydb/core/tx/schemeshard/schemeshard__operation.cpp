@@ -1084,6 +1084,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropColumnTable:
         return CreateDropColumnTable(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateColumnTableIndex:
+        return CreateNewColumnTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxDropColumnTableIndex:
+        return CreateDropColumnTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterColumnTableIndex:
+        return CreateAlterColumnTableIndex(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreatePQGroup:
         return CreateNewPQ(NextPartId(), txState);
@@ -1394,9 +1400,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         if (tx.GetCreateColumnTable().HasCopyFromTable()) {
             return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
         }
-        return {CreateNewColumnTable(op.NextPartId(), tx)};
+        return CreateColumnTableWithIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return {CreateAlterColumnTable(op.NextPartId(), tx)};
+        return AlterColumnTableWithIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
         return {CreateDropColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:

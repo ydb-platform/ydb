@@ -1,6 +1,6 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
-#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
+
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -378,8 +378,6 @@ public:
 
         context.SS->PersistColumnTableAlterRemove(db, pathId);
         context.SS->PersistColumnTable(db, pathId, *table);
-
-        NOlap::FinalizeNewLocalIndexPaths(step, path, context, db);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsLikeDirectory()) {
@@ -822,8 +820,6 @@ public:
             AFL_VERIFY(tierPath.IsResolved())("path", tier);
             context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
         }
-
-        NOlap::CreateLocalIndexSchemeObjects(opTxId, tableInfo->Description.GetSchema(), {}, dstPath, context, db);
 
         context.SS->PersistTxState(db, OperationId);
 

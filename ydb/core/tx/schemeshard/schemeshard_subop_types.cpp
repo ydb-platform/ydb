@@ -67,6 +67,7 @@ bool IsCreate(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateColumnTableIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateSequence:
@@ -107,6 +108,7 @@ bool IsCreate(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
+        case TxDropColumnTableIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxFinalizeBuildIndex:
@@ -135,6 +137,7 @@ bool IsCreate(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
+        case TxAlterColumnTableIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -202,6 +205,7 @@ bool IsDrop(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
+        case TxDropColumnTableIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxDropCdcStream:
@@ -238,6 +242,7 @@ bool IsDrop(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateColumnTableIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
@@ -273,6 +278,7 @@ bool IsDrop(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
+        case TxAlterColumnTableIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -351,6 +357,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBackupCollection:
             return true; // CanDeleteParts
         case TxDropTableIndex:
+        case TxDropColumnTableIndex:
         case TxRmDir:
         case TxFinalizeBuildIndex:
         case TxDropExternalTable:
@@ -377,6 +384,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
+        case TxCreateColumnTableIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
@@ -424,6 +432,7 @@ bool CanDeleteParts(ETxType t) {
         case TxAlterUserAttributes:
         case TxFillIndex:
         case TxAlterTableIndex:
+        case TxAlterColumnTableIndex:
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:
         case TxAlterCdcStreamAtTable:

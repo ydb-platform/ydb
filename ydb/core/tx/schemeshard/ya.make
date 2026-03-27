@@ -119,6 +119,8 @@ SRCS(
     schemeshard__operation_alter_external_table.cpp
     schemeshard__operation_alter_extsubdomain.cpp
     schemeshard__operation_alter_fs.cpp
+    schemeshard__operation_alter_column_table_index.cpp
+    schemeshard__operation_alter_index.cpp
     schemeshard__operation_alter_kesus.cpp
     schemeshard__operation_alter_login.cpp
     schemeshard__operation_alter_pq.cpp
@@ -159,6 +161,10 @@ SRCS(
     schemeshard__operation_create_external_table.cpp
     schemeshard__operation_create_extsubdomain.cpp
     schemeshard__operation_create_fs.cpp
+    schemeshard__operation_create_column_table_index.cpp
+    schemeshard__operation_create_column_table_with_indexes.cpp
+    schemeshard__operation_create_index.cpp
+    schemeshard__operation_create_indexed_table.cpp
     schemeshard__operation_create_kesus.cpp
     schemeshard__operation_create_lock.cpp
     schemeshard__operation_create_pq.cpp
@@ -185,6 +191,9 @@ SRCS(
     schemeshard__operation_drop_external_table.cpp
     schemeshard__operation_drop_extsubdomain.cpp
     schemeshard__operation_drop_fs.cpp
+    schemeshard__operation_drop_column_table_index.cpp
+    schemeshard__operation_drop_index.cpp
+    schemeshard__operation_drop_indexed_table.cpp
     schemeshard__operation_drop_kesus.cpp
     schemeshard__operation_drop_lock.cpp
     schemeshard__operation_drop_pq.cpp

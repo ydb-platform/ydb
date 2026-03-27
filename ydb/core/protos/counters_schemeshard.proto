@@ -283,6 +283,10 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateColumnTableIndex = 221 [(CounterOpts) = {Name: "InFlightOps/CreateColumnTableIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropColumnTableIndex = 222 [(CounterOpts) = {Name: "InFlightOps/DropColumnTableIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterColumnTableIndex = 223 [(CounterOpts) = {Name: "InFlightOps/AlterColumnTableIndex"}];
 }
 
 enum ECumulativeCounters {
@@ -465,6 +469,10 @@ enum ECumulativeCounters {
     COUNTER_FORCED_COMPACTION_LOANED = 139        [(CounterOpts) = {Name: "ForcedCompactionLoaned"}];
 
     COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
+
+    COUNTER_FINISHED_OPS_TxCreateColumnTableIndex = 141 [(CounterOpts) = {Name: "FinishedOps/CreateColumnTableIndex"}];
+    COUNTER_FINISHED_OPS_TxDropColumnTableIndex = 142 [(CounterOpts) = {Name: "FinishedOps/DropColumnTableIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterColumnTableIndex = 143 [(CounterOpts) = {Name: "FinishedOps/AlterColumnTableIndex"}];
 }
 
 enum EPercentileCounters {

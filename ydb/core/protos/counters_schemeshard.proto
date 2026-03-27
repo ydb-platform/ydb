@@ -283,6 +283,10 @@ enum ESimpleCounters {
     COUNTER_FORCED_COMPACTION_PROCESSING_QUEUE_RUNNING = 219 [(CounterOpts) = {Name: "ForcedCompactionProcessingQueueRunning"}];
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateColumnTableIndex = 221 [(CounterOpts) = {Name: "InFlightOps/CreateColumnTableIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropColumnTableIndex = 222 [(CounterOpts) = {Name: "InFlightOps/DropColumnTableIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterColumnTableIndex = 223 [(CounterOpts) = {Name: "InFlightOps/AlterColumnTableIndex"}];
 }
 
 enum ECumulativeCounters {
@@ -471,6 +475,10 @@ enum ECumulativeCounters {
     COUNTER_SPLIT_MERGE_PARTITIONS_SKIPPED  = 141 [(CounterOpts) = {Name: "SplitMergePartitionsSkipped"}];
     // Partitions actually rewritten during split/merge (those at or after the split point).
     COUNTER_SPLIT_MERGE_PARTITIONS_REWRITTEN = 142 [(CounterOpts) = {Name: "SplitMergePartitionsRewritten"}];
+
+    COUNTER_FINISHED_OPS_TxCreateColumnTableIndex = 143 [(CounterOpts) = {Name: "FinishedOps/CreateColumnTableIndex"}];
+    COUNTER_FINISHED_OPS_TxDropColumnTableIndex = 144 [(CounterOpts) = {Name: "FinishedOps/DropColumnTableIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterColumnTableIndex = 145 [(CounterOpts) = {Name: "FinishedOps/AlterColumnTableIndex"}];
 }
 
 enum EPercentileCounters {

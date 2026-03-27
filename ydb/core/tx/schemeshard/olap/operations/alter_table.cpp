@@ -1,7 +1,6 @@
 #include "alter/abstract/object.h"
 #include "alter/abstract/update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
-#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -12,71 +11,6 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
-
-namespace {
-
-void DropLocalIndexPaths(
-    TTxId txId,
-    const THashSet<TString>& targetIndexNames,
-    NSchemeShard::TPath& tablePath,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db)
-{
-    TVector<TPathId> toDrop;
-    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
-        auto it = context.SS->PathsById.find(childPathId);
-        if (it == context.SS->PathsById.end() || !it->second->IsTableIndex()) {
-            continue;
-        }
-        if (!targetIndexNames.contains(childName)) {
-            toDrop.push_back(childPathId);
-        }
-    }
-
-    for (const auto& pathId : toDrop) {
-        context.SS->PersistRemoveTableIndex(db, pathId);
-        auto childPath = context.SS->PathsById.at(pathId);
-        childPath->SetDropped(TStepId(1), txId);
-        context.SS->PersistRemovePath(db, childPath);
-        tablePath.Base()->DecAliveChildrenPrivate();
-        tablePath.DomainInfo()->DecPathsInside(context.SS);
-    }
-}
-
-THashSet<TString> CollectExistingIndexNames(TPathElement::TPtr tablePath, TSchemeShard* ss) {
-    THashSet<TString> result;
-    for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
-        auto it = ss->PathsById.find(childPathId);
-        if (it != ss->PathsById.end() && it->second->IsTableIndex()) {
-            result.insert(childName);
-        }
-    }
-    return result;
-}
-
-void ApplyLocalIndexChanges(
-    TTxId txId,
-    const THashSet<TString>& existingIndexNames,
-    NSchemeShard::TPath& path,
-    TOperationContext& context,
-    NIceDb::TNiceDb& db)
-{
-    auto tableInfo = context.SS->ColumnTables.GetVerifiedPtr(path->PathId);
-    if (!tableInfo->AlterData) {
-        return;
-    }
-    const auto& targetSchema = tableInfo->AlterData->Description.GetSchema();
-    NOlap::CreateLocalIndexSchemeObjects(txId, targetSchema, existingIndexNames, path, context, db);
-    NOlap::UpdateLocalIndexSchemeObjects(targetSchema, existingIndexNames, path.Base(), context, db);
-
-    THashSet<TString> targetIndexNames;
-    for (const auto& idx : targetSchema.GetIndexes()) {
-        targetIndexNames.insert(idx.GetName());
-    }
-    DropLocalIndexPaths(txId, targetIndexNames, path, context, db);
-}
-
-} // anonymous namespace
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -186,8 +120,6 @@ public:
         std::shared_ptr<ISSEntity> originalEntity = ISSEntity::GetEntityVerified(context, objPath);
         TUpdateRestoreContext urContext(originalEntity.get(), &context, (ui64)OperationId.GetTxId());
         std::shared_ptr<ISSEntityUpdate> update = originalEntity->RestoreUpdateVerified(urContext);
-
-        NOlap::FinalizeNewLocalIndexPaths(step, path, context, db);
 
         TUpdateFinishContext fContext(&objPath, &context, &db, NKikimr::NOlap::TSnapshot(ev->Get()->StepId, ev->Get()->TxId));
         update->Finish(fContext).Validate();
@@ -417,8 +349,6 @@ public:
             path->PathState = TPathElement::EPathState::EPathStateAlter;
             context.SS->PersistLastTxId(db, path.Base());
 
-            auto existingIndexNames = CollectExistingIndexNames(path.Base(), context.SS);
-
             {
                 TUpdateStartContext startContext(&path, &context, &db);
                 auto status = update->Start(startContext);
@@ -427,8 +357,6 @@ public:
                     return result;
                 }
             }
-
-            ApplyLocalIndexChanges(TTxId(OperationId.GetTxId()), existingIndexNames, path, context, db);
 
             context.SS->PersistTxState(db, OperationId);
 
@@ -436,8 +364,6 @@ public:
 
             SetState(NextState());
         } else {
-            auto existingIndexNames = CollectExistingIndexNames(path.Base(), context.SS);
-
             {
                 TUpdateStartContext startContext(&path, &context, &db);
                 auto status = update->Start(startContext);
@@ -446,9 +372,6 @@ public:
                     return result;
                 }
             }
-
-            ApplyLocalIndexChanges(TTxId(OperationId.GetTxId()), existingIndexNames, path, context, db);
-            NOlap::FinalizeNewLocalIndexPaths(TStepId(1), path.Base(), context, db);
 
             {
                 TUpdateFinishContext fContext(&path, &context, &db, {});

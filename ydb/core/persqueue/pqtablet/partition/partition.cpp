@@ -511,7 +511,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
-    //Set Start Offset
+    // We keep the service information about the partition. For supportive partitions, we additionally
+    // persist statistics on how many were written.
     auto write = request->Record.AddCmdWrite();
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 

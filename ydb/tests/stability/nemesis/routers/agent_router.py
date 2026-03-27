@@ -4,7 +4,7 @@ import socket
 from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.models import ProcessInfo
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import PROCESS_TYPES
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisManager
 
@@ -29,10 +29,10 @@ def create_process_helper(
     payload=None,
 ):
     """Helper function to create a process (can be called directly)"""
-    if process_type not in PROCESS_TYPES:
+    if process_type not in NEMESIS_TYPES:
         return {"status": "error", "message": "Invalid process type"}
 
-    process_def = PROCESS_TYPES[process_type]
+    process_def = NEMESIS_TYPES[process_type]
     runner = process_def['runner']
 
     manager.start_process(

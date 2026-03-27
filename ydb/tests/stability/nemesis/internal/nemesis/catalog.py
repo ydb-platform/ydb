@@ -1,12 +1,13 @@
 """
 Nemesis registration for the stability nemesis app.
 
-Source of truth:
-- ALL_NEMESIS_TYPES — every nemesis: agent runner + default schedule interval (keys = process types)
-- NEMESIS_PLANNERS — optional custom master planners (subset of ALL_NEMESIS_TYPES keys)
-  Types without an entry use DefaultRandomHostPlanner (one random host per scheduled tick).
+Single registry:
+- NEMESIS_TYPES — each type: runner, schedule, ui_group, optional planner_cls.
+  If planner_cls is omitted, build_all_planners() uses DefaultRandomHostPlanner.
 
-ChaosMasterStore uses build_all_planners().
+- NEMESIS_UI_GROUPS — group id -> description for /api/process_types/grouped.
+
+ChaosMasterStore receives a planner map from build_all_planners().
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from __future__ import annotations
 import logging
 import signal
 import subprocess
+from typing import Any, Type
 
 from ydb.tests.tools.nemesis.library import base
 from ydb.tests.library.nemesis.network.client import NetworkClient
@@ -98,43 +100,87 @@ class KillNodeNemesis(MonitoredAgentActor):
         self.on_success_extract_fault()
 
 
-# Agent-side: runner instance + default schedule interval (seconds)
-ALL_NEMESIS_TYPES = {
+NEMESIS_UI_GROUPS: dict[str, dict[str, str]] = {
+    "NetworkNemesis": {
+        "description": "Network fault injection",
+    },
+    "NodeNemesis": {
+        "description": "Node process failures",
+    },
+}
+
+
+NEMESIS_TYPES: dict[str, dict[str, Any]] = {
     NETWORK_NEMESIS: {
         "runner": NetworkNemesis(),
         "schedule": 200,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": NetworkNemesisPlanner,
     },
     NODE_KILLER: {
         "runner": KillNodeNemesis(),
         "schedule": 300,
+        "ui_group": "NodeNemesis",
+        "planner_cls": KillNodeNemesisPlanner,
     },
 }
 
-# Master-side: only custom planners; other ALL_NEMESIS_TYPES keys get DefaultRandomHostPlanner
-NEMESIS_PLANNERS = {
-    NETWORK_NEMESIS: NetworkNemesisPlanner(),
-    NODE_KILLER: KillNodeNemesisPlanner(),
-}
-
-if not set(NEMESIS_PLANNERS) <= set(ALL_NEMESIS_TYPES):
-    raise RuntimeError("NEMESIS_PLANNERS keys must be a subset of ALL_NEMESIS_TYPES")
-
 
 def build_all_planners() -> dict[str, NemesisPlannerBase]:
-    """Full planner map: explicit entries from NEMESIS_PLANNERS, else default random host per tick."""
+    """Planner per registered type: planner_cls from registry or DefaultRandomHostPlanner."""
     merged: dict[str, NemesisPlannerBase] = {}
-    for key in ALL_NEMESIS_TYPES:
-        if key in NEMESIS_PLANNERS:
-            merged[key] = NEMESIS_PLANNERS[key]
+    for key, spec in NEMESIS_TYPES.items():
+        cls: Type[NemesisPlannerBase] | None = spec.get("planner_cls")
+        if cls is not None:
+            merged[key] = cls()
         else:
             merged[key] = DefaultRandomHostPlanner(nemesis_type=key)
     return merged
 
 
-MASTER_MANAGED_TYPES = frozenset(ALL_NEMESIS_TYPES.keys())
+def get_all_nemesis_types() -> list[str]:
+    return list(NEMESIS_TYPES.keys())
 
-PROCESS_TYPES = {**ALL_NEMESIS_TYPES}
+
+def nemesis_types_flat_for_api() -> list[dict[str, Any]]:
+    """Rows for GET /api/process_types."""
+    result: list[dict[str, Any]] = []
+    for name, definition in NEMESIS_TYPES.items():
+        runner = definition.get("runner")
+        description = (
+            runner.nemesis_description if runner and hasattr(runner, "nemesis_description") else ""
+        )
+        result.append(
+            {
+                "name": name,
+                "description": description,
+                "schedule": int(definition.get("schedule") or 60),
+            }
+        )
+    return result
 
 
-def get_all_nemesis_types():
-    return list(PROCESS_TYPES.keys())
+def nemesis_types_grouped_for_api() -> dict[str, Any]:
+    """Payload for GET /api/process_types/grouped."""
+    groups: dict[str, Any] = {}
+    for gid, meta in NEMESIS_UI_GROUPS.items():
+        groups[gid] = {"description": meta["description"], "nemesis": []}
+    groups["Other"] = {"description": "Other nemesis types", "nemesis": []}
+
+    for name, definition in NEMESIS_TYPES.items():
+        runner = definition.get("runner")
+        description = (
+            runner.nemesis_description if runner and hasattr(runner, "nemesis_description") else ""
+        )
+        gid = definition.get("ui_group", "Other")
+        if gid not in groups:
+            groups[gid] = {"description": "", "nemesis": []}
+        groups[gid]["nemesis"].append(
+            {
+                "name": name,
+                "description": description,
+                "schedule": int(definition.get("schedule") or 60),
+            }
+        )
+
+    return {k: v for k, v in groups.items() if v["nemesis"]}

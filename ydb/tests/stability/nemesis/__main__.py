@@ -4,10 +4,8 @@ import logging
 import sys
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
-from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
-from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 from ydb.tests.stability.nemesis.internal.config import get_master_settings
+from ydb.tests.stability.nemesis.internal.warden_catalog import MASTER_LIVENESS_CHECKS
 from ydb.tests.stability.nemesis.internal.master.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 
 
@@ -87,19 +85,12 @@ def run_liveness_checks(settings):
     # Create cluster object
     cluster = ExternalKiKiMRCluster(get_master_settings().yaml_config_location, None, None)
 
-    # Define wardens to run
-    warden_configs = [
-        ('AllTabletsAlive', lambda: AllTabletsAliveLivenessWarden(cluster)),
-        ('BootQueueSize', lambda: BootQueueSizeWarden(cluster)),
-        ('SchemeShardNoInFlightTx', lambda: SchemeShardHasNoInFlightTransactions(cluster)),
-        ('TxCompleteLag', lambda: TxCompleteLagLivenessWarden(cluster)),
-    ]
-
     checks = []
     try:
-        for name, warden_fn in warden_configs:
+        for spec in MASTER_LIVENESS_CHECKS:
+            name = spec.name
             try:
-                warden = warden_fn()
+                warden = spec.build(cluster)
                 violations = warden.list_of_liveness_violations
                 status = 'violation' if violations else 'ok'
                 checks.append({

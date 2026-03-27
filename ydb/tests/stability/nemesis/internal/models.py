@@ -32,7 +32,7 @@ class ProcessTypeRow:
 
     name: str
     description: str
-    schedule: int = 60  # default interval (sec) from catalog.ALL_NEMESIS_TYPES
+    schedule: int = 60  # default interval (sec) from catalog.NEMESIS_TYPES
 
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
@@ -62,9 +62,14 @@ class WardenCheckResult:
     status: str  # 'ok', 'violation', 'error'
     error_message: Optional[str] = None
     affected_hosts: List[str] = field(default_factory=list)
+    # Stable id from warden_catalog (API / master aggregation); optional for legacy liveness rows
+    check_id: Optional[str] = None
 
     def to_json(self) -> dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        if d.get("check_id") is None:
+            d.pop("check_id", None)
+        return d
 
 
 @dataclass

@@ -1,21 +1,20 @@
 import logging
 import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 
 import requests
 from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.config import Settings
-from ydb.tests.stability.nemesis.internal.master import runtime_state
-from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import get_chaos_store
+from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import ChaosMasterStore
 from ydb.tests.stability.nemesis.internal.master.nemesis.schedule_loop import OrchestratorNemesisSchedule
-from ydb.tests.stability.nemesis.internal.master.orchestrator_warden_checker import (
-    OrchestratorWardenChecker,
-    get_all_warden_definitions,
-)
+from ydb.tests.stability.nemesis.internal.master.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal.warden_catalog import get_all_warden_definitions
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
-    MASTER_MANAGED_TYPES,
-    PROCESS_TYPES,
+    NEMESIS_TYPES,
+    nemesis_types_flat_for_api,
+    nemesis_types_grouped_for_api,
 )
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 
@@ -25,11 +24,13 @@ logger = logging.getLogger(__name__)
 
 blueprint = Blueprint('orchestrator', __name__)
 
-# Module-level state
-hosts = []
+# Module-level state (orchestrator wiring; see app.initialize_app)
+hosts: list[str] = []
 mon_port = 8765  # Default monitoring port
-orchestrator_warden_checker: OrchestratorWardenChecker = None  # initialized in app.py
-nemesis_schedule: OrchestratorNemesisSchedule | None = None  # initialized in app.py
+orchestrator_warden_checker: OrchestratorWardenChecker | None = None
+nemesis_schedule: OrchestratorNemesisSchedule | None = None
+chaos_store: ChaosMasterStore | None = None
+healthcheck_reporter: Any = None
 
 
 def get_app_port() -> int:
@@ -45,6 +46,22 @@ def is_local_host(host: str) -> bool:
         return host in ('localhost', '127.0.0.1', '::1', app_host)
     except Exception:
         return False
+
+
+def fetch_agent_warden_result(host: str) -> dict[str, Any]:
+    """HTTP or in-process: last warden JSON from an agent host (injected into OrchestratorWardenChecker)."""
+    try:
+        if is_local_host(host):
+            wc = agent_router.warden_checker
+            if wc is None:
+                return {"status": "error", "error_message": "warden_checker not initialized"}
+            return wc.get_last_result()
+        port = get_app_port()
+        resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)
+        return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to get warden result from {host}: {e}")
+        return {"status": "error", "error_message": str(e)}
 
 
 @blueprint.route("/api/hosts/<host>/processes", methods=["GET"])
@@ -100,7 +117,7 @@ def create_host_process():
     if not host:
         return jsonify({"status": "error", "message": "Missing host field"}), 400
 
-    if process_type not in PROCESS_TYPES:
+    if process_type not in NEMESIS_TYPES:
         return jsonify({"status": "error", "message": "Invalid process type"}), 400
     if host not in hosts:
         return jsonify({"status": "error", "message": "Invalid host"}), 400
@@ -114,12 +131,13 @@ def create_host_process():
         ), 400
 
     try:
-        if process_type not in MASTER_MANAGED_TYPES:
+        if process_type not in NEMESIS_TYPES:
             return jsonify(
                 {"status": "error", "message": "Only orchestrator-planned nemesis types are supported"}
             ), 400
-        store = get_chaos_store()
-        cmds = store.plan_manual(process_type, host, action)
+        if chaos_store is None:
+            return jsonify({"status": "error", "message": "Chaos store not initialized"}), 500
+        cmds = chaos_store.plan_manual(process_type, host, action)
         if not cmds:
             return jsonify(
                 {"status": "error", "message": "Could not plan manual execution for this type/action"}
@@ -144,77 +162,16 @@ def create_host_process():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# Nemesis group definitions (UI); patterns match registered PROCESS_TYPES names
-NEMESIS_GROUPS = {
-    "NodeNemesis": {
-        "description": "Node process failures",
-        "patterns": ["NodeKiller"],
-    },
-    "NetworkNemesis": {
-        "description": "Network fault injection",
-        "patterns": ["Network"],
-    },
-}
-
-
-def get_nemesis_group(nemesis_name: str) -> str:
-    """Determine which group a nemesis belongs to based on its name."""
-    for group_name, group_info in NEMESIS_GROUPS.items():
-        for pattern in group_info["patterns"]:
-            if pattern in nemesis_name:
-                return group_name
-    return "Other"
-
-
 @blueprint.route("/api/process_types", methods=["GET"])
 def get_process_types():
     """Return process types with their descriptions"""
-    result = []
-    for name, definition in PROCESS_TYPES.items():
-        runner = definition.get('runner')
-        description = runner.nemesis_description if runner and hasattr(runner, 'nemesis_description') else ""
-        result.append(
-            {
-                "name": name,
-                "description": description,
-                "schedule": int(definition.get("schedule") or 60),
-            }
-        )
-    return jsonify(result)
+    return jsonify(nemesis_types_flat_for_api())
 
 
 @blueprint.route("/api/process_types/grouped", methods=["GET"])
 def get_process_types_grouped():
-    """Return process types grouped by category with descriptions"""
-    groups = {}
-
-    # Initialize groups
-    for group_name, group_info in NEMESIS_GROUPS.items():
-        groups[group_name] = {
-            "description": group_info["description"],
-            "nemesis": []
-        }
-    groups["Other"] = {
-        "description": "Other nemesis types",
-        "nemesis": []
-    }
-
-    # Categorize each nemesis
-    for name, definition in PROCESS_TYPES.items():
-        runner = definition.get('runner')
-        description = runner.nemesis_description if runner and hasattr(runner, 'nemesis_description') else ""
-        group = get_nemesis_group(name)
-
-        groups[group]["nemesis"].append({
-            "name": name,
-            "description": description,
-            "schedule": int(definition.get("schedule") or 60),
-        })
-
-    # Remove empty groups
-    groups = {k: v for k, v in groups.items() if v["nemesis"]}
-
-    return jsonify(groups)
+    """Return process types grouped by category with descriptions (from catalog NEMESIS_UI_GROUPS)."""
+    return jsonify(nemesis_types_grouped_for_api())
 
 
 @blueprint.route("/api/hosts/health", methods=["GET"])
@@ -249,7 +206,7 @@ def set_schedule():
     if enabled is None:
         return jsonify({"status": "error", "message": "Missing enabled field"}), 400
 
-    if process_type not in PROCESS_TYPES:
+    if process_type not in NEMESIS_TYPES:
         return jsonify({"status": "error", "message": "Invalid process type"}), 400
 
     if enabled:
@@ -273,7 +230,7 @@ def set_schedule():
 def get_schedule():
     """Return schedule status with intervals"""
     return jsonify(
-        nemesis_schedule.schedule_status_for_types(PROCESS_TYPES.keys())
+        nemesis_schedule.schedule_status_for_types(NEMESIS_TYPES.keys())
     )
 
 
@@ -285,7 +242,7 @@ def get_schedule_history():
 
 @blueprint.route("/api/healthcheck", methods=["GET"])
 def get_healthcheck():
-    rep = runtime_state.healthcheck_reporter
+    rep = healthcheck_reporter
     if rep:
         return jsonify(rep.last_results)
     return jsonify({})

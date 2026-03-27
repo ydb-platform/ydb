@@ -8,117 +8,22 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
-import requests
-
-import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.stability.nemesis.internal.config import get_master_settings
-from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop, asyncio_run_blocking
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
+from ydb.tests.stability.nemesis.internal.warden_catalog import (
+    CHECK_ID_AGENT_UNIFIED_VERIFY,
+    CHECK_ID_MASTER_PDISK,
+    CHECK_ID_MASTER_VERIFY_AGGREGATED,
+    MASTER_SAFETY_CHECK_IDS_ORDER,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-def liveness_warden_factory() -> List[Dict[str, Any]]:
-    """
-    Returns list of liveness warden definitions.
-    These run centrally on orchestrator via HTTP monitoring.
-    """
-    return [
-        {
-            'name': 'AllTabletsAlive',
-            'description': 'Check that all tablets are alive',
-        },
-        {
-            'name': 'BootQueueSize',
-            'description': 'Check boot queue size is acceptable',
-        },
-        {
-            'name': 'SchemeShardNoInFlightTx',
-            'description': 'Check SchemeShard has no stuck in-flight transactions',
-        },
-        {
-            'name': 'TxCompleteLag',
-            'description': 'Check transaction completion lag',
-        },
-    ]
-
-
-def agent_safety_warden_factory() -> List[Dict[str, Any]]:
-    """
-    Returns list of agent safety warden definitions.
-    These run locally on each agent (log checks, dmesg, etc.).
-    """
-    return [
-        {
-            'name': 'GrepLogFileForMarkersSafetyWarden',
-            'description': 'Check kikimr.start logs for error markers',
-        },
-        {
-            'name': 'GrepGzippedLogFilesForMarkersSafetyWarden',
-            'description': 'Check gzipped kikimr.start logs for error markers',
-        },
-        {
-            'name': 'GrepDMesgForPatternsSafetyWarden',
-            'description': 'Check dmesg for OOM and other critical patterns',
-        },
-        {
-            'name': 'UnifiedAgentVerifyFailedSafetyWarden',
-            'description': 'Check unified_agent logs for VERIFY failed errors',
-        },
-    ]
-
-
-def orchestrator_safety_warden_factory() -> List[Dict[str, Any]]:
-    """
-    Returns list of orchestrator safety warden definitions.
-    These run centrally on orchestrator via HTTP monitoring.
-    """
-    return [
-        {
-            'name': 'AllPDisksAreInValidState',
-            'description': 'Check all PDisks are in valid state',
-        },
-        {
-            'name': 'UnifiedAgentVerifyFailedAggregated',
-            'description': 'Aggregate and deduplicate VERIFY failed errors from all agents',
-        },
-    ]
-
-
-def get_all_warden_definitions() -> List[Dict[str, Any]]:
-    """Get all warden definitions as a list of dicts for API."""
-    all_wardens = []
-
-    for w in liveness_warden_factory():
-        all_wardens.append({
-            'name': w['name'],
-            'category': 'liveness',
-            'description': w['description'],
-            'location': 'master'
-        })
-
-    for w in agent_safety_warden_factory():
-        all_wardens.append({
-            'name': w['name'],
-            'category': 'safety',
-            'description': w['description'],
-            'location': 'agent'
-        })
-
-    for w in orchestrator_safety_warden_factory():
-        all_wardens.append({
-            'name': w['name'],
-            'category': 'safety',
-            'description': w['description'],
-            'location': 'master'
-        })
-
-    return all_wardens
 
 
 def deduplicate_verify_failed(violations: List[str]) -> List[str]:
@@ -170,7 +75,14 @@ def deduplicate_verify_failed(violations: List[str]) -> List[str]:
 class OrchestratorWardenChecker:
     """Orchestrator-side warden checker for liveness and safety checks."""
 
-    def __init__(self, hosts: List[str] = None, mon_port: int = 8765):
+    def __init__(
+        self,
+        hosts: List[str] = None,
+        mon_port: int = 8765,
+        *,
+        fetch_agent_warden_result: Optional[Callable[[str], Dict[str, Any]]] = None,
+        get_monitored_hosts: Optional[Callable[[], List[str]]] = None,
+    ):
         self._last_report: WardenCheckReport = WardenCheckReport(status='idle')
         self._is_running: bool = False
         self._lock = threading.Lock()
@@ -178,6 +90,8 @@ class OrchestratorWardenChecker:
         self._mon_port = mon_port
         self._cluster = None
         self._event_loop = BackgroundEventLoop()
+        self._fetch_agent_warden = fetch_agent_warden_result
+        self._get_monitored_hosts = get_monitored_hosts
 
     def set_hosts(self, hosts: List[str], mon_port: int = None):
         """Set hosts to monitor."""
@@ -241,35 +155,37 @@ class OrchestratorWardenChecker:
                         )
                 logger.debug(f"Liveness checks completed: {len(liveness_results)} checks")
 
-                # PDisk check also uses HTTP, run it here
-                logger.debug("Running PDisk safety check...")
-                for result in self._run_pdisk_check_with_progress(cluster):
-                    safety_results.append(result)
-                    # Update report with current progress
-                    with self._lock:
-                        self._last_report = WardenCheckReport(
-                            status='running',
-                            started_at=self._last_report.started_at,
-                            completed_at=None,
-                            liveness_checks=liveness_results.copy(),
-                            safety_checks=safety_results.copy()
-                        )
-                logger.debug(f"PDisk check completed: {len(safety_results)} checks")
+                logger.debug(
+                    "Running master safety checks (parallel asyncio tasks: %s)",
+                    ", ".join(MASTER_SAFETY_CHECK_IDS_ORDER),
+                )
 
-                # Run aggregated VERIFY failed check
-                logger.debug("Running aggregated VERIFY failed check...")
-                aggregated_result = await self._run_aggregated_verify_failed_check_async()
-                safety_results.append(aggregated_result)
-                # Update report with current progress
+                async def _run_one_master_safety(check_id: str):
+                    if check_id == CHECK_ID_MASTER_PDISK:
+                        return await asyncio_run_blocking(
+                            lambda: list(self._run_pdisk_check_sync(cluster))
+                        )
+                    if check_id == CHECK_ID_MASTER_VERIFY_AGGREGATED:
+                        return [await self._run_aggregated_verify_failed_check_async()]
+                    raise RuntimeError(f"Unknown master safety check_id: {check_id}")
+
+                groups = await asyncio.gather(
+                    *(_run_one_master_safety(cid) for cid in MASTER_SAFETY_CHECK_IDS_ORDER)
+                )
+                for part in groups:
+                    safety_results.extend(part)
                 with self._lock:
                     self._last_report = WardenCheckReport(
                         status='running',
                         started_at=self._last_report.started_at,
                         completed_at=None,
                         liveness_checks=liveness_results.copy(),
-                        safety_checks=safety_results.copy()
+                        safety_checks=safety_results.copy(),
                     )
-                logger.debug(f"Aggregated VERIFY failed check completed: status={aggregated_result.status}")
+                logger.debug(
+                    f"Master safety done: pdisk={len(pdisk_results)} row(s), "
+                    f"aggregated status={aggregated_result.status}"
+                )
 
             # Count results by status
             liveness_ok = sum(1 for r in liveness_results if r.status == 'ok')
@@ -428,12 +344,6 @@ class OrchestratorWardenChecker:
         for result in self._run_liveness_checks_sync(timeout_seconds):
             yield result
 
-    def _run_pdisk_check_with_progress(self, cluster) -> List[WardenCheckResult]:
-        """Run PDisk state check and yield results."""
-        # Since this is a single check, we just yield the result
-        for result in self._run_pdisk_check_sync(cluster):
-            yield result
-
     def _run_pdisk_check_sync(self, cluster) -> List[WardenCheckResult]:
         """Run PDisk state check."""
         results = []
@@ -450,7 +360,8 @@ class OrchestratorWardenChecker:
                 name='AllPDisksAreInValidState',
                 category='safety',
                 violations=violations if violations else [],
-                status=status
+                status=status,
+                check_id=CHECK_ID_MASTER_PDISK,
             ))
             if violations:
                 logger.info(f"AllPDisksAreInValidState: {len(violations)} violation(s) found")
@@ -461,28 +372,26 @@ class OrchestratorWardenChecker:
                 category='safety',
                 violations=[],
                 status='error',
-                error_message=str(e)
+                error_message=str(e),
+                check_id=CHECK_ID_MASTER_PDISK,
             ))
 
         return results
 
     async def _run_aggregated_verify_failed_check_async(self, max_wait_seconds: int = 120, poll_interval_seconds: float = 2.0) -> WardenCheckResult:
         """Aggregate VERIFY failed errors from all agents."""
-        from ydb.tests.stability.nemesis.routers.orchestrator_router import hosts, get_app_port, is_local_host
-
-        port = get_app_port()
+        monitored = (
+            self._get_monitored_hosts()
+            if self._get_monitored_hosts is not None
+            else list(self._hosts)
+        )
 
         def get_agent_status(host: str) -> Dict[str, Any]:
             """Get the warden check status from an agent."""
+            if self._fetch_agent_warden is None:
+                return {"status": "error", "error_message": "fetch_agent_warden_result not configured"}
             try:
-                if is_local_host(host):
-                    wc = agent_router.warden_checker
-                    if wc is None:
-                        return {"status": "error", "error_message": "warden_checker not initialized"}
-                    return wc.get_last_result()
-                else:
-                    resp = requests.get(f"http://{host}:{port}/api/warden/result", timeout=10)
-                    return resp.json()
+                return self._fetch_agent_warden(host)
             except Exception as e:
                 logger.error(f"Failed to get status from {host}: {e}")
                 return {"status": "error", "error_message": str(e)}
@@ -497,9 +406,9 @@ class OrchestratorWardenChecker:
         # Wait for all agents to complete their checks
         start_time = time.time()
         all_completed = False
-        pending_hosts = set(hosts)
+        pending_hosts = set(monitored)
 
-        logger.info(f"Waiting for {len(hosts)} agents to complete safety checks...")
+        logger.info(f"Waiting for {len(monitored)} agents to complete safety checks...")
 
         while not all_completed and (time.time() - start_time) < max_wait_seconds:
             still_pending = set()
@@ -540,7 +449,10 @@ class OrchestratorWardenChecker:
                 # Extract VERIFY failed violations
                 if result.get("safety_checks"):
                     for check in result["safety_checks"]:
-                        if "UnifiedAgentVerifyFailed" in check.get("name", ""):
+                        if check.get("check_id") == CHECK_ID_AGENT_UNIFIED_VERIFY:
+                            if check.get("violations"):
+                                return host, check["violations"]
+                        elif "UnifiedAgentVerifyFailed" in check.get("name", ""):
                             if check.get("violations"):
                                 return host, check["violations"]
                 return host, []
@@ -550,7 +462,7 @@ class OrchestratorWardenChecker:
 
         # Get results from all hosts sequentially
         logger.debug("Collecting VERIFY failed violations from all agents...")
-        for host in hosts:
+        for host in monitored:
             host_result, violations = get_verify_failed_from_host(host)
             if violations:
                 logger.debug(f"Agent {host}: {len(violations)} VERIFY failed violation(s)")
@@ -578,8 +490,6 @@ class OrchestratorWardenChecker:
             violations=aggregated_violations,
             status='violation' if aggregated_violations or error_message else 'ok',
             error_message=error_message,
-            affected_hosts=verify_failed_hosts
+            affected_hosts=verify_failed_hosts,
+            check_id=CHECK_ID_MASTER_VERIFY_AGGREGATED,
         )
-
-
-orchestrator_warden_checker = OrchestratorWardenChecker()

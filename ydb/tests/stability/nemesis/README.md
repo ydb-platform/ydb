@@ -51,7 +51,7 @@
 
 - **Общее** (и master, и agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
 - **`internal/agent/`** — только агент: `agent_warden_checker.py`, `nemesis/runner.py` (`NemesisManager`).
-- **`internal/master/`** — только оркестратор: `install.py`, `runtime_state.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики).
+- **`internal/master/`** — только оркестратор: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики). Состояние оркестратора (hosts, healthcheck, chaos store) живёт в `routers/orchestrator_router.py`.
 
 ## UI и API-модели
 

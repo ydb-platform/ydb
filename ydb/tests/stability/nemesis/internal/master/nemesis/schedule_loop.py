@@ -15,8 +15,8 @@ import requests
 
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import MASTER_MANAGED_TYPES
-from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import get_chaos_store
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
+from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import ChaosMasterStore
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ class OrchestratorNemesisSchedule:
     def __init__(
         self,
         *,
+        chaos_store: ChaosMasterStore,
         get_hosts: Callable[[], List[str]],
         is_local_host: Callable[[str], bool],
         get_app_port: Callable[[], int],
@@ -41,6 +42,7 @@ class OrchestratorNemesisSchedule:
         self._tasks: dict[str, dict] = {}
         self._executions_history: list[dict] = []
         self._history_limit = history_limit
+        self._chaos_store = chaos_store
         self._get_hosts = get_hosts
         self._is_local_host = is_local_host
         self._get_app_port = get_app_port
@@ -172,10 +174,9 @@ class OrchestratorNemesisSchedule:
 
     def flush_disable_extracts(self, process_type: str) -> None:
         """Plan and run extract on all tracked hosts when schedule is turned off."""
-        if process_type not in MASTER_MANAGED_TYPES:
+        if process_type not in NEMESIS_TYPES:
             return
-        store = get_chaos_store()
-        cmds = store.plan_disable_schedule(process_type)
+        cmds = self._chaos_store.plan_disable_schedule(process_type)
         if not cmds:
             return
         logger.info("Disable schedule: %d extract dispatch(es) for %s", len(cmds), process_type)
@@ -183,9 +184,8 @@ class OrchestratorNemesisSchedule:
             self.dispatch_command(cmd, track_history=True)
 
     def _run_planned_tick(self, process_type: str) -> None:
-        store = get_chaos_store()
         hosts = self._get_hosts()
-        cmds = store.plan_scheduled_tick(process_type, hosts)
+        cmds = self._chaos_store.plan_scheduled_tick(process_type, hosts)
         if not cmds:
             return
         logger.info("Running %d dispatch(es) for %s", len(cmds), process_type)

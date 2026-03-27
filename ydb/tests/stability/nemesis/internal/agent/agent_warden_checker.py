@@ -1,50 +1,47 @@
 """
-AgentWardenChecker - Agent-side asynchronous safety checks collector.
+AgentWardenChecker — safety checks on each agent host.
 
-This module provides the AgentWardenChecker class that runs on each agent
-and performs SAFETY checks only (log checks, dmesg OOM - requires local access).
-
-Uses warden definitions from agent_safety_warden_factory().
+Each safety warden instance runs as its own asyncio task on the background event loop
+(asyncio_run_blocking), with progress merged into the report as tasks finish.
 """
 
+from __future__ import annotations
+
+import asyncio
 import logging
 import socket
 import threading
 from datetime import datetime
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Tuple
 
 from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
 from ydb.tests.library.wardens.logs import (
     kikimr_grep_dmesg_safety_warden_factory,
     kikimr_start_logs_safety_warden_factory,
 )
-from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
+from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop, asyncio_run_blocking
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
+from ydb.tests.stability.nemesis.internal.warden_catalog import (
+    CHECK_ID_AGENT_DMESG,
+    CHECK_ID_AGENT_KIKIMR_START_PLAIN,
+    CHECK_ID_AGENT_UNIFIED_VERIFY,
+    check_id_for_agent_warden_instance,
+)
 
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# Agent Warden Checker
-# =============================================================================
 
 class AgentWardenChecker:
     """
-    Agent-side warden checker that runs SAFETY checks only.
-
-    Safety checks require local access (logs, dmesg) and run on each agent.
-    Uses warden definitions from agent_safety_warden_factory().
-
-    Supports operations:
-    - start_checks(): Begin running checks asynchronously
-    - get_last_result(): Return the last check result
+    Agent-side warden checker: SAFETY only.
 
     Args:
         log_directory: Path to kikimr logs directory (see AgentSettings.kikimr_logs_directory).
     """
 
     def __init__(self, log_directory: str = "/Berkanavt/kikimr/logs/"):
-        self._last_report: WardenCheckReport = WardenCheckReport(status='idle')
+        self._last_report: WardenCheckReport = WardenCheckReport(status="idle")
         self._is_running: bool = False
         self._lock = threading.Lock()
         self._log_directory = log_directory
@@ -52,72 +49,188 @@ class AgentWardenChecker:
         self._event_loop = BackgroundEventLoop()
 
     def is_running(self) -> bool:
-        """Check if checks are currently running."""
         with self._lock:
             return self._is_running
 
     def get_last_result(self) -> Dict[str, Any]:
-        """Return the last check result as a dictionary."""
         with self._lock:
             return self._last_report.to_dict()
 
     def start_checks(self) -> bool:
-        """
-        Start running safety checks in the background event loop.
-
-        Returns:
-            True if checks were started, False if already running
-        """
         with self._lock:
             if self._is_running:
                 logger.debug(f"[{self._hostname}] Safety checks already running, skipping")
                 return False
             self._is_running = True
             self._last_report = WardenCheckReport(
-                status='running',
-                started_at=datetime.utcnow().isoformat() + 'Z'
+                status="running",
+                started_at=datetime.utcnow().isoformat() + "Z",
             )
 
-        logger.info(f"[{self._hostname}] Starting agent safety checks in background event loop")
-
-        # Submit async checks to background event loop
+        logger.info(f"[{self._hostname}] Starting agent safety checks (one asyncio task per check)")
         self._event_loop.submit(self._run_checks_async())
         return True
 
+    def _execute_one_warden(self, warden, check_id: str) -> WardenCheckResult:
+        warden_name = str(warden)
+        try:
+            violations = warden.list_of_safety_violations()
+            status = "violation" if violations else "ok"
+            if violations:
+                logger.info(f"[{self._hostname}] {warden_name}: {len(violations)} violation(s) found")
+            return WardenCheckResult(
+                name=warden_name,
+                category="safety",
+                violations=violations if violations else [],
+                status=status,
+                check_id=check_id,
+            )
+        except Exception as e:
+            logger.error(f"[{self._hostname}] {warden_name}: error - {e}")
+            return WardenCheckResult(
+                name=warden_name,
+                category="safety",
+                violations=[],
+                status="error",
+                error_message=str(e),
+                check_id=check_id,
+            )
+
+    def _execute_unified_verify(self) -> WardenCheckResult:
+        warden_name = "UnifiedAgentVerifyFailedSafetyWarden"
+        try:
+            warden = UnifiedAgentVerifyFailedSafetyWarden(hours_back=24)
+            actual_name = str(warden)
+            violations = warden.list_of_safety_violations()
+            status = "violation" if violations else "ok"
+            if violations:
+                logger.info(f"[{self._hostname}] {actual_name}: {len(violations)} violation(s) found")
+            return WardenCheckResult(
+                name=actual_name,
+                category="safety",
+                violations=violations if violations else [],
+                status=status,
+                check_id=CHECK_ID_AGENT_UNIFIED_VERIFY,
+            )
+        except Exception as e:
+            logger.error(f"[{self._hostname}] {warden_name}: error - {e}")
+            return WardenCheckResult(
+                name=warden_name,
+                category="safety",
+                violations=[],
+                status="error",
+                error_message=str(e),
+                check_id=CHECK_ID_AGENT_UNIFIED_VERIFY,
+            )
+
+    def _collect_agent_safety_jobs(
+        self,
+    ) -> List[Tuple[str, Callable[[], WardenCheckResult]]]:
+        """Ordered (check_id, sync callable) — one job per warden / logical check."""
+        local_hosts = [self._hostname]
+        jobs: List[Tuple[str, Callable[[], WardenCheckResult]]] = []
+
+        try:
+            wardens = kikimr_start_logs_safety_warden_factory(
+                local_hosts,
+                ssh_username=None,
+                deploy_path=self._log_directory,
+                lines_after=5,
+                cut=True,
+                modification_days=1,
+            )
+        except Exception as e:
+            logger.error(f"[{self._hostname}] kikimr_start_logs factory error - {e}")
+
+            def factory_err() -> WardenCheckResult:
+                return WardenCheckResult(
+                    name="kikimr_start_logs_safety_warden_factory",
+                    category="safety",
+                    violations=[],
+                    status="error",
+                    error_message=str(e),
+                    check_id=CHECK_ID_AGENT_KIKIMR_START_PLAIN,
+                )
+
+            jobs.append((CHECK_ID_AGENT_KIKIMR_START_PLAIN, factory_err))
+        else:
+            for w in wardens:
+                cid = check_id_for_agent_warden_instance(w)
+
+                def make_job(warden=w, check_id=cid):
+                    return self._execute_one_warden(warden, check_id)
+
+                jobs.append((cid, make_job))
+
+        try:
+            dmesg_wardens = kikimr_grep_dmesg_safety_warden_factory(
+                local_hosts,
+                ssh_username=None,
+                lines_after=5,
+            )
+        except Exception as e:
+            logger.error(f"[{self._hostname}] dmesg factory error - {e}")
+
+            def dmesg_factory_err() -> WardenCheckResult:
+                return WardenCheckResult(
+                    name="kikimr_grep_dmesg_safety_warden_factory",
+                    category="safety",
+                    violations=[],
+                    status="error",
+                    error_message=str(e),
+                    check_id=CHECK_ID_AGENT_DMESG,
+                )
+
+            jobs.append((CHECK_ID_AGENT_DMESG, dmesg_factory_err))
+        else:
+            for w in dmesg_wardens:
+                cid = check_id_for_agent_warden_instance(w)
+
+                def make_dmesg_job(warden=w, check_id=cid):
+                    return self._execute_one_warden(warden, check_id)
+
+                jobs.append((cid, make_dmesg_job))
+
+        jobs.append((CHECK_ID_AGENT_UNIFIED_VERIFY, self._execute_unified_verify))
+        return jobs
+
     async def _run_checks_async(self):
-        """Run safety checks asynchronously in the background event loop."""
         start_time = datetime.utcnow()
         logger.info(f"[{self._hostname}] Agent safety checks execution started")
 
         try:
-            safety_results = []
+            jobs = self._collect_agent_safety_jobs()
+            n = len(jobs)
+            slots: List[WardenCheckResult | None] = [None] * n
 
-            # Run checks with progress updates
-            for result in self._run_safety_checks_with_progress():
-                safety_results.append(result)
-
-                # Update report with current progress
+            async def run_at(index: int, fn: Callable[[], WardenCheckResult]) -> None:
+                res = await asyncio_run_blocking(fn)
+                slots[index] = res
                 with self._lock:
+                    started = self._last_report.started_at
+                    partial = [slots[i] for i in range(n) if slots[i] is not None]
                     self._last_report = WardenCheckReport(
-                        status='running',
-                        started_at=self._last_report.started_at,
+                        status="running",
+                        started_at=started,
                         completed_at=None,
-                        liveness_checks=[],  # Agent doesn't run liveness checks
-                        safety_checks=safety_results.copy()
+                        liveness_checks=[],
+                        safety_checks=partial,
                     )
 
-            # Count results by status
-            ok_count = sum(1 for r in safety_results if r.status == 'ok')
-            violation_count = sum(1 for r in safety_results if r.status == 'violation')
-            error_count = sum(1 for r in safety_results if r.status == 'error')
+            await asyncio.gather(*(run_at(i, fn) for i, (_, fn) in enumerate(jobs)))
+
+            final = [slots[i] for i in range(n)]
+            ok_count = sum(1 for r in final if r.status == "ok")
+            violation_count = sum(1 for r in final if r.status == "violation")
+            error_count = sum(1 for r in final if r.status == "error")
 
             with self._lock:
                 self._last_report = WardenCheckReport(
-                    status='completed',
+                    status="completed",
                     started_at=self._last_report.started_at,
-                    completed_at=datetime.utcnow().isoformat() + 'Z',
-                    liveness_checks=[],  # Agent doesn't run liveness checks
-                    safety_checks=safety_results
+                    completed_at=datetime.utcnow().isoformat() + "Z",
+                    liveness_checks=[],
+                    safety_checks=final,
                 )
                 self._is_running = False
 
@@ -131,142 +244,11 @@ class AgentWardenChecker:
             logger.error(f"[{self._hostname}] Error running safety checks: {e}")
             with self._lock:
                 self._last_report = WardenCheckReport(
-                    status='error',
+                    status="error",
                     started_at=self._last_report.started_at,
-                    completed_at=datetime.utcnow().isoformat() + 'Z',
+                    completed_at=datetime.utcnow().isoformat() + "Z",
                     liveness_checks=[],
                     safety_checks=[],
-                    error_message=str(e)
+                    error_message=str(e),
                 )
                 self._is_running = False
-
-    def _run_safety_checks_with_progress(self) -> List[WardenCheckResult]:
-        """Run safety checks synchronously and yield results as they complete."""
-        # Agent runs checks only on localhost; warden factories use ssh_username=None.
-        local_hosts = [self._hostname]
-
-        # 1. Check kikimr.start logs for errors (GrepLogFileForMarkersSafetyWarden)
-        logger.debug(f"[{self._hostname}] Running GrepLogFileForMarkersSafetyWarden")
-        for result in self._run_warden_factory_sync_with_progress(
-            'GrepLogFileForMarkersSafetyWarden',
-            lambda: kikimr_start_logs_safety_warden_factory(
-                local_hosts,
-                ssh_username=None,
-                deploy_path=self._log_directory,
-                lines_after=5,
-                cut=True,
-                modification_days=1
-            )
-        ):
-            yield result
-        logger.debug(f"[{self._hostname}] GrepLogFileForMarkersSafetyWarden completed")
-
-        # 2. Check dmesg for OOM (GrepDMesgForPatternsSafetyWarden)
-        logger.debug(f"[{self._hostname}] Running GrepDMesgForPatternsSafetyWarden")
-        for result in self._run_warden_factory_sync_with_progress(
-            'GrepDMesgForPatternsSafetyWarden',
-            lambda: kikimr_grep_dmesg_safety_warden_factory(
-                local_hosts,
-                ssh_username=None,
-                lines_after=5
-            )
-        ):
-            yield result
-        logger.debug(f"[{self._hostname}] GrepDMesgForPatternsSafetyWarden completed")
-
-        # 3. Check unified_agent for VERIFY failed errors
-        logger.debug(f"[{self._hostname}] Running UnifiedAgentVerifyFailedSafetyWarden")
-        result = self._run_single_warden_sync(
-            'UnifiedAgentVerifyFailedSafetyWarden',
-            lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24)
-        )
-        yield result
-        logger.debug(f"[{self._hostname}] UnifiedAgentVerifyFailedSafetyWarden: status={result.status}")
-
-    def _run_safety_checks_sync(self) -> List[WardenCheckResult]:
-        """Run safety checks synchronously (legacy method for compatibility)."""
-        return list(self._run_safety_checks_with_progress())
-
-    def _run_warden_factory_sync_with_progress(
-        self,
-        factory_name: str,
-        factory_fn: Callable
-    ) -> List[WardenCheckResult]:
-        """Run a warden factory and yield results as each warden completes."""
-        try:
-            wardens = factory_fn()
-            for warden in wardens:
-                warden_name = str(warden)
-                try:
-                    violations = warden.list_of_safety_violations()
-                    status = 'violation' if violations else 'ok'
-                    result = WardenCheckResult(
-                        name=warden_name,
-                        category='safety',
-                        violations=violations if violations else [],
-                        status=status
-                    )
-                    yield result
-                    if violations:
-                        logger.info(f"[{self._hostname}] {warden_name}: {len(violations)} violation(s) found")
-                except Exception as e:
-                    logger.error(f"[{self._hostname}] {warden_name}: error - {e}")
-                    result = WardenCheckResult(
-                        name=warden_name,
-                        category='safety',
-                        violations=[],
-                        status='error',
-                        error_message=str(e)
-                    )
-                    yield result
-        except Exception as e:
-            logger.error(f"[{self._hostname}] {factory_name}: factory error - {e}")
-            result = WardenCheckResult(
-                name=factory_name,
-                category='safety',
-                violations=[],
-                status='error',
-                error_message=str(e)
-            )
-            yield result
-
-    def _run_warden_factory_sync(
-        self,
-        factory_name: str,
-        factory_fn: Callable
-    ) -> List[WardenCheckResult]:
-        """Run a warden factory and return results for all wardens it creates."""
-        return list(self._run_warden_factory_sync_with_progress(factory_name, factory_fn))
-
-    def _run_single_warden_sync(
-        self,
-        warden_name: str,
-        warden_fn: Callable
-    ) -> WardenCheckResult:
-        """Run a single warden and return its result."""
-        try:
-            warden = warden_fn()
-            actual_name = str(warden)
-            violations = warden.list_of_safety_violations()
-            status = 'violation' if violations else 'ok'
-            if violations:
-                logger.info(f"[{self._hostname}] {actual_name}: {len(violations)} violation(s) found")
-            return WardenCheckResult(
-                name=actual_name,
-                category='safety',
-                violations=violations if violations else [],
-                status=status
-            )
-        except Exception as e:
-            logger.error(f"[{self._hostname}] {warden_name}: error - {e}")
-            return WardenCheckResult(
-                name=warden_name,
-                category='safety',
-                violations=[],
-                status='error',
-                error_message=str(e)
-            )
-
-
-# Global instance for the agent (safety checks only)
-warden_checker = AgentWardenChecker()

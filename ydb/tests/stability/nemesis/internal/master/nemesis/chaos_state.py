@@ -1,12 +1,11 @@
 """
-Orchestrator store: delegation to planners from catalog.build_all_planners().
+Orchestrator chaos planning: ChaosMasterStore holds planners (no process-wide singleton).
+Create one instance per app and pass it to OrchestratorNemesisSchedule / wire from orchestrator_router.
 """
 
 from __future__ import annotations
 
 import threading
-from typing import Any
-
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import build_all_planners
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.master.nemesis.nemesis_planner_base import NemesisPlannerBase
@@ -41,18 +40,7 @@ class ChaosMasterStore:
         return planner.manual(host, action)
 
 
-_chaos_store: ChaosMasterStore | None = None
-
-
-def get_chaos_store() -> ChaosMasterStore:
-    global _chaos_store
-    if _chaos_store is None:
-        _chaos_store = ChaosMasterStore()
-    return _chaos_store
-
-
 __all__ = [
     "ChaosMasterStore",
     "DispatchCommand",
-    "get_chaos_store",
 ]

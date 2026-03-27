@@ -1,55 +1,171 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import shlex
 import subprocess
+import sys
 
 import yaml
+
 from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings
 
 
+def _ssh_base():
+    return [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=no",
+        "-o",
+        "UserKnownHostsFile=/dev/null",
+        "-A",
+    ]
+
+
+def _run_external(argv: list, *, log_line: str, host: str | None = None) -> None:
+    """
+    Run a subprocess quietly: only our log_line on success.
+    On failure, print captured stdout/stderr (rsync/ssh noise stays hidden when all is OK).
+    """
+    prefix = f"[{host}] " if host else ""
+    print(f"{prefix}{log_line}")
+    r = subprocess.run(argv, capture_output=True, text=True)
+    if r.returncode != 0:
+        parts = [f"{prefix}FAILED ({r.returncode}): {log_line}"]
+        if r.stdout and r.stdout.strip():
+            parts.append("--- stdout ---\n" + r.stdout.rstrip())
+        if r.stderr and r.stderr.strip():
+            parts.append("--- stderr ---\n" + r.stderr.rstrip())
+        print("\n".join(parts), file=sys.stderr)
+        raise RuntimeError(
+            f"{prefix.rstrip()}{log_line} failed with exit code {r.returncode}"
+        ) from None
+
+
+def ensure_remote_install_dirs(host: str, settings: Settings, *, is_orchestrator: bool) -> None:
+    """
+    Create and verify target paths on the remote host before rsync.
+    rsync targets: {install_root}/bin/agent, optionally {install_root}/static/, cluster.yaml under root.
+    """
+    root = settings.install_root.rstrip("/")
+    dirs = [f"{root}/bin"]
+    if is_orchestrator:
+        dirs.append(f"{root}/static")
+
+    mkdir = "sudo mkdir -p " + " ".join(shlex.quote(d) for d in dirs)
+    verify = " && ".join(f"sudo test -d {shlex.quote(d)}" for d in dirs)
+    remote_script = f"{mkdir} && {verify}"
+
+    argv = _ssh_base() + [host, remote_script]
+    _run_external(
+        argv,
+        log_line=f"ensure remote dirs ({', '.join(dirs)})",
+        host=host,
+    )
+
+
+def _require_local_path(path: str, *, kind: str) -> None:
+    if kind == "dir":
+        if not os.path.isdir(path):
+            raise FileNotFoundError(f"Local path missing or not a directory: {path}")
+    else:
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"Local file missing: {path}")
+
+
 def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None):
-    print(f'Uploading binary to {host}')
-    ssh_base = ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A']
+    _require_local_path("./nemesis", kind="file")
+
+    ssh_base = _ssh_base()
     ssh_rsh = " ".join(ssh_base)
     root = settings.install_root.rstrip("/")
 
-    subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
-                           "--rsh={}".format(ssh_rsh),
-                           "--rsync-path=sudo rsync", "--progress", './nemesis', f'{host}:{root}/bin/agent'],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ensure_remote_install_dirs(host, settings, is_orchestrator=is_orchestrator)
 
-    # Upload static files and config for orchestrator
+    _run_external(
+        [
+            "rsync",
+            "-aqLW",
+            "--del",
+            "--no-o",
+            "--no-g",
+            "--rsh={}".format(ssh_rsh),
+            "--rsync-path=sudo rsync",
+            "./nemesis",
+            f"{host}:{root}/bin/agent",
+        ],
+        log_line="upload nemesis binary",
+        host=host,
+    )
+
     if is_orchestrator:
-        print(f'Uploading static files to {host}')
-        subprocess.check_call(["rsync", "-avqLW", "--del", "--no-o", "--no-g",
-                               "--rsh={}".format(ssh_rsh),
-                               "--rsync-path=sudo rsync", "--progress", './static/', f'{host}:{root}/static/'],
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _require_local_path("./static", kind="dir")
+        _run_external(
+            [
+                "rsync",
+                "-aqLW",
+                "--del",
+                "--no-o",
+                "--no-g",
+                "--rsh={}".format(ssh_rsh),
+                "--rsync-path=sudo rsync",
+                "./static/",
+                f"{host}:{root}/static/",
+            ],
+            log_line="upload static/",
+            host=host,
+        )
 
         if yaml_config_location:
-            print(f'Uploading cluster config to {host}')
-            subprocess.check_call(["rsync", "-avqLW", "--no-o", "--no-g",
-                                   "--rsh={}".format(ssh_rsh),
-                                   "--rsync-path=sudo rsync", "--progress", yaml_config_location, f'{host}:{root}/cluster.yaml'],
-                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _require_local_path(yaml_config_location, kind="file")
+            _run_external(
+                [
+                    "rsync",
+                    "-aqLW",
+                    "--no-o",
+                    "--no-g",
+                    "--rsh={}".format(ssh_rsh),
+                    "--rsync-path=sudo rsync",
+                    yaml_config_location,
+                    f"{host}:{root}/cluster.yaml",
+                ],
+                log_line="upload cluster.yaml",
+                host=host,
+            )
 
-    print(f'Uploading service to {host}')
-    subprocess.check_call(["rsync", "-avqLW", "--no-o", "--no-g",
-                           "--rsh={}".format(ssh_rsh),
-                           "--rsync-path=sudo rsync", "--progress", f'./nemesis-agent.service.{host}',
-                           f'{host}:/etc/systemd/system/nemesis-agent.service'],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    unit_file = f"./nemesis-agent.service.{host}"
+    _require_local_path(unit_file, kind="file")
+    _run_external(
+        [
+            "rsync",
+            "-aqLW",
+            "--no-o",
+            "--no-g",
+            "--rsh={}".format(ssh_rsh),
+            "--rsync-path=sudo rsync",
+            unit_file,
+            f"{host}:/etc/systemd/system/nemesis-agent.service",
+        ],
+        log_line="upload systemd unit",
+        host=host,
+    )
 
-    print(f'Restarting service on {host}')
-    subprocess.check_call(ssh_base + [host, "sudo systemctl daemon-reload && sudo systemctl enable nemesis-agent && sudo systemctl restart nemesis-agent"],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _run_external(
+        ssh_base
+        + [
+            host,
+            "sudo systemctl daemon-reload && sudo systemctl enable nemesis-agent && sudo systemctl restart nemesis-agent",
+        ],
+        log_line="restart nemesis-agent (systemd)",
+        host=host,
+    )
 
 
 def stop_agent_service(host):
-    ssh_base = ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null', '-A']
-
-    print(f'Stopping service on {host}')
-    subprocess.check_call(ssh_base + [host, "sudo systemctl stop nemesis-agent"],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ssh_base = _ssh_base()
+    _run_external(
+        ssh_base + [host, "sudo systemctl stop nemesis-agent"],
+        log_line="stop nemesis-agent (systemd)",
+        host=host,
+    )
 
 
 def get_hosts_from_yaml(yaml_path):
@@ -62,11 +178,14 @@ def get_hosts_from_yaml(yaml_path):
     Returns:
         List of host names
     """
-    with open(yaml_path, 'r') as r:
+    with open(yaml_path, "r") as r:
         yaml_config = yaml.safe_load(r.read())
-        hosts = [host.get('name') or host.get('host') for host in yaml_config.get('hosts', [])]
+        hosts = [host.get("name") or host.get("host") for host in yaml_config.get("hosts", [])]
         if len(hosts) == 0:
-            hosts = [host.get('name') or host.get('host') for host in yaml_config.get('config', {}).get('hosts', [])]
+            hosts = [
+                host.get("name") or host.get("host")
+                for host in yaml_config.get("config", {}).get("hosts", [])
+            ]
         return hosts
 
 
@@ -77,7 +196,7 @@ def install_on_hosts(hosts, settings: Settings):
     - Remaining hosts: agent mode
     """
     if not hosts:
-        return
+        return None
 
     orchestrator_host = hosts[0]
     agent_hosts = hosts[1:] if len(hosts) > 1 else []
@@ -90,7 +209,8 @@ def install_on_hosts(hosts, settings: Settings):
         config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
         yaml_config_env = f"Environment=YAML_CONFIG_LOCATION={config_location}\n" if config_location else ""
 
-        f.write(f"""[Unit]
+        f.write(
+            f"""[Unit]
 Description=Nemesis Orchestrator Service
 After=network-online.target
 Wants=nemesis-autoconf.service
@@ -121,7 +241,8 @@ LimitMEMLOCK=32212254720
 
 [Install]
 WantedBy=multi-user.target
-""")
+"""
+        )
 
     # Create service files for agents (remaining hosts)
     for host in agent_hosts:
@@ -129,7 +250,8 @@ WantedBy=multi-user.target
         agent_settings.app_host = host
 
         with open(f"nemesis-agent.service.{host}", "w") as f:
-            f.write(f"""[Unit]
+            f.write(
+                f"""[Unit]
 Description=Nemesis Agent Service
 After=network-online.target
 Wants=nemesis-autoconf.service
@@ -159,16 +281,20 @@ LimitMEMLOCK=32212254720
 
 [Install]
 WantedBy=multi-user.target
-""")
+"""
+            )
 
-    # Upload binaries to all hosts
-    with ThreadPoolExecutor(max_workers=len(hosts)) as executor:
-        # Upload to orchestrator with static files and config
-        executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location)
-
-        # Upload to agents (without static files and config)
+    # Upload binaries to all hosts — collect futures so thread exceptions are not swallowed
+    futures = []
+    with ThreadPoolExecutor(max_workers=max(len(hosts), 1)) as executor:
+        futures.append(
+            executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location)
+        )
         for host in agent_hosts:
-            executor.submit(upload_binary, host, settings, False, None)
+            futures.append(executor.submit(upload_binary, host, settings, False, None))
+
+        for fut in as_completed(futures):
+            fut.result()
 
     for host in agent_hosts + [orchestrator_host]:
         os.remove(f"nemesis-agent.service.{host}")
@@ -177,6 +303,11 @@ WantedBy=multi-user.target
 
 
 def stop_agent_services(hosts):
-    with ThreadPoolExecutor(max_workers=len(hosts)) as executor:
+    if not hosts:
+        return
+    futures = []
+    with ThreadPoolExecutor(max_workers=max(len(hosts), 1)) as executor:
         for host in hosts:
-            executor.submit(stop_agent_service, host)
+            futures.append(executor.submit(stop_agent_service, host))
+        for fut in as_completed(futures):
+            fut.result()

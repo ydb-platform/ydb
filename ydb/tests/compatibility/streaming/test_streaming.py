@@ -58,7 +58,6 @@ class StreamingTestBase:
                     SOURCE_TYPE="Ydb",
                     LOCATION="{endpoint}",
                     DATABASE_NAME="{self.database_path}",
-                    SHARED_READING="false",
                     AUTH_METHOD="NONE");
             """
             session_pool.execute_with_retries(query)

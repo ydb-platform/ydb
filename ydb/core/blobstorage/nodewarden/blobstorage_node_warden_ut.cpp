@@ -1067,6 +1067,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
             UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
+            UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
             break;
         }
 
@@ -1090,6 +1092,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
             UNIT_ASSERT(metrics.HasPDiskUsage());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
+            UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
             break;
         }
     }

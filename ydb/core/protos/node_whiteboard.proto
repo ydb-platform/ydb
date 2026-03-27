@@ -152,6 +152,7 @@ message TPDiskStateInfo {
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
     optional uint32 SlotSizeInUnits = 25;
     optional double PDiskUsage = 26; // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 27; // Max(SharedQuota.Color, CommonLog.Color)
 }
 
 message TEvPDiskStateRequest {

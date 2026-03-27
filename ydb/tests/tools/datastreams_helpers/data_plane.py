@@ -69,8 +69,9 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
         "--timeout", "{}ms".format(int(timeout * 1000))
     ] + ["--commit-after-processing"] if commit_after_processing else []
 
+    execute_timeout = timeout + max(timeout, plain_or_under_sanitizer(10, 30))
     with open(result_file, "w") as outfile:
-        yatest.common.execute(cmd, timeout=timeout * 2, stdout=outfile)
+        yatest.common.execute(cmd, timeout=execute_timeout, stdout=outfile)
 
     ret = []
     with open(result_file, "r") as result:

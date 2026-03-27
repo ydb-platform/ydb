@@ -158,12 +158,6 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->StorageType = storageType;
 
-    if (storageType == EStorageType::ColumnStorage && !tableData.Metadata->PartitionedByColumns.empty()) {
-        for (const auto& columnName : tableData.Metadata->PartitionedByColumns) {
-            Props.Metadata->ShuffledByColumns.emplace_back(Alias, columnName);
-        }
-    }
-
     YQL_CLOG(TRACE, CoreDq) << "Inferred metadata for table: " << path.Value();
 }
 

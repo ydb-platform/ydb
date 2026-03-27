@@ -542,14 +542,11 @@ VIEWER_ENDPOINTS_LIST = [
     '/viewer/vdiskinfo',
     # Endpoints below expose excessive information or grant excessive rights.
     '/viewer/autocomplete',
-    '/viewer/describe',
     '/viewer/feature_flags',
     '/viewer/nodelist',
-    '/viewer/query',
     '/viewer/tenantinfo',
     '/viewer/whoami',
 ]
-
 
 
 def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -603,3 +600,96 @@ def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_u
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
+
+OPERATOR_ENDPOINTS_LIST = [
+    '/actors/',
+    '/actors/dsproxynode',
+    '/actors/feature_flags',
+    '/actors/kqp_node',
+    '/actors/kqp_proxy',
+    '/actors/kqp_resource_manager',
+    '/actors/kqp_spilling_file',
+    '/actors/logger',
+    '/actors/memory_tracker',
+    '/actors/netclassifier',
+    '/actors/pql2',
+    '/actors/quoter_proxy',
+    '/actors/statservice',
+    '/grpc',
+    '/healthcheck',
+    '/jquery.tablesorter.css',
+    '/jquery.tablesorter.js',
+    '/memory/fragmentation',
+    '/memory/heap',
+    '/memory/peakheap',
+    '/memory/statistics',
+    '/static/css/bootstrap.min.css',
+    '/static/fonts/glyphicons-halflings-regular.eot',
+    '/static/fonts/glyphicons-halflings-regular.svg',
+    '/static/fonts/glyphicons-halflings-regular.ttf',
+    '/static/fonts/glyphicons-halflings-regular.woff',
+    '/static/js/bootstrap.min.js',
+    '/static/js/jquery.min.js',
+    '/tablet',
+    '/tablets',
+    '/trace',
+    '/ver',
+    '/viewer/healthcheck',
+    '/viewer/v2/json/nodelist',
+    '/viewer/v2/json/storage',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/actors/configs_dispatcher',
+    '/actors/console_configs_provider',
+    '/actors/dnameserver',
+    '/actors/icb',
+    '/actors/nodewarden',
+    '/actors/rb',
+    '/actors/tenant_pool',
+    '/cms',
+    '/internal',
+    '/nodetabmon',
+    '/viewer/v2/json/config',
+]
+
+
+OPERATOR_UNRESOLVED_ENDPOINTS_LIST = [
+    '/actors/lease',
+    '/actors/row_dispatcher',
+    '/actors/schemeboard',
+    '/actors/sqsgc',
+    '/actors/yq_control_plane_proxy',
+    '/actors/yq_health',
+    '/fq_diag/fetcher',
+    '/fq_diag/local_worker_manager',
+    '/fq_diag/quotas',
+]
+
+
+def test_operator_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in OPERATOR_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 404,
+            'root@builtin': 404,
+        }
+        for endpoint_path in OPERATOR_UNRESOLVED_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)

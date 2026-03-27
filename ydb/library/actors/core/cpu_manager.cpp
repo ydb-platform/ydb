@@ -115,6 +115,9 @@ namespace NActors {
 
     void TCpuManager::PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem) {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart");
+        if (Harmonizer) {
+            Harmonizer->SetActorSystem(actorSystem);
+        }
         NSchedulerQueue::TReader* readers;
         ui32 readersCount = 0;
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {

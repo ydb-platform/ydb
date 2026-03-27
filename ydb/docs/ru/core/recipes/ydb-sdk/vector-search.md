@@ -76,6 +76,29 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+  ```
+
 {% endlist %}
 
 
@@ -166,13 +189,6 @@
 - JavaScript
 
   ```javascript
-  import { Driver } from '@ydbjs/core'
-  import { query } from '@ydbjs/query'
-
-  const driver = new Driver('grpc://localhost:2136/local')
-  await driver.ready()
-
-  const sql = query(driver)
   await sql`CREATE TABLE IF NOT EXISTS `table_name` (
     id Utf8,
     document Utf8,
@@ -367,25 +383,6 @@
 - JavaScript
 
   ```javascript
-  import { Driver } from '@ydbjs/core'
-  import { query } from '@ydbjs/query'
-
-  const driver = new Driver('grpc://localhost:2136/local')
-  await driver.ready()
-
-  function convertVectorToBytes(vector) {
-    const bytes = new Uint8Array(vector.length * 4 + 1);
-    const view = new DataView(bytes.buffer);
-
-    for (let i = 0; i < vector.length; i++) {
-        view.setFloat32(i * 4, vector[i], true);
-    }
-
-    bytes[bytes.length - 1] = 0x01;
-    return bytes;
-  }
-
-  const sql = query(driver)
   const items = [
     {
       id: "first_doc",
@@ -545,13 +542,6 @@
 - JavaScript (альтернативный)
 
   ```javascript
-  import { Driver } from '@ydbjs/core'
-  import { query } from '@ydbjs/query'
-
-  const driver = new Driver('grpc://localhost:2136/local')
-  await driver.ready()
-
-  const sql = query(driver)
   const items = [
     {
       id: "first_doc",
@@ -920,25 +910,6 @@
 - JavaScript
 
   ```javascript
-  import { Driver } from '@ydbjs/core'
-  import { query, unsafe } from '@ydbjs/query'
-
-  const driver = new Driver('grpc://localhost:2136/local')
-  await driver.ready()
-
-  function convertVectorToBytes(vector) {
-    const bytes = new Uint8Array(vector.length * 4 + 1);
-    const view = new DataView(bytes.buffer);
-
-    for (let i = 0; i < vector.length; i++) {
-        view.setFloat32(i * 4, vector[i], true);
-    }
-
-    bytes[bytes.length - 1] = 0x01;
-    return bytes;
-  }
-
-  const sql = query(driver)
   const limit;
   const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
 
@@ -1120,13 +1091,6 @@
 - JavaScript (alternative)
 
   ```javascript
-  import { Driver } from '@ydbjs/core'
-  import { query, unsafe } from '@ydbjs/query'
-
-  const driver = new Driver('grpc://localhost:2136/local')
-  await driver.ready()
-
-  const sql = query(driver)
   const limit;
   const embedding = new Float32Array([1.5, 2.5, 3.5])
 

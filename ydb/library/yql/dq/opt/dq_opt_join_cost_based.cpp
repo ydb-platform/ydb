@@ -436,7 +436,9 @@ private:
 
         joinNode->Stats.LogicalOrderings = fsm.CreateState();
         switch (joinNode->JoinAlgo) {
-            case EJoinAlgoType::GraceJoin: {
+            case EJoinAlgoType::GraceJoin: 
+            case EJoinAlgoType::ReverseBlockJoin:
+            {
                 /* look at dphyp shuffle elimination EmitCsgCmp function. it has the same logic. */
 
                 bool lhsShuffled =

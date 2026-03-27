@@ -37,7 +37,7 @@ struct TRBORelOptimizerNode : public NYql::TRelOptimizerNode {
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
-    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel) : TKqpProviderContext(kqpCtx, optLevel) {}
+    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin) : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin) {}
 
     virtual bool IsJoinApplicable(
         const std::shared_ptr<NYql::IBaseOptimizerNode>& left, 

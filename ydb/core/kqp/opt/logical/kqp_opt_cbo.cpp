@@ -166,6 +166,8 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
         case EJoinAlgoType::GraceJoin:
             return true;
+        case EJoinAlgoType::ReverseBlockJoin:
+            return BlockJoinEnabled && joinKind == EJoinKind::LeftJoin;
         default:
             return false;
     }
@@ -197,6 +199,8 @@ double TKqpProviderContext::ComputeJoinCost(
             return 1.5 * (leftStats.ByteSize + 1.8 * rightStats.ByteSize + outputRows);
         case EJoinAlgoType::GraceJoin:
             return 1.5 * (leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputRows);
+        case EJoinAlgoType::ReverseBlockJoin:
+            return 1.5 * (rightStats.ByteSize + 2.0 * leftStats.ByteSize + outputRows);
         default:
             return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }

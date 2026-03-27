@@ -19,3 +19,5 @@ items:
   href: 08_processor_energy_saving_mode.md
 - name: "Память и CPU при совмещении узлов хранения и узлов БД на одном хосте"
   href: 09_memory-cpu-mixed-hosts.md
+- name: "Минимальный {{ ydb-short-name }}: выбор конфигурации под задачу"
+  href: 10_minimal-ydb.md

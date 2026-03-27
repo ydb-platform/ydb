@@ -4,10 +4,14 @@ namespace NYT::NBacktrace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#if !defined(_win32_) && !defined(_win64_)
+
 TFramePointerCursorContext FramePointerCursorContextFromUcontext(const ucontext_t& /*ucontext*/)
 {
     return {};
 }
+
+#endif
 
 std::optional<unw_context_t> TrySynthesizeLibunwindContextFromMachineContext(
     const TContMachineContext& /*machineContext*/)

@@ -81,10 +81,10 @@ void DoNestedTuplesCompressTest() {
     node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
         return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
     });
-    node = pb.ToFlow(pb.WideToBlocks(pb.FromFlow(node)));
+    node = pb.WideToBlocks(pb.FromFlow(node));
 
     node = pb.BlockExpandChunked(node);
-    node = pb.WideSkipBlocks(pb.FromFlow(node), pb.template NewDataLiteral<ui64>(19));
+    node = pb.WideSkipBlocks(node, pb.template NewDataLiteral<ui64>(19));
     node = pb.BlockCompress(node, 2);
     node = pb.ToFlow(pb.WideFromBlocks(node));
 

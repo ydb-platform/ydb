@@ -32,6 +32,7 @@ const char M128iShiftRight[31] = {
 // fault and terminate the process.
 Y_NO_SANITIZE("address")
 Y_NO_SANITIZE("memory")
+Y_NO_SANITIZE("thread")
 inline __m128i AlignedPrefixLoad(
     const void* p,
     int* length)

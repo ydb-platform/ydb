@@ -110,11 +110,17 @@ private:
     std::vector<TPreparedColumn> Columns;
     size_t RowsCount = 0;
     // When set, AssembleToGeneralContainer will slice the assembled result to
-    // this many rows (from offset 0).  Used by the page-aware assembly path
-    // when a chunk straddles the page boundary: the chunk is included in full
-    // so that RowsCount >= pageRange.End, and then the result is sliced back
-    // to exactly pageRange.End rows.
+    // SliceRows rows starting at SliceOffset.  Used by the page-aware assembly
+    // path:
+    //   - A chunk that straddles pageRange.End is included in full, so the
+    //     assembled column may have more rows than the page.  SliceRows caps
+    //     the tail.
+    //   - A chunk that straddles pageRange.Start is also included in full, so
+    //     the assembled column may have leading rows before pageRange.Start.
+    //     SliceOffset skips those leading rows.
+    // Both values are 0 / nullopt when no straddling occurs.
     std::optional<ui32> SliceRows;
+    ui32 SliceOffset = 0;
 
 public:
     struct TAssembleOptions {
@@ -164,12 +170,13 @@ public:
     }
 
     TPreparedBatchData(std::vector<TPreparedColumn>&& columns, const size_t rowsCount,
-        const std::optional<ui32> sliceRows = std::nullopt)
+        const std::optional<ui32> sliceRows = std::nullopt, const ui32 sliceOffset = 0)
         : Columns(std::move(columns))
         , RowsCount(rowsCount)
-        , SliceRows(sliceRows) {
-        AFL_VERIFY(!SliceRows || *SliceRows <= RowsCount)
-            ("slice_rows", *SliceRows)("rows_count", RowsCount);
+        , SliceRows(sliceRows)
+        , SliceOffset(sliceOffset) {
+        AFL_VERIFY(!SliceRows || SliceOffset + *SliceRows <= RowsCount)
+            ("slice_offset", SliceOffset)("slice_rows", *SliceRows)("rows_count", RowsCount);
     }
 
     TConclusion<std::shared_ptr<NArrow::TGeneralContainer>> AssembleToGeneralContainer(const std::set<ui32>& sequentialColumnIds) const;

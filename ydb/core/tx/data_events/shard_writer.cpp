@@ -90,6 +90,8 @@ namespace NKikimr::NEvWrite {
             }
         }
 
+        LastOverloadSeqNo = 0;
+
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
@@ -101,9 +103,6 @@ namespace NKikimr::NEvWrite {
             return;
         }
 
-        if (RetryBySubscription) {
-            LastOverloadSeqNo = 0;
-        }
         ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
     }
 
@@ -111,14 +110,18 @@ namespace NKikimr::NEvWrite {
         const auto& record = ev->Get()->Record;
 
         AFL_VERIFY(RetryBySubscription);
-        AFL_VERIFY(record.GetSeqNo() == LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
+        AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
         AFL_VERIFY(record.GetTabletID() == ShardId)("ev_tablet_id", record.GetTabletID())("shard_id", ShardId);
+        if (record.GetSeqNo() != LastOverloadSeqNo) {
+            return;
+        }
 
         if (!RetryWriteRequest(false)) {
             auto gPassAway = PassAwayGuard();
             const TString errMsg = TStringBuilder() << "Shard " << ShardId << " is still overloaded after " << NumRetries << " retries";
             ExternalController->OnFail(Ydb::StatusIds::OVERLOADED, errMsg);
             ExternalController->GetCounters()->OnRetryBySubscribeOnOverloadLimitExceeded();
+            LastOverloadSeqNo = 0;
         } else {
             ExternalController->GetCounters()->OnRetryBySubscribeOnOverload();
         }
@@ -141,6 +144,8 @@ namespace NKikimr::NEvWrite {
         } else {
             ExternalController->OnFail(Ydb::StatusIds::UNDETERMINED, errMsg);
         }
+
+        LastOverloadSeqNo = 0;
     }
 
     void TShardWriter::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -171,17 +176,6 @@ namespace NKikimr::NEvWrite {
 
     bool TShardWriter::IsMaxRetriesReached() const {
         return NumRetries >= MaxRetriesPerShard;
-    }
-
-    void TShardWriter::Die(const NActors::TActorContext& ctx) {
-        if (RetryBySubscription && LastOverloadSeqNo) {
-            SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
-            LastOverloadSeqNo = 0;
-        }
-
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-
-        TBase::Die(ctx);
     }
 
     void TShardWriter::PassAway() {

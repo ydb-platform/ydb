@@ -33,13 +33,43 @@ void AddWriteOperation(NTopic::TTopicOperations& ops,
                      supportivePartition);
 }
 
+static
+void AssertReadOperation(const NTopic::TTopicOperationTransactions& txs,
+                         const ui64 tabletId,
+                         const size_t opsCount,
+                         const size_t opIndex)
+{
+    UNIT_ASSERT(txs.contains(tabletId));
+    const auto& t = txs.at(tabletId);
+    UNIT_ASSERT_EQUAL(t.tx.OperationsSize(), opsCount);
+    UNIT_ASSERT_LT(opIndex, opsCount);
+    const auto& readOp = t.tx.GetOperations(opIndex);
+    UNIT_ASSERT(not readOp.HasSkipConflictCheck());
+}
+
+static
+void AssertWriteOperation(const NTopic::TTopicOperationTransactions& txs,
+                          const ui64 tabletId,
+                          const size_t opsCount,
+                          const size_t opIndex,
+                          const bool skipConflictCheck)
+{
+    UNIT_ASSERT(txs.contains(tabletId));
+    const auto& t = txs.at(tabletId);
+    UNIT_ASSERT(t.hasWrite);
+    UNIT_ASSERT_EQUAL(t.tx.OperationsSize(), opsCount);
+    UNIT_ASSERT_LT(opIndex, opsCount);
+    const auto& writeOp = t.tx.GetOperations(opIndex);
+    UNIT_ASSERT(writeOp.HasSkipConflictCheck());
+    UNIT_ASSERT_EQUAL(writeOp.GetSkipConflictCheck(), skipConflictCheck);
+}
+
 Y_UNIT_TEST(OnlyReadOperations) {
     const TString TOPIC = "topic";
     const ui32 PARTITION = 0;
     const ui64 TABLETID = 1'000'000;
 
     NTopic::TTopicOperations topicOps;
-
     topicOps.SetSkipConflictCheck(false);
 
     AddReadOperation(topicOps, TOPIC, PARTITION, 100, 105, "consumer");
@@ -52,6 +82,12 @@ Y_UNIT_TEST(OnlyReadOperations) {
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertReadOperation(txs, TABLETID, 1, 0);
 }
 
 Y_UNIT_TEST(ReadWriteOperations) {
@@ -80,6 +116,13 @@ Y_UNIT_TEST(ReadWriteOperations) {
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 2);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID_A));
     UNIT_ASSERT(sendTabletIds.contains(TABLETID_B));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 2);
+
+    AssertReadOperation(txs, TABLETID_A, 1, 0);
+    AssertWriteOperation(txs, TABLETID_B, 1, 0, false);
 }
 
 Y_UNIT_TEST(OnlyWriteOperations) {
@@ -102,6 +145,12 @@ Y_UNIT_TEST(OnlyWriteOperations) {
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertWriteOperation(txs, TABLETID, 1, 0, false);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck) {
@@ -129,6 +178,13 @@ Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck) {
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID_A));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 2);
+
+    AssertReadOperation(txs, TABLETID_A, 1, 0);
+    AssertWriteOperation(txs, TABLETID_B, 1, 0, true);
 }
 
 Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck) {
@@ -150,6 +206,12 @@ Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck) {
 
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT(sendTabletIds.empty());
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertWriteOperation(txs, TABLETID, 1, 0, true);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_OnePartition) {
@@ -173,6 +235,13 @@ Y_UNIT_TEST(ReadWriteOperations_OnePartition) {
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertReadOperation(txs, TABLETID, 2, 0);
+    AssertWriteOperation(txs, TABLETID, 2, 1, false);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck) {
@@ -196,6 +265,13 @@ Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck) {
     const auto sendTabletIds = topicOps.GetSendingTabletIds();
     UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
     UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertReadOperation(txs, TABLETID, 2, 0);
+    AssertWriteOperation(txs, TABLETID, 2, 1, true);
 }
 
 }

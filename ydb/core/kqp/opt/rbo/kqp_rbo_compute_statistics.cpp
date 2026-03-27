@@ -368,7 +368,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TString> unionOfAliases;
     ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
     
-    EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined;
+    NKqp::EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
     auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
@@ -434,7 +434,7 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
-        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined,
+        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined,
         ConvertToJoinKind(JoinKind),
         FindCardHint(unionOfAliases, *hints.CardinalityHints),
         false,

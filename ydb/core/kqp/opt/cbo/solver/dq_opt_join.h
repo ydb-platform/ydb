@@ -27,10 +27,11 @@ NYql::NNodes::TExprBase DqBuildJoin(
     bool useBlockHashJoin = false,
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
-    bool buildCollectStage = true
+    bool buildCollectStage=true,
+    bool blockHashJoinBuildSideLeft = false
 );
 
-NYql::NNodes::TExprBase DqBuildHashJoin(const NYql::NNodes::TDqJoin& join, NYql::NDq::EHashJoinMode mode, NYql::TExprContext& ctx, NYql::IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false);
+NYql::NNodes::TExprBase DqBuildHashJoin(const NYql::NNodes::TDqJoin& join, NYql::NDq::EHashJoinMode mode, NYql::TExprContext& ctx, NYql::IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
 
 NYql::NNodes::TExprBase DqBuildBlockHashJoin(const NYql::NNodes::TDqJoin& join, NYql::TExprContext& ctx);
 

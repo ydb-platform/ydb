@@ -44,10 +44,10 @@ struct TRBOProviderContext : public TKqpProviderContext {
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TVector<TJoinColumn>& leftJoinKeys,
         const TVector<TJoinColumn>& rightJoinKeys,
-        EJoinAlgoType joinAlgo,
+        NKqp::EJoinAlgoType joinAlgo,
         EJoinKind joinKind
     ) override {
-        if (joinAlgo == EJoinAlgoType::LookupJoin || joinAlgo == EJoinAlgoType::LookupJoinReverse) {
+        if (joinAlgo == NKqp::EJoinAlgoType::LookupJoin || joinAlgo == NKqp::EJoinAlgoType::LookupJoinReverse) {
             return false;
         }
         return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);

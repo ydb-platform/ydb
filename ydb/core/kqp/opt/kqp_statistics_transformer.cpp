@@ -968,9 +968,6 @@ static NYql::NDq::TFDStorage ConvertToYqlFDStorage(const TFDStorage& kqpFDS) {
         }
         if (ordering.Type == TOrdering::EShuffle) {
             NYql::NDq::TShuffling shuffling(std::move(yqlCols));
-            if (ordering.IsNatural) {
-                shuffling.SetNatural();
-            }
             yqlFDS.AddShuffling(shuffling);
         } else {
             std::vector<NYql::NDq::TOrdering::TItem::EDirection> dirs;

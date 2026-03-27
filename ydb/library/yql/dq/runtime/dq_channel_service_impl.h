@@ -780,6 +780,7 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
+         Cerr << "TFastDqOutputChannel Push checkpoint" << Endl;
         if (!Serializer->Buffer->IsFinished()) {
             Serializer->Push(std::move(checkpoint));
         }
@@ -926,7 +927,7 @@ public:
     }
 
     bool IsPausedByCheckpoint() const override {
-        Y_ENSURE(false);
+        return PausedByCheckpoint;
     }
 
     void AddWatermark(TInstant) override {
@@ -974,10 +975,16 @@ public:
         return IsLocalChannel;
     }
 
+    void SetCallback(IDqInputChannelCallbacks* callback) override {
+        Callback = callback;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
     bool IsLocalChannel = false;
+    IDqInputChannelCallbacks* Callback = nullptr;
+    bool PausedByCheckpoint = false;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

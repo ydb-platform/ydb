@@ -7,7 +7,7 @@
 namespace NYql::NDq {
 
 template<typename TDerived>
-class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync> {
+class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>, public IDqInputChannelCallbacks {
     using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>;
 public:
     using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>::TDqComputeActorBase;
@@ -175,13 +175,13 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 return false;
             }
         }
-
+       // CA_LOG_D("ReadyToCheckpoint " );
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
 
-            if (!channelInfo.IsPaused()) {
+            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsPausedByCheckpoint()) {
                 return false;
             }
 
@@ -205,10 +205,13 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     }
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) override final {
+
+        CA_LOG_D("InjectBarrierToOutputs map size " << this->OutputChannelsMap.size());
         Y_ABORT_UNLESS(this->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
         for (const auto& [id, channelInfo] : this->OutputChannelsMap) {
             if (!channelInfo.IsTransformOutput) {
                 channelInfo.Channel->Push(NDqProto::TCheckpoint(checkpoint));
+                CA_LOG_D("InjectBarrierToOutputs Push checkpoint" );
             }
         }
         for (const auto& [outputIndex, sink] : this->SinksMap) {
@@ -284,6 +287,7 @@ protected:
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
+            channel.Channel->SetCallback(this);
         }
 
         for (auto& [inputIndex, source] : this->SourcesMap) {
@@ -318,6 +322,7 @@ protected:
             TaskRunner->GetReadRanges(),
             TaskRunner->GetRandomProvider()
         );
+        CA_LOG_D("FillIoMaps: SourcesMap size " << this->SourcesMap.size());
     }
 
     const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
@@ -392,6 +397,7 @@ protected:
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         this->ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
+
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
         if (outputInfo.Finished && !this->Checkpoints) {
@@ -428,6 +434,11 @@ protected:
 
         this->ProcessOutputsState.HasDataToSend |= !outputInfo.Finished;
         this->ProcessOutputsState.DataWasSent |= outputInfo.Finished || sent;
+    }
+
+    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint) override {
+        CA_LOG_D("Take checkpoint ");
+        this->Checkpoints->RegisterCheckpoint(checkpoint, 666);
     }
 
 protected:

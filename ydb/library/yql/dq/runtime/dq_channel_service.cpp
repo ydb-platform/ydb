@@ -50,6 +50,14 @@ void BufferToData(TDataChunk& data, TBuffer&& buffer) {
     data.Finished = ReadNumber<bool>(source);
     data.Timestamp = TInstant::MicroSeconds(ReadNumber<ui64>(source));
 
+    bool hasCheckpoint = ReadNumber<bool>(source);
+    if (hasCheckpoint) {
+        data.Checkpoint = NDqProto::TCheckpoint{};
+        data.Checkpoint->SetId(ReadNumber<ui64>(source));
+        data.Checkpoint->SetGeneration(ReadNumber<ui64>(source));
+        data.Checkpoint->SetType(static_cast<NYql::NDqProto::ECheckpointType>(ReadNumber<ui8>(source)));
+    }
+
     ui64 size = ReadNumber<ui64>(source);
     YQL_ENSURE(size == source.size(), "Spilled data is corrupted");
     data.Buffer = TChunkedBuffer(source, sharedBuffer);
@@ -65,6 +73,12 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
     AppendNumber<bool>(result, data.Leading);
     AppendNumber<bool>(result, data.Finished);
     AppendNumber<ui64>(result, data.Timestamp.MicroSeconds());
+    AppendNumber<bool>(result, !data.Checkpoint.Empty());
+    if (data.Checkpoint) {
+        AppendNumber<ui64>(result, data.Checkpoint->GetId());
+        AppendNumber<ui64>(result, data.Checkpoint->GetGeneration());
+        AppendNumber<ui8>(result, data.Checkpoint->GetType());
+    }
 
     AppendNumber<ui64>(result, data.Buffer.Size());
     result.Append(std::move(data.Buffer));
@@ -97,6 +111,7 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
+    Cerr << "TLocalBuffer Push" << Endl;
     if (!FinishPushed && !Finished.load()) {
         if (data.Finished) {
             FinishPushed = true;
@@ -110,6 +125,8 @@ void TLocalBuffer::Push(TDataChunk&& data) {
 
 void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
+
+    Cerr << "TLocalBuffer PushDataChunk" << Endl;
 
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
@@ -602,6 +619,7 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 
 void TOutputBuffer::Push(TDataChunk&& data) {
     if (!Descriptor->IsTerminatedOrAborted() && !Descriptor->IsFinished()) {
+        Cerr << "TOutputBuffer Push" << Endl;
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
@@ -921,6 +939,11 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
     ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
 
+    if (item->Data.Checkpoint) {
+        Cerr << "SendMessage with checkpoint" << Endl;
+        ev->Record.MutableCheckpoint()->CopyFrom(item->Data.Checkpoint.GetRef());
+    }
+    
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
@@ -1016,7 +1039,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         // data.Timestamp = TInstant::MicroSeconds(record.GetSendTime());
     }
     data.Bytes = record.GetBytes();
-    Y_ENSURE(data.Bytes > data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
+    if (record.HasCheckpoint()) {
+        data.Checkpoint = record.GetCheckpoint();
+    }
+    Y_ENSURE(data.Bytes > data.Buffer.Size(), "data.Bytes " << data.Bytes << " data.Buffer.Size() " << data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
     if (descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
     }
@@ -1889,9 +1915,20 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     Y_UNUSED(watermark);
 
     TDataChunk chunk;
-    auto popResult = Buffer->Pop(chunk) && !chunk.Buffer.Empty();
+    bool popResult = Buffer->Pop(chunk);
+    if (popResult && chunk.Checkpoint) {
+        Cerr << "TFastDqInputChannel::Pop checkpoint" << Endl;
+        if (Callback) {
+            Callback->TakeCheckpoint(*chunk.Checkpoint);
+            PausedByCheckpoint = true;
 
-    if (popResult) {
+        }
+        Y_ENSURE(batch.RowCount() == 0);
+        return false;
+    }
+
+    bool hasData = popResult && !chunk.Buffer.Empty();
+    if (hasData) {
         if (chunk.TransportVersion != Deserializer->TransportVersion || chunk.PackerVersion != Deserializer->PackerVersion) {
             auto deserializer = CreateDeserializer(Deserializer->RowType, chunk.TransportVersion, chunk.PackerVersion, Nothing(), Deserializer->HolderFactory);
             Deserializer = std::move(deserializer);
@@ -1903,7 +1940,7 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     PushStats.PopTime = TInstant::Now();
     PushStats.PopResult = popResult;
 
-    return popResult;
+    return hasData;
 }
 
 void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {

@@ -15,6 +15,12 @@ struct TDqInputChannelStats : TDqInputStats {
     bool PopResult = false;
 };
 
+ struct IDqInputChannelCallbacks {
+    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual ~IDqInputChannelCallbacks() = default;
+};
+
+
 class IDqInputChannel : public IDqInput {
 public:
     using TPtr = TIntrusivePtr<IDqInputChannel>;
@@ -29,6 +35,10 @@ public:
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
     virtual bool IsLocal() const = 0;
+
+    virtual void SetCallback(IDqInputChannelCallbacks* callback) {
+        Y_UNUSED(callback);
+    };
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);

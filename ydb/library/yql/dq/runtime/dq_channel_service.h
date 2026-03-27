@@ -63,6 +63,15 @@ public:
         Timestamp = TInstant::Now();
     }
 
+    TDataChunk(NDqProto::TCheckpoint&& checkpoint, NDqProto::EDataTransportVersion transportVersion,
+        NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
+        : TransportVersion(transportVersion)
+        , PackerVersion(packerVersion)
+        , Checkpoint(std::move(checkpoint)) {
+            Bytes = 1;
+        Timestamp = TInstant::Now();
+    }
+
     TChunkedBuffer Buffer;
 
     ui64 Rows = 0;
@@ -72,6 +81,7 @@ public:
     bool Leading = false;
     bool Finished = false;
     TInstant Timestamp;
+    TMaybe<NDqProto::TCheckpoint> Checkpoint;
 };
 
 class IChannelBuffer {

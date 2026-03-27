@@ -65,6 +65,14 @@ bool DetailedMetricsAreEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return AppData()->FeatureFlags.GetEnableMetricsLevel() && config.HasMetricsLevel() && config.GetMetricsLevel() == METRICS_LEVEL_DETAILED;
 }
 
+const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions(const NKikimrPQ::TPQTabletConfig& config Y_LIFETIME_BOUND, const ui32 partitionId) noexcept {
+    for (const auto& partition : config.GetAllPartitions()) {
+        if (partition.GetPartitionId() == partitionId) {
+            return &partition;
+        }
+    }
+    return nullptr;
+}
 }
 
 } // NKikimr

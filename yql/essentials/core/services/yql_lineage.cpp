@@ -726,6 +726,17 @@ private:
                 (*lineage.Fields).insert_or_assign(field, source);
             }
         }
+        if (const TExprNode::TPtr outputColumnsSetting = GetSetting(*node.Child(3), "output_columns")) {
+            TSet<TStringBuf> outMembers;
+            const auto& settingsList = outputColumnsSetting->ChildPtr(1)->ChildrenList();
+            Transform(settingsList.begin(),
+                      settingsList.end(),
+                      std::inserter(outMembers, outMembers.begin()),
+                      [](const auto& x) { return x->Content(); });
+            EraseNodesIf(*lineage.Fields, [&outMembers](auto& iter) {
+                return !outMembers.contains(iter.first);
+            });
+        }
     }
 
     void HandleLMap(TLineage& lineage, const TExprNode& node) {

@@ -496,9 +496,12 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     config->SetTopicName("streamImpl");
     config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
     config->MutablePartitionConfig()->SetLifetimeSeconds(*ValidatedAttributes_.MessageRetentionPeriod);
+    if (ValidatedAttributes_.ContentBasedDeduplication) {
+        config->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+    }
 
     auto* consumer = config->AddConsumers();
-    consumer->SetName("sqs_consumer");
+    consumer->SetName(ConsumerName);
     consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
     consumer->SetKeepMessageOrder(IsFifo_);
     if (ValidatedAttributes_.DelaySeconds) {
@@ -509,9 +512,6 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
     if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
         consumer->SetDefaultReceiveMessageWaitTimeMs(SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
-    }
-    if (ValidatedAttributes_.ContentBasedDeduplication) {
-        consumer->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
     }
     if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
         consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);

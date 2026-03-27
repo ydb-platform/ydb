@@ -76,6 +76,7 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        bool CollectSubscriptionStackTrace = false;
     };
 
     struct TWhiteboardSessionStatus {

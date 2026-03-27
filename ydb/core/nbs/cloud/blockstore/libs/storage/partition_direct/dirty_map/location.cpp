@@ -1,5 +1,6 @@
 #include "location.h"
 
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 
 #include <bitset>
@@ -45,6 +46,54 @@ bool IsPBuffer(ELocation location)
             return false;
         case ELocation::Unknown:
             return false;
+    }
+}
+
+ELocation TranslateDDiskToPBuffer(ELocation location)
+{
+    switch (location) {
+        case ELocation::PBuffer0:
+        case ELocation::PBuffer1:
+        case ELocation::PBuffer2:
+        case ELocation::HOPBuffer0:
+        case ELocation::HOPBuffer1:
+        case ELocation::Unknown:
+            Y_ABORT_UNLESS(false);
+
+        case ELocation::DDisk0:
+            return ELocation::PBuffer0;
+        case ELocation::DDisk1:
+            return ELocation::PBuffer1;
+        case ELocation::DDisk2:
+            return ELocation::PBuffer2;
+        case ELocation::HODDisk0:
+            return ELocation::HOPBuffer0;
+        case ELocation::HODDisk1:
+            return ELocation::HOPBuffer1;
+    }
+}
+
+ELocation TranslatePBufferToDDisk(ELocation location)
+{
+    switch (location) {
+        case ELocation::PBuffer0:
+            return ELocation::DDisk0;
+        case ELocation::PBuffer1:
+            return ELocation::DDisk1;
+        case ELocation::PBuffer2:
+            return ELocation::DDisk2;
+        case ELocation::HOPBuffer0:
+            return ELocation::HODDisk0;
+        case ELocation::HOPBuffer1:
+            return ELocation::HODDisk1;
+
+        case ELocation::DDisk0:
+        case ELocation::DDisk1:
+        case ELocation::DDisk2:
+        case ELocation::HODDisk0:
+        case ELocation::HODDisk1:
+        case ELocation::Unknown:
+            Y_ABORT_UNLESS(false);
     }
 }
 
@@ -166,13 +215,39 @@ bool TLocationMask::operator==(const TLocationMask& other) const
 
 TString TLocationMask::Print() const
 {
-    // ToDo
-    return ToString(Mask);
+    TStringBuilder result;
+    result << "[D";
+    result << (Get(ELocation::DDisk0) ? "+" : ".");
+    result << (Get(ELocation::DDisk1) ? "+" : ".");
+    result << (Get(ELocation::DDisk2) ? "+" : ".");
+    result << (Get(ELocation::HODDisk0) ? "*" : ".");
+    result << (Get(ELocation::HODDisk1) ? "*" : ".");
+    result << "P";
+    result << (Get(ELocation::PBuffer0) ? "+" : ".");
+    result << (Get(ELocation::PBuffer1) ? "+" : ".");
+    result << (Get(ELocation::PBuffer2) ? "+" : ".");
+    result << (Get(ELocation::HOPBuffer0) ? "*" : ".");
+    result << (Get(ELocation::HOPBuffer1) ? "*" : ".");
+    result << "]";
+    return result;
 }
 
 TLocationMask::TLocationMask(ui16 mask)
     : Mask(mask)
 {}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TRoute::operator==(const TRoute& other) const
+{
+    return Source == other.Source && Destination == other.Destination;
+}
+
+bool TRoute::operator<(const TRoute& other) const
+{
+    return Source < other.Source ||
+           (Source == other.Source && Destination < other.Destination);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

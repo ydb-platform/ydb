@@ -38,7 +38,7 @@ public:
                 if (iter->second.IsOfType<T>()) {
                     Value_ = iter->second.As<T>();
                 } else {
-                    ythrow yexception() << "operation_link_pattern must be string";
+                    ythrow yexception() << Name_ << " must be " << typeid(T).name();
                 }
             }
         }

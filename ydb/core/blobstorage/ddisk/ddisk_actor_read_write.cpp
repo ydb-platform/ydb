@@ -86,9 +86,7 @@ namespace NKikimr::NDDisk {
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        // TODO: use pool
-        std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDDiskIoOp>(
-            SelfId(), Counters, ev.Get());
+        std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
         op->SetSpan(std::move(span));
         op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
@@ -159,9 +157,7 @@ namespace NKikimr::NDDisk {
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
-        // TODO: use pool
-        std::unique_ptr<TDirectIoOpBase> op = std::make_unique<TDDiskIoOp>(
-            SelfId(), Counters, ev.Get());
+        std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
@@ -27,9 +28,26 @@ namespace NKikimr::NDataShard {
 
     class TMultiTxIdManager;
 
+    struct TMultiTxIdCleanupQueueTag {};
     struct TMultiTxIdReferenceTag {};
 
-    struct TMultiTxId {
+    /**
+     * This class is used to represent MultiTxId in the graph, with multiple
+     * locks from different transactions or lock modes. Its multi identifier is
+     * used in place of a contained set of transactions. MultiTxId forms a tree,
+     * which is a union of other MultiTxIds or transaction locks. In the common
+     * case there are at most two edges. Since there cannot be more than two
+     * non-conflicting lock modes, it will either have two edges with the same
+     * lock mode (one of which may be a previously seen MultiTxId), or two
+     * edges with different lock modes.
+     *
+     * In complex cases where the same transaction acquires different lock modes
+     * at different savepoints, it may have more than two edges, one per
+     * corresponding lock mode.
+     */
+    struct TMultiTxId
+        : public TIntrusiveListItem<TMultiTxId, TMultiTxIdCleanupQueueTag>
+    {
         struct TEdge
             : public TIntrusiveListItem<TEdge>
             , public TIntrusiveListItem<TEdge, TMultiTxIdReferenceTag>
@@ -54,6 +72,14 @@ namespace NKikimr::NDataShard {
             const TEdge* NextEdge() const {
                 const TIntrusiveListItem<TEdge>* self = this;
                 return self->Next()->Node();
+            }
+
+            TIntrusiveListItem<TEdge>* ToEdgesItem() {
+                return this;
+            }
+
+            TIntrusiveListItem<TEdge, TMultiTxIdReferenceTag>* ToReferencesItem() {
+                return this;
             }
         };
 
@@ -95,6 +121,31 @@ namespace NKikimr::NDataShard {
             }
             return lockMode;
         }
+
+        TIntrusiveListItem<TMultiTxId, TMultiTxIdCleanupQueueTag>* ToCleanupQueueItem() {
+            return this;
+        }
+    };
+
+    /**
+     * This class is used to represent leaf nodes (transactions) referenced
+     * by MultiTxIds. This decouples MultiTxIds from the lock table, and allows
+     * tracking and cleaning up unnecessary transactions and MultiTxId nodes
+     * when transactions are committed or rolled back. Additionally we use these
+     * shadow nodes to cache pathways for reusing MultiTxIds with the same
+     * construction path.
+     */
+    struct TMultiTxIdLockShadow
+        : public TIntrusiveListItem<TMultiTxIdLockShadow, TMultiTxIdCleanupQueueTag>
+    {
+        const ui64 LockId;
+        TIntrusiveList<TMultiTxId::TEdge, TMultiTxIdReferenceTag> References;
+        size_t ReferencesCount = 0;
+        bool Broken = false;
+
+        explicit TMultiTxIdLockShadow(ui64 lockId)
+            : LockId(lockId)
+        {}
     };
 
     /**
@@ -105,6 +156,7 @@ namespace NKikimr::NDataShard {
      */
     class TMultiTxIdEnumerator {
     public:
+        TMultiTxIdEnumerator(TMultiTxIdManager& self);
         TMultiTxIdEnumerator(TMultiTxIdManager& self, const TMultiTxId* entry, NTable::ELockMode filter = NTable::ELockMode::None);
 
         struct TResult {
@@ -135,7 +187,7 @@ namespace NKikimr::NDataShard {
             const TMultiTxId::TEdge* Edge;
         };
         TMultiTxIdManager& Self;
-        TVector<TNextEdge> Stack;
+        TStackVec<TNextEdge> Stack;
         NTable::ELockMode Filter;
     };
 
@@ -148,21 +200,49 @@ namespace NKikimr::NDataShard {
         bool Load(NIceDb::TNiceDb& db);
         void Start();
 
-        const TMultiTxId* FindMultiTxId(ui64 multiTxId) const {
-            return MultiTxIds.FindPtr(multiTxId);
-        }
+        TMultiTxId* FindMultiTxId(ui64 multiTxId) { return MultiTxIds.FindPtr(multiTxId); }
+        const TMultiTxId* FindMultiTxId(ui64 multiTxId) const { return MultiTxIds.FindPtr(multiTxId); }
 
         void DecrementLockedRowsCount(NIceDb::TNiceDb& db, ui64 multiTxId);
         ui64 CombineRowLocks(NIceDb::TNiceDb& db, ui64 currentTxId, NTable::ELockMode currentLockMode, ui64 lockTxId, NTable::ELockMode lockMode, ui64& globalTxId);
+
+        TMultiTxIdEnumerator EnumerateLocks(const TMultiTxId* entry, NTable::ELockMode filter = NTable::ELockMode::None) {
+            return TMultiTxIdEnumerator(*this, entry, filter);
+        }
+
+        void BreakMultiTxId(const TMultiTxId* entry);
+        void AddWriteConflict(const TMultiTxId* entry);
+
+        void OnLockBroken(NIceDb::TNiceDb& db, ui64 lockId);
+        void OnLockRemoved(NIceDb::TNiceDb& db, ui64 lockId);
+        void RunCleanup(NIceDb::TNiceDb& db);
 
     private:
         bool LoadMultiTxIds(NIceDb::TNiceDb& db);
         bool LoadMultiTxIdGraph(NIceDb::TNiceDb& db);
 
     private:
+        void InitializeReference(TMultiTxId::TEdge& edge);
+        TMultiTxIdLockShadow& GetLockShadow(ui64 lockId);
+        void BreakShadow(NIceDb::TNiceDb& db, TMultiTxIdLockShadow* shadow);
+        void EnqueueCleanupTx();
+        bool NeedCleanup(const TMultiTxId* entry) const;
+        void MaybeEnqueueCleanup(TMultiTxId* entry);
+        void RunLockShadowCleanup(NIceDb::TNiceDb& db, TMultiTxIdLockShadow* shadow);
+        void RunMultiTxIdCleanup(NIceDb::TNiceDb& db, TMultiTxId* entry);
+
+    private:
+        void DeleteEdge(NIceDb::TNiceDb& db, TMultiTxId::TEdge* edge);
+        void DeleteMultiTxId(NIceDb::TNiceDb& db, TMultiTxId* entry);
+
+    private:
         TDataShard& Self;
-        THashMap<ui64, TMultiTxId> MultiTxIds;
         ui64 NextEdgeId = 1;
+        THashMap<ui64, TMultiTxId> MultiTxIds;
+        THashMap<ui64, TMultiTxIdLockShadow> LockShadows;
+        TIntrusiveList<TMultiTxId, TMultiTxIdCleanupQueueTag> MultiTxIdCleanupQueue;
+        TIntrusiveList<TMultiTxIdLockShadow, TMultiTxIdCleanupQueueTag> LockShadowCleanupQueue;
+        bool CleanupTxInFlight = false;
     };
 
     /**

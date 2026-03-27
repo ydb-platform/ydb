@@ -146,7 +146,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev) {
-        if (IsLimitedKeyless) {
+        if (IsLimitedKeyless && !ev->Get()->AlreadyEncrypted) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
             HandleError(ev);
             return;
@@ -206,18 +206,19 @@ namespace NKikimr {
                 !BatchedPutIds.contains(ev->Get()->Id)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
+            const bool reduceInterpileTraffic = ev->Get()->ReduceInterpileTraffic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
             Y_ABORT_UNLESS(tactic <= PutTacticCount);
 
-            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic];
+            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic][reduceInterpileTraffic];
             if (batchedPuts.Queue.empty()) {
-                PutBatchedBucketQueue.emplace_back(handleClass, tactic);
+                PutBatchedBucketQueue.emplace_back(handleClass, tactic, reduceInterpileTraffic);
             }
 
             if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + partSize > MaxBatchedPutSize) {
                 *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
                 ++*Mon->PutBatchesSent;
-                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
+                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic, reduceInterpileTraffic);
             }
 
             BatchedPutIds.insert(ev->Get()->Id);
@@ -553,7 +554,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic) {
+            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
+            bool reduceInterpileTraffic) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
 
         for (auto& ev : batchedPuts.Queue) {
@@ -619,6 +621,7 @@ namespace NKikimr {
                                 .AccelerationParams = GetAccelerationParams(),
                                 .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
                                 .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
+                                .ReduceInterpileTraffic = reduceInterpileTraffic,
                             }),
                             TInstant::Max()
                         );
@@ -670,11 +673,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingPutRequests::TPtr& ev) {
         StopPutBatchingEvent = ev;
         for (auto &bucket : PutBatchedBucketQueue) {
-            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic];
+            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
             Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
             *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
             ++*Mon->PutBatchesSent;
-            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic);
+            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic, bucket.ReduceInterpileTraffic);
         }
         PutBatchedBucketQueue.clear();
         ++*Mon->EventStopPutBatching;
@@ -926,6 +929,10 @@ namespace NKikimr {
         GetActiveCounter()->Dec();
         if (DoSendDeathNote) {
             SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        }
+        for (auto& [nodeId, sessionId] : NodeSubscriptions) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+                sessionId ?: TActivationContext::InterconnectProxy(nodeId), SelfId(), nullptr, 0));
         }
         TActor::PassAway();
     }

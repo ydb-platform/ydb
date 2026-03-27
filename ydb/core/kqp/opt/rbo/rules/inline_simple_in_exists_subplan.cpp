@@ -53,6 +53,7 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
     auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
     const auto subPlanKind = uncorrSubplan->Kind;
 
+    // If its a correlated subplan with filters pulled up, build join conditions from the pulled up filter
     if (subPlanKind == EOperator::Filter && CastOperator<TOpFilter>(uncorrSubplan)->GetInput()->Kind == EOperator::AddDependencies) {
         auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
         auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
@@ -74,6 +75,11 @@ TIntrusivePtr<IOperator> TInlineSimpleInExistsSubplanRule::SimpleMatchAndApply(c
                 Y_ENSURE(false, "Correlated filter missing join condition");
             }
         }
+    }
+
+    // If we have a correlated subplan where pull up didn't succeed, throw an exception
+    else if (subPlanKind == EOperator::Filter && subplanEntry.DependentIUs.size()) {
+        Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
     }
 
     // We build a semi-join or a left-only join when processing IN subplan

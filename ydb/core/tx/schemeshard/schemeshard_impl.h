@@ -417,6 +417,8 @@ public:
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
+    bool IsOldArgonHashFormatMigrationCompleted = false;
+
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff

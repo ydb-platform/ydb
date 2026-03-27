@@ -2988,7 +2988,7 @@ TExprBase DqBuildJoin(
     const bool mapJoinCanBeApplied = joinType != "Full"sv && joinType != "Exclusion"sv;
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
-    } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
         hashJoin = EHashJoinMode::Grace;
     }
 

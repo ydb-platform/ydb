@@ -152,23 +152,28 @@ for pair in "${PAIRS[@]}"; do
         if (( STAT_ONLY == 0 )); then
             echo "${BOLD}--- normalized diff (mechanical changes stripped) ---${RESET}"
 
-	    diff_dir="$(mktemp -d "/tmp/diffing-ydb-XXXXXX")"
-	    mkdir -p "$(dirname "$diff_dir/$orig_file")"
-	    mkdir -p "$(dirname "$diff_dir/$ydb_file")"
-	    normalize "$orig_file" > "$diff_dir/$orig_file"
-	    normalize "$ydb_file" > "$diff_dir/$ydb_file"
-	    (
-	        cd "$diff_dir"; 
-	        echo
-	        echo
-	        echo
-	        echo
-	        echo
-	        echo "===================================================================================================="
-	        echo "${RED}SUBSTANTIVE${RESET} (raw ${raw_stat}  norm ${norm_stat})  $label"
-	        difft "$orig_file" "$ydb_file" --color=always
-	    ) >> "$resulting_diff"
-	    rm -rf "$diff_dir"
+            diff_dir="$(mktemp -d "/tmp/diffing-ydb-XXXXXX")"
+            mkdir -p "$(dirname "$diff_dir/$orig_file")"
+            mkdir -p "$(dirname "$diff_dir/$ydb_file")"
+            normalize "$orig_file" > "$diff_dir/$orig_file"
+            normalize "$ydb_file" > "$diff_dir/$ydb_file"
+
+            difft_output="$(cd "$diff_dir" && difft "$orig_file" "$ydb_file" --color=always 2>&1 || true)"
+
+            # Print to terminal
+            echo "$difft_output"
+            echo
+
+            # Also append to collected diff file
+            (
+                echo
+                echo
+                echo "===================================================================================================="
+                echo "${RED}SUBSTANTIVE${RESET} (raw ${raw_stat}  norm ${norm_stat})  $label"
+                echo "$difft_output"
+            ) >> "$resulting_diff"
+
+            rm -rf "$diff_dir"
 
             echo "${BOLD}--- raw diff ---${RESET}"
             print_diff "$raw_diff"

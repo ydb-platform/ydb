@@ -137,4 +137,8 @@
 
   Функциональность на данный момент не поддерживается.
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 {% endlist %}

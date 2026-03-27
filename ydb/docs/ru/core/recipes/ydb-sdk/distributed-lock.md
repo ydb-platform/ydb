@@ -75,4 +75,45 @@
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { CoordinationClient } from '@ydbjs/coordination'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  const client = new CoordinationClient(driver)
+
+  await using session = await client.createSession('/local/my-app')
+  await using lock = await session.mutex('job-lock').lock()
+  await doWork(lock.signal)
+  ```
+
+- JavaScript (альтернативный)
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { CoordinationClient } from '@ydbjs/coordination'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  const client = new CoordinationClient(driver)
+
+  for await (let session of client.openSession('/local/my-app')) {
+    let mutex = session.mutex('job-lock')
+
+    try {
+      // Blocks until the lock is acquired.
+      await using lock = await mutex.lock()
+
+      await doWork(lock.signal)
+      // lock.release() called automatically here
+    } catch {
+      if (session.signal.aborted) continue // session expired, retry
+      throw error
+    }
+
+    break
+  }
+  ```
+
 {% endlist %}

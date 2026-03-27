@@ -250,8 +250,9 @@ TLocationMask TInflightInfo::ReadMask() const
         case EState::PBufferErasing:
         case EState::PBufferErased:
             // The data has already been transferred to DDisk.
-            // Will read from primary DDisks.
-            return TLocationMask::MakePrimaryDDisks();
+            // Will read from DDisks.
+            // Filter out non-desired or fresh later.
+            return TLocationMask::MakeAllDDisks();
     }
 }
 
@@ -416,8 +417,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
     auto makeDefaultHint = [this](TBlockRange64 range)
     {
         // Filter out disabled locations.
-        auto locationMask =
-            TLocationMask::MakePrimaryDDisks().Exclude(DisabledLocations);
+        auto locationMask = DesiredDDisks.Exclude(DisabledLocations);
         Y_ABORT_UNLESS(!locationMask.Empty());
 
         return TReadRangeHint(
@@ -427,11 +427,18 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             range,
             TRangeLock(this, range));
     };
+
     auto makeHint =
         [this](TLocationMask locationMask, ui64 lsn, TBlockRange64 range)
     {
+        Y_ABORT_UNLESS(!locationMask.Empty());
+
         // Filter out disabled locations.
+        if (locationMask.HasDDisk()) {
+            locationMask = locationMask.LogicalAnd(DesiredDDisks);
+        }
         locationMask = locationMask.Exclude(DisabledLocations);
+        Y_ABORT_UNLESS(!locationMask.Empty());
 
         return TReadRangeHint(
             locationMask,
@@ -466,17 +473,14 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    TReadRangeHint readHint =
-        makeHint(item->Value.ReadMask(), item->Key, item->Range);
-    if (readHint.LocationMask.Empty()) {
-        // Reading from range with blocked lsn is forbidden.
+    if (item->Value.ReadMask().Empty()) {
+        // Reading from range without quorum is forbidden.
         // Caller should wait until PBuffers quorum will be made.
-        auto item = Inflight.GetValue(readHint.Lsn);
-        Y_ABORT_UNLESS(item);
         result.WaitReady = item->Value.GetQuorumReadyFuture();
         Y_ABORT_UNLESS(result.RangeHints.empty());
     } else {
-        result.RangeHints.push_back(std::move(readHint));
+        result.RangeHints.push_back(
+            makeHint(item->Value.ReadMask(), item->Key, item->Range));
     }
 
     return result;

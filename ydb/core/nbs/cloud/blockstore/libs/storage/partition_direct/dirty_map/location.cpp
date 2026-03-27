@@ -135,12 +135,12 @@ TLocationMask::TIterator& TLocationMask::TIterator::operator++()
     return *this;
 }
 
-ELocation TLocationMask::TIterator::operator*()
+ELocation TLocationMask::TIterator::operator*() const
 {
     return Location;
 }
 
-ELocation TLocationMask::TIterator::operator->()
+ELocation TLocationMask::TIterator::operator->() const
 {
     return Location;
 }

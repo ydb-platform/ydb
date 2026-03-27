@@ -98,8 +98,8 @@ public:
         bool operator!=(const TIterator& other) const;
 
         TIterator& operator++();
-        ELocation operator*();
-        ELocation operator->();
+        ELocation operator*() const;
+        ELocation operator->() const;
     };
 
     TLocationMask() = default;

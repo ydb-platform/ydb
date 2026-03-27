@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.UpdateConfig(desired, disabled);
         readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
         UNIT_ASSERT_VALUES_EQUAL(
-            "0{[D.++..P.....][10..19][0..9]};",
+            "0{[D.++*.P.....][10..19][0..9]};",
             readHint.DebugPrint());
     }
 
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap;
 
-        // Enable Hand-off-0 insted of DDisk0
+        // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, true, true, true, false);
         auto disabled = TLocationMask::Make(true, false, false, false, false);
         dirtyMap.UpdateConfig(desired, disabled);
@@ -322,7 +322,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap;
 
-        // Enable Hand-off-0 insted of DDisk0
+        // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, false, true, true, true);
         auto disabled = TLocationMask::Make(true, true, false, false, false);
         dirtyMap.UpdateConfig(desired, disabled);

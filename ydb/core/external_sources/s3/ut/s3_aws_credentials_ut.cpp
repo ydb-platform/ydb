@@ -1117,6 +1117,230 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
                 fmt::format("Row count changed after migration: before={}, after={}", rowsBeforeMigration, rowsAfterMigration));
         }
     }
+
+    Y_UNIT_TEST(TieringInvalidSecretsFixViaDropCreateCheck) {
+        const TString tablePath = "/Root/olapStore/olapTable";
+        const TString tierPath = "/Root/tier1";
+        const TString invalidAccessKeyName = "badAccessKey";
+        const TString invalidSecretKeyName = "badSecretKey";
+        const TString validAccessKeySecretName = "/Root/valid-access-key-secret";
+        const TString validSecretKeySecretName = "/Root/valid-secret-key-secret";
+        const TString columnName = "timestamp";
+
+        auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
+        runnerSettings.SetS3ActorsFactory(s3ActorsFactory);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardBool(true);
+        featureFlags.SetEnableColumnStore(true);
+        featureFlags.SetEnableTieringInColumnShard(true);
+        featureFlags.SetEnableExternalDataSources(true);
+        runnerSettings.SetFeatureFlags(featureFlags);
+        runnerSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        auto kikimr = std::make_unique<TKikimrRunner>(runnerSettings);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+
+        TLocalHelper olapHelper(*kikimr);
+        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 4, 4);
+
+        {
+            const TString storePath = "/Root/olapStore";
+
+            const TString query = fmt::format(R"(
+                ALTER OBJECT `{store_path}` (TYPE TABLESTORE) SET (
+                    ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`{features}`
+                );
+            )",
+                "store_path"_a = storePath,
+                "features"_a =
+                    R"({"levels":[{"class_name":"Zero","portions_live_duration":"5s","expected_blobs_size":1000000000000,"portions_count_available":2},{"class_name":"Zero"}]})"
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE OBJECT {access_key} (TYPE SECRET) WITH (value = "INVALID_KEY");
+                CREATE OBJECT {secret_key} (TYPE SECRET) WITH (value = "INVALID_SECRET");
+            )",
+                "access_key"_a = invalidAccessKeyName,
+                "secret_key"_a = invalidSecretKeyName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString minioLocation = "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/";
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{tier_path}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key}",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{secret_key}",
+                    AWS_REGION="ru-central-1"
+                );
+            )",
+                "tier_path"_a = tierPath,
+                "location"_a = minioLocation,
+                "access_key"_a = invalidAccessKeyName,
+                "secret_key"_a = invalidSecretKeyName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
+            )",
+                "table_path"_a = tablePath,
+                "tier_path"_a = tierPath,
+                "column_name"_a = columnName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        for (ui64 i = 0; i < 30; ++i) {
+            WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(*kikimr, tablePath, 0, 3600000000 + i * 10000, 1000);
+        }
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->SetSkipSpecialCheckForEvict(true);
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(120));
+
+        NYdb::NTable::TTableClient tableClient = kikimr->GetTableClient();
+        TString selectQuery = fmt::format(R"(
+            SELECT
+                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
+            FROM `{table_path}/.sys/primary_index_portion_stats`
+            WHERE Activity == 1
+            GROUP BY TierName
+        )",
+            "table_path"_a = tablePath
+        );
+
+        {
+            const TDuration noEvictionCheckDuration = TDuration::Seconds(30);
+            const TDuration pollInterval = TDuration::Seconds(10);
+            TInstant checkDeadline = TInstant::Now() + noEvictionCheckDuration;
+            while (TInstant::Now() < checkDeadline) {
+                auto rows = ExecuteScanQuery(tableClient, selectQuery);
+                for (auto&& row : rows) {
+                    UNIT_ASSERT_C(GetUtf8(row.at("TierName")) != tierPath,
+                        "Data was unexpectedly evicted to tier with invalid secrets");
+                }
+
+                Sleep(pollInterval);
+            }
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                ALTER TABLE `{table_path}` RESET (TTL);
+            )",
+                "table_path"_a = tablePath
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                DROP EXTERNAL DATA SOURCE `{tier_path}`;
+            )",
+                "tier_path"_a = tierPath
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE SECRET `{access_key_secret}` WITH (value = "minio");
+                CREATE SECRET `{secret_key_secret}` WITH (value = "minio123");
+            )",
+                "access_key_secret"_a = validAccessKeySecretName,
+                "secret_key_secret"_a = validSecretKeySecretName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{tier_path}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="{access_key_secret}",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="{secret_key_secret}",
+                    AWS_REGION="ru-central-1"
+                );
+            )",
+                "tier_path"_a = tierPath,
+                "location"_a = minioLocation,
+                "access_key_secret"_a = validAccessKeySecretName,
+                "secret_key_secret"_a = validSecretKeySecretName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                ALTER TABLE `{table_path}` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `{tier_path}` ON `{column_name}`
+            )",
+                "table_path"_a = tablePath,
+                "tier_path"_a = tierPath,
+                "column_name"_a = columnName
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        csController->WaitActualization(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(120));
+
+        {
+            const TDuration evictionWaitTimeout = TDuration::Seconds(100);
+            const TDuration evictionPollInterval = TDuration::Seconds(10);
+            TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            while (rows.size() != 1 || GetUtf8(rows[0].at("TierName")) != tierPath) {
+                UNIT_ASSERT_C(TInstant::Now() < evictionDeadline,
+                    fmt::format("Valid secrets: eviction didn't complete within {}s: got {} tier(s), expected all data in {}",
+                        evictionWaitTimeout.Seconds(), rows.size(), tierPath));
+                Sleep(evictionPollInterval);
+                rows = ExecuteScanQuery(tableClient, selectQuery);
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), tierPath);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

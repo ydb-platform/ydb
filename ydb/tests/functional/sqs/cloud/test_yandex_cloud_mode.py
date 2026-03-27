@@ -398,8 +398,8 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_dlq_mechanics_in_cloud(self, is_fifo):
-        tables_format = 1;
-        another_tables_format = 1;
+        tables_format = 1
+        another_tables_format = 1
 
         self._init_with_params(is_fifo, tables_format)
 

@@ -526,6 +526,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         featureFlags.SetEnableReplaceIfExistsForExternalEntities(true);
         runnerSettings.SetFeatureFlags(featureFlags);
         runnerSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        auto kikimr = std::make_unique<TKikimrRunner>(runnerSettings);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -721,6 +722,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         featureFlags.SetEnableReplaceIfExistsForExternalEntities(true);
         runnerSettings.SetFeatureFlags(featureFlags);
         runnerSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        auto kikimr = std::make_unique<TKikimrRunner>(runnerSettings);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -906,6 +908,7 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         featureFlags.SetEnableExternalDataSources(true);
         runnerSettings.SetFeatureFlags(featureFlags);
         runnerSettings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        auto kikimr = std::make_unique<TKikimrRunner>(runnerSettings);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();

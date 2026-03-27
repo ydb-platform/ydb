@@ -621,7 +621,6 @@ void LoadSmallTables(
     TDriver& driver,
     const TString& path,
     int warehouseCount,
-    TImportState& state,
     google::protobuf::Arena& arena,
     TReallyFastRng32& fastRng,
     TLog* Log)
@@ -645,8 +644,6 @@ void LoadSmallTables(
             return LoadDistricts(tableClient, districtTablePath, wh, lastId, arena, fastRng, Log);
         }, arena, Log);
     }
-
-    state.SmallTablesLoaded.store(true, std::memory_order_relaxed);
 }
 
 //-----------------------------------------------------------------------------
@@ -1023,7 +1020,7 @@ public:
                 TReallyFastRng32 fastRng(threadId * TInstant::Now().Seconds());
                 auto& driver = drivers[threadId % driverCount];
                 if (threadId == 0) {
-                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, LoadState, arena, fastRng, Log.get());
+                    LoadSmallTables(driver, Config.Path, Config.WarehouseCount, arena, fastRng, Log.get());
                 } else {
                     std::this_thread::sleep_for(std::chrono::milliseconds(threadId));
                 }
@@ -1072,7 +1069,7 @@ public:
                         break;
                     }
 
-                    LOG_I("Indexed tables loaded, indices are being built and tables are being compacted in background. Continuing with remaining tables");
+                    LOG_I("Indexed tables loaded, indices are being built in background. Continuing with remaining tables");
                     LoadState.State = TImportState::ELOAD_TABLES_BUILD_INDICES;
                     lastIndexProgressCheck = now;
                 }

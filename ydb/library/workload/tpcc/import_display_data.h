@@ -61,7 +61,6 @@ struct TImportState {
         : State(other.State)
         , StopToken() // can't copy: leave unset
         , DataSizeLoaded(other.DataSizeLoaded.load(std::memory_order_relaxed))
-        , SmallTablesLoaded(other.SmallTablesLoaded.load(std::memory_order_relaxed))
         , IndexedRangesLoaded(other.IndexedRangesLoaded.load(std::memory_order_relaxed))
         , RangesLoaded(other.RangesLoaded.load(std::memory_order_relaxed))
         , IndexBuildStates(other.IndexBuildStates)
@@ -77,7 +76,6 @@ struct TImportState {
             State = other.State;
             // StopToken is not copyable — intentionally omitted
             DataSizeLoaded.store(other.DataSizeLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
-            SmallTablesLoaded.store(other.SmallTablesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexedRangesLoaded.store(other.IndexedRangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             RangesLoaded.store(other.RangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexBuildStates = other.IndexBuildStates;
@@ -97,7 +95,6 @@ struct TImportState {
 
     std::atomic<size_t> DataSizeLoaded{0};
 
-    std::atomic_bool SmallTablesLoaded{false};
     std::atomic<size_t> IndexedRangesLoaded{0};
     std::atomic<size_t> RangesLoaded{0};
 

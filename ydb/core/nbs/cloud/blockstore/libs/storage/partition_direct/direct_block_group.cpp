@@ -272,6 +272,71 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
 }
 
 NThreading::TFuture<TDBGWriteBlocksResponse>
+TDirectBlockGroup::WriteBlocksToDDisk(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    TBlockRange64 range,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvWriterResultFuture =
+        NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>;
+
+    if (!Initialized) {
+        return MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "Connections are not established")});
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.WriteBlocks.WritePBuffer",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGWriteBlocksResponse>();
+    auto result = promise.GetFuture();
+    auto future = StorageTransport->WriteToDDisk(
+        PBufferConnections[hostIndex].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        NKikimr::NDDisk::TWriteInstruction(0),
+        guardedSglist,
+        childSpan);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TEvWriterResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise), threadChecker, f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    const auto& response = f.GetValue();
+                    NProto::TError error =
+                        response.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, response.GetErrorReason());
+
+                    promise.SetValue(
+                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                });
+        });
+    return result;
+}
+
+NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     ui8 hostIndex,

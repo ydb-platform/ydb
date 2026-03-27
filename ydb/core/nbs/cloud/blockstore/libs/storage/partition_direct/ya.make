@@ -1,7 +1,11 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
+
 SRCS(
+    ddisk_data_copier.cpp
     direct_block_group_in_mem.cpp
+    direct_block_group_mock.cpp
     direct_block_group.cpp
     erase_request.cpp
     executor_pool.cpp

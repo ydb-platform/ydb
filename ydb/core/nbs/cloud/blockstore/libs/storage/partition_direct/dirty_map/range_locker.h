@@ -37,6 +37,7 @@ public:
 private:
     friend class TBlocksDirtyMap;
     friend class TRangeLockAccess;
+    friend class TDDiskDataCopier;
 
     TRangeLock(ILockableRanges* lockableRanges, ui64 lsn);
     TRangeLock(ILockableRanges* lockableRanges, TBlockRange64 range);

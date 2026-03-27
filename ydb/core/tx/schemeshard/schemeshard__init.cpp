@@ -3041,7 +3041,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
                     TPathElement::TPtr parent = Self->PathsById.at(path->ParentPathId);
-                    Y_VERIFY_S(parent->IsTable(), "Parent path is not a table"
+                    Y_VERIFY_S(parent->IsTable() || parent->IsColumnTable(), "Parent path is not a table or column table"
                                    << ", index pathId: " << pathId
                                    << ", parent pathId: " << path->ParentPathId);
 

@@ -39,7 +39,8 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 
-    NThreading::TFuture<TEvWritePersistentBuffersResult> WriteToPBuffers(
+    NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
+    WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,

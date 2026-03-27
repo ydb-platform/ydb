@@ -14,7 +14,7 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-TEvTransportPrivate::TWriteToPBuffers::~TWriteToPBuffers()
+TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
     Y_ABORT_UNLESS(Promise.IsReady());
 }

@@ -35,8 +35,8 @@ private:
     TMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToPBuffers>>
-        WriteToPBuffersRequests;
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>>
+        WriteToManyPBuffersRequests;
 
 public:
     TICStorageTransportActor() = default;
@@ -44,6 +44,10 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
+    using TEvWriteToManyPersistentBuffers =
+        NKikimr::NDDisk::TEvWritePersistentBuffers;
+    using TEvWriteToManyPersistentBuffersResult =
+        NKikimr::NDDisk::TEvWritePersistentBuffersResult;
     STFUNC(StateWork);
 
     void HandleConnect(
@@ -62,12 +66,12 @@ private:
         const NKikimr::NDDisk::TEvWritePersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleWritePersistentBuffers(
-        const TEvTransportPrivate::TEvWriteToPBuffers::TPtr& ev,
+    void HandleWriteToManyPersistentBuffers(
+        const TEvTransportPrivate::TEvWriteToManyPBuffers::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleWritePersistentBuffersResult(
-        const NKikimr::NDDisk::TEvWritePersistentBuffersResult::TPtr& ev,
+    void HandleWriteToManyPersistentBuffersResult(
+        const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBuffer(

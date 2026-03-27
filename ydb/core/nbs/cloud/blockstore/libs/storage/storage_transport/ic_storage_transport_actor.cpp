@@ -134,15 +134,15 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
     }
 }
 
-void TICStorageTransportActor::HandleWritePersistentBuffers(
-    const TEvTransportPrivate::TEvWriteToPBuffers::TPtr& ev,
+void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
+    const TEvTransportPrivate::TEvWriteToManyPBuffers::TPtr& ev,
     const TActorContext& ctx)
 {
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
-        WriteToPBuffersRequests.emplace(requestId, ev->Release().Release());
+        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -151,8 +151,7 @@ void TICStorageTransportActor::HandleWritePersistentBuffers(
         "Sent TEvWriteToPBuffers with requestId# %lu",
         requestId);
 
-    const std::vector<std::tuple<ui32, ui32, ui32>> persistentBufferIds;
-    auto request = std::make_unique<NDDisk::TEvWritePersistentBuffers>(
+    auto request = std::make_unique<TEvWriteToManyPersistentBuffers>(
         msg->Credentials,
         msg->Selector,
         msg->Lsn,
@@ -177,8 +176,8 @@ void TICStorageTransportActor::HandleWritePersistentBuffers(
         std::move(msg->TraceId)));
 }
 
-void TICStorageTransportActor::HandleWritePersistentBuffersResult(
-    const NDDisk::TEvWritePersistentBuffersResult::TPtr& ev,
+void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
+    const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
     const TActorContext& ctx)
 {
     const ui64 requestId = ev->Cookie;
@@ -186,20 +185,21 @@ void TICStorageTransportActor::HandleWritePersistentBuffersResult(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Received TEvWritePersistentBuffersResult with requestId# %lu",
+        "Received TEvWriteToManyPersistentBuffersResult with requestId# %lu",
         requestId);
 
-    if (auto* r = WriteToPBuffersRequests.FindPtr(requestId)) {
+    if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
         auto& request = **r;
         request.Promise.SetValue(std::move(ev->Get()->Record));
-        WriteToPBuffersRequests.erase(requestId);
+        WriteToManyPBuffersRequests.erase(requestId);
     } else {
         // That means that request is already completed
         // TODO handle this case in writeRequests through weak_ptr with erase
         LOG_ERROR(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "WritePersistentBuffersEvent with requestId# %lu not found",
+            "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
+            "found",
             requestId);
     }
 }
@@ -532,11 +532,11 @@ STFUNC(TICStorageTransportActor::StateWork)
             HandleWritePersistentBufferResult);
 
         HFunc(
-            TEvTransportPrivate::TEvWriteToPBuffers,
-            HandleWritePersistentBuffers);
+            TEvTransportPrivate::TEvWriteToManyPBuffers,
+            HandleWriteToManyPersistentBuffers);
         HFunc(
-            NDDisk::TEvWritePersistentBuffersResult,
-            HandleWritePersistentBuffersResult);
+            TEvWriteToManyPersistentBuffersResult,
+            HandleWriteToManyPersistentBuffersResult);
 
         HFunc(
             TEvTransportPrivate::TEvEraseFromPBuffer,

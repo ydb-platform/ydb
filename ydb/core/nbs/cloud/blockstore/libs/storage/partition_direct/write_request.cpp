@@ -43,11 +43,6 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run()
 {
-    /*
-    SendWriteRequest(ELocation::PBuffer0);
-    SendWriteRequest(ELocation::PBuffer1);
-    SendWriteRequest(ELocation::PBuffer2);
-    */
     SendWriteRequestToManyPBuffers();
 }
 
@@ -63,10 +58,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
         ELocation::PBuffer0,
         ELocation::PBuffer1,
         ELocation::PBuffer2};
-    // std::vector<ui8> hostsIndexes(
-    //     {VChunkConfig.GetHostIndex(ELocation::PBuffer0),
-    //      VChunkConfig.GetHostIndex(ELocation::PBuffer1),
-    //      VChunkConfig.GetHostIndex(ELocation::PBuffer2)});
+
     std::vector<ui8> hostsIndexes;
     hostsIndexes.reserve(3);
     for (auto location: locations) {
@@ -74,7 +66,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
         RequestedWrites.Set(location);
     }
 
-    auto future = DirectBlockGroup->WriteBlocksToPBuffers(
+    auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.VChunkIndex,
         std::move(hostsIndexes),
         Lsn,

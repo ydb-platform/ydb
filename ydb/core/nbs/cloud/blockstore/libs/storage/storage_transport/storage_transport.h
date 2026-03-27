@@ -37,7 +37,7 @@ public:
     using TEvReadResult = NKikimrBlobStorage::NDDisk::TEvReadResult;
     using TEvWritePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult;
-    using TEvWritePersistentBuffersResult =
+    using TEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
@@ -76,8 +76,8 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) = 0;
 
-    virtual NThreading::TFuture<TEvWritePersistentBuffersResult>
-    WriteToPBuffers(
+    virtual NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
+    WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,

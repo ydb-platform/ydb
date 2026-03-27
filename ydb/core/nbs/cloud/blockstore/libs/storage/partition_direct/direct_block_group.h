@@ -131,7 +131,7 @@ public:
         NWilson::TTraceId traceId) = 0;
 
     virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToPBuffers(
+    WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         std::vector<ui8> hostIndexes,
         ui64 lsn,
@@ -219,7 +219,7 @@ public:
         NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToPBuffers(
+    WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         std::vector<ui8> hostIndexes,
         ui64 lsn,

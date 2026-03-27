@@ -221,10 +221,14 @@ struct TEvTransportPrivate
     };
 
     // TODO рассмотреть вариант переиспольщование общего с TWriteToPBuffer кода
-    struct TWriteToPBuffers: TDisableCopyMove
+    using TProtoEvWriteToManyPersistentBuffersResult =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
+    using TProtoEvWriteToManyPersistentBuffers =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffers;
+
+    struct TWriteToManyPBuffers: TDisableCopyMove
     {
-        using TResult =
-            NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
+        using TResult = TProtoEvWriteToManyPersistentBuffersResult;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
@@ -239,7 +243,7 @@ struct TEvTransportPrivate
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
 
-        TWriteToPBuffers(
+        TWriteToManyPBuffers(
             const NActors::TActorId serviceId,
             const NKikimr::NDDisk::TQueryCredentials& credentials,
             const NKikimr::NDDisk::TBlockSelector& selector,
@@ -262,7 +266,7 @@ struct TEvTransportPrivate
 
         {}
 
-        ~TWriteToPBuffers();
+        ~TWriteToManyPBuffers();
     };
 
     enum EEvents
@@ -274,7 +278,7 @@ struct TEvTransportPrivate
         EvReadFromDDisk,
         EvSyncWithPBuffer,
         EvListPBufferEntries,
-        EvWriteToPBuffers,
+        EvWriteToManyPBuffers,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -297,8 +301,8 @@ struct TEvTransportPrivate
     using TEvListPBufferEntries =
         TRequestEvent<TListPBufferEntries, EEvents::EvListPBufferEntries>;
 
-    using TEvWriteToPBuffers =
-        TRequestEvent<TWriteToPBuffers, EEvents::EvWriteToPBuffers>;
+    using TEvWriteToManyPBuffers =
+        TRequestEvent<TWriteToManyPBuffers, EEvents::EvWriteToManyPBuffers>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

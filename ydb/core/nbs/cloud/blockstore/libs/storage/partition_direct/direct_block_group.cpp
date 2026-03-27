@@ -315,7 +315,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 }
 
 NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-TDirectBlockGroup::WriteBlocksToPBuffers(
+TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     std::vector<ui8> hostIndexes,
     ui64 lsn,
@@ -327,8 +327,8 @@ TDirectBlockGroup::WriteBlocksToPBuffers(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
 
-    using TEvWritePersistentBuffersResultFuture = NThreading::TFuture<
-        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult>;
+    using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
+        NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
     std::vector<std::tuple<ui32, ui32, ui32>> disksIds(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
@@ -362,7 +362,7 @@ TDirectBlockGroup::WriteBlocksToPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
-    auto future = StorageTransport->WriteToPBuffers(
+    auto future = StorageTransport->WriteToManyPBuffers(
         PBufferConnections[hostIndexes[0]].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
@@ -379,7 +379,7 @@ TDirectBlockGroup::WriteBlocksToPBuffers(
         [promise = std::move(promise),
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate()](
-            const TEvWritePersistentBuffersResultFuture& f) mutable
+            const TEvWriteToManyPersistentBuffersResultFuture& f) mutable
         {
             // ActorSystem thread
 

@@ -156,35 +156,33 @@ class OrchestratorWardenChecker:
                 logger.debug(f"Liveness checks completed: {len(liveness_results)} checks")
 
                 logger.debug(
-                    "Running master safety checks (parallel asyncio tasks: %s)",
+                    "Running master safety checks (ordered: %s). "
+                    "PDisk first so the report updates before aggregated waits on agents.",
                     ", ".join(MASTER_SAFETY_CHECK_IDS_ORDER),
                 )
 
-                async def _run_one_master_safety(check_id: str):
-                    if check_id == CHECK_ID_MASTER_PDISK:
-                        return await asyncio_run_blocking(
+                for cid in MASTER_SAFETY_CHECK_IDS_ORDER:
+                    if cid == CHECK_ID_MASTER_PDISK:
+                        part = await asyncio_run_blocking(
                             lambda: list(self._run_pdisk_check_sync(cluster))
                         )
-                    if check_id == CHECK_ID_MASTER_VERIFY_AGGREGATED:
-                        return [await self._run_aggregated_verify_failed_check_async()]
-                    raise RuntimeError(f"Unknown master safety check_id: {check_id}")
-
-                groups = await asyncio.gather(
-                    *(_run_one_master_safety(cid) for cid in MASTER_SAFETY_CHECK_IDS_ORDER)
-                )
-                for part in groups:
-                    safety_results.extend(part)
-                with self._lock:
-                    self._last_report = WardenCheckReport(
-                        status='running',
-                        started_at=self._last_report.started_at,
-                        completed_at=None,
-                        liveness_checks=liveness_results.copy(),
-                        safety_checks=safety_results.copy(),
-                    )
+                        safety_results.extend(part)
+                    elif cid == CHECK_ID_MASTER_VERIFY_AGGREGATED:
+                        agg = await self._run_aggregated_verify_failed_check_async()
+                        safety_results.append(agg)
+                    else:
+                        raise RuntimeError(f"Unknown master safety check_id: {cid}")
+                    with self._lock:
+                        self._last_report = WardenCheckReport(
+                            status="running",
+                            started_at=self._last_report.started_at,
+                            completed_at=None,
+                            liveness_checks=liveness_results.copy(),
+                            safety_checks=safety_results.copy(),
+                        )
                 logger.debug(
-                    f"Master safety done: pdisk={len(pdisk_results)} row(s), "
-                    f"aggregated status={aggregated_result.status}"
+                    "Master safety done: %d safety row(s) on orchestrator",
+                    len(safety_results),
                 )
 
             # Count results by status

@@ -1,13 +1,13 @@
 """
 AgentWardenChecker — safety checks on each agent host.
 
-Each safety warden instance runs as its own asyncio task on the background event loop
-(asyncio_run_blocking), with progress merged into the report as tasks finish.
+Each safety warden runs in its own asyncio step: await asyncio_run_blocking(...)
+so the event loop yields between checks. Runs sequentially on the default executor
+to avoid parallel log/IO on the same host (which can look like a hang).
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import socket
 import threading
@@ -67,7 +67,7 @@ class AgentWardenChecker:
                 started_at=datetime.utcnow().isoformat() + "Z",
             )
 
-        logger.info(f"[{self._hostname}] Starting agent safety checks (one asyncio task per check)")
+        logger.info(f"[{self._hostname}] Starting agent safety checks (one asyncio step per check)")
         self._event_loop.submit(self._run_checks_async())
         return True
 
@@ -203,12 +203,12 @@ class AgentWardenChecker:
             n = len(jobs)
             slots: List[WardenCheckResult | None] = [None] * n
 
-            async def run_at(index: int, fn: Callable[[], WardenCheckResult]) -> None:
+            for i, (_, fn) in enumerate(jobs):
                 res = await asyncio_run_blocking(fn)
-                slots[index] = res
+                slots[i] = res
                 with self._lock:
                     started = self._last_report.started_at
-                    partial = [slots[i] for i in range(n) if slots[i] is not None]
+                    partial = [slots[j] for j in range(n) if slots[j] is not None]
                     self._last_report = WardenCheckReport(
                         status="running",
                         started_at=started,
@@ -216,8 +216,6 @@ class AgentWardenChecker:
                         liveness_checks=[],
                         safety_checks=partial,
                     )
-
-            await asyncio.gather(*(run_at(i, fn) for i, (_, fn) in enumerate(jobs)))
 
             final = [slots[i] for i in range(n)]
             ok_count = sum(1 for r in final if r.status == "ok")

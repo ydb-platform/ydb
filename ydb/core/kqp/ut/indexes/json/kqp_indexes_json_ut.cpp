@@ -157,10 +157,64 @@ void TestAddJsonIndex(const std::string& type, bool nullable, bool covered) {
     }
 }
 
+void FillTestTable(TQueryClient& db, const std::string& tableName, const std::string& jsonType) {
+    const std::vector<std::string> values = {
+        R"(('null'))",
+        R"(('1'))",
+        R"(('true'))",
+        R"(('false'))",
+        R"(('"1"'))",
+        R"(('[]'))",
+        R"(('{}'))",
+        R"(('{"k1": null}'))",
+        R"(('{"k1": 1}'))",
+        R"(('{"k1": true}'))",
+        R"(('{"k1": false}'))",
+        R"(('{"k1": "1"}'))",
+        R"(('{"k1": []}'))",
+        R"(('{"k1": {}}'))",
+        R"(('{"k1": [1, 2, 3]}'))",
+        R"(('{"k1": "1", "k2": "22"}'))",
+        R"(('[{"k1": "1", "k2": "22"}, {"k1": "1", "k2": "22"}]'))",
+        R"(('{"k1": {"k2": {"k3": {"k4": "1"}}}}'))",
+        R"(('{"k1": 0, "k2": -1.5, "k3": "text", "k4": true, "k5": null, "k6": [1, "1", false], "k7": {"k1": "v"}}'))",
+        R"(('{"k1": [{"k1": 10}, {"k1": 20}], "k2": {"k1": 2, "k2": true}}'))",
+        R"(('{"": null}'))",
+        R"(('{"": 1}'))",
+        R"(('{"": true}'))",
+        R"(('{"": false}'))",
+        R"(('{"": "1"}'))",
+        R"(('{"": []}'))",
+        R"(('{"": {}}'))",
+        R"(('{"": [1, 2, 3]}'))",
+        R"(('{"": {"": {"": {"": ["", "1", null, 1, {"": ""}]}}}}'))",
+        R"(('[{"": ""}, {"": ""}, {"": ""}, {"": ""}]'))",
+        R"(('{"k1": [[{"k2": 0}, {"k2": 1}], []]}'))",
+        R"(('[1, [2, [3, [4, []]]]]'))",
+        R"(('["1", {"k1": 1}, [2, 3], 4, null, false]'))",
+        R"(('[[{"k1": 1}], [{"k2": [{"k3": 2}]}]]'))",
+        R"(('{"k1": {"k2": {"k3": [{"k1": "a"}, {"k2": "b"}], "k4": [0, 1.5, -2, null]}}}'))",
+        "NULL",
+        "NULL",
+        "NULL"
+    };
+
+    std::string query = std::format(R"(
+        UPSERT INTO {} (Key, Text) VALUES
+    )", tableName);
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        query += std::format("({}, {}),", i + 1, (values[i] == "NULL" ? "" : jsonType) + values[i]);
+    }
+
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void ValidatePredicate(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate) {
     auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
         return std::format(R"(
-            SELECT k, v FROM {} {} WHERE {} ORDER BY k;
+            SELECT Key, Text FROM {} {} WHERE {} ORDER BY Key;
         )", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
     };
 
@@ -180,7 +234,7 @@ void ValidatePredicate(TQueryClient& db, const std::string& table, const std::st
 void ValidateError(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate, const std::string& errorMessage) {
     auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
         return std::format(R"(
-            SELECT * FROM {} {} WHERE {} ORDER BY k;
+            SELECT * FROM {} {} WHERE {} ORDER BY Key;
         )", table, (indexTable.empty() ? "" : "VIEW  " + indexTable), predicate);
     };
 
@@ -387,78 +441,15 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
         const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
         const auto jsonExists = [&](const std::string& predicate) {
-            return std::format("JSON_EXISTS(v, '{}')", (IsStrict ? "strict " : "lax ") + predicate);
+            return std::format("JSON_EXISTS(Text, '{}')", (IsStrict ? "strict " : "lax ") + predicate);
         };
 
-        {
-            auto query = std::format(R"(
-                CREATE TABLE TestTable (
-                    k Uint64,
-                    v {0},
-                    PRIMARY KEY (k)
-                );
-            )", jsonType);
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            std::vector<std::string> values = {
-                R"(('null'))",
-                R"(('1'))",
-                R"(('true'))",
-                R"(('false'))",
-                R"(('"1"'))",
-                R"(('[]'))",
-                R"(('{}'))",
-                R"(('{"k1": null}'))",
-                R"(('{"k1": 1}'))",
-                R"(('{"k1": true}'))",
-                R"(('{"k1": false}'))",
-                R"(('{"k1": "1"}'))",
-                R"(('{"k1": []}'))",
-                R"(('{"k1": {}}'))",
-                R"(('{"k1": [1, 2, 3]}'))",
-                R"(('{"k1": "1", "k2": "22"}'))",
-                R"(('[{"k1": "1", "k2": "22"}, {"k1": "1", "k2": "22"}]'))",
-                R"(('{"k1": {"k2": {"k3": {"k4": "1"}}}}'))",
-                R"(('{"k1": 0, "k2": -1.5, "k3": "text", "k4": true, "k5": null, "k6": [1, "1", false], "k7": {"k1": "v"}}'))",
-                R"(('{"k1": [{"k1": 10}, {"k1": 20}], "k2": {"k1": 2, "k2": true}}'))",
-                R"(('{"": null}'))",
-                R"(('{"": 1}'))",
-                R"(('{"": true}'))",
-                R"(('{"": false}'))",
-                R"(('{"": "1"}'))",
-                R"(('{"": []}'))",
-                R"(('{"": {}}'))",
-                R"(('{"": [1, 2, 3]}'))",
-                R"(('{"": {"": {"": {"": ["", "1", null, 1, {"": ""}]}}}}'))",
-                R"(('[{"": ""}, {"": ""}, {"": ""}, {"": ""}]'))",
-                R"(('{"k1": [[{"k2": 0}, {"k2": 1}], []]}'))",
-                R"(('[1, [2, [3, [4, []]]]]'))",
-                R"(('["1", {"k1": 1}, [2, 3], 4, null, false]'))",
-                R"(('[[{"k1": 1}], [{"k2": [{"k3": 2}]}]]'))",
-                R"(('{"k1": {"k2": {"k3": [{"k1": "a"}, {"k2": "b"}], "k4": [0, 1.5, -2, null]}}}'))",
-                "NULL",
-                "NULL",
-                "NULL"
-            };
-
-            std::string query = R"(
-                UPSERT INTO TestTable (k, v) VALUES
-            )";
-
-            for (size_t i = 0; i < values.size(); ++i) {
-                query += std::format("({}, {}),", i + 1, (values[i] == "NULL" ? "" : jsonType) + values[i]);
-            }
-
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        CreateTestTable(db, jsonType, /* withIndex */ false);
+        FillTestTable(db, "TestTable", jsonType);
 
         {
             auto query = R"(
-                ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (v)
+                ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

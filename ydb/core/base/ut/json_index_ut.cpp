@@ -79,6 +79,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("$.key[0].*", {"\3key"});
     }
 
+    // Methods stop further path extraction: operand path only
     Y_UNIT_TEST(CollectPath_Methods) {
         ValidateQueries("$.abs()", {""});
         ValidateQueries("$.*.floor()", {""});

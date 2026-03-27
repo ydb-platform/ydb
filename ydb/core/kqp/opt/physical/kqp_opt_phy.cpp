@@ -573,7 +573,7 @@ protected:
         bool shuffleEliminationWithMap = KqpCtx.Config->OptShuffleEliminationWithMap.Get().GetOrElse(true);
         bool rightCollectStage = !KqpCtx.Config->GetAllowMultiBroadcasts();
         TExprBase output = DqBuildJoin(node, ctx, optCtx, *getParents(), IsGlobal,
-            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
+            pushLeftStage, KqpCtx.Config->GetHashJoinMode(), false, KqpCtx.Config->UseGraceJoinCoreForMap.Get().GetOrElse(false), KqpCtx.Config->GetUseBlockHashJoin(), KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination()), shuffleEliminationWithMap,
             rightCollectStage,
             KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false)
         );

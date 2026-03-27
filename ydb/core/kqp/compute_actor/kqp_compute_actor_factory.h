@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_compute_actor.h"
+
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -97,6 +99,8 @@ public:
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
 
+    std::atomic<bool> AccountDefaultPoolInScheduler = false;
+
 public:
     struct TCreateArgs {
         const NActors::TActorId& ExecuterId;
@@ -106,7 +110,7 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
-        const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
+        TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
         const TString& SerializedGUCSettings;
@@ -133,6 +137,8 @@ public:
     virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
+    virtual bool GetVerboseMemoryLimitException() = 0;
+    virtual TShardsScanningPolicy GetShardsScanningPolicy() = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

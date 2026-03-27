@@ -323,7 +323,9 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
 }
 
 TString ReformatYson(const TString& yson);
+TString SortYsonList(const TString& yson);
 void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYsonUnordered(const TString& expected, const TString& actual, const TString& message = {});
 void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,

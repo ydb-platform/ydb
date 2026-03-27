@@ -541,7 +541,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui64 GetCachedNow() {
         if (!CachedNow) {
             if (QContext.CanRead()) {
-                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                auto item = QContext.GetReader()->Get({.Component=TypeAnnotationContextComponent, .Label=NowKey}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -550,7 +550,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
             } else {
                 CachedNow = TimeProvider->Now().GetValue();
                 if (QContext.CanWrite()) {
-                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                    QContext.GetWriter()->Put({.Component=TypeAnnotationContextComponent, .Label=NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
                 }
             }
         }

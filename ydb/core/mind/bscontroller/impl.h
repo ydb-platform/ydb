@@ -2050,6 +2050,9 @@ private:
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
+    void UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, ui32 generation, NKikimrBlobStorage::TGroupInfo bridgeGroupInfo,
+        TGroupId targetGroupId);
+
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});

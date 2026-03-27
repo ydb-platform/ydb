@@ -2,6 +2,7 @@
 
 #include "vhost_test.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_test.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_test.h>
@@ -125,12 +126,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::WriteBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -157,12 +159,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ReadBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -188,8 +191,8 @@ private:
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ZeroBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = {}});
 
             if (ServiceFrozen.test()) {

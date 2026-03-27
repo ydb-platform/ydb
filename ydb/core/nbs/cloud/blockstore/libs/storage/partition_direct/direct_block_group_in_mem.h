@@ -34,36 +34,44 @@ public:
 
     ~TInMemoryDirectBlockGroup() override = default;
 
-    NThreading::TFuture<void> EstablishConnections(
-        TExecutorPtr executor,
-        NWilson::TTraceId traceId,
-        ui32 vChunkIndex) override;
+    TExecutorPtr GetExecutor() override;
 
-    NThreading::TFuture<TDBGReadBlocksResponse>
-    ReadBlocksLocalFromPersistentBuffer(
-        ui32 vChunkIndex,
-        ui8 persistentBufferIndex,
-        TCallContextPtr callContext,
-        std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId,
-        ui64 lsn) override;
+    void EstablishConnections() override;
 
-    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksLocalFromDDisk(
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,
-        TCallContextPtr callContext,
-        std::shared_ptr<TReadBlocksLocalRequest> request,
+        ui8 hostIndex,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksLocal(
+    NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
-        TCallContextPtr callContext,
-        std::shared_ptr<TWriteBlocksLocalRequest> request,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
-    NThreading::TFuture<TDBGSyncBlocksResponse> SyncWithPersistentBuffer(
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
-        ui8 persistBufferIndex,
-        const TVector<TSyncRequest>& syncRequests,
+        ui8 hostIndex,
+        ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
+        ui32 vChunkIndex,
+        ui8 pbufferHostIndex,
+        ui8 ddiskHostIndex,
+        const TVector<TPBufferSegment>& segments,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        const TVector<TPBufferSegment>& segments,
         NWilson::TTraceId traceId) override;
 };
 

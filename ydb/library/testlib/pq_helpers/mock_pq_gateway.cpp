@@ -601,17 +601,17 @@ private:
     }
 
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const std::string& topic, ui64 partitionId) {
-        if (Settings.Runtime && Settings.Notifier) {
-            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
-        }
-
         const TString path(topic);
-        auto& info = GetTopicInfo(path);
         auto session = std::make_shared<TMockPqReadSession>(path, partitionId);
 
         with_lock (Mutex) {
+            auto& info = Topics[path];
             info.ReadSessionsByPartition[partitionId] = session;
             info.LastCreatedPartitionId = partitionId;
+        }
+
+        if (Settings.Runtime && Settings.Notifier) {
+            Settings.Runtime->Send(Settings.Notifier, NActors::TActorId(), new TEvMockPqEvents::TEvCreateSession());
         }
 
         return session;

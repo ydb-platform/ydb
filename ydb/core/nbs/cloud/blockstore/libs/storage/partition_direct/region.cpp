@@ -1,18 +1,30 @@
 #include "region.h"
 
+#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
+    NActors::TActorSystem* actorSystem,
+    IPartitionDirectService* partitionDirectService,
+    ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    ui32 syncRequestsBatchSize)
+    ui32 syncRequestsBatchSize,
+    TDuration traceSamplePeriod)
+    : ActorSystem(actorSystem)
 {
     for (size_t i = 0; i < directBlockGroups.size(); i++) {
+        const ui32 vChunkIndex =
+            (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
         auto vChunk = std::make_shared<TVChunk>(
-            i,
+            ActorSystem,
+            partitionDirectService,
+            TVChunkConfig::Make(vChunkIndex),
             std::move(directBlockGroups[i]),
-            syncRequestsBatchSize);
+            syncRequestsBatchSize,
+            traceSamplePeriod);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
     }
@@ -23,10 +35,10 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        GetVChunkOffset(request->Range.Start),
-        request->Range.Size());
+    auto vChunkIndex = GetVChunkIndex(request->RegionRange.Start);
+    request->VChunkRange = TBlockRange64::WithLength(
+        GetVChunkOffset(request->RegionRange.Start),
+        request->RegionRange.Size());
 
     return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
@@ -39,10 +51,10 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        GetVChunkOffset(request->Range.Start),
-        request->Range.Size());
+    auto vChunkIndex = GetVChunkIndex(request->RegionRange.Start);
+    request->VChunkRange = TBlockRange64::WithLength(
+        GetVChunkOffset(request->RegionRange.Start),
+        request->RegionRange.Size());
 
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),

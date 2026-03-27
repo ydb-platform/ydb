@@ -158,6 +158,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
+    NMonitoring::TDynamicCounters::TCounterPtr DictionaryOnlyOptimizationCount;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     std::shared_ptr<TDuplicateFilteringCounters> DuplicateFilteringCounters;
 
@@ -193,6 +194,9 @@ public:
     }
     void OnDeniedByHeader(const ui32 recordsCount) const {
         RecordsDeniedByHeader->Add(recordsCount);
+    }
+    void OnDictionaryOnlyOptimization() const {
+        DictionaryOnlyOptimizationCount->Add(1);
     }
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;

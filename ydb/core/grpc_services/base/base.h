@@ -423,6 +423,11 @@ struct TAuditMode {
     }
 };
 
+enum class EEmptyDatabaseMode {
+    EmptyDatabaseAllowed,
+    EmptyDatabaseForbidden,
+};
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing
@@ -438,6 +443,7 @@ struct TRequestAuxSettings {
     void (*CustomAttributeProcessor)(const NKikimrScheme::TEvDescribeSchemeResult& schemeData, ICheckerIface*) = nullptr;
     TAuditMode AuditMode = {};
     NJaegerTracing::ERequestType RequestType = NJaegerTracing::ERequestType::UNSPECIFIED;
+    EEmptyDatabaseMode EmptyDatabaseMode = EEmptyDatabaseMode::EmptyDatabaseForbidden;
 };
 
 class TGRpcRequestProxySimple;
@@ -510,6 +516,10 @@ public:
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
+
+    virtual EEmptyDatabaseMode GetEmptyDatabaseMode() const {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
+    }
 
     virtual TString GetRpcMethodName() const = 0;
 };
@@ -767,6 +777,10 @@ public:
 
     void SetAuditLogHook(TAuditLogHook&&) override {
         Y_ABORT("unimplemented for TRefreshTokenImpl");
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseForbidden;
     }
 
     TString GetRpcMethodName() const override {
@@ -1038,6 +1052,10 @@ public:
 
     bool* IsTracingDecided() override {
         return &IsTracingDecided_;
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
     }
 
     // IRequestCtxBase
@@ -1665,6 +1683,10 @@ public:
         return AuxSettings.AuditMode.IsModifying && AuxSettings.AuditMode.LogClass == TAuditMode::TLogClassConfig::Dml && !this->IsInternalCall();
     }
 
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return AuxSettings.EmptyDatabaseMode;
+    }
+
 private:
     std::function<void(std::unique_ptr<TRequestIface>, const IFacilityProvider&)> PassMethod;
     const TRequestAuxSettings AuxSettings;
@@ -1819,7 +1841,7 @@ class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName)
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -2006,6 +2028,10 @@ public:
 
     TAuditMode GetAuditMode() const override {
         return AuditMode;
+    }
+
+    EEmptyDatabaseMode GetEmptyDatabaseMode() const override {
+        return EEmptyDatabaseMode::EmptyDatabaseAllowed;
     }
 
     TString GetRpcMethodName() const override {

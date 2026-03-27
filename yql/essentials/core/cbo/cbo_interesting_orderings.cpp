@@ -300,7 +300,7 @@ i64 TFDStorage::FindInterestingOrderingIdx(
     const std::vector<TJoinColumn>& interestingOrdering,
     TOrdering::EType type,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, false, false, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, /*createIfNotExists=*/false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
@@ -362,27 +362,27 @@ void TFDStorage::ApplyNaturalOrderings() {
 std::size_t TFDStorage::FindSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, true, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(sorting.Ordering, sorting.Directions, TOrdering::ESorting, false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::FindShuffling(
     const TShuffling& shuffling,
     TTableAliasMap* tableAliases) {
-    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, shuffling.IsNatural, tableAliases);
+    const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(shuffling.Ordering, {}, TOrdering::EShuffle, false, /*isNatural=*/true, tableAliases);
     return orderingIdx;
 }
 
 std::size_t TFDStorage::AddSorting(
     const TSorting& sorting,
     TTableAliasMap* tableAliases) {
-    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, true, tableAliases);
+    return AddInterestingOrdering(sorting.Ordering, TOrdering::ESorting, sorting.Directions, /*isNatural=*/true, tableAliases);
 }
 
 std::size_t TFDStorage::AddShuffling(
     const TShuffling& shuffling,
     TTableAliasMap* tableAliases) {
-    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, shuffling.IsNatural, tableAliases);
+    return AddInterestingOrdering(shuffling.Ordering, TOrdering::EShuffle, std::vector<TOrdering::TItem::EDirection>{}, /*isNatural=*/true, tableAliases);
 }
 
 std::size_t TFDStorage::AddInterestingOrdering(
@@ -416,7 +416,17 @@ std::size_t TFDStorage::AddInterestingOrdering(
         return std::numeric_limits<std::size_t>::max();
     }
 
-    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, true, false, tableAliases);
+    // At the time of writing this, only shuffles and sortings are supported,
+    // both of them are order sensitive, i.e. shuffle (A, B) != (B, A),
+    // the same is also true for sortings (A, B) != (B, A).
+
+    // It's not true, though, for groupings, where (A, B) does equal (B, A).
+    // If groupings are ever added to this enum, we will have to set
+    // isNatural=false for them (as opposed to isNatural=true for sortings and shuffles)
+    // to NOT account for relative order of columns inside the grouping.
+    Y_ENSURE(type == TOrdering::EType::EShuffle || type == TOrdering::EType::ESorting);
+
+    auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, {}, type, /*createIfNotExists=*/true, /*isNatural=*/true, tableAliases);
 
     if (foundIdx >= 0) {
         return static_cast<std::size_t>(foundIdx);
@@ -1069,7 +1079,7 @@ void TOrderingsStateMachine::TDFSM::Build(
         for (std::size_t nfsmNodeIdx = 0; nfsmNodeIdx < nfsm.Nodes_.size(); ++nfsmNodeIdx) {
             if (nfsm.Nodes_[nfsmNodeIdx].Ordering == interestingOrderings[i]) {
                 auto nfsmNodes = CollectNodesWithEpsOrFdEdge(nfsm, {i}, fds);
-                InitStateByOrderingIdx_[i] = TInitState{AddNode(std::move(nfsmNodes)), interestingOrderings[i].Items.size()};
+                InitStateByOrderingIdx_[i] = TInitState{.StateIdx = AddNode(std::move(nfsmNodes)), .ShuffleHashFuncArgsCount = interestingOrderings[i].Items.size()};
             }
         }
     }

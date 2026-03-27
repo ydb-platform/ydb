@@ -19,10 +19,10 @@ namespace NKikimr::NPQ {
 
     private:
         i64 AvailableSize;
-        ui64 SpeedPerSecond;
-        TInstant LastUpdateTime;
+        ui64 QuotaSpeed;
         ui64 MaxBurst;
 
+        TInstant LastUpdateTime;
         TDuration QuotedTime;
     };
 

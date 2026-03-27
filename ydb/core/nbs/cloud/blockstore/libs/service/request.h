@@ -12,21 +12,27 @@ namespace NYdb::NBS::NBlockStore {
 
 struct TRequestHeaders
 {
+    TRequestHeaders Clone(TBlockRange64 range) const;
+
     const TVolumeConfigPtr VolumeConfig;
-    const ui64 RequestId;
     const TString ClientId;
+
+    const ui64 RequestId;
+    const TBlockRange64 Range;
     const TInstant Timestamp;
 };
 
 struct TReadBlocksLocalRequest
 {
     TRequestHeaders Headers;
-    TBlockRange64 Range;
     TGuardedSgList Sglist;
 
-    TReadBlocksLocalRequest(TRequestHeaders headers, TBlockRange64 range)
+    // Set during execution
+    TBlockRange64 RegionRange;
+    TBlockRange64 VChunkRange;
+
+    explicit TReadBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
-        , Range(range)
     {}
 };
 
@@ -38,12 +44,15 @@ struct TReadBlocksLocalResponse
 struct TWriteBlocksLocalRequest
 {
     TRequestHeaders Headers;
-    TBlockRange64 Range;
     TGuardedSgList Sglist;
 
-    TWriteBlocksLocalRequest(TRequestHeaders headers, TBlockRange64 range)
+    // Set during execution
+    TBlockRange64 RegionRange;
+    TBlockRange64 VChunkRange;
+    ui64 Lsn = 0;
+
+    explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
-        , Range(range)
     {}
 };
 
@@ -55,11 +64,9 @@ struct TWriteBlocksLocalResponse
 struct TZeroBlocksLocalRequest
 {
     TRequestHeaders Headers;
-    TBlockRange64 Range;
 
-    TZeroBlocksLocalRequest(TRequestHeaders headers, TBlockRange64 range)
+    explicit TZeroBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
-        , Range(range)
     {}
 };
 

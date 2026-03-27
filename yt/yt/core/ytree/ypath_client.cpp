@@ -59,6 +59,13 @@ TYPathRequest::TYPathRequest(
     ypathExt->set_target_path(std::move(path));
 }
 
+TYPathRequest::TYPathRequest(const TYPathRequest& other)
+    : Tag_(other.Tag_)
+    , Attachments_(other.Attachments())
+{
+    Header_.CopyFrom(other.Header_);
+}
+
 TRequestId TYPathRequest::GetRequestId() const
 {
     return NullRequestId;

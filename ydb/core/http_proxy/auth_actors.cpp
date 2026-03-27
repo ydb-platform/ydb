@@ -55,6 +55,7 @@ namespace NKikimr::NHttpProxy {
             , Authorize(!context.Driver)
             , DatabasePath(CanonizePath(context.DatabasePath))
             , StreamName(context.StreamName)
+            , SourceAddress(context.SourceAddress)
         {
         }
 
@@ -179,12 +180,12 @@ namespace NKikimr::NHttpProxy {
 
                     ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = "",
+                                                                                                     .PeerName = SourceAddress,
                                                                                                      .Entries = entries}));
                 } else {
                     ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
                                                                                                      .Database = DatabasePath,
-                                                                                                     .PeerName = "",
+                                                                                                     .PeerName = SourceAddress,
                                                                                                      .Entries = entries}));
                 }
                 return;
@@ -312,6 +313,7 @@ namespace NKikimr::NHttpProxy {
         TString DatabaseId;
         TString DatabasePath;
         TString StreamName;
+        TString SourceAddress;
     };
 
     NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)

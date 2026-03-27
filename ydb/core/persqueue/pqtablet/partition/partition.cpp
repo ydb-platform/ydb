@@ -1508,6 +1508,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
         return;
     }
     ClosedInternalPartition = true;
+
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
     response->BodyKeys = std::move(CompactionBlobEncoder.DataKeysBody);
@@ -1515,7 +1516,9 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
               std::back_inserter(response->BodyKeys));
     std::move(BlobEncoder.DataKeysBody.begin(), BlobEncoder.DataKeysBody.end(),
               std::back_inserter(response->BodyKeys));
-    response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+    if (!ev->GetSkipSrcIdInfo()) {
+        response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+    }
 
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
@@ -1598,7 +1601,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
         return EProcessResult::Continue;
     }
 
-    auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
+    const auto& srcIdInfo = tx.WriteInfo->SrcIdInfo;
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
@@ -2261,17 +2264,18 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
 
 void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event)
 {
+    const bool skipSrcIdInfo = event->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(event), Now()));
-    RequestWriteInfoIfRequired();
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
-void TPartition::RequestWriteInfoIfRequired()
+void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
 {
     auto tx = std::get<1>(UserActionAndTransactionEvents.back().Event);
     auto supportId = tx->SupportivePartitionActor;
     if (supportId) {
         PQ_LOG_TX_D("Send TEvGetWriteInfoRequest for TxId " << tx->GetTxId());
-        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(),
+        Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo),
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
         WriteInfosToTx.insert(std::make_pair(supportId, tx));
@@ -2296,9 +2300,10 @@ void TPartition::PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConf
 
 void TPartition::AddImmediateTx(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> tx)
 {
+    const bool skipSrcIdInfo = tx->GetSkipSrcIdInfo();
     UserActionAndTransactionEvents.emplace_back(MakeSimpleShared<TTransaction>(std::move(tx)));
     ++ImmediateTxCount;
-    RequestWriteInfoIfRequired();
+    RequestWriteInfoIfRequired(skipSrcIdInfo);
 }
 
 void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)

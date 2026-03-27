@@ -41,16 +41,16 @@ class TestNbs(NbsTestBase):
         # Verify the data matches (trimmed to the original length)
         assert read_data[: len(test_data)] == test_data
 
-    def test_nbs_4gb_disk_read_write(self):
+    def test_nbs_500gb_disk_read_write(self):
         """
-        Create a 4GB disk, write random data to some locations in it, and verify read operations.
+        Create a 500GB disk, write random data to some locations in it, and verify read operations.
         The disk is internally split into 128MB chunks. We test first, middle, and last
         block of some chunks.
         """
         disk_id = self.generate_disk_id()
         block_size = 4096
-        # 4GB = 4 * 1024 * 1024 * 1024 bytes = 1,048,576 blocks of 4096 bytes
-        blocks_count = 1048576
+        # 500GB = 500 * 1024 * 1024 * 1024 bytes = 1,048,576 blocks of 4096 bytes
+        blocks_count = 131072000
 
         # 128MB chunk = 128 * 1024 * 1024 bytes = 32,768 blocks of 4096 bytes
         chunk_size_blocks = 32768

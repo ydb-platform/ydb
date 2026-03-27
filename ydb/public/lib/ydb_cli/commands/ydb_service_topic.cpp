@@ -474,6 +474,10 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("retention-storage-mb", "Storage retention in megabytes")
             .Optional()
             .StoreResult(&RetentionStorageMb_);
+        config.Opts->AddLongOption("content-based-deduplication", "Content based deduplication for topic")
+            .Optional()
+            .Hidden()
+            .StoreTrue(&ContentBasedDeduplication_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -536,6 +540,10 @@ namespace NYdb::NConsoleClient {
 
         if (RetentionPeriod_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != RetentionPeriod_) {
             settings.SetRetentionPeriod(*RetentionPeriod_);
+        }
+
+        if (ContentBasedDeduplication_ && describeResult.GetTopicDescription().GetContentBasedDeduplication() != ContentBasedDeduplication_) {
+            settings.SetContentBasedDeduplication(ContentBasedDeduplication_);
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
@@ -656,6 +664,14 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .StoreResult(&DlqQueueName_);
+        config.Opts->AddLongOption("receive-message-wait-time", "Receive message wait time for shared consumer (ex. '10s', '1m')")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&ReceiveMessageWaitTime_, ParseDuration);
+        config.Opts->AddLongOption("receive-message-delay", "Receive message delay for shared consumer (ex. '1s', '1m')")
+            .Optional()
+            .Hidden()
+            .StoreMappedResult(&ReceiveMessageDelay_, ParseDuration);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -721,6 +737,13 @@ namespace NYdb::NConsoleClient {
         consumerSettings.KeepMessagesOrder(KeepMessagesOrder_.GetOrElse(false));
         if (DefaultProcessingTimeout_.Defined()) {
             consumerSettings.DefaultProcessingTimeout(*DefaultProcessingTimeout_);
+        }
+
+        if (ReceiveMessageWaitTime_.Defined()) {
+            consumerSettings.ReceiveMessageWaitTime(*ReceiveMessageWaitTime_);
+        }
+        if (ReceiveMessageDelay_.Defined()) {
+            consumerSettings.ReceiveMessageDelay(*ReceiveMessageDelay_);
         }
 
         if (MaxProcessingAttempts_.Defined() || DlqQueueName_.Defined()) {

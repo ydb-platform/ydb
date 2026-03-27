@@ -161,7 +161,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                 (formatSector + FormatSectorSize - sizeof(TDataSectorFooter));
 
             cypher.StartMessage(footer->Nonce);
-            alignas(16) TDiskFormat diskFormat;
+            alignas(16) TDiskFormat diskFormat = {};
             diskFormat.SetEncryptFormat(Cfg->EnableFormatAndMetadataEncryption);
             cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
@@ -1704,6 +1704,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         double pdiskUsage = Keeper.GetPDiskUsage();
         pDiskMetrics.SetPDiskUsage(pdiskUsage);
         pdiskState.SetPDiskUsage(pdiskUsage);
+
+        auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
+        pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2247,6 +2251,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 AtomicGet(TotalOwners),
                 GetNumActiveSlots(),
+                ExpectedSlotCount,
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
     result->NormalizedOccupancy = occupancy;
@@ -3509,7 +3514,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             if (errStatus != NKikimrProto::OK) {
                 P_LOG(PRI_ERROR, BPD01, err.Str());
                 THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0u, 0, err.Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.CheckSpace.CountResponse();
                 delete request;

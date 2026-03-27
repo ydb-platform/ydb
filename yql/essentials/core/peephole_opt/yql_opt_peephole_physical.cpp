@@ -3198,8 +3198,33 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
+        return ctx.Builder(node->Pos())
+            .Callable("Block")
+                .Lambda(0)
+                    .Param("parent")
+                    .Callable("Collect")
+                        .Apply(0, node->Tail())
+                            .With(0)
+                                .Callable("Iterator")
+                                    .Add(0, node->HeadPtr())
+                                    .Callable(1, "DependsOn")
+                                        .Arg(0, "parent")
+                                    .Seal()
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+    }
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -6225,10 +6250,6 @@ private:
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
-        // Block Coalesce and block exists between two scalars are available only since 63 version.
-        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return nullptr;
-        }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
@@ -9365,9 +9386,6 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9397,6 +9415,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"LMap", &ExpandLMapOrShuffleByKeys},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

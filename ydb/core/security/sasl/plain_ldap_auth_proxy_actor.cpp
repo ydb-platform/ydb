@@ -63,6 +63,12 @@ private:
         return CreatePlainLdapLoginRequest(TString(AuthcId), TString(PeerName), AppData()->AuthConfig);
     }
 
+    virtual void ProceedWithAuthentication([[maybe_unused]] const TActorContext &ctx,
+        [[maybe_unused]] TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) override final
+    {
+        SendLoginRequest();
+    }
+
     virtual void SendIssuedToken(const NKikimrScheme::TEvLoginResult& loginResult) const override final {
         auto response = std::make_unique<TEvSasl::TEvSaslPlainLdapLoginResponse>();
         response->Issue = MakeIssue(NKikimrIssues::TIssuesIds::SUCCESS);

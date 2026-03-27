@@ -38,6 +38,9 @@ public:
         const auto& sortedMergeOperationParams = std::get<TSortedMergeOperationParams>(context.OperationParams);
         TGenerateTasksResult result;
         std::vector<TGeneratedTaskInfo> generatedTasks;
+
+        YQL_CLOG(INFO, FastMapReduce) << "Starting SortedMerge operation";
+
         for (auto& task: context.PartitionResult.TaskInputs) {
             TSortedMergeTaskParams sortedMergeTaskParams;
             sortedMergeTaskParams.Input = task;
@@ -60,7 +63,7 @@ public:
         return result;
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         TGetNewPartIdsForTaskResult result;
         TSortedMergeTaskParams& sortedMergeTaskParams = std::get<TSortedMergeTaskParams>(context.Task->TaskParams);
 
@@ -97,7 +100,7 @@ public:
             return result;
     }
 
-    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TSortedMergeTaskParams& sortedMergeTaskParams = std::get<TSortedMergeTaskParams>(context.Task->TaskParams);
         TString tableId = sortedMergeTaskParams.Output.TableId;

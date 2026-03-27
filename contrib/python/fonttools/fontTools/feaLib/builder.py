@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fontTools.misc import sstruct
 from fontTools.misc.textTools import Tag, tostr, binary2num, safeEval
 from fontTools.feaLib.error import FeatureLibError
@@ -8,7 +10,7 @@ from fontTools.feaLib.lookupDebugInfo import (
 )
 from fontTools.feaLib.parser import Parser
 from fontTools.feaLib.ast import FeatureFile
-from fontTools.feaLib.variableScalar import VariableScalar
+from fontTools.feaLib.variableScalar import VariableScalar, VariableScalarBuilder
 from fontTools.otlLib import builder as otl
 from fontTools.otlLib.maxContextCalc import maxCtxFont
 from fontTools.ttLib import newTable, getTableModule
@@ -124,6 +126,7 @@ class Builder(object):
             self.varstorebuilder = OnlineVarStoreBuilder(
                 [ax.axisTag for ax in self.axes]
             )
+            self.scalar_builder = VariableScalarBuilder.from_ttf(font)
         self.default_language_systems_ = set()
         self.script_ = None
         self.lookupflag_ = 0
@@ -180,10 +183,6 @@ class Builder(object):
         self.stat_ = {}
         # for conditionsets
         self.conditionsets_ = {}
-        # We will often use exactly the same locations (i.e. the font's masters)
-        # for a large number of variable scalars. Instead of creating a model
-        # for each, let's share the models.
-        self.model_cache = {}
 
     def build(self, tables=None, debug=False):
         if self.parseTree is None:
@@ -392,6 +391,10 @@ class Builder(object):
                 return user_name_id
 
     def buildFeatureParams(self, tag):
+        # by convention, a missing name ID is represented by 0xffff.
+        # the spec says that these fields can be 'NULL', but 'NULL' is not
+        # well defined for the purpose of nameIDs?
+        NO_NAME_ID = 0xFFFF
         params = None
         if tag == "size":
             params = otTables.FeatureParamsSize()
@@ -418,17 +421,17 @@ class Builder(object):
             params = otTables.FeatureParamsCharacterVariants()
             params.Format = 0
             params.FeatUILabelNameID = self.cv_parameters_ids_.get(
-                (tag, "FeatUILabelNameID"), 0
+                (tag, "FeatUILabelNameID"), NO_NAME_ID
             )
             params.FeatUITooltipTextNameID = self.cv_parameters_ids_.get(
-                (tag, "FeatUITooltipTextNameID"), 0
+                (tag, "FeatUITooltipTextNameID"), NO_NAME_ID
             )
             params.SampleTextNameID = self.cv_parameters_ids_.get(
-                (tag, "SampleTextNameID"), 0
+                (tag, "SampleTextNameID"), NO_NAME_ID
             )
             params.NumNamedParameters = self.cv_num_named_params_.get(tag, 0)
             params.FirstParamUILabelNameID = self.cv_parameters_ids_.get(
-                (tag, "ParamUILabelNameID_0"), 0
+                (tag, "ParamUILabelNameID_0"), NO_NAME_ID
             )
             params.CharCount = len(self.cv_characters_[tag])
             params.Character = self.cv_characters_[tag]
@@ -805,7 +808,6 @@ class Builder(object):
                 gdef.remap_device_varidxes(varidx_map)
                 if "GPOS" in self.font:
                     self.font["GPOS"].table.remap_device_varidxes(varidx_map)
-            self.model_cache.clear()
         if any(
             (
                 gdef.GlyphClassDef,
@@ -1439,6 +1441,19 @@ class Builder(object):
         if sub is None:
             sub = self.get_chained_lookup_(location, MultipleSubstBuilder)
         sub.mapping[glyph] = replacements
+        # https://github.com/fonttools/fonttools/issues/4016
+        # If the last rule has the same context and lookup, merge the glyph
+        # into it instead of creating a new rule (avoids unnecessary subtables).
+        if chain.rules and not chain.rules[-1].is_subtable_break:
+            last = chain.rules[-1]
+            if (
+                last.prefix == prefix
+                and last.suffix == suffix
+                and last.lookups == [sub]
+            ):
+                assert len(last.glyphs) == 1
+                last.glyphs[0].add(glyph)
+                return
         chain.rules.append(ChainContextualRule(prefix, [{glyph}], suffix, [sub]))
 
     def add_ligature_subst_chained_(
@@ -1725,19 +1740,24 @@ class Builder(object):
 
         self.conditionsets_[key] = value
 
-    def makeVariablePos(self, location, varscalar):
-        if not self.varstorebuilder:
+    def makeVariablePos(
+        self, location, varscalar: VariableScalar
+    ) -> tuple[int, int | None]:
+        """Make a pos statement from a VariableScalar, returning the default
+        value, and optionally the variation index if the scalar genuinely
+        requires variation too."""
+
+        if self.varstorebuilder is None or self.scalar_builder is None:
             raise FeatureLibError(
                 "Can't define a variable scalar in a non-variable font", location
             )
 
-        varscalar.axes = self.axes
         if not varscalar.does_vary:
-            return varscalar.default, None
+            return self.scalar_builder.default_value(varscalar), None
 
         try:
-            default, index = varscalar.add_to_variation_store(
-                self.varstorebuilder, self.model_cache, self.font.get("avar")
+            default, index = self.scalar_builder.add_to_variation_store(
+                varscalar, self.varstorebuilder
             )
         except VarLibError as e:
             raise FeatureLibError(

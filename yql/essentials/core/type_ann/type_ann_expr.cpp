@@ -32,6 +32,12 @@ THashSet<TStringBuf> FuzzUntypedExcludes = {
     "DqPhyJoinDict",
 };
 
+// IO funcs will be skipped during partial typecheck
+THashSet<TStringBuf> FuzzUniversalExcludes = {
+    "ConfRead!",
+    "PgReadTable!",
+};
+
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
     TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
@@ -639,6 +645,10 @@ private:
             }
         case EFuzzMode::Universal:
             {
+                if (FuzzUniversalExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
                 if (!FuzzUniversalNode_) {
                     auto arg = ctx.NewCallable(originalInput->Pos(), "UniversalType", {});
                     arg->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TUniversalExprType>()));
@@ -651,14 +661,9 @@ private:
             }
         }
 
-        if (mode == EFuzzMode::UntypedLambda) {
-            ctx.IssueManager.Mute();
-        }
-
+        ctx.IssueManager.Mute(mode == EFuzzMode::Universal);
         Y_DEFER {
-            if (mode == EFuzzMode::UntypedLambda) {
-                ctx.IssueManager.Unmute();
-            }
+            ctx.IssueManager.Unmute();
         };
 
         for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {

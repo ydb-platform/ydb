@@ -102,6 +102,10 @@ message TEvLoadTestRequest {
             optional TContentType.E ContentType = 21;
             optional uint32 RdmaMode = 22 [default = 0];
 
+            repeated TIntervalInfo BarrierIntervals = 24;
+            optional uint32 MaxBarriersInFlight = 25 [default = 10];
+            optional uint32 BarrierChannelCount = 26 [default = 100];
+
             optional bool WriteKeepFlags = 23 [default = false];
         };
         optional uint64 Tag = 1;
@@ -140,11 +144,11 @@ message TEvLoadTestRequest {
         optional bool IsWardenlessTest = 13 [default = false];
         optional uint32 DelayBeforeMeasurementsSeconds = 14 [default = 15];
     }
-    message TDDiskWriteLoad {
-        // In a most simple case there is a single TWriteArea.
+    message TDDiskLoad {
+        // In a most simple case there is a single TArea.
         // However for various test cases it is possible to split
-        // DDisk into areas of different size, weight and write order (seq or random).
-        message TWriteArea {
+        // DDisk into areas of different size, weight and I/O order (seq or random).
+        message TArea {
             enum EAreaInit {
                 INIT_NONE = 0;
 
@@ -163,26 +167,31 @@ message TEvLoadTestRequest {
         optional NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2;
         optional uint32 DurationSeconds = 3;
         optional uint32 DelayBeforeMeasurementsSeconds = 4 [default = 15];
-        optional uint32 InFlightWrites = 5;
-        optional uint32 InitInFlightWrites = 6;
+        optional uint32 InFlight = 5;
+        optional uint32 InitInFlight = 6;
 
         optional uint32 IntervalMsMin = 7;
         optional uint32 IntervalMsMax = 8;
 
         optional uint32 ExpectedChunkSize = 9 [default = 134217728]; // 128 MB
 
-        repeated TWriteArea Areas = 10;
+        repeated TArea Areas = 10;
 
-        // Use simulated PDisk: no real writes, copy to RAM buffer instead.
+        // Use simulated DDisk: no real I/O, copy to/from RAM buffer instead.
         optional bool Simulate = 11;
-        // Number of simulated PDisk actors used in round-robin.
+        // Number of simulated DDisk actors used in round-robin.
         optional uint32 SimulateActorsCount = 12 [default = 1];
 
         optional bool AlignSourceData = 13 [default = true];
 
-        // Percentage of background read requests (0-100).
-        // These reads are not counted in any results (IOPS, speed, latency, etc.).
-        optional uint32 BackgroundReadRatio = 14 [default = 0];
+        reserved 14; // BackgroundReadRatio
+
+        // When true, the load test performs reads instead of writes.
+        optional bool IsReadLoad = 15 [default = false];
+        // Enable io_uring SQPOLL mode for DDisk direct I/O.
+        optional bool SQPoll = 16 [default = false];
+        // Enable io_uring IOPOLL mode for DDisk direct I/O.
+        optional bool IOPoll = 17 [default = false];
     }
 
     message TPersistentBufferWriteLoad {
@@ -377,7 +386,7 @@ message TEvLoadTestRequest {
         NKikimrDataShardLoad.TEvYCSBTestLoadRequest YCSBLoad = 11;
         TInterconnectLoad InterconnectLoad = 15;
         TNBS2Load NBS2Load = 16;
-        TDDiskWriteLoad DDiskWriteLoad = 17;
+        TDDiskLoad DDiskLoad = 17;
         TPersistentBufferWriteLoad PersistentBufferWriteLoad = 18;
     }
     optional uint64 Tag = 12;

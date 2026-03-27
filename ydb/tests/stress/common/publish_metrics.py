@@ -146,6 +146,7 @@ class MetricsPublisher:
             "stress_util": event.stress_util_name,
             "type": event.type,
             "kind": event.kind,
+            "ts": int(time.time()),
         }
 
         if hasattr(event, 'operation') and event.operation:
@@ -188,6 +189,7 @@ class MetricsPublisher:
                 "stress_util": event.stress_util_name,
                 "type": event.type,
                 "kind": event.kind,
+                "ts": int(time.time()),
             }
 
             if hasattr(event, 'operation') and event.operation:

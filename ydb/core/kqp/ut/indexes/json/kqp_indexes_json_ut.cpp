@@ -567,6 +567,69 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             validateMethod("abs().floor().type()");
         }
 
+        // Starts with predicate
+        {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"text\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k3 starts with \"te\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k8 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3.k4 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.* starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.* starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*.k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[1 to last] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].* starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*] starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*].k1 starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.type() starts with \"s\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.keyvalue().name starts with \"k\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.keyvalue().value starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*.type() starts with \"s\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].type() starts with \"s\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].type() starts with \"s\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.keyvalue().name starts with \"k\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\" starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\" starts with \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0 to last].k1 starts with \"1\""));
+        }
+
+        // Like regex predicate
+        {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 like_regex \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ like_regex \".*\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*].k1 like_regex \"1\""));
+        }
+
+        // Is unknown predicate
+        {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("($ starts with \"abc\") is unknown"));
+        }
+
+        // Exists predicate
+        {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key[1, 2, 3])"));
+        }
+
         // Without context object ($)
         {
             ValidateError(db, "TestTable", "json_idx", jsonExists("null"), "No search terms were extracted from the query");

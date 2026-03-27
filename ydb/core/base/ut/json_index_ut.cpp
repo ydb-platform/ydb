@@ -12,22 +12,22 @@ namespace {
 TQueries ParseAndCollect(const TString& jsonPath) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
-    UNIT_ASSERT_C(issues.Empty(), "Parse errors found: " + issues.ToOneLineString());
+    UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
     TQueryCollector collector(path);
     auto result = collector.Collect();
-    UNIT_ASSERT_C(!result.IsError(), "Collect errors found: " + result.GetError().GetMessage());
+    UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
     return result.GetQueries();
 }
 
 void ExpectError(const TString& jsonPath, const TString& errorMessage) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
-    UNIT_ASSERT_C(issues.Empty(), "Parse errors found: " + issues.ToOneLineString());
+    UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
     TQueryCollector collector(path);
     auto result = collector.Collect();
-    UNIT_ASSERT_C(result.IsError(), "Expected error: " + errorMessage);
+    UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
     UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "Expected error message not found: " + errorMessage);
 }
@@ -36,74 +36,91 @@ void ExpectError(const TString& jsonPath, const TString& errorMessage) {
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
     Y_UNIT_TEST(CorrectJsonPath) {
+        using T = TQueries;
+
         // Context object
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$"), TQueries{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$"), T{""});
 
         // Member access
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a"), TQueries{"\1a"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c"), TQueries{"\1a\1b\1c"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.aba.\"caba\""), TQueries{"\3aba\4caba"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.\"\".abc"), TQueries{TString("\0\3abc", 5)});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*"), TQueries{"\1a"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c"), TQueries{"\1a"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a"), T{"\1a"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c"), T{"\1a\1b\1c"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.aba.\"caba\""), T{"\3aba\4caba"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.\"\".abc"), T{TString("\0\3abc", 5)});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*"), T{"\1a"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c"), T{"\1a"});
 
         // Array access
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0]"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3]"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 3]"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[last]"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0, 2 to last]"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0 to 1].key"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0]"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key1[last].key2"), TQueries{"\4key1\4key2"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.arr[2 to last]"), TQueries{"\3arr"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*[2 to last].key"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0].*"), TQueries{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0]"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3]"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 3]"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[last]"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0, 2 to last]"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[0 to 1].key"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0]"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key1[last].key2"), T{"\4key1\4key2"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.arr[2 to last]"), T{"\3arr"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*[2 to last].key"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[0].*"), T{"\3key"});
 
         // Methods
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.abs()"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.floor()"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3].ceiling()"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.abs()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.floor()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.ceiling()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.double()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.size()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue()"), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.keyvalue()"), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3].value.size().floor()"), TQueries{"\3key\5value"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue().name"), TQueries{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.abs()"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.floor()"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1, 2, 3].ceiling()"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.abs()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.floor()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.ceiling()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.double()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.size()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue()"), T{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.*.keyvalue()"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3].value.size().floor()"), T{"\3key\5value"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue().name"), T{"\3key"});
 
         // Starts with predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ starts with \"lol\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to last] starts with \"lol\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] starts with \"lol\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key starts with \"abc\""), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c[1, 2, 3] starts with \"abc\""), TQueries{"\1a\1b\1c"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type().name starts with \"abc\""), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* starts with \"abc\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c[1, 2, 3] starts with \"abc\""), TQueries{"\1a"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ starts with \"lol\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to last] starts with \"lol\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] starts with \"lol\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key starts with \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.b.c[1, 2, 3] starts with \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.type().name starts with \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* starts with \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.a.*.c[1, 2, 3] starts with \"abc\""), T{""});
 
         // Like regex predicate
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ like_regex \"abc\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 2] like_regex \"abc\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] like_regex \"abc\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \"abc\""), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* like_regex \"abc\""), TQueries{""});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3] like_regex \"abc\""), TQueries{"\3key"});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue() like_regex \"abc\""), TQueries{"\3key"});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$ like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[1 to 2] like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$[*] like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.* like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key[1, 2, 3] like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key.keyvalue() like_regex \"abc\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \"a.c\""), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("$.key like_regex \".*\""), T{""});
+
+        // Exists predicate
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($)"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key)"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key[1, 2, 3])"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($[*].size())"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key.keyvalue().name)"), T{""});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("exists($.key.keyvalue().name starts with \"abc\")"), T{""});
+
+        // Is unknown predicate
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("($ starts with \"abc\") is unknown"), T{""});
     }
 
     // Literals are not supported without a preceding ContextObject
     Y_UNIT_TEST(Literals) {
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1"), TQueries{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1.2345"), TQueries{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("true"), TQueries{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("false"), TQueries{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("null"), TQueries{});
-        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("\"string\""), TQueries{});
+        using T = TQueries;
+
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1"), T{});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("1.2345"), T{});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("true"), T{});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("false"), T{});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("null"), T{});
+        UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect("\"string\""), T{});
     }
 
     // Variables are not supported now

@@ -203,6 +203,17 @@ TResult TQueryCollector::Finalize(const TJsonPathItem& item) {
     return input;
 }
 
+TResult TQueryCollector::FinalizeEmpty(const TJsonPathItem& item) {
+    auto input = Collect(Reader.ReadInput(item));
+    if (input.IsError() || input.GetQueries().empty()) {
+        return input;
+    }
+
+    auto result = TResult("");
+    result.MarkDone();
+    return result;
+}
+
 TResult TQueryCollector::ContextObject() {
     return TResult(TResult::TQueries{TString{}});
 }
@@ -366,24 +377,24 @@ TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
     return TResult(TIssue("Not implemented"));
 }
 
+// Do not emit specific posting keys for the predicates: JsonExists/SqlExists treats any non-empty jsonpath
+// result as true, including a single boolean false from the predicate, so index + residual
+// JSON_EXISTS would return wrong rows. We just emit an empty query to indicate that the predicate
+// is present to read all json documents.
 TResult TQueryCollector::StartsWithPredicate(const TJsonPathItem& item) {
-    return Finalize(item);
+    return FinalizeEmpty(item);
 }
 
 TResult TQueryCollector::IsUnknownPredicate(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    return FinalizeEmpty(item);
 }
 
 TResult TQueryCollector::ExistsPredicate(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    return FinalizeEmpty(item);
 }
 
 TResult TQueryCollector::LikeRegexPredicate(const TJsonPathItem& item) {
-    return Finalize(item);
+    return FinalizeEmpty(item);
 }
 
 TResult TQueryCollector::Variable(const TJsonPathItem&) {

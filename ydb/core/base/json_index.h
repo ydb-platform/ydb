@@ -60,6 +60,8 @@ private:
 
     TResult Finalize(const TJsonPathItem& item);
 
+    TResult FinalizeEmpty(const TJsonPathItem& item);
+
     // The next methods are used to build the query step by step.
     TResult ContextObject();
 

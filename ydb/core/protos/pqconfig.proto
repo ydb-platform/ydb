@@ -222,6 +222,16 @@ message TPQConfig {
     optional TCompactionConfig CompactionConfig = 58;
     optional uint64 MaxMessageSizeBytes = 59 [default = 125829120]; // 120MB
     optional uint64 MLPBatchWindowMilliSeconds = 60 [default = 10];
+
+    message TCloudEventsConfig {
+        optional bool Enabled = 1 [default = false];
+        oneof Endpoint {
+            string UaURI = 2;
+            string FilePath = 3;
+        }
+    }
+
+    optional TCloudEventsConfig CloudEventsConfig = 61;
 }
 
 message TChannelProfile {

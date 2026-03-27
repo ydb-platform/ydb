@@ -2,6 +2,7 @@
 
 #include <util/system/types.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr {
 
@@ -13,10 +14,6 @@ private:
 
 private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
-
-    static size_t StaticSize(ui64 width, ui64 depth) {
-        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
-    }
 
     const ui32* Buckets() const {
         return reinterpret_cast<const ui32*>(this + 1);
@@ -39,6 +36,10 @@ public:
         return StaticSize(Width_, Depth_);
     }
 
+    static size_t StaticSize(ui64 width, ui64 depth) {
+        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
+    }
+
     size_t GetWidth() const {
         return Width_;
     }
@@ -58,6 +59,8 @@ public:
     void Count(const char* data, size_t size);
 
     ui32 Probe(const char* data, size_t size) const;
+
+    TMaybe<ui32> GetOverlappingCardinality(const TCountMinSketch& rhs) const;
 
     TCountMinSketch& operator+=(const TCountMinSketch& rhs);
 };

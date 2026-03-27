@@ -582,7 +582,7 @@ public:
                     value = TExprBase(listPtr->ChildPtr(2)->ChildPtr(1));
                 }
                 if (OlapCompSigns.contains(compSign)) {
-                    resSelectivity = this->ComputeInequalitySelectivity(member, value, OlapCompStrToEInequalityPredicate[compSign], false);
+                    resSelectivity = this->ComputeInequalitySelectivity(member, value, false, OlapCompStrToEInequalityPredicate[compSign]);
                 } else if (compSign == "eq") {
                     resSelectivity = this->ComputeEqualitySelectivity(member, value, false);
                 } else if (compSign == "neq") {
@@ -1301,6 +1301,6 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
 }
 
 TAutoPtr<IGraphTransformer> NKikimr::NKqp::CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) {
-    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx, const NMiniKQL::IFunctionRegistry& funcRegistry) {
+    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx, &funcRegistry));
 }

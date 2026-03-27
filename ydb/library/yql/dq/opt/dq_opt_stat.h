@@ -6,14 +6,15 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 namespace NYql::NDq {
-enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
+enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal, NotEqual };
 
-void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx, TExprContext& ctx, const NKikimr::NMiniKQL::IFunctionRegistry& funcRegistry);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForCombiner(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
 void InferStatisticsForStage(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx);
@@ -47,6 +48,32 @@ struct TOrderingInfo {
     std::int64_t OrderingIdx = -1;
     std::vector<TOrdering::TItem::EDirection> Directions{};
     TVector<TJoinColumn> Ordering{};
+};
+
+enum class ELogicalOperator : ui8 { And, Or, Leaf };
+
+struct TPredicateRange {
+    TMaybe<NNodes::TExprBase> Left;
+    TMaybe<TString> LeftBound;
+    bool LeftInclusive = false;
+
+    TMaybe<NNodes::TExprBase> Right;
+    TMaybe<TString> RightBound;
+    bool RightInclusive = false;
+};
+
+struct TTreeNode {
+    ELogicalOperator Operator;
+
+    // For And / Or
+    TVector<std::shared_ptr<TTreeNode>> Children;
+
+    // For Leaf
+    TString Column;
+    TString ColumnType;
+    TMaybe<TString> TableAlias;
+    double Selectivity = 0.0;
+    TPredicateRange Range;
 };
 
 TOrderingInfo GetTopBaseSortingOrderingInfo(const NNodes::TCoTopBase&, const TSimpleSharedPtr<TOrderingsStateMachine>& sortingsFSM, TTableAliasMap*);
@@ -112,28 +139,77 @@ public:
     }
 
 protected:
-    double ComputeImpl(
+    std::shared_ptr<TTreeNode> ComputeImpl(
         const NNodes::TExprBase& input,
         bool underNot,
         bool collectConstantMembers
     );
 
     double ComputeEqualitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
         bool collectConstantMembers
     );
 
     double ComputeInequalitySelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right,
-        EInequalityPredicateType predicate,
-        bool collectConstantMembers
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool collectConstantMembers,
+        EInequalityPredicateType predicate
     );
 
     double ComputeComparisonSelectivity(
-        const NYql::NNodes::TExprBase& left,
-        const NYql::NNodes::TExprBase& right
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool containString
+    );
+
+    std::shared_ptr<TTreeNode> ConvertEqualityToRange(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessSetPredicate(
+        const NNodes::TExprBase& left,
+        const TExprNode::TPtr list,
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ConvertInequalityToRange(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers,
+        EInequalityPredicateType inequalitySign
+    );
+
+    std::shared_ptr<TTreeNode> ProcessRegexPredicte(
+        bool underNot,
+        bool collectConstantMembers
+    );
+
+    std::shared_ptr<TTreeNode> ProcessStringPredicate(
+        const NNodes::TExprBase& left,
+        const NNodes::TExprBase& right,
+        bool underNot,
+        bool collectConstantMembers,
+        bool containString
+    );
+
+    TMaybe<TString> GetAttributeType(const TString& attributeName);
+    std::shared_ptr<TTreeNode> CreateLeafNode(TMaybe<TString> attribute);
+
+    double ComputeSelectivity(
+        const std::shared_ptr<TTreeNode>& node,
+        TSet<TString>& tableAliases
+    );
+
+    double ReComputeEstimation(
+        TString attributeName,
+        TPredicateRange& mergedRange
     );
 
 private:

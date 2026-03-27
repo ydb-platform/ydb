@@ -13,12 +13,14 @@ using namespace NNodes;
 TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     TTypeAnnotationContext* typeCtx,
     const IProviderContext& ctx,
+    const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry,
     const TOptimizerHints& hints,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
     const bool useFSMForSortElimination
 )
     : TypeCtx(typeCtx)
     , Pctx(ctx)
+    , FuncRegistry(funcRegistry)
     , Hints(hints)
     , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
     , UseFSMForSortElimination(useFSMForSortElimination)
@@ -107,6 +109,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, TypeCtx);
     }
+    else if (TCoWideCombiner::Match(input.Get())) {
+        InferStatisticsForCombiner(input, TypeCtx);
+    }
     else if (TCoAsList::Match(input.Get())){
         InferStatisticsForAsList(input, TypeCtx);
     }
@@ -177,7 +182,7 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
     if (TDqStageBase::Match(input.Get())) {
         InferStatisticsForStage(input, TypeCtx);
     } else if (TCoFlatMapBase::Match(input.Get())) {
-        InferStatisticsForFlatMap(input, TypeCtx);
+        InferStatisticsForFlatMap(input, TypeCtx, ctx, *FuncRegistry);
     } else {
         matched = false;
     }

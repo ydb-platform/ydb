@@ -57,6 +57,23 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
+        struct TBackupState {
+            TActorId Owner;
+            TActorId Writer;
+            ui64 SeqNo = 0;
+            ui64 InFlightBytes = 0;
+            ui64 InFlightBytesLimit = Max<ui64>();
+
+            TBackupState() = default;
+            TBackupState(TActorId owner, TActorId writer, ui64 seqNo, ui64 inFlightBytesLimit)
+                : Owner(owner)
+                , Writer(writer)
+                , SeqNo(seqNo)
+                , InFlightBytes(0)
+                , InFlightBytesLimit(inFlightBytesLimit)
+            {}
+        };
+
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
             : Tablet(steppedCookieAllocatorFactory.Tablet)
             , Gen(steppedCookieAllocatorFactory.Gen)
@@ -92,33 +109,26 @@ namespace NTabletFlatExecutor {
         void Stop() const
         {
             Y_ENSURE(Ops, "Commit manager is not started");
-            Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
+            Ops->Send(BackupState.Writer, new TEvents::TEvPoisonPill());
         }
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
 
         void StartBackup(TActorId backupOwner, TActorId backupWriter, ui64 seqNo, ui64 inFlightBytesLimit) {
             StopBackup();
-            BackupOwner = backupOwner;
-            BackupWriter = backupWriter;
-            BackupSeqNo = seqNo;
-            BackupInFlightBytesLimit = inFlightBytesLimit;
+            BackupState = TBackupState(backupOwner, backupWriter, seqNo, inFlightBytesLimit);
         }
 
         void StopBackup() {
-            if (BackupWriter) {
+            if (BackupState.Writer) {
                 Y_ENSURE(Ops, "Commit manager is not started");
-                Ops->Send(BackupWriter, new TEvents::TEvPoisonPill());
+                Ops->Send(BackupState.Writer, new TEvents::TEvPoisonPill());
+                BackupState = TBackupState();
             }
-            BackupOwner = TActorId();
-            BackupWriter = TActorId();
-            BackupInFlightBytes = 0;
-            BackupSeqNo = 0;
-            BackupInFlightBytesLimit = Max<ui64>();
         }
 
         void DecBackupInFlight(ui64 bytes) {
-            BackupInFlightBytes -= bytes;
+            BackupState.InFlightBytes -= bytes;
         }
 
         ui64 Stamp() const noexcept
@@ -196,13 +206,17 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
-            if (BackupWriter && commit.Type == ECommit::Redo) {
+            if (BackupState.Writer && commit.Type == ECommit::Redo) {
                 auto backupEv = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
-                if (BackupInFlightBytes + backupEv->GetTotalSize() <= BackupInFlightBytesLimit) {
-                    BackupInFlightBytes += backupEv->GetTotalSize();
-                    Ops->Send(BackupWriter, backupEv.Release());
+                ui64 backupEvSize = backupEv->GetTotalSize();
+                if (BackupState.InFlightBytes + backupEvSize <= BackupState.InFlightBytesLimit) {
+                    BackupState.InFlightBytes += backupEvSize;
+                    Ops->Send(BackupState.Writer, backupEv.Release());
                 } else {
-                    Ops->Send(BackupOwner, new NBackup::TEvChangelogFailed(BackupSeqNo, "Backup changelog in flight bytes limit exceeded"));
+                    auto error = TStringBuilder()
+                        << "Backup changelog in flight bytes limit exceeded: "
+                        << BackupState.InFlightBytes + backupEvSize << " > " << BackupState.InFlightBytesLimit;
+                    Ops->Send(BackupState.Owner, new NBackup::TEvChangelogFailed(BackupState.SeqNo, error));
                     StopBackup();
                 }
             }
@@ -240,12 +254,7 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-
-        TActorId BackupOwner;
-        TActorId BackupWriter;
-        ui64 BackupSeqNo = 0;
-        ui64 BackupInFlightBytes = 0;
-        ui64 BackupInFlightBytesLimit = Max<ui64>();
+        TBackupState BackupState;
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;

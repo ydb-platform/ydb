@@ -5224,7 +5224,7 @@ void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
 void TExecutor::FailBackup(const TString& error) {
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
 
-    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_CRASH) {
+    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_RESTART) {
         Y_TABLET_ERROR(error);
     }
 

@@ -1,6 +1,5 @@
 #include "kqp_operator.h"
 
-#include <yql/essentials/core/yql_cost_function.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/solver/dq_opt_stat.h>
 

@@ -8,11 +8,6 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(cbo_optimizer_new.h)
 
-CHECK_DEPENDENT_DIRS(DENY PEERDIRS
-    ydb/core/kqp/opt/cbo
-    ydb/core/kqp/opt/cbo/solver
-)
-
 END()
 
 RECURSE(

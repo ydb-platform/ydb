@@ -9,9 +9,4 @@ PEERDIR(
     yql/essentials/utils
 )
 
-CHECK_DEPENDENT_DIRS(DENY PEERDIRS
-    ydb/core/kqp/opt/cbo
-    ydb/core/kqp/opt/cbo/solver
-)
-
 END()

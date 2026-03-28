@@ -30,6 +30,7 @@ enum class EJoinAlgoType {
     LookupJoinReverse,
     MapJoin,
     GraceJoin,
+    ReverseBlockJoin,
     StreamLookupJoin,
     MergeJoin
 };
@@ -40,6 +41,7 @@ static constexpr auto AllJoinAlgos = {
     EJoinAlgoType::LookupJoinReverse,
     EJoinAlgoType::MapJoin,
     EJoinAlgoType::GraceJoin,
+    EJoinAlgoType::ReverseBlockJoin,
     EJoinAlgoType::MergeJoin
 };
 

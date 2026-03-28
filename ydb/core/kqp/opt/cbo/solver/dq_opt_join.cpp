@@ -24,6 +24,7 @@ EJoinAlgoType JoinAlgoFromYql(NYql::EJoinAlgoType yqlAlgo) {
         case NYql::EJoinAlgoType::LookupJoinReverse:return EJoinAlgoType::LookupJoinReverse;
         case NYql::EJoinAlgoType::MapJoin:          return EJoinAlgoType::MapJoin;
         case NYql::EJoinAlgoType::GraceJoin:        return EJoinAlgoType::GraceJoin;
+        case NYql::EJoinAlgoType::ReverseBlockJoin: return EJoinAlgoType::ReverseBlockJoin;
         case NYql::EJoinAlgoType::StreamLookupJoin: return EJoinAlgoType::StreamLookupJoin;
         case NYql::EJoinAlgoType::MergeJoin:        return EJoinAlgoType::MergeJoin;
     }
@@ -37,6 +38,7 @@ NYql::EJoinAlgoType JoinAlgoToYql(EJoinAlgoType kqpAlgo) {
         case EJoinAlgoType::LookupJoinReverse:return NYql::EJoinAlgoType::LookupJoinReverse;
         case EJoinAlgoType::MapJoin:          return NYql::EJoinAlgoType::MapJoin;
         case EJoinAlgoType::GraceJoin:        return NYql::EJoinAlgoType::GraceJoin;
+        case EJoinAlgoType::ReverseBlockJoin: return NYql::EJoinAlgoType::ReverseBlockJoin;
         case EJoinAlgoType::StreamLookupJoin: return NYql::EJoinAlgoType::StreamLookupJoin;
         case EJoinAlgoType::MergeJoin:        return NYql::EJoinAlgoType::MergeJoin;
     }

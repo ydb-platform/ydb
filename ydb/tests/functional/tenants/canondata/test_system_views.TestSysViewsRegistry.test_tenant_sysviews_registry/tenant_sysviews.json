@@ -569,6 +569,10 @@
   "resource_pool_classifiers": {
     "columns": [
       {
+        "name": "FullScanOn",
+        "type": "Utf8?"
+      },
+      {
         "name": "Name",
         "type": "Utf8?"
       },
@@ -582,6 +586,10 @@
       },
       {
         "name": "ResourcePool",
+        "type": "Utf8?"
+      },
+      {
+        "name": "AppName",
         "type": "Utf8?"
       }
     ],

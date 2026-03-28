@@ -318,6 +318,125 @@ nav.toc li { margin: 6px 0; }
   color: var(--text);
   margin-top: 4px;
 }
+
+/* Pitfall blocks */
+.pitfall-block {
+  background: var(--surface);
+  border: 1px solid #5a2a2a;
+  border-left: 4px solid var(--red);
+  border-radius: 0 8px 8px 0;
+  margin: 24px 0;
+  padding: 18px 22px;
+}
+.pitfall-block h4 {
+  color: var(--red);
+  font-size: 15px;
+  margin-bottom: 8px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+}
+.pitfall-block .pitfall-location {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.pitfall-block .pitfall-fix {
+  background: #0d1f18;
+  border: 1px solid var(--border-hi);
+  border-radius: 4px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+.pitfall-block .pitfall-fix::before {
+  content: "Fix: ";
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* KQP-specific addition cards */
+.addition-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent3);
+  border-radius: 0 6px 6px 0;
+  padding: 14px 18px;
+  margin: 14px 0;
+}
+.addition-card h4 {
+  color: var(--accent3);
+  font-size: 14px;
+  margin-bottom: 6px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+}
+.addition-card .addition-where {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+/* Maintenance workflow steps */
+.workflow-step {
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+.workflow-step:last-child { border-bottom: none; }
+.workflow-step .step-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 26px;
+}
+.workflow-step .step-body { flex: 1; font-size: 13.5px; }
+.workflow-step .step-cmd {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  color: var(--accent2);
+  background: var(--surface2);
+  padding: 2px 8px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+/* dq/opt/core file table */
+.srcdir-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.srcdir-table th {
+  background: var(--surface2);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid var(--border);
+}
+.srcdir-table td {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+.srcdir-table td:first-child {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.srcdir-table tr:hover td { background: var(--surface); }
 </style>
 </head>
 <body>
@@ -338,6 +457,11 @@ nav.toc li { margin: 6px 0; }
 <li><a href="#sec-includes">8. Header Include Graph</a></li>
 <li><a href="#sec-correspondence">9. Fork Correspondence Table</a></li>
 <li><a href="#sec-decisions">10. Design Decision Analysis</a></li>
+<li><a href="#sec-dataflow">11. Data Flow Walkthrough</a></li>
+<li><a href="#sec-pitfalls">12. Known Pitfalls</a></li>
+<li><a href="#sec-kqp-additions">13. KQP-Specific Additions</a></li>
+<li><a href="#sec-maintenance">14. Maintenance Workflow</a></li>
+<li><a href="#sec-dqoptcore">15. dq/opt/core — The SRCDIR Sub-Library</a></li>
 </ol>
 </nav>
 
@@ -1372,6 +1496,304 @@ flowchart TD
   <div class="chosen-summary">The solver's transitive exposure to <code>yql/essentials/core/cbo</code> is structural and cannot be removed without a major refactor of the YQL build graph. The guard on <code>kqp/opt/cbo</code> (the pure-types library) provides the meaningful protection: it ensures the CBO types themselves are defined independently of the YQL CBO types. The solver is documented as the intentional bridge layer.</div>
 </div>
 </div>
+
+
+<!-- ============================================================ -->
+<h2 id="sec-dataflow">11. Data Flow Walkthrough</h2>
+<p>End-to-end sequence from table metadata to a rewritten physical join plan. Two separate passes are involved: the <em>statistics collection pass</em> (run once per query, before CBO) and the <em>join rewriting pass</em> (run for each <code>EquiJoin</code> node visited by the optimizer).</p>
+
+<h3>11.1 Statistics Collection Pass</h3>
+<div class="mermaid-wrap">
+<pre class="mermaid">
+sequenceDiagram
+    participant Svc as Statistics Service
+    participant KqpCtx as TKqpStatsStore
+    participant Tx as kqp_statistics_transformer.cpp
+    participant TypeCtx as TTypeAnnotationContext
+
+    Note over Svc,TypeCtx: Phase 1 - pre-populate KqpStats from the statistics service
+    Svc->>KqpCtx: Pre-populate per-table TOptimizerStatistics<br/>(Nrows, Nattrs, ByteSize, cost model params)
+    Note over Tx: For each TKqpReadTable / TKqpReadTableRanges node
+    Tx->>KqpCtx: Read TOptimizerStatistics from KqpStats[node.UniqueId()]
+    Tx->>TypeCtx: Write NYql::TOptimizerStatistics to StatisticsMap[node]
+    Note over Tx: InferStatisticsForExtendBase, InferStatisticsForAggregateBase etc.<br/>propagate statistics upward through the AST tree
+    Tx->>TypeCtx: Propagate statistics upward through AST
+    Note over KqpCtx: Also: BuildShuffleEliminationFSM() runs here;<br/>KqpStats.ShufflingsFSM built once from PartitionedByColumns
+</pre>
+</div>
+
+<h3>11.2 Join Rewriting Pass (CBO path)</h3>
+<div class="mermaid-wrap">
+<pre class="mermaid">
+sequenceDiagram
+    participant KqpLog as kqp_opt_log.cpp
+    participant CostBased as dq_opt_join_cost_based.cpp
+    participant Collect as DqCollectJoinRelationsWithStats
+    participant Convert as ConvertToJoinTree
+    participant Hypergraph as MakeJoinHypergraph
+    participant Solver as DPHyp Solver
+    participant Rewrite as DqBuildJoin / DqRewriteEquiJoin
+    participant Plan as Physical plan node
+
+    KqpLog->>KqpLog: MakeNativeOptimizerNew(providerCtx, settings, SE-flag, ShufflingsFSM)
+    KqpLog->>CostBased: DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpStats, *opt, ...)
+    CostBased->>Collect: DqCollectJoinRelationsWithStats(rels, ctx, node, relBuilder)
+    Note over Collect: For each EquiJoin leaf:<br/>look up NKqp::TOptimizerStatistics in KqpStats<br/>relBuilder creates TKqpRelOptimizerNode
+    Collect-->>CostBased: rels: vector of TRelOptimizerNode
+    CostBased->>Convert: ConvertToJoinTree(equiJoinTuple, rels, ctx, hints)
+    Note over Convert: Walks TCoEquiJoinTuple AST recursively;<br/>builds TJoinOptimizerNode tree with NKqp::EJoinAlgoType
+    Convert-->>CostBased: root: shared_ptr of TJoinOptimizerNode
+    CostBased->>Hypergraph: MakeJoinHypergraph(graph, root)
+    Note over Hypergraph: Extracts predicates as hyperedges;<br/>annotates nodes with TOptimizerStatistics
+    Hypergraph-->>CostBased: TJoinHypergraph with edge set
+    CostBased->>Solver: Enumerate(graph) - DPHyp dynamic programming
+    Note over Solver: BitSet-based partition enumeration;<br/>calls IProviderContext::ComputeJoinStats() per candidate;<br/>selects minimum-cost plan tree
+    Solver-->>CostBased: best root: shared_ptr of IBaseOptimizerNode
+    CostBased->>Rewrite: DqBuildJoin / DqRewriteEquiJoin on the reordered tree
+    Rewrite-->>Plan: Rewritten TExprNode (physical EquiJoin tree)
+</pre>
+</div>
+
+<h3>11.3 Key Boundary Crossings</h3>
+<p>Three points in the data flow involve explicit type conversion between <code>NKikimr::NKqp</code> and <code>NYql</code> types:</p>
+<ul>
+  <li><strong>Stats service → KqpStats</strong>: Statistics arrive as <code>NKikimr::NKqp::TOptimizerStatistics</code> (independent struct). <code>InferStatisticsForReadTable</code> copies them into <code>TypeCtx.StatisticsMap</code> as <code>NYql::TOptimizerStatistics</code> (shallow copy; <code>TColumnStatMap</code> is shared via alias).</li>
+  <li><strong>Column statistics boundary</strong>: <code>FromYqlColumnStatMap()</code> in <code>kqp_statistics_transformer.cpp</code> converts a <code>NYql::TColumnStatMap</code> to <code>NKqp::TColumnStatMap</code> (same alias; no actual conversion needed). Lives in <code>kqp_statistics_transformer.cpp</code> to avoid a forbidden include chain if placed in <code>kqp/opt/cbo</code>.</li>
+  <li><strong><code>EJoinAlgoType</code> at join settings</strong>: <code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code>. The solver reads it via <code>static_cast&lt;EJoinAlgoType&gt;(linkSettings.JoinAlgo)</code> (same underlying integer values). Writes use <code>static_cast&lt;NYql::EJoinAlgoType&gt;(hint.Algo)</code>.</li>
+</ul>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-pitfalls">12. Known Pitfalls</h2>
+<p>Bugs encountered during development that stem directly from the fork's dual-namespace architecture. Understanding these prevents reintroducing the same problems.</p>
+
+<div class="pitfall-block">
+<h4>Pitfall 1 — FSM Index Mismatch Between Independently-Built FDStorages</h4>
+<div class="pitfall-location">Site: kqp_opt_phy_build_stage.cpp → KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM()</div>
+<p><code>ApplyNaturalOrderings()</code> sorts the <code>InterestingOrderings</code> list by column indices (integers) independently in each <code>FDStorage</code>. When KQP builds its own FSM from a join relation's <code>KqpStats</code>, and then looks up an ordering index from a <em>different</em> FSM (e.g., <code>typeCtx.SortingsFSM</code>), the integer index refers to a different sorting than intended — silently producing wrong join key order or no ordering at all.</p>
+<p>The invariant: the <strong>same FDStorage that created an ordering index</strong> must be used to look it up via <code>GetInterestingSortingByOrderingIdx</code>. Mixing FSM objects from different sides of the KQP/YQL boundary breaks this invariant.</p>
+<div class="pitfall-fix">Always use the same FSM object for both <code>CreateState(orderingIdx)</code> and subsequent <code>GetInterestingSortingByOrderingIdx</code>. In <code>KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM</code>, use <code>KqpStats.SortingsFSM</code> exclusively, not <code>typeCtx.SortingsFSM</code>.</div>
+</div>
+
+<div class="pitfall-block">
+<h4>Pitfall 2 — Two <code>EJoinKind</code> Enums in the <code>NKikimr</code> Namespace</h4>
+<div class="pitfall-location">Site: any file with both <code>NKikimr::NMiniKQL</code> and <code>NKikimr::NKqp</code> in scope</div>
+<p>Two distinct enums share the bare name <code>EJoinKind</code> inside <code>NKikimr</code>:</p>
+<ul>
+  <li><code>NKikimr::NMiniKQL::EJoinKind</code> — scoped enum (<code>Inner</code>, <code>Left</code>, <code>LeftSemi</code>, …), used by the execution engine</li>
+  <li><code>NKikimr::NKqp::EJoinKind</code> — unscoped enum (<code>InnerJoin</code>, <code>LeftJoin</code>, …), used by the CBO optimizer</li>
+</ul>
+<p>When both namespaces are open (e.g., via <code>using namespace NKikimr::NMiniKQL</code> + <code>using namespace NKikimr::NKqp</code>), the bare name <code>EJoinKind</code> is ambiguous. The compiler does not resolve across nested namespaces by unification.</p>
+<div class="pitfall-fix">Qualify as <code>NMiniKQL::EJoinKind</code> and <code>NKqp::EJoinKind</code> wherever both may be in scope. Do not assume the bare name resolves to the correct one.</div>
+</div>
+
+<div class="pitfall-block">
+<h4>Pitfall 3 — Unqualified <code>TOptimizerStatistics</code> in Mixed-Namespace Files</h4>
+<div class="pitfall-location">Site: solver/ files that open <code>namespace NKikimr::NKqp</code> and use names from <code>NYql::NDq</code></div>
+<p>Inside <code>namespace NYql::NDq { ... }</code>, an unqualified reference to <code>TOptimizerStatistics</code> resolves to <code>NYql::TOptimizerStatistics</code> by enclosing-namespace lookup — even if the intent was <code>NKikimr::NKqp::TOptimizerStatistics</code>. This produced silent type mismatches: the solver was storing costs into <code>NYql</code> stats objects that callers never read.</p>
+<p>The solver opens <code>namespace NKikimr::NKqp</code> at the top, which means references to <code>TOptimizerStatistics</code> correctly resolve to <code>NKikimr::NKqp::TOptimizerStatistics</code> in that context. But any helper that is defined inside <code>NYql::NDq</code> (or uses types from it via ADL) must explicitly qualify or use an alias.</p>
+<div class="pitfall-fix">In solver's <code>dq_opt_stat.h</code> / <code>dq_opt_stat.cpp</code>: add <code>using TOptimizerStatistics = NKikimr::NKqp::TOptimizerStatistics;</code> directly inside <code>namespace NYql::NDq</code>. A local <code>using</code> declaration beats enclosing-namespace lookup. Verify that boundary files that include both headers never leave <code>TOptimizerStatistics</code> unqualified.</div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-kqp-additions">13. KQP-Specific Additions</h2>
+<p>Features added to the KQP fork beyond the mechanical namespace/include adaptation of the YQL original. These represent KQP-specific behaviour that does not exist in the <code>ydb/library/yql/dq/opt</code> library.</p>
+
+<div class="addition-card">
+<h4>Shuffle Elimination Fields on <code>TOptimizerStatistics</code></h4>
+<div class="addition-where">ydb/core/kqp/opt/cbo/kqp_statistics.h — struct TOptimizerStatistics</div>
+<p>Two fields added to the independent <code>NKikimr::NKqp::TOptimizerStatistics</code> that have no counterpart in <code>NYql::TOptimizerStatistics</code>:</p>
+<ul>
+  <li><code>std::optional&lt;ui32&gt; ShufflingOrderingIdx</code> — index into the KQP shufflings FSM identifying which shuffle ordering this relation carries</li>
+  <li><code>std::vector&lt;TString&gt; ShuffledByColumns</code> — the partition key columns that the data is already shuffled on (populated from <code>TOpRead::PartitionedByColumns</code>)</li>
+</ul>
+<p>These are used by the shuffle elimination (SE) path to determine whether a hash join shuffle can be avoided by exploiting an existing data partitioning.</p>
+</div>
+
+<div class="addition-card">
+<h4><code>BuildShuffleEliminationFSM()</code></h4>
+<div class="addition-where">ydb/core/kqp/opt/cbo/apply_cbo.cpp — called from statistics transformer</div>
+<p>Builds the KQP-owned shufflings FSM (<code>KqpStats.ShufflingsFSM</code>) for shuffle elimination. Walks all <code>TOpRead</code> nodes in the query, extracts <code>PartitionedByColumns</code>, registers them as interesting shufflings, then calls <code>ApplyFunctionalDependencies()</code> to close the ordering lattice.</p>
+<p>This FSM is completely independent of <code>TTypeAnnotationContext.SortingsFSM</code> — it is built from KQP-specific metadata (physical table partition keys) that YQL statistics transformers do not have access to.</p>
+</div>
+
+<div class="addition-card">
+<h4><code>OptShuffleElimination</code> Config Flag</h4>
+<div class="addition-where">KQP config → kqp_opt_log.cpp → DqOptimizeEquiJoinWithCosts()</div>
+<p>Gate flag that enables the shuffle elimination code path. When set:</p>
+<ul>
+  <li><code>BuildShuffleEliminationFSM()</code> is called to populate <code>KqpStats.ShufflingsFSM</code></li>
+  <li><code>DqOptimizeEquiJoinWithCosts</code> receives <code>enableShuffleElimination = true</code></li>
+  <li><code>ShufflingOrderingsByJoinLabels</code> map is populated during optimization</li>
+  <li>RBO path also checks this flag (<code>DqRewriteEquiJoin</code> with <code>KqpCtx.JoinsCount</code>)</li>
+</ul>
+</div>
+
+<div class="addition-card">
+<h4>KQP-Typed FSM Fields on <code>TKqpStatsStore</code></h4>
+<div class="addition-where">ydb/core/kqp/opt/kqp_opt.h — struct TKqpStatsStore</div>
+<p>Two FSM pointers on <code>TKqpStatsStore</code> that use KQP's <code>TOptimizerStatistics</code> type (not YQL's):</p>
+<ul>
+  <li><code>std::shared_ptr&lt;TOrderingsStateMachine&gt; SortingsFSM</code> — built by the SE infrastructure for index lookup join stage construction</li>
+  <li><code>std::shared_ptr&lt;TOrderingsStateMachine&gt; ShufflingsFSM</code> — built by <code>BuildShuffleEliminationFSM()</code> for hash join shuffle elimination</li>
+</ul>
+</div>
+
+<div class="addition-card">
+<h4><code>dq_opt_stat_kqp.cpp</code> — KQP-Typed Hint Application</h4>
+<div class="addition-where">ydb/core/kqp/opt/cbo/solver/dq_opt_stat_kqp.cpp</div>
+<p>New file with no YQL counterpart. Provides hint-application functions that work directly with <code>NKikimr::NKqp::TCardinalityHints</code>:</p>
+<ul>
+  <li><code>FindCardHint(const TCardinalityHints&amp;, TStringBuf label)</code></li>
+  <li><code>FindBytesHint(const TCardinalityHints&amp;, TStringBuf label)</code></li>
+  <li><code>ApplyRowsHints(TOptimizerStatistics&amp;, const TCardinalityHints&amp;, TStringBuf label)</code></li>
+  <li><code>ApplyBytesHints(TOptimizerStatistics&amp;, const TCardinalityHints&amp;, TStringBuf label)</code></li>
+</ul>
+<p>Equivalent functions exist in the YQL library for <code>NYql::TCardinalityHints</code>, but they cannot be reused because the types differ and there is no conversion layer at the hint application site.</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-maintenance">14. Maintenance Workflow</h2>
+<p>The fork will diverge from the YQL original over time. Two directions require active attention: (1) pulling upstream improvements from YQL into the KQP fork, and (2) ensuring KQP-specific changes are never accidentally overwritten.</p>
+
+<h3>14.1 Tracking Upstream Changes with <code>diff_copies.sh</code></h3>
+<div class="rationale-card">
+<p>Run the diff tool to audit the current divergence between KQP and YQL files:</p>
+<p style="margin-top:10px"><code>./diff_copies.sh --stat-only</code></p>
+<p style="margin-top:6px;font-size:13px;color:var(--text-dim)">One summary line per pair. For full normalized diffs (mechanical changes stripped, structural changes shown via <code>difft</code>): run without <code>--stat-only</code>. Results also written to <code>./cbo-to-ydb-diff</code>.</p>
+</div>
+
+<p>The tool classifies each pair as:</p>
+<ul>
+  <li><span style="color:var(--accent)"><strong>IDENTICAL</strong></span> — files are bit-for-bit identical. Mechanical changes (namespace, include path) have not been applied yet, or a recent YQL change was already synced. Low-risk to pull in YQL changes directly.</li>
+  <li><span style="color:#6888b8"><strong>MECHANICAL</strong></span> — files differ only by namespace/include-path renames (patterns normalized away by <code>normalize()</code>). Safe to update by re-applying the same mechanical transforms to the YQL version.</li>
+  <li><span style="color:var(--red)"><strong>SUBSTANTIVE</strong></span> — files have logic differences beyond mechanical renames. The normalized diff shows exactly what changed. <strong>Do not blindly overwrite</strong>: each difference must be reviewed individually.</li>
+</ul>
+
+<h3>14.2 Sync Decision Matrix</h3>
+<div class="file-grid" style="margin-top:12px">
+  <div class="file-row" style="grid-template-columns: 160px 1fr">
+    <div class="file-name">IDENTICAL pair</div>
+    <div class="file-desc">YQL changed: cherry-pick the YQL commit, apply mechanical transforms. No KQP logic to preserve.</div>
+  </div>
+  <div class="file-row" style="grid-template-columns: 160px 1fr">
+    <div class="file-name">MECHANICAL pair</div>
+    <div class="file-desc">YQL changed: apply the YQL delta on top of the KQP version, then re-apply mechanical transforms. Check include paths and namespace qualifiers.</div>
+  </div>
+  <div class="file-row" style="grid-template-columns: 160px 1fr">
+    <div class="file-name">SUBSTANTIVE — dq_opt_stat.h/cpp</div>
+    <div class="file-desc">Contains KQP-specific hint application and FSM fields. Always review manually. The <code>using TOptimizerStatistics</code> alias and <code>ShuffledByColumns</code> fields must be preserved.</div>
+  </div>
+  <div class="file-row" style="grid-template-columns: 160px 1fr">
+    <div class="file-name">SUBSTANTIVE — dq_opt_join.cpp</div>
+    <div class="file-desc">Namespace trick (<code>namespace NKikimr::NKqp { using namespace NYql::NDq; }</code>) and <code>EJoinAlgoType</code> boundary casts must be preserved. Pull logic changes from YQL but keep the namespace wrapper.</div>
+  </div>
+  <div class="file-row" style="grid-template-columns: 160px 1fr">
+    <div class="file-name">KQP-only files</div>
+    <div class="file-desc"><code>dq_opt_stat_kqp.cpp</code>, <code>kqp_statistics.h</code> (KQP addition fields) — no YQL counterpart. Not tracked by <code>diff_copies.sh</code>. Update as needed for KQP-specific features only.</div>
+  </div>
+</div>
+
+<h3>14.3 Adding a New File to the Fork</h3>
+<p>If a new file appears in <code>ydb/library/yql/dq/opt</code> that the KQP solver needs:</p>
+<div class="workflow-step">
+  <span class="step-num">1.</span>
+  <div class="step-body">Determine whether the file is <em>infrastructure</em> (build helpers, generic DQ AST manipulation) or <em>CBO logic</em> (stat propagation, join cost models). Infrastructure files can go into <code>dq/opt/core</code> via the SRCDIR trick — no copy needed. CBO logic files must be forked into <code>solver/</code>.</div>
+</div>
+<div class="workflow-step">
+  <span class="step-num">2.</span>
+  <div class="step-body">For infrastructure: add the file to <code>ydb/library/yql/dq/opt/core/ya.make</code> SRCS list. The solver will pick it up transitively.
+  <span class="step-cmd">ydb/library/yql/dq/opt/core/ya.make → SRCS</span></div>
+</div>
+<div class="workflow-step">
+  <span class="step-num">3.</span>
+  <div class="step-body">For CBO logic: copy to <code>ydb/core/kqp/opt/cbo/solver/</code>, apply mechanical namespace/include transforms, add to solver's <code>ya.make</code>, and add a new entry to the PAIRS array in <code>diff_copies.sh</code>.
+  <span class="step-cmd">diff_copies.sh PAIRS array</span></div>
+</div>
+<div class="workflow-step">
+  <span class="step-num">4.</span>
+  <div class="step-body">Verify the fork builds and all unit tests pass before committing.
+  <span class="step-cmd">./ya make --build relwithdebinfo -tA ydb/core/kqp/opt/cbo</span></div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-dqoptcore">15. dq/opt/core — The SRCDIR Sub-Library</h2>
+<p>The central insight that makes the fork feasible without duplicating all DQ infrastructure. The sub-library at <code>ydb/library/yql/dq/opt/core</code> uses an Arcadia <code>SRCDIR</code> directive to compile files that physically live in the parent directory (<code>ydb/library/yql/dq/opt/</code>) without moving them. This preserves the YQL library's original file layout while letting the KQP solver depend on only the infrastructure portion.</p>
+
+<h3>Files compiled via SRCDIR</h3>
+<table class="srcdir-table">
+<thead><tr><th>File</th><th>Content</th><th>Why in core, not dq/opt</th></tr></thead>
+<tbody>
+<tr>
+  <td>dq_opt.cpp</td>
+  <td>Generic DQ expression rewrite helpers (<code>DqPushdownPredicate</code>, <code>DqFlatMap</code>, etc.)</td>
+  <td>No join-cost or statistics logic. Used by all DQ rewriters regardless of CBO.</td>
+</tr>
+<tr>
+  <td>dq_opt_build.cpp</td>
+  <td>Physical stage builder helpers (<code>DqBuildStagesOverInputs</code>, etc.)</td>
+  <td>Infrastructure for constructing physical DQ stages; independent of join cost model.</td>
+</tr>
+<tr>
+  <td>dq_opt_hopping.cpp</td>
+  <td>Hopping window rewrite (<code>DqExpandWindowFunctions</code> helpers)</td>
+  <td>Window function rewriting is independent of CBO join ordering.</td>
+</tr>
+<tr>
+  <td>dq_opt_log.cpp</td>
+  <td>Logical-plan rewriting helpers (<code>DqRewriteAggregate</code>, <code>DqRewriteStreamEquiJoinWithLookup</code>, etc.)</td>
+  <td>Logical optimizations not related to join cost. <em>Note: a dead copy of this file was initially placed in <code>solver/</code> and later deleted — see Section 5.</em></td>
+</tr>
+<tr>
+  <td>dq_opt_peephole.cpp</td>
+  <td>Peephole physical rewrites (<code>DqPeepholeRewrite*</code>)</td>
+  <td>Low-level IR cleanup; no statistics or cost model involvement.</td>
+</tr>
+<tr>
+  <td>dq_opt_phy.cpp</td>
+  <td>Physical plan builder (<code>DqBuildPhyStage</code>, <code>DqBuildPhyJoin</code>, etc.)</td>
+  <td>Physical join <em>construction</em> (emitting IR nodes) is separate from join <em>ordering</em> (CBO). The solver calls <code>DqBuildPhyJoin</code> from the <code>NYql::NDq</code> namespace.</td>
+</tr>
+<tr>
+  <td>dq_opt_phy_finalizing.cpp</td>
+  <td>Physical plan finalisation (<code>DqBuildFinalizeByKey</code>, <code>DqBuildGlobalSort</code>, etc.)</td>
+  <td>Post-CBO finalisation steps that run after join ordering is complete.</td>
+</tr>
+</tbody>
+</table>
+
+<p>The <code>ya.make</code> for <code>dq/opt/core</code> uses:</p>
+<pre style="background:var(--surface2);padding:14px 18px;border-radius:6px;font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--accent);margin:12px 0;overflow-x:auto">SRCDIR(ydb/library/yql/dq/opt)
+
+SRCS(
+    dq_opt.cpp
+    dq_opt_build.cpp
+    dq_opt_hopping.cpp
+    dq_opt_log.cpp
+    dq_opt_peephole.cpp
+    dq_opt_phy.cpp
+    dq_opt_phy_finalizing.cpp
+)</pre>
+
+<p>Because <code>dq/opt/core</code> is in the same Arcadia module subtree as <code>dq/opt</code>, the files compile cleanly under <code>namespace NYql::NDq</code> — their includes resolve to the original YQL libraries. The KQP solver then <code>PEERDIR</code>s <code>dq/opt/core</code> to get this infrastructure, while keeping the CBO join logic separate.</p>
+
+<h3>What is <em>not</em> in core</h3>
+<p>The following files remain in <code>ydb/library/yql/dq/opt</code> (the YQL-owned library) and are <em>not</em> compiled by <code>core</code>:</p>
+<ul>
+  <li><code>dq_opt_join.cpp</code> / <code>dq_opt_join.h</code> — join ordering entry points; <strong>forked</strong> into <code>solver/</code></li>
+  <li><code>dq_opt_join_cost_based.cpp</code> / <code>.h</code> — DPHyp cost-based optimizer; <strong>forked</strong></li>
+  <li><code>dq_opt_stat.cpp</code> / <code>.h</code> — statistics propagation; <strong>forked</strong></li>
+  <li><code>dq_opt_predicate_selectivity.cpp</code> — selectivity estimation; <strong>forked</strong></li>
+  <li><code>dq_opt_stat_transformer_base.cpp</code> / <code>.h</code> — stat-transformer infrastructure; <strong>forked</strong></li>
+  <li>All other CBO-related files listed in the Fork Correspondence Table (Section 9)</li>
+</ul>
 
 </body>
 </html>

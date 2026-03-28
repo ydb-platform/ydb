@@ -21,6 +21,26 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
 
+// Boundary conversion: NYql::TOptimizerStatistics::TColumnStatMap -> KQP-owned copy.
+// Lives here rather than in kqp_statistics.h because yql_statistics.h (needed for the
+// NYql argument type) transitively includes yql/essentials/core/cbo, which kqp/opt/cbo
+// explicitly denies via CHECK_DEPENDENT_DIRS.
+static TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
+    const TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>& src)
+{
+    auto result = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
+    for (const auto& [name, s] : src->Data) {
+        TColumnStatistics cs;
+        cs.NumUniqueVals = s.NumUniqueVals;
+        cs.HyperLogLog = s.HyperLogLog;
+        cs.CountMinSketch = s.CountMinSketch;
+        cs.EqWidthHistogramEstimator = s.EqWidthHistogramEstimator;
+        cs.Type = s.Type;
+        result->Data[name] = std::move(cs);
+    }
+    return result;
+}
+
 // Dual-inheritance wrapper: stored as NKikimr::NKqp::IProviderStatistics,
 // but dynamic_cast<NYql::TS3ProviderStatistics*> still works.
 struct TKqpS3ProviderStatistics

@@ -11,7 +11,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
     ydb/core/kqp/expr_nodes
     yql/essentials/core/dq_integration
-    yql/essentials/parser/pg_wrapper/interface
     ydb/library/yql/dq/proto
 )
 

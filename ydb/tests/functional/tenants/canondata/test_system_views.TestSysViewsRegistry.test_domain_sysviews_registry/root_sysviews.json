@@ -167,6 +167,14 @@
       {
         "name": "IsTruncated",
         "type": "Bool?"
+      },
+      {
+        "name": "QueryType",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Syntax",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [

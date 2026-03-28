@@ -27,6 +27,7 @@
 Ссылки на видео оформляются по стандартным md-правилам. `@[название_ресурса](ссылка)`. Например:
 
 - `@[youtube](https://youtu.be/Dy0VtzQatag?)`
+
 - `@[rutube](6840af8411a8be4e7da9f82cb4a25103)`
 
 - `@[](https://runtime.strm.yandex.ru/player/episode/vplekzpruxb4htfcgqwm?autoplay=0&mute=1&color=white&rel=0)`

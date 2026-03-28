@@ -13,7 +13,7 @@ WITH (option = value[, ...])
 * `transfer_name` — the name of the transfer to be created.
 * `topic_name` — the name of the topic containing the source messages for transformation and writing to the table.
 * `table_name` — the name of the table where the data will be written.
-* `lambda` — [lambda-function](#lambda) for message transformation. <!-- markdownlint-disable-line MD051 -->
+* `lambda` — [lambda-function](#lambda) for message transformation.
 * `option` — a command option:
 
   * `CONNECTION_STRING` — [the connection string](../../../concepts/connect.md#connection_string) to the database containing the topic. This is only specified if the topic is located in a different {{ ydb-short-name }} database.
@@ -153,6 +153,8 @@ WITH (
     FLUSH_INTERVAL = Interval('PT60S')
 );
 ```
+
+## Lambda function {#lambda}
 
 {% include [x](../_includes/transfer_lambda.md) %}
 

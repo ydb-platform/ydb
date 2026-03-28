@@ -29,34 +29,12 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (BlockHash)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"orders"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"InnerJoin (Map)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"customer"
-                                          },
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"nation"
-                                          }
-                                        ]
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"supplier"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
                               }
                             ]
                         }
@@ -69,7 +47,7 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
                         {

@@ -569,7 +569,7 @@ public:
 
         QueryState->UpdateTempTablesState(TempTablesState);
 
-        if (!QueryState->QueryClassifier) {
+        if (!QueryState->QueryClassifier || QueryState->UserRequestContext->PoolConfig) {
             CompileQuery();
             return;
         }
@@ -592,14 +592,7 @@ public:
         }, status);
     }
 
-    void HandleAdmission(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType != TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
-            return;
-        }
-
-        STLOG_W("Failed to deliver request to workload service, bypassing WLM",
-            (trace_id, TraceId()));
-
+    void CompileOrExecuteQuery() {
         if (CurrentStateFunc() == &TThis::PostCompileState) {
             PrepareAndExecuteQuery();
         } else if (CurrentStateFunc() == &TThis::PreCompileState){
@@ -609,6 +602,20 @@ public:
         }
     }
 
+    void HandleAdmission(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Get()->SourceType != TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool) {
+            return;
+        }
+
+        STLOG_W("Failed to deliver request to workload service, bypassing WLM",
+            (trace_id, TraceId()));
+
+        QueryState->UserRequestContext->PoolId.clear();
+        QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
+
+        CompileOrExecuteQuery();
+    }
+
     void Handle(NWorkload::TEvContinueRequest::TPtr& ev) {
         YQL_ENSURE(QueryState);
         QueryState->ContinueTime = TInstant::Now();
@@ -616,8 +623,11 @@ public:
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
+
             QueryState->UserRequestContext->PoolId.clear();
-            CompileQuery();
+            QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
+
+            CompileOrExecuteQuery();
             return;
         }
 
@@ -644,13 +654,7 @@ public:
         QueryState->UserRequestContext->PoolId = poolId;
         QueryState->UserRequestContext->PoolConfig = ev->Get()->PoolConfig;
 
-        if (CurrentStateFunc() == &TThis::PostCompileState) {
-            PrepareAndExecuteQuery();
-        } else if (CurrentStateFunc() == &TThis::PreCompileState) {
-            CompileQuery();
-        } else {
-            Y_ABORT("Unexpected ContinueRequest in state: %s", CurrentStateFuncName().c_str());
-        }
+        CompileOrExecuteQuery();
     }
 
     bool AreAllTheTopicsAndPartitionsKnown() const {
@@ -1029,10 +1033,10 @@ public:
                         QueryState->UserRequestContext->PoolId = r.PoolId;
                         PassRequestToResourcePool(&TThis::PostCompileState);
                     },
-                    [this](const IWmQueryClassifier::TBypass& b) {
+                    [this](const IWmQueryClassifier::TBypass&) {
                         STLOG_D("PostCompile Classify bypass", (trace_id, TraceId()));
-                        QueryState->UserRequestContext->PoolId = "";
-                        QueryState->UserRequestContext->PoolConfig = *b.Config;
+                        QueryState->UserRequestContext->PoolId.clear();
+                        QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
                     },
                     [this](const IWmQueryClassifier::TReject& r) {
                         STLOG_N("PostCompile Classify rejected", (trace_id, TraceId()));

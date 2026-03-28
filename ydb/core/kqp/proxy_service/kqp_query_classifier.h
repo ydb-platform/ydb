@@ -67,9 +67,7 @@ struct IWmQueryClassifier {
         TString PoolId;
     };
 
-    struct TBypass {
-        const NResourcePool::TPoolSettings* Config = &EMPTY_POOL;
-    };
+    struct TBypass {};
 
     struct TReject {
         Ydb::StatusIds::StatusCode Code;

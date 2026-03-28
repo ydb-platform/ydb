@@ -1627,10 +1627,10 @@ private:
                 ev->Get()->SetPoolId(resolved.PoolId);
                 return true;
             },
-            [&ev](const IWmQueryClassifier::TBypass& bypass) {
+            [&ev](const IWmQueryClassifier::TBypass&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
                 ev->Get()->SetPoolId("");
-                ev->Get()->SetPoolConfig(*bypass.Config);
+                ev->Get()->SetPoolConfig(IWmQueryClassifier::EMPTY_POOL);
                 return true;
             },
             [&ev](const IWmQueryClassifier::TPendingCompilation&) {

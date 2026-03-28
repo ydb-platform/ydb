@@ -20,10 +20,6 @@ TMaybeNode<TExprBase> KqpRewriteLiteralLookup(const TExprBase& node, TExprContex
         return {};
     }
 
-    if (kqpCtx.IsScanQuery())  {
-        return {};
-    }
-
     const TKqlLookupTableBase& lookup = node.Cast<TKqlLookupTableBase>();
     TMaybeNode<TExprBase> lookupKeys = lookup.LookupKeys();
     TMaybeNode<TCoSkipNullMembers> skipNullMembers;

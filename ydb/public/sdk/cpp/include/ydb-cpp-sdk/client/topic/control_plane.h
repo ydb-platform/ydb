@@ -664,7 +664,7 @@ struct TConsumerSettings {
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
-    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy);
+    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
 
     FLUENT_SETTING(TAttributes, Attributes);
 

@@ -137,7 +137,7 @@ def do(args):
 
             if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
                 row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage / 100
-            elif pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+            elif row['SlotSize'] > 0:
                 # VDiskRawUsage metric was added in 26.1.1
                 # For older versions we calculate it on client side
                 #
@@ -146,9 +146,7 @@ def do(args):
                 # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
                 #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
                 #
-                weight = common.get_vslot_owner_weight(row['GroupSizeInUnits'], row['PDiskSlotSizeInUnits'])
-                vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
-                row['VDiskRawUsage'] = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+                row['VDiskRawUsage'] = row['UsedSize'] / row['SlotSize']
 
             if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
                 row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy

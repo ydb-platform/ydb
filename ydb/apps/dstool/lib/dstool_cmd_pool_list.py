@@ -222,7 +222,6 @@ def do(args):
             pool['groups_list'] = []
 
         # fill in usage estimations
-        pdisk_map = common.build_pdisk_map(base_config)
         pdisk_slot_usage_map = common.build_pdisk_usage_map(base_config, count_donors=True)
         usage_map = calculate_estimated_usage(pdisk_map, pdisk_slot_usage_map, vslot_map, pool['groups_list'])
 

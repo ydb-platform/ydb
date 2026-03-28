@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(timestamps[0] <= timestamps[1]);
     }
 
-    Y_UNIT_TEST(CommonLabelsArePrepended) {
+    Y_UNIT_TEST(CommonLabelsAreStoredSeparately) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,
             .ChunkSizeBytes = 64,
@@ -80,13 +80,52 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer);
         UNIT_ASSERT(writer.Append(10));
 
-        auto lines = registry.Snapshot().Lines();
+        auto snapshot = registry.Snapshot();
+        auto lines = snapshot.Lines();
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "node_id");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "42");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[1].Name, "kind");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[1].Value, "basic");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "42");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "kind");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "basic");
+    }
+
+    Y_UNIT_TEST(CommonLabelsCanBeUpdatedAfterLineCreation) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+            .CommonLabels = {{
+                TLabel{"node_id", "42"},
+            }},
+        });
+
+        TLabel label{"kind", "basic"};
+        auto writer = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+
+        const TVector<TLabel> updatedLabels = {
+            {"node_id", "43"},
+            {"host", "slot-1"},
+        };
+        registry.SetCommonLabels(updatedLabels);
+
+        auto snapshot = registry.Snapshot();
+        auto lines = snapshot.Lines();
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "43");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Name, "host");
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Value, "slot-1");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "kind");
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "basic");
+
+        auto duplicate = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
+        UNIT_ASSERT(!duplicate);
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {

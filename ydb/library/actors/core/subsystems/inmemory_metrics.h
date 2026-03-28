@@ -111,6 +111,9 @@ namespace NActors {
 
         TVector<TLineSnapshot> Lines() const;
 
+    public:
+        TVector<TLabel> CommonLabels;
+
     private:
         friend class TInMemoryMetricsRegistry;
         TVector<TLineSnapshot> SnapshotLines;
@@ -130,7 +133,10 @@ namespace NActors {
 
         // Single-writer contract: a line can be created only once for a key.
         // Duplicate CreateLine() calls return a noop writer.
+        // Common labels are registry-wide mutable state and are not part of line identity.
         TLineWriter CreateLine(TStringBuf name, std::span<const TLabel> labels);
+        void SetCommonLabels(std::span<const TLabel> labels);
+        TVector<TLabel> GetCommonLabels() const;
         TSnapshot Snapshot() const;
 
         ui64 GetReuseWatermark() const noexcept;

@@ -10,6 +10,7 @@
 #include <util/generic/ymath.h>
 #include <util/system/hp_timer.h>
 #include <util/system/mutex.h>
+#include <util/system/rwlock.h>
 #include <util/system/yassert.h>
 
 #include <array>
@@ -127,6 +128,7 @@ namespace NActors {
             : Config(std::move(cfg))
             , ChunkCount(Config.ChunkSizeBytes ? Config.MemoryBytes / Config.ChunkSizeBytes : 0)
             , MaxLines(Config.MaxLines ? Config.MaxLines : ChunkCount / 2)
+            , CommonLabels(Config.CommonLabels)
         {
             TimeAnchor.BaseCycles = GetCycleCountFast();
             TimeAnchor.BaseWallClock = TInstant::Now();
@@ -153,6 +155,8 @@ namespace NActors {
         mutable TMutex RegistryLock;
         THashMap<TLineKey, std::unique_ptr<TLine>, TLineKeyHash> LinesByKey;
         THashMap<ui32, TLine*> LinesById;
+        mutable TRWMutex CommonLabelsLock;
+        TVector<TLabel> CommonLabels;
 
         mutable TMutex VictimLock;
         TVector<std::unique_ptr<TChunk>> Storage;
@@ -281,17 +285,30 @@ namespace NActors {
     TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
     namespace {
-        TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> commonLabels, std::span<const TLabel> labels) {
+        TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
             TLineKey key;
             key.Name = TString(name);
-            key.Labels.reserve(commonLabels.size() + labels.size());
-            for (const auto& label : commonLabels) {
-                key.Labels.push_back(label);
-            }
+            key.Labels.reserve(labels.size());
             for (const auto& label : labels) {
                 key.Labels.push_back(label);
             }
             return key;
+        }
+
+        TVector<TLabel> NormalizeCommonLabels(std::span<const TLabel> labels) {
+            TVector<TLabel> normalized;
+            normalized.reserve(labels.size());
+            for (const auto& label : labels) {
+                auto it = FindIf(normalized, [&](const TLabel& current) {
+                    return current.Name == label.Name;
+                });
+                if (it != normalized.end()) {
+                    it->Value = label.Value;
+                } else {
+                    normalized.push_back(label);
+                }
+            }
+            return normalized;
         }
 
         void ResetChunkForWrite(TChunk* chunk, TLine* line) {
@@ -318,7 +335,7 @@ namespace NActors {
     }
 
     TLineWriter TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
-        auto key = MakeLineKey(name, Impl->Config.CommonLabels, labels);
+        auto key = MakeLineKey(name, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
         if (Impl->LinesByKey.contains(key)) {
@@ -337,6 +354,16 @@ namespace NActors {
         Impl->LinesById.emplace(linePtr->LineId, linePtr);
         Impl->LinesByKey.emplace(linePtr->Key, std::move(line));
         return TLineWriter(this, linePtr);
+    }
+
+    void TInMemoryMetricsRegistry::SetCommonLabels(std::span<const TLabel> labels) {
+        TWriteGuard guard(Impl->CommonLabelsLock);
+        Impl->CommonLabels = NormalizeCommonLabels(labels);
+    }
+
+    TVector<TLabel> TInMemoryMetricsRegistry::GetCommonLabels() const {
+        TReadGuard guard(Impl->CommonLabelsLock);
+        return Impl->CommonLabels;
     }
 
     namespace {
@@ -618,6 +645,7 @@ namespace NActors {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
+        snapshot.CommonLabels = GetCommonLabels();
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
         snapshot.SnapshotLines.reserve(Impl->LinesById.size());

@@ -39,13 +39,30 @@ namespace {
         return escaped;
     }
 
-    inline TString BuildInMemoryMetricTarget(const TLineSnapshot& line) {
+    inline TVector<TLabel> BuildEffectiveMetricLabels(const TVector<TLabel>& commonLabels, const TLineSnapshot& line) {
+        TVector<TLabel> labels = commonLabels;
+        labels.reserve(commonLabels.size() + line.Labels.size());
+        for (const auto& label : line.Labels) {
+            auto it = FindIf(labels, [&](const TLabel& current) {
+                return current.Name == label.Name;
+            });
+            if (it != labels.end()) {
+                it->Value = label.Value;
+            } else {
+                labels.push_back(label);
+            }
+        }
+        return labels;
+    }
+
+    inline TString BuildInMemoryMetricTarget(const TVector<TLabel>& commonLabels, const TLineSnapshot& line) {
         TStringBuilder target;
         target << line.Name;
-        if (!line.Labels.empty()) {
+        const auto labels = BuildEffectiveMetricLabels(commonLabels, line);
+        if (!labels.empty()) {
             target << '{';
             bool first = true;
-            for (const auto& label : line.Labels) {
+            for (const auto& label : labels) {
                 if (!first) {
                     target << ',';
                 }
@@ -62,7 +79,7 @@ namespace {
         const auto snapshot = inMemoryMetrics.Snapshot();
         targets.reserve(snapshot.Lines().size());
         for (const auto& line : snapshot.Lines()) {
-            targets.push_back(BuildInMemoryMetricTarget(line));
+            targets.push_back(BuildInMemoryMetricTarget(snapshot.CommonLabels, line));
         }
         Sort(targets);
         return targets;
@@ -417,11 +434,16 @@ namespace {
         return true;
     }
 
-    inline TString FindLineLabelValue(const TLineSnapshot& line, TStringBuf labelName) {
+    inline TString FindLineLabelValue(const TVector<TLabel>& commonLabels, const TLineSnapshot& line, TStringBuf labelName) {
         if (labelName == "__name__") {
             return line.Name;
         }
         for (const auto& label : line.Labels) {
+            if (label.Name == labelName) {
+                return label.Value;
+            }
+        }
+        for (const auto& label : commonLabels) {
             if (label.Name == labelName) {
                 return label.Value;
             }
@@ -449,8 +471,8 @@ namespace {
         return false;
     }
 
-    inline bool MatchPrometheusLabelMatcher(const TLineSnapshot& line, const TPrometheusLabelMatcher& matcher, TString& error) {
-        const TString actual = FindLineLabelValue(line, matcher.Name);
+    inline bool MatchPrometheusLabelMatcher(const TVector<TLabel>& commonLabels, const TLineSnapshot& line, const TPrometheusLabelMatcher& matcher, TString& error) {
+        const TString actual = FindLineLabelValue(commonLabels, line, matcher.Name);
         return MatchPrometheusLabelValue(actual, matcher, error);
     }
 
@@ -468,13 +490,13 @@ namespace {
         return NJson::ReadJsonTree(raw, &json, false);
     }
 
-    inline bool MatchPrometheusSelector(const TLineSnapshot& line, const TPrometheusVectorSelector& selector, TString& error) {
+    inline bool MatchPrometheusSelector(const TVector<TLabel>& commonLabels, const TLineSnapshot& line, const TPrometheusVectorSelector& selector, TString& error) {
         if (!selector.MetricName.empty() && line.Name != selector.MetricName) {
             return false;
         }
         for (const auto& matcher : selector.Matchers) {
             const size_t prevErrorSize = error.size();
-            const bool matched = MatchPrometheusLabelMatcher(line, matcher, error);
+            const bool matched = MatchPrometheusLabelMatcher(commonLabels, line, matcher, error);
             if (!error.empty() && error.size() != prevErrorSize) {
                 return false;
             }
@@ -667,11 +689,11 @@ private:
         points = std::move(downsampled);
     }
 
-    TSeries BuildSeries(const TLineSnapshot& line, const std::optional<ui64>& from, const std::optional<ui64>& until, ui32 maxDataPoints) const {
+    TSeries BuildSeries(const TVector<TLabel>& commonLabels, const TLineSnapshot& line, const std::optional<ui64>& from, const std::optional<ui64>& until, ui32 maxDataPoints) const {
         TSeries series;
-        series.Target = BuildInMemoryMetricTarget(line);
+        series.Target = BuildInMemoryMetricTarget(commonLabels, line);
         series.Name = line.Name;
-        series.Labels = line.Labels;
+        series.Labels = BuildEffectiveMetricLabels(commonLabels, line);
 
         line.ForEachRecord([&](const TRecordView& record) {
             const ui64 timestamp = record.Timestamp.Seconds();
@@ -693,6 +715,7 @@ private:
     }
 
     TVector<TSeries> EvaluateTarget(const TString& expression,
+            const TVector<TLabel>& commonLabels,
             const THashMap<TString, const TLineSnapshot*>& linesByTarget,
             const THashMap<TString, TVector<const TLineSnapshot*>>& linesByName,
             const std::optional<ui64>& from,
@@ -703,7 +726,7 @@ private:
         TVector<TString> args;
         if (TryParseGraphiteFunction(expression, functionName, args)) {
             if (functionName == "aliasSub" && args.size() == 3) {
-                auto series = EvaluateTarget(args[0], linesByTarget, linesByName, from, until, maxDataPoints);
+                auto series = EvaluateTarget(args[0], commonLabels, linesByTarget, linesByName, from, until, maxDataPoints);
                 try {
                     const std::string patternString(UnquoteGraphiteString(args[1]).c_str());
                     const std::regex pattern(patternString);
@@ -719,7 +742,7 @@ private:
                 return series;
             }
             if (functionName == "alias" && args.size() == 2) {
-                auto series = EvaluateTarget(args[0], linesByTarget, linesByName, from, until, maxDataPoints);
+                auto series = EvaluateTarget(args[0], commonLabels, linesByTarget, linesByName, from, until, maxDataPoints);
                 const TString alias = UnquoteGraphiteString(args[1]);
                 for (auto& line : series) {
                     line.Target = alias;
@@ -729,14 +752,14 @@ private:
         }
 
         if (const auto it = linesByTarget.find(expression); it != linesByTarget.end()) {
-            return {BuildSeries(*it->second, from, until, maxDataPoints)};
+            return {BuildSeries(commonLabels, *it->second, from, until, maxDataPoints)};
         }
         if (expression.find('{') == TString::npos) {
             if (const auto it = linesByName.find(expression); it != linesByName.end()) {
                 TVector<TSeries> series;
                 series.reserve(it->second.size());
                 for (const auto* line : it->second) {
-                    series.push_back(BuildSeries(*line, from, until, maxDataPoints));
+                    series.push_back(BuildSeries(commonLabels, *line, from, until, maxDataPoints));
                 }
                 return series;
             }
@@ -756,7 +779,7 @@ private:
         linesByTarget.reserve(lines.size());
         linesByName.reserve(lines.size());
         for (const auto& line : lines) {
-            linesByTarget.emplace(BuildInMemoryMetricTarget(line), &line);
+            linesByTarget.emplace(BuildInMemoryMetricTarget(snapshot.CommonLabels, line), &line);
             linesByName[line.Name].push_back(&line);
         }
 
@@ -767,7 +790,7 @@ private:
         TVector<TSeries> series;
         series.reserve(Targets.size());
         for (const auto& target : Targets) {
-            auto resolved = EvaluateTarget(target, linesByTarget, linesByName, from, until, maxDataPoints);
+            auto resolved = EvaluateTarget(target, snapshot.CommonLabels, linesByTarget, linesByName, from, until, maxDataPoints);
             series.insert(series.end(),
                 std::make_move_iterator(resolved.begin()),
                 std::make_move_iterator(resolved.end()));
@@ -1128,7 +1151,8 @@ private:
         return selectors;
     }
 
-    TVector<const TLineSnapshot*> SelectSeries(const TVector<TLineSnapshot>& lines,
+    TVector<const TLineSnapshot*> SelectSeries(const TVector<TLabel>& commonLabels,
+            const TVector<TLineSnapshot>& lines,
             const TVector<TPrometheusVectorSelector>& selectors,
             TString& error) const
     {
@@ -1145,7 +1169,7 @@ private:
         for (const auto& line : lines) {
             for (const auto& selector : selectors) {
                 const size_t prevErrorSize = error.size();
-                const bool matched = MatchPrometheusSelector(line, selector, error);
+                const bool matched = MatchPrometheusSelector(commonLabels, line, selector, error);
                 if (!error.empty() && error.size() != prevErrorSize) {
                     selected.clear();
                     return selected;
@@ -1159,10 +1183,10 @@ private:
         return selected;
     }
 
-    static NJson::TJsonValue BuildMetricObject(const TLineSnapshot& line) {
+    static NJson::TJsonValue BuildMetricObject(const TVector<TLabel>& commonLabels, const TLineSnapshot& line) {
         NJson::TJsonValue metric;
         metric["__name__"] = line.Name;
-        for (const auto& label : line.Labels) {
+        for (const auto& label : BuildEffectiveMetricLabels(commonLabels, line)) {
             metric[label.Name] = label.Value;
         }
         return metric;
@@ -1180,7 +1204,7 @@ private:
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
-        auto selected = SelectSeries(lines, selectors, error);
+        auto selected = SelectSeries(snapshot.CommonLabels, lines, selectors, error);
         if (!error.empty()) {
             return MakeError("bad_data", error);
         }
@@ -1188,6 +1212,9 @@ private:
         TVector<TString> labels;
         labels.reserve(8);
         labels.push_back("__name__");
+        for (const auto& label : snapshot.CommonLabels) {
+            labels.push_back(label.Name);
+        }
         for (const auto* line : selected) {
             for (const auto& label : line->Labels) {
                 labels.push_back(label.Name);
@@ -1213,14 +1240,14 @@ private:
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
-        auto selected = SelectSeries(lines, selectors, error);
+        auto selected = SelectSeries(snapshot.CommonLabels, lines, selectors, error);
         if (!error.empty()) {
             return MakeError("bad_data", error);
         }
 
         TVector<TString> values;
         for (const auto* line : selected) {
-            const TString value = FindLineLabelValue(*line, labelName);
+            const TString value = FindLineLabelValue(snapshot.CommonLabels, *line, labelName);
             if (!value.empty()) {
                 values.push_back(value);
             }
@@ -1245,7 +1272,7 @@ private:
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
-        auto selected = SelectSeries(lines, selectors, error);
+        auto selected = SelectSeries(snapshot.CommonLabels, lines, selectors, error);
         if (!error.empty()) {
             return MakeError("bad_data", error);
         }
@@ -1255,7 +1282,7 @@ private:
         NJson::TJsonValue& data = result.Json["data"];
         data.SetType(NJson::JSON_ARRAY);
         for (const auto* line : selected) {
-            data.AppendValue(BuildMetricObject(*line));
+            data.AppendValue(BuildMetricObject(snapshot.CommonLabels, *line));
         }
         return result;
     }
@@ -1286,7 +1313,7 @@ private:
 
         for (const auto& line : lines) {
             const size_t prevErrorSize = error.size();
-            const bool matched = MatchPrometheusSelector(line, selector, error);
+            const bool matched = MatchPrometheusSelector(snapshot.CommonLabels, line, selector, error);
             if (!error.empty() && error.size() != prevErrorSize) {
                 return MakeError("bad_data", error);
             }
@@ -1313,7 +1340,7 @@ private:
             }
 
             NJson::TJsonValue& item = output.AppendValue({});
-            item["metric"] = BuildMetricObject(line);
+            item["metric"] = BuildMetricObject(snapshot.CommonLabels, line);
             NJson::TJsonValue& value = item["value"];
             value.SetType(NJson::JSON_ARRAY);
             value.AppendValue(lastPoint->Timestamp);
@@ -1357,7 +1384,7 @@ private:
 
         for (const auto& line : lines) {
             const size_t prevErrorSize = error.size();
-            const bool matched = MatchPrometheusSelector(line, selector, error);
+            const bool matched = MatchPrometheusSelector(snapshot.CommonLabels, line, selector, error);
             if (!error.empty() && error.size() != prevErrorSize) {
                 return MakeError("bad_data", error);
             }
@@ -1383,7 +1410,7 @@ private:
             }
 
             NJson::TJsonValue& item = output.AppendValue({});
-            item["metric"] = BuildMetricObject(line);
+            item["metric"] = BuildMetricObject(snapshot.CommonLabels, line);
             item["values"] = std::move(values);
         }
 

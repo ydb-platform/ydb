@@ -86,6 +86,8 @@ normalize() {
         -e 's/NYql:://g'           \
         -e 's/NKikimr:://g'        \
         -e 's/NDq:://g'            \
+        -e 's/NNodes:://g'         \
+        -e 's/using namespace __NS__::NNodes;/using namespace NNodes;/g' \
         -e 's|#include "dq_opt_phy\.h"|#include <__DQ__/dq_opt_phy.h>|g' \
         -e 's|#include <ydb/library/yql/dq/opt/dq_opt_phy\.h>|#include <__DQ__/dq_opt_phy.h>|g' \
         -e 's/[[:space:]]*$//'     \

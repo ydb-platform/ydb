@@ -24,7 +24,7 @@ If `RANK` is omitted in the DDL, the default is $RANK = MAX(existing\_ranks) + 1
 
 A classifier may reference a non-existent pool or a pool the user cannot access; such classifiers are skipped.
 
-Classifier count limits are described on the [limits](../../../../concepts/limits-ydb.md#resource_pool) page.
+Classifier count limits are described on the [limits](../../../concepts/limits-ydb.md#resource_pool) page.
 
 ## Permissions
 

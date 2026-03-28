@@ -540,12 +540,12 @@ graph TD
   </div>
   <div class="file-row">
     <div class="file-name">cbo_optimizer_new.h/cpp</div>
-    <div class="file-desc"><code>using NYql::EJoinAlgoType</code> and <code>using NYql::AllJoinAlgos</code> (re-exported from <code>yql/essentials/core/yql_cost_function.h</code> &mdash; not forked, see <a href="#sec-decisions">Decision 5</a>), <code>IBaseOptimizerNode</code>, <code>IProviderContext</code>, <code>TBaseProviderContext</code>, <code>TRelOptimizerNode</code>, <code>TJoinOptimizerNode</code>, <code>IOptimizerNew</code>, <code>TOptimizerHints</code>. The complete CBO API surface.</div>
+    <div class="file-desc">Forked <code>EJoinAlgoType</code> enum and <code>AllJoinAlgos</code> constexpr list (independent copy of <code>NYql::EJoinAlgoType</code> from <code>yql/essentials/core/yql_cost_function.h</code>; boundary uses switch/case conversion, see <a href="#sec-decisions">Decision 5</a>), <code>IBaseOptimizerNode</code>, <code>IProviderContext</code>, <code>TBaseProviderContext</code>, <code>TRelOptimizerNode</code>, <code>TJoinOptimizerNode</code>, <code>IOptimizerNew</code>, <code>TOptimizerHints</code>. The complete CBO API surface.</div>
     <div><span class="tag tag-cbo">CBO</span></div>
   </div>
   <div class="file-row">
     <div class="file-name">cbo_interesting_orderings.h/cpp</div>
-    <div class="file-desc">Inlined <code>TJoinColumn</code> (from <code>yql_cost_function.h</code>), <code>TOrdering</code>, <code>TFunctionalDependency</code>, <code>TFDStorage</code>, <code>TOrderingsStateMachine</code> (NFSM/DFSM). Shuffle/sort elimination engine.</div>
+    <div class="file-desc">Inlined <code>TJoinColumn</code> (originally from <code>yql_cost_function.h</code>), <code>TOrdering</code>, <code>TFunctionalDependency</code>, <code>TFDStorage</code>, <code>TOrderingsStateMachine</code> (NFSM/DFSM). Shuffle/sort elimination engine.</div>
     <div><span class="tag tag-cbo">CBO</span></div>
   </div>
   <div class="file-row">
@@ -609,7 +609,7 @@ graph TD
   </div>
   <div class="file-row">
     <div class="file-name">dq_opt_join_tree_node.h/cpp</div>
-    <div class="file-desc"><code>TJoinOptimizerNodeInternal</code> &mdash; non-owning internal CBO node. <code>ToString(EJoinKind)</code>, <code>ToString(EJoinAlgoType)</code> &mdash; <code>EJoinAlgoType</code> is shared (re-exported from YQL), <code>EJoinKind</code> references fork's enum.</div>
+    <div class="file-desc"><code>TJoinOptimizerNodeInternal</code> &mdash; non-owning internal CBO node. <code>ToString(EJoinKind)</code>, <code>ToString(EJoinAlgoType)</code> &mdash; both reference the fork's own enums.</div>
     <div><span class="tag tag-plumb">PLUMB</span></div>
   </div>
   <div class="file-row">
@@ -694,7 +694,7 @@ flowchart LR
   subgraph NYql ["NYql types (shared, read-only)"]
     TAC["TTypeAnnotationContext\n.StatisticsMap\n.ColumnStatisticsByTableName\n.OrderingsFSM / .SortingsFSM"]
     YqlColStat["NYql::TColumnStatistics"]
-    YqlJoinAlgo["NYql::EJoinAlgoType"]
+    YqlJoinAlgo["NYql::EJoinAlgoType\n(yql_cost_function.h)"]
     TEN["NYql::TExprNode"]
   end
 
@@ -703,8 +703,8 @@ flowchart LR
     KqpColStat["NKqp::TColumnStatistics"]
   end
 
-  subgraph NKqpShared ["NKikimr::NKqp (re-exported from NYql)"]
-    KqpJoinAlgo["using NYql::EJoinAlgoType\n(not forked — shared enum)"]
+  subgraph NKqpForkedEnum ["NKikimr::NKqp (forked enum)"]
+    KqpJoinAlgo["NKqp::EJoinAlgoType\n(independent fork,\nswitch/case at boundary)"]
   end
 
   TAC -->|"FromYqlColumnStatMap()\nin kqp_statistics_transformer.cpp"| KqpStats
@@ -726,8 +726,8 @@ flowchart LR
 </div>
 
 <div class="boundary-point">
-  <div class="location">dq_opt_join.cpp &mdash; EJoinAlgoType (shared, no conversion needed)</div>
-  <p><code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code> (from the YQL equi-join infrastructure). <code>TOptimizerHints::TJoinAlgoHint::Algo</code> is also <code>NYql::EJoinAlgoType</code> (re-exported via <code>using</code> declaration in <code>cbo_optimizer_new.h</code>). Since both sides use the same type, no <code>static_cast</code> or conversion functions are needed. This eliminates a previous source of bugs where enum value drift between a forked KQP enum and the YQL enum caused incorrect join algorithm selection (see <a href="#sec-decisions">Decision 5</a>).</p>
+  <div class="location">dq_opt_join.cpp &mdash; EJoinAlgoType (forked, switch/case conversion)</div>
+  <p><code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code> (from the YQL equi-join infrastructure). <code>TOptimizerHints::TJoinAlgoHint::Algo</code> is <code>NKikimr::NKqp::EJoinAlgoType</code> (the fork's independent enum). Conversion functions <code>JoinAlgoFromYql()</code> and <code>JoinAlgoToYql()</code> use exhaustive <code>switch/case</code> with <code>Y_ABORT</code> in the default to bridge the two. If YQL adds a new enumerator, the compiler emits a <code>-Wswitch</code> warning and any runtime encounter hits <code>Y_ABORT</code> &mdash; no silent misbehaviour (see <a href="#sec-decisions">Decision 5</a>).</p>
 </div>
 
 <div class="boundary-point">
@@ -749,8 +749,8 @@ flowchart LR
 
 <div class="rationale-card">
   <h4>cbo_optimizer_new.h (+45/-37)</h4>
-  <p><strong>Root cause:</strong> The original defines <code>NYql::EJoinAlgoType</code> (which lives in <code>yql/essentials/core/yql_cost_function.h</code>, not even in this file). The fork initially defined its own independent <code>NKikimr::NKqp::EJoinAlgoType</code> with matching integer values, but this was <strong>de-forked</strong> after a CI bug caused by enum value drift (see <a href="#sec-decisions">Decision 5</a>). The enum is now re-exported via <code>using NYql::EJoinAlgoType</code>.</p>
-  <div class="chain"><span class="arrow">&rarr;</span> Added <code>#include &lt;yql/essentials/core/yql_cost_function.h&gt;</code> and <code>using NYql::EJoinAlgoType; using NYql::AllJoinAlgos;</code>. Changed all <code>NDq::TJoinColumn</code> references to the fork's <code>TJoinColumn</code>. Forward-declared <code>NYql::TExprContext</code> (needed by <code>IOptimizerFactory</code>). Note: including <code>yql_cost_function.h</code> is safe because it is a leaf header that does not transitively pull <code>yql/essentials/core/cbo</code>.</div>
+  <p><strong>Root cause:</strong> The original defines <code>NYql::EJoinAlgoType</code> (which lives in <code>yql/essentials/core/yql_cost_function.h</code>, not even in this file). The fork defines its own independent <code>NKikimr::NKqp::EJoinAlgoType</code> with matching enumerator <strong>names</strong> (for <code>FromString</code>/<code>ToString</code> compatibility) but independent integer values. Boundary conversion uses switch/case functions in <code>dq_opt_join.cpp</code> (see <a href="#sec-decisions">Decision 5</a>).</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Defined independent <code>enum class EJoinAlgoType</code> and <code>static constexpr auto AllJoinAlgos</code>. Changed all <code>NDq::TJoinColumn</code> references to the fork's <code>TJoinColumn</code>. Forward-declared <code>NYql::TExprContext</code> (needed by <code>IOptimizerFactory</code>). No <code>#include &lt;yql_cost_function.h&gt;</code> in this header &mdash; the CBO library has zero includes from <code>yql/essentials/core</code>.</div>
 </div>
 
 <div class="rationale-card">
@@ -773,8 +773,8 @@ flowchart LR
 
 <div class="rationale-card">
   <h4>dq_opt_join.h (+13/-18) and dq_opt_join.cpp (+15/-7)</h4>
-  <p><strong>Root cause:</strong> <code>DqRewriteEquiJoin()</code> calls <code>typeCtx.GetStats()</code>/<code>typeCtx.SetStats()</code> to propagate equi-join statistics. It also processes <code>TOptimizerHints</code> which use <code>EJoinAlgoType</code>.</p>
-  <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore&amp;</code> parameter to both <code>DqRewriteEquiJoin</code> overloads. Since <code>EJoinAlgoType</code> is now shared (re-exported from <code>NYql::EJoinAlgoType</code>), no <code>static_cast</code> is needed between <code>TEquiJoinLinkSettings::JoinAlgo</code> and <code>TOptimizerHints</code> &mdash; both use the same type directly. Removed <code>DqCollectJoinRelationsWithStats</code> declaration (moved to <code>dq_opt_join_cost_based.h</code> where it uses <code>TKqpStatsStore</code>).</div>
+  <p><strong>Root cause:</strong> <code>DqRewriteEquiJoin()</code> calls <code>typeCtx.GetStats()</code>/<code>typeCtx.SetStats()</code> to propagate equi-join statistics. It also processes <code>TOptimizerHints</code> which use the fork's <code>EJoinAlgoType</code>, while <code>TEquiJoinLinkSettings::JoinAlgo</code> uses <code>NYql::EJoinAlgoType</code>.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore&amp;</code> parameter to both <code>DqRewriteEquiJoin</code> overloads. <code>dq_opt_join.cpp</code> includes <code>yql/essentials/core/yql_cost_function.h</code> and defines <code>JoinAlgoFromYql()</code>/<code>JoinAlgoToYql()</code> switch/case conversion functions (with <code>Y_ABORT</code> in default) to bridge <code>NYql::EJoinAlgoType</code> &harr; <code>NKqp::EJoinAlgoType</code> at the <code>TEquiJoinLinkSettings</code> boundary. Removed <code>DqCollectJoinRelationsWithStats</code> declaration (moved to <code>dq_opt_join_cost_based.h</code> where it uses <code>TKqpStatsStore</code>).</div>
 </div>
 
 <div class="rationale-card">
@@ -791,7 +791,7 @@ flowchart LR
 
 <div class="rationale-card">
   <h4>dq_opt_join_hypergraph.h (+0/-1)</h4>
-  <p><strong>Root cause:</strong> Original includes <code>yql_cost_function.h</code> (for <code>TJoinColumn</code>). The fork's <code>TJoinColumn</code> lives in <code>cbo_interesting_orderings.h</code> instead.</p>
+  <p><strong>Root cause:</strong> Original includes <code>yql_cost_function.h</code> (for <code>TJoinColumn</code> and <code>EJoinAlgoType</code>). The fork's <code>TJoinColumn</code> lives in <code>cbo_interesting_orderings.h</code> and <code>EJoinAlgoType</code> in <code>cbo_optimizer_new.h</code> instead.</p>
   <div class="chain"><span class="arrow">&rarr;</span> Removed the one include line. <code>TJoinColumn</code> is already available via <code>cbo_optimizer_new.h</code> <span class="arrow">&rarr;</span> <code>cbo_interesting_orderings.h</code>.</div>
 </div>
 
@@ -823,12 +823,12 @@ flowchart LR
 
 <div class="rationale-card">
   <h4>dq_opt_join.h/cpp (Join rewrite plumbing)</h4>
-  <p><code>DqRewriteEquiJoin()</code> calls <code>GetStats()</code>/<code>SetStats()</code> on the stats store. If we kept using the original, it would call <code>typeCtx.GetStats()</code> &mdash; the shared YQL stats map. We need it to use <code>kqpStats.GetStats()</code> instead. The function also processes <code>TOptimizerHints</code> which contains <code>EJoinAlgoType</code> &mdash; since the enum is now shared (re-exported from <code>NYql::EJoinAlgoType</code> via <code>using</code> declaration), no conversion is needed at the <code>TEquiJoinLinkSettings::JoinAlgo</code> boundary.</p>
+  <p><code>DqRewriteEquiJoin()</code> calls <code>GetStats()</code>/<code>SetStats()</code> on the stats store. If we kept using the original, it would call <code>typeCtx.GetStats()</code> &mdash; the shared YQL stats map. We need it to use <code>kqpStats.GetStats()</code> instead. The function also processes <code>TOptimizerHints</code> which contains the fork's <code>NKqp::EJoinAlgoType</code>. At the <code>TEquiJoinLinkSettings::JoinAlgo</code> boundary, <code>JoinAlgoFromYql()</code>/<code>JoinAlgoToYql()</code> switch/case functions convert between the YQL and KQP enum types.</p>
 </div>
 
 <div class="rationale-card">
   <h4>dq_opt_join_tree_node.h/cpp</h4>
-  <p>Defines <code>ToString(EJoinAlgoType)</code> and <code>TJoinOptimizerNodeInternal</code> which references <code>EJoinAlgoType</code> (shared via <code>using NYql::EJoinAlgoType</code>), the fork's <code>EJoinKind</code>, and the fork's <code>TJoinColumn</code>. The <code>ToString</code> declaration must be in <code>NKikimr::NKqp</code> namespace because <code>GENERATE_ENUM_SERIALIZATION</code> generates serialization in the declaring namespace.</p>
+  <p>Defines <code>ToString(EJoinAlgoType)</code> and <code>TJoinOptimizerNodeInternal</code> which references the fork's own <code>EJoinAlgoType</code>, <code>EJoinKind</code>, and <code>TJoinColumn</code>. The <code>ToString</code> declaration must be in <code>NKikimr::NKqp</code> namespace because <code>GENERATE_ENUM_SERIALIZATION</code> generates serialization in the declaring namespace.</p>
 </div>
 
 <div class="rationale-card">
@@ -1034,7 +1034,7 @@ flowchart TD
 <tr><td><code>dq_opt_join_tree_node.cpp</code></td><td><code>dq_opt_join_tree_node.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace</td></tr>
 <tr><td><code>dq_opt_make_join_hypergraph.h</code></td><td><code>dq_opt_make_join_hypergraph.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace; local includes</td></tr>
 <tr><td><code>dq_opt_join.h</code></td><td><code>dq_opt_join.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +6/-11</span></td><td><code>TKqpStatsStore&amp;</code> added to <code>DqRewriteEquiJoin</code> signatures; <code>DqCollectJoinRelationsWithStats</code> moved to <code>dq_opt_join_cost_based.h</code></td></tr>
-<tr><td><code>dq_opt_join.cpp</code></td><td><code>dq_opt_join.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-9</span></td><td><code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code>; <code>EJoinAlgoType</code> is shared (no cast needed); stats store calls</td></tr>
+<tr><td><code>dq_opt_join.cpp</code></td><td><code>dq_opt_join.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-9</span></td><td><code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code>; <code>EJoinAlgoType</code> forked with switch/case conversion (<code>JoinAlgoFromYql</code>/<code>JoinAlgoToYql</code>); stats store calls</td></tr>
 <tr><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +2/-3</span></td><td>PG optimizer path replaced with <code>Y_ABORT</code>; <code>pg_wrapper</code> include removed</td></tr>
 <tr><td><code>dq_opt_join_cost_based.h</code></td><td><code>dq_opt_join_cost_based.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +12/-1</span></td><td><code>TKqpStatsStore&amp;</code> added; <code>DqCollectJoinRelationsWithStats</code> moved here from <code>dq_opt_join.h</code></td></tr>
 <tr><td><code>dq_opt_join_cost_based.cpp</code></td><td><code>dq_opt_join_cost_based.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-7</span></td><td>All <code>typesCtx.GetStats/SetStats</code> → <code>kqpStats.GetStats/SetStats</code></td></tr>
@@ -1053,7 +1053,7 @@ flowchart TD
 <tbody>
 <tr><td><code>cbo_interesting_orderings.h</code></td><td><code>cbo/cbo_interesting_orderings.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +38/-1</span></td><td><code>TJoinColumn</code> struct inlined (was in <code>yql_cost_function.h</code>); <code>#include &lt;yql_cost_function.h&gt;</code> removed; <code>IsNatural</code>/<code>SetNatural()</code> removed; <code>GetColumns()</code> added</td></tr>
 <tr><td><code>cbo_interesting_orderings.cpp</code></td><td><code>cbo/cbo_interesting_orderings.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +14/-0</span></td><td><code>TJoinColumn</code> method implementations added (<code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code>)</td></tr>
-<tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +45/-37</span></td><td><code>EJoinAlgoType</code> de-forked: <code>using NYql::EJoinAlgoType; using NYql::AllJoinAlgos;</code> with <code>#include &lt;yql_cost_function.h&gt;</code>; all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
+<tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +45/-37</span></td><td><code>EJoinAlgoType</code> and <code>AllJoinAlgos</code> forked as independent enum/constexpr (names match for serialization, values independent; boundary uses switch/case); all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
 <tr><td><code>cbo_optimizer_new.cpp</code></td><td><code>cbo/cbo_optimizer_new.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+10/-10</span></td><td>namespace only</td></tr>
 <tr><td><code>cbo_hints.cpp</code></td><td><code>cbo/cbo_hints.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace only</td></tr>
 <tr>
@@ -1220,36 +1220,41 @@ flowchart TD
 <!-- ─── Decision 5 ─────────────────────────────────────────── -->
 <div class="decision-block">
 <div class="decision-header">
-  <h3>5. <code>EJoinAlgoType</code> — De-forked via <code>using</code> Declaration</h3>
-  <span class="problem-tag">enum sharing vs. independence</span>
+  <h3>5. <code>EJoinAlgoType</code> — Forked with switch/case Boundary Conversion</h3>
+  <span class="problem-tag">enum independence + safety</span>
 </div>
 <div class="decision-body">
   <div class="decision-problem">
-    <code>NYql::EJoinAlgoType</code> lives in <code>yql/essentials/core/yql_cost_function.h</code>. The fork's <code>cbo_optimizer_new.h</code> and <code>TJoinAlgoHints</code> need a join-algorithm enum. The initial approach was to duplicate the enum with matching integer values and use <code>static_cast</code> at the boundary. However, this caused a <strong>real CI bug</strong>: when <code>main</code> added <code>ReverseBlockJoin</code> to <code>NYql::EJoinAlgoType</code>, the KQP fork's enum was not updated, shifting <code>StreamLookupJoin</code>'s integer value. The <code>static_cast</code> then mapped <code>NYql::StreamLookupJoin</code> to <code>NKqp::MergeJoin</code>, silently producing incorrect join plans.
+    <code>NYql::EJoinAlgoType</code> lives in <code>yql/essentials/core/yql_cost_function.h</code>. The fork's <code>cbo_optimizer_new.h</code> and <code>TJoinAlgoHints</code> need a join-algorithm enum. Forking the enum gives KQP independence to evolve its own join vocabulary (e.g. add dependent joins), but a previous <code>static_cast</code>-based fork caused a <strong>real CI bug</strong>: when <code>main</code> added <code>ReverseBlockJoin</code> to <code>NYql::EJoinAlgoType</code>, the KQP fork's enum was not updated, shifting <code>StreamLookupJoin</code>'s integer value. The <code>static_cast</code> then mapped <code>NYql::StreamLookupJoin</code> to <code>NKqp::MergeJoin</code>, silently producing incorrect join plans. The solution is to fork the enum but convert at the boundary using exhaustive <code>switch/case</code> with <code>Y_ABORT</code>.
   </div>
   <div class="options-grid">
     <div class="option-card chosen">
-      <div class="option-label">✓ CHOSEN — <code>using NYql::EJoinAlgoType</code> (shared, not forked)</div>
-      <div class="option-desc"><code>cbo_optimizer_new.h</code> includes <code>yql/essentials/core/yql_cost_function.h</code> and re-exports the enum via <code>using NYql::EJoinAlgoType; using NYql::AllJoinAlgos;</code>. Both KQP and YQL code use the same enum type. No conversion or <code>static_cast</code> is needed anywhere.</div>
-      <div class="option-why">Eliminates the entire class of enum-drift bugs. <code>yql_cost_function.h</code> is a leaf header that does <em>not</em> transitively pull <code>yql/essentials/core/cbo</code>, so the <code>CHECK_DEPENDENT_DIRS</code> restriction on <code>kqp/opt/cbo</code> is not violated. No explicit <code>PEERDIR</code> to <code>yql/essentials/core</code> is needed in <code>cbo/ya.make</code> because the header's utility includes are universally available via existing dependencies in the solver sublibrary.</div>
+      <div class="option-label">✓ CHOSEN — Independent fork + switch/case conversion at boundary</div>
+      <div class="option-desc"><code>cbo_optimizer_new.h</code> defines its own <code>NKikimr::NKqp::EJoinAlgoType</code> with matching enumerator <strong>names</strong> (for <code>FromString</code>/<code>ToString</code> serialization compatibility) but independent integer values. <code>dq_opt_join.cpp</code> defines <code>JoinAlgoFromYql()</code> and <code>JoinAlgoToYql()</code> using exhaustive <code>switch/case</code> statements. The <code>default:</code> branch calls <code>Y_ABORT</code>. A local <code>EJoinAlgoType joinAlgo</code> variable is used for all internal logic; <code>linkSettings.JoinAlgo</code> (the YQL type) is only read/written via conversion functions.</div>
+      <div class="option-why">Gives KQP full independence over its join-algorithm vocabulary. No <code>yql_cost_function.h</code> include in the CBO headers, so the CBO library has zero dependency on <code>yql/essentials/core</code>. If YQL adds a new enumerator (like <code>ReverseBlockJoin</code>), the compiler emits <code>-Wswitch</code> on the incomplete <code>switch</code>, and any runtime encounter hits <code>Y_ABORT</code> &mdash; no silent misbehaviour. Integer values can differ freely; only the enumerator names must stay in sync for string serialization.</div>
     </div>
     <div class="option-card rejected">
-      <div class="option-label">✗ PREVIOUSLY CHOSEN, REVERTED — Duplicate enum with identical integer values</div>
-      <div class="option-desc">Define <code>NKikimr::NKqp::EJoinAlgoType</code> with the same enumerator names and same implicit integer values as <code>NYql::EJoinAlgoType</code>. At the one boundary point (<code>TEquiJoinLinkSettings::JoinAlgo</code>), use <code>static_cast</code>.</div>
-      <div class="option-why"><strong>Proven unsafe in practice.</strong> When <code>NYql::EJoinAlgoType</code> gained <code>ReverseBlockJoin</code> (value 5), all subsequent enumerators shifted by one. The KQP fork was not updated, so <code>static_cast</code> from <code>NYql::StreamLookupJoin</code> (now value 6) mapped to <code>NKqp::MergeJoin</code> (value 6). This bypassed stream-lookup-specific logic, causing test failures (<code>DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got PartitionsByKeys</code>). Even with <code>static_assert</code>s enforcing value alignment, the enum remained a maintenance liability &mdash; every upstream change required a coordinated update in the fork.</div>
+      <div class="option-label">✗ PREVIOUSLY CONSIDERED — <code>using NYql::EJoinAlgoType</code> (shared, not forked)</div>
+      <div class="option-desc"><code>cbo_optimizer_new.h</code> includes <code>yql_cost_function.h</code> and re-exports the enum via <code>using</code>. No conversion needed.</div>
+      <div class="option-why">Eliminates enum-drift entirely, but introduces an include dependency from the CBO headers into <code>yql/essentials/core</code>, reducing independence. Prevents KQP from adding its own join algorithms independently. A trade-off that was temporarily chosen but reverted in favour of the safer fork approach when it became clear that independence was architecturally valuable and <code>switch/case</code> conversion provides adequate safety.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Duplicate enum with identical integer values + <code>static_cast</code></div>
+      <div class="option-desc">Define <code>NKikimr::NKqp::EJoinAlgoType</code> with the same enumerator names and same implicit integer values as <code>NYql::EJoinAlgoType</code>. At the boundary, use <code>static_cast</code>.</div>
+      <div class="option-why"><strong>Proven unsafe in practice.</strong> When <code>NYql::EJoinAlgoType</code> gained <code>ReverseBlockJoin</code> (value 5), all subsequent enumerators shifted by one. The KQP fork was not updated, so <code>static_cast</code> from <code>NYql::StreamLookupJoin</code> (now value 6) mapped to <code>NKqp::MergeJoin</code> (value 6). This bypassed stream-lookup-specific logic, causing test failures (<code>DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got PartitionsByKeys</code>).</div>
     </div>
     <div class="option-card rejected">
       <div class="option-label">✗ Duplicate enum + <code>static_assert</code> safety net</div>
-      <div class="option-desc">Keep the forked enum but add compile-time <code>static_assert</code>s verifying that each enumerator's integer value matches the YQL original. Use explicit conversion functions (<code>JoinAlgoFromYql</code>/<code>JoinAlgoToYql</code>) instead of raw <code>static_cast</code>.</div>
-      <div class="option-why">Better than raw <code>static_cast</code> &mdash; would have caught the <code>ReverseBlockJoin</code> bug at compile time. But still requires maintaining two copies of the same enum and updating the fork every time YQL adds a value. An intermediate safety improvement that was implemented and then superseded by de-forking entirely when it became clear <code>yql_cost_function.h</code> could be included without violating build constraints.</div>
+      <div class="option-desc">Keep the forked enum with explicit integer values, add compile-time <code>static_assert</code>s verifying value alignment with YQL.</div>
+      <div class="option-why">Catches drift at compile time, but still requires maintaining identical integer values and updating the fork every time YQL adds a value. The <code>switch/case</code> approach is strictly better: independent values, compiler warnings on missing cases, and <code>Y_ABORT</code> at runtime.</div>
     </div>
     <div class="option-card rejected">
       <div class="option-label">✗ Use raw <code>int</code> / forward-declared opaque enum</div>
       <div class="option-desc">Store join algorithm as an integer or a forward-declared opaque enum whose body is not included in the CBO headers.</div>
-      <div class="option-why">Loses type safety at every call site that compares or switches on the enum. The forward-declaration trick for scoped enums requires knowing the underlying type; for unscoped enums it is not possible in standard C++. Makes all algorithm-selection code harder to read and validate.</div>
+      <div class="option-why">Loses type safety at every call site that compares or switches on the enum. Makes all algorithm-selection code harder to read and validate.</div>
     </div>
   </div>
-  <div class="chosen-summary">The de-forking was motivated by a real production bug. <code>yql_cost_function.h</code> turned out to be a leaf header that can be included without violating build constraints &mdash; an assumption the original analysis got wrong. Using the YQL enum directly makes enum drift impossible and simplifies the boundary code by removing conversion functions, <code>static_cast</code>s, and <code>static_assert</code>s. The trade-off is a slightly wider include footprint for <code>cbo_optimizer_new.h</code>, which is acceptable given the safety gain.</div>
+  <div class="chosen-summary">The forked enum with <code>switch/case</code> conversion combines independence with safety. KQP controls its own join-algorithm vocabulary without any includes from <code>yql/essentials/core</code> in the CBO headers. The exhaustive <code>switch/case</code> in <code>dq_opt_join.cpp</code> is the single boundary crossing point, making new-enumerator drift visible via both compiler warnings (<code>-Wswitch</code>) and runtime abort (<code>Y_ABORT</code>). This approach was chosen after the initial <code>static_cast</code>-based fork caused a real CI bug, an intermediate <code>static_assert</code> approach, and a temporary de-fork using <code>using NYql::EJoinAlgoType</code>.</div>
 </div>
 </div>
 
@@ -1699,7 +1704,7 @@ sequenceDiagram
   </div>
   <div class="file-row" style="grid-template-columns: 160px 1fr">
     <div class="file-name">SUBSTANTIVE — dq_opt_join.cpp</div>
-    <div class="file-desc">Namespace trick (<code>namespace NKikimr::NKqp { using namespace NYql::NDq; }</code>) must be preserved. <code>EJoinAlgoType</code> is shared (no boundary casts). Pull logic changes from YQL but keep the namespace wrapper and stats store parameter changes.</div>
+    <div class="file-desc">Namespace trick (<code>namespace NKikimr::NKqp { using namespace NYql::NDq; }</code>) must be preserved. <code>EJoinAlgoType</code> is forked &mdash; <code>JoinAlgoFromYql()</code>/<code>JoinAlgoToYql()</code> switch/case conversion functions must be updated if YQL adds new enum values. Pull logic changes from YQL but keep the namespace wrapper, stats store parameter changes, and boundary conversion functions.</div>
   </div>
   <div class="file-row" style="grid-template-columns: 160px 1fr">
     <div class="file-name">KQP-only files</div>

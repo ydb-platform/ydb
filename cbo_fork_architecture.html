@@ -216,6 +216,108 @@ nav.toc a { color: var(--accent); text-decoration: none; font-size: 14px; }
 nav.toc a:hover { text-decoration: underline; }
 nav.toc ol { padding-left: 20px; }
 nav.toc li { margin: 6px 0; }
+
+/* Design Decision Analysis styles */
+.decision-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 28px 0;
+  overflow: hidden;
+}
+
+.decision-header {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.decision-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--accent2);
+}
+
+.decision-header .problem-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.decision-body {
+  padding: 16px 20px;
+}
+
+.decision-problem {
+  color: var(--text);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+@media (max-width: 900px) {
+  .options-grid { grid-template-columns: 1fr; }
+}
+
+.option-card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.option-card.chosen {
+  border-color: var(--accent);
+  background: #0d1f18;
+}
+
+.option-card.rejected {
+  border-color: var(--border);
+  background: var(--surface);
+  opacity: 0.85;
+}
+
+.option-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  margin-bottom: 5px;
+}
+
+.option-card.chosen .option-label { color: var(--accent); }
+.option-card.rejected .option-label { color: var(--red); }
+
+.option-desc { color: var(--text); line-height: 1.55; }
+
+.option-why {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.chosen-summary {
+  background: var(--surface2);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 4px 4px 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 4px;
+}
 </style>
 </head>
 <body>
@@ -233,6 +335,7 @@ nav.toc li { margin: 6px 0; }
 <li><a href="#sec-noncbo">5. Why Each Non-CBO File Is Copied</a></li>
 <li><a href="#sec-enforce">6. Build-System Enforcement</a></li>
 <li><a href="#sec-entry">7. Entry Points</a></li>
+<li><a href="#sec-decisions">8. Design Decision Analysis</a></li>
 </ol>
 </nav>
 
@@ -693,6 +796,445 @@ flowchart LR
 <div class="boundary-point">
   <div class="location">kqp_statistics_transformer.cpp &mdash; InferStatisticsFor*()</div>
   <p>The statistics transformer walks the plan bottom-up and calls <code>InferStatisticsFor*()</code> for each operator. It passes <code>KqpStats</code> to all inference functions. This is where table-level stats (from <code>TTypeAnnotationContext</code>) enter the KQP stats store via <code>FromYqlColumnStatMap()</code>.</p>
+</div>
+
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-decisions">8. Design Decision Analysis</h2>
+<p>Each major structural decision during the fork had at least two viable paths. This section documents the problem each decision faced, the options that were on the table, which one was chosen and why, and what would have gone wrong with each rejected alternative.</p>
+
+<!-- ─── Decision 1 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>1. Copy vs. Wrapper / Delegation</h3>
+  <span class="problem-tag">scope of fork</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    KQP needs its own CBO that can diverge from the YQL/YT CBO over time (KQP-specific join algorithms, KQP-specific statistics, shuffle elimination). The question is how much of the YQL CBO code to reproduce vs. delegate to.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Full source copy in a new namespace</div>
+      <div class="option-desc">All CBO source files are physically copied under <code>ydb/core/kqp/opt/cbo/</code> and <code>…/solver/</code>. Types live in <code>NKikimr::NKqp</code>. The two implementations evolve independently with zero cross-dependency.</div>
+      <div class="option-why">Clear ownership boundary; no runtime overhead; each team can evolve their copy without coordinating with the other. ODR safety is automatic (different namespaces).</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Thin wrappers / adapter pattern</div>
+      <div class="option-desc">Keep <code>NYql::NDq</code> types internally; expose KQP-branded adapter classes that forward calls to the real implementation. E.g., <code>NKqp::IOptimizerNew</code> delegates to <code>NYql::IOptimizerNew</code>.</div>
+      <div class="option-why">Fails: any KQP-specific change (new parameter, new method) requires touching the YQL interface too, defeating the fork. Adapter indirection also makes debugging harder and incurs vtable overhead on every CBO call.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Template policy / CRTP base classes</div>
+      <div class="option-desc">Parameterise the CBO on a <em>Statistics</em> policy type so both YQL (<code>NYql::TOptimizerStatistics</code>) and KQP (<code>NKqp::TOptimizerStatistics</code>) can use the same template body.</div>
+      <div class="option-why">Fails: the CBO algorithms use statistics in dozens of call sites across many files. Templatising all of them turns every header into a massive template instantiation, exploding compile times. Template errors are also notoriously hard to diagnose.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Subclassing YQL types</div>
+      <div class="option-desc">Derive <code>NKqp::TOptimizerStatistics : NYql::TOptimizerStatistics</code>, etc. Use <code>dynamic_cast</code> or virtual overrides to extend behaviour.</div>
+      <div class="option-why">Fails: object slicing when stored in <code>shared_ptr&lt;NYql::TOptimizerStatistics&gt;</code>. The base class is a plain <code>struct</code> with no virtual destructor. Also, the include path for the base still pulls <code>yql/essentials/core/cbo</code> into the KQP library.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The full-copy approach is the only one that gives genuine independence. It is more code on day one but costs nothing at runtime and allows each CBO to evolve freely.</div>
+</div>
+</div>
+
+<!-- ─── Decision 2 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>2. <code>dq/opt</code> Library Split (<code>SRCDIR</code> trick)</h3>
+  <span class="problem-tag">shared infrastructure vs. CBO code</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>ydb/library/yql/dq/opt</code> is a single library containing both pure-infrastructure files (<code>dq_opt.h</code>, <code>dq_opt_phy.h</code>, ...) and CBO files (<code>dq_opt_join_cost_based.*</code>, etc.). The fork's solver needs the infrastructure but must not pull in the YQL CBO. Making the fork depend on the entire <code>dq/opt</code> library would be circular (and forbidden by <code>CHECK_DEPENDENT_DIRS</code>).
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Create <code>dq/opt/core</code> sub-library with <code>SRCDIR</code></div>
+      <div class="option-desc">Add a <code>dq/opt/core/ya.make</code> that uses <code>SRCDIR(ydb/library/yql/dq/opt)</code> to compile the infrastructure files from the parent directory without moving them. <code>dq/opt</code> gains a PEERDIR on <code>dq/opt/core</code>; the fork's solver depends only on <code>dq/opt/core</code>.</div>
+      <div class="option-why">Infrastructure files don't move (no upstream diff noise); <code>dq/opt</code> is backward-compatible (still compiles all the same SRCS); the fork gets clean infrastructure access without the YQL CBO.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Physically move infra files into <code>dq/opt/core/</code></div>
+      <div class="option-desc">Move <code>dq_opt.h</code>, <code>dq_opt_phy.h</code>, etc. to a new subdirectory. Update all consumers.</div>
+      <div class="option-why">Hundreds of <code>#include "…/dq_opt.h"</code> across the codebase would need updating. Creates massive upstream diff, merge conflicts, and reviewability issues. The <code>SRCDIR</code> trick achieves the same result with zero file moves.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Fork depends on full <code>dq/opt</code></div>
+      <div class="option-desc">Have the solver PEERDIR on <code>ydb/library/yql/dq/opt</code> directly, accepting that both YQL and KQP CBO code are compiled together.</div>
+      <div class="option-why">Fails immediately: <code>dq/opt</code> has <code>CHECK_DEPENDENT_DIRS(DENY PEERDIRS ydb/core/kqp/opt/cbo/solver)</code> specifically to prevent this. Even without the guard, it would cause ODR violations — <code>DqOptimizeEquiJoinWithCosts</code> would be defined in both <code>NYql::NDq</code> and <code>NKikimr::NKqp</code> from <em>the same TU</em> if both were linked.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Duplicate infrastructure files too</div>
+      <div class="option-desc">Copy <code>dq_opt.h</code>, <code>dq_opt_phy.h</code>, etc. into the solver directory alongside the CBO copies.</div>
+      <div class="option-why">Infrastructure files don't need any KQP changes (they don't touch statistics or CBO types). Duplicating them adds maintenance burden with zero benefit. Any bug fix to, say, <code>dq_opt_phy.cpp</code> would need to be applied in two places.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The <code>SRCDIR</code> trick is an Arcadia-idiomatic way to split a library into sub-components without moving source files. It is zero-diff for existing consumers and cleanly separates infrastructure from CBO logic.</div>
+</div>
+</div>
+
+<!-- ─── Decision 3 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>3. <code>TKqpStatsStore</code> vs. Extending <code>TTypeAnnotationContext</code></h3>
+  <span class="problem-tag">statistics ownership</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    All <code>InferStatisticsFor*()</code> functions need to read and write per-node statistics. The YQL versions do this through <code>TTypeAnnotationContext::StatisticsMap</code>. The fork's types (<code>NKqp::TOptimizerStatistics</code>) are not the same C++ types as <code>NYql::TOptimizerStatistics</code>, so the map can't hold both without conversion.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — New <code>TKqpStatsStore</code> class</div>
+      <div class="option-desc">A simple <code>THashMap&lt;ui64, shared_ptr&lt;NKqp::TOptimizerStatistics&gt;&gt;</code> keyed by <code>TExprNode::UniqueId()</code>. Stored on <code>TKqpOptimizeContext</code>. Passed as a pointer to all stat inference functions alongside (or instead of) <code>TTypeAnnotationContext*</code>.</div>
+      <div class="option-why">KQP owns its stats without touching shared YQL state. Signature changes are mechanical and localised. The KQP FSMs (<code>ShufflingsFSM</code>, <code>SortingsFSM</code>) live here too, typed as <code>NKqp::TOrderingsStateMachine</code>.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Add a second map to <code>TTypeAnnotationContext</code></div>
+      <div class="option-desc">Extend <code>TTypeAnnotationContext</code> with a <code>KqpStatisticsMap: THashMap&lt;ui64, shared_ptr&lt;NKqp::TOptimizerStatistics&gt;&gt;</code> field.</div>
+      <div class="option-why">Fails: <code>TTypeAnnotationContext</code> lives in <code>yql/essentials/core</code>. Adding a field typed <code>NKqp::TOptimizerStatistics</code> would pull <code>kqp/opt/cbo</code> into the core YQL library — the exact dependency inversion the <code>CHECK_DEPENDENT_DIRS</code> guards prevent. <code>yql/essentials/core</code> must not know about KQP types.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Store <code>NYql::TOptimizerStatistics</code> in both maps</div>
+      <div class="option-desc">Keep using <code>TTypeAnnotationContext::StatisticsMap</code> (typed <code>NYql::TOptimizerStatistics</code>) in the KQP CBO, converting at the end.</div>
+      <div class="option-why">Defeats the fork: KQP-specific fields (<code>ShuffleOrderingIdx</code>, <code>SortingOrderingIdx</code>, <code>ShuffledByColumns</code>) added to <code>NKqp::TOptimizerStatistics</code> cannot exist in the YQL type. KQP would have no place to store them without modifying YQL's struct.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Use <code>std::any</code> / type-erased slot in <code>TTypeAnnotationContext</code></div>
+      <div class="option-desc">Add an <code>std::any KqpExtension</code> field to <code>TTypeAnnotationContext</code> that KQP fills with its own context object.</div>
+      <div class="option-why">Loses compile-time type safety; every access requires <code>std::any_cast</code> and an awkward downcast. The extension slot pattern has the same ownership/layering problem: <code>yql/essentials/core</code> gains a runtime dependency on KQP code. Also hides the dependency, making it harder to enforce and audit.</div>
+    </div>
+  </div>
+  <div class="chosen-summary"><code>TKqpStatsStore</code> is a clean owned map that mirrors the YQL map's shape but stays fully inside the KQP dependency cone. Passing it alongside <code>TTypeAnnotationContext*</code> (for the few functions that still need YQL context for non-stats purposes) is explicit and auditable.</div>
+</div>
+</div>
+
+<!-- ─── Decision 4 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>4. <code>TOptimizerStatistics</code> — Full Independence vs. Type Alias</h3>
+  <span class="problem-tag">core stats struct</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>NYql::TOptimizerStatistics</code> (in <code>yql_statistics.h</code>) uses <code>NYql::NDq::TJoinColumn</code>, <code>NYql::NDq::TOrderingsStateMachine::TLogicalOrderings</code>, and <code>NYql::IProviderStatistics</code>. If <code>kqp_statistics.h</code> simply included <code>yql_statistics.h</code> and aliased the type, the KQP CBO library would transitively depend on <code>yql/essentials/core/cbo</code> (because <code>yql_statistics.h</code> includes <code>cbo_interesting_orderings.h</code>), violating <code>CHECK_DEPENDENT_DIRS</code>.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Full independent struct</div>
+      <div class="option-desc">Duplicate <code>TOptimizerStatistics</code> field-by-field in <code>NKikimr::NKqp</code>, using the fork's own <code>TJoinColumn</code> and <code>TOrderingsStateMachine</code>. Add KQP-specific fields (<code>SortingOrderingIdx</code>, <code>ShuffledByColumns</code>) that have no equivalent in the YQL type.</div>
+      <div class="option-why">No include dependency on <code>yql_statistics.h</code> from <code>kqp/opt/cbo</code>; KQP can extend the struct freely; no ODR issues.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Type alias <code>using TOptimizerStatistics = NYql::TOptimizerStatistics</code></div>
+      <div class="option-desc">Keep it as a pure alias. All code that uses <code>NKqp::TOptimizerStatistics</code> is just sugar over the YQL type.</div>
+      <div class="option-why">An alias still requires <code>#include &lt;yql/essentials/core/yql_statistics.h&gt;</code> to be reachable, which includes <code>yql/essentials/core/cbo/cbo_interesting_orderings.h</code>. The <code>CHECK_DEPENDENT_DIRS</code> violation happens at include-time, not at type-reference time. Also, aliases don't allow adding KQP-specific fields.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Keep <code>NYql::NDq::TOrderingsStateMachine</code> in <code>NKqp::TOptimizerStatistics</code></div>
+      <div class="option-desc">Make the struct independent in most fields but keep <code>LogicalOrderings</code> typed as <code>NYql::NDq::TOrderingsStateMachine::TLogicalOrderings</code>.</div>
+      <div class="option-why">Fails: <code>TLogicalOrderings</code> is a nested type of <code>TOrderingsStateMachine</code>, which lives in <code>yql/essentials/core/cbo/cbo_interesting_orderings.h</code>. Including that from <code>kqp_statistics.h</code> would be the exact <code>CHECK_DEPENDENT_DIRS</code> violation the guard prevents. The KQP fork of <code>TOrderingsStateMachine</code> must be used.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Use <code>void*</code> / opaque handles for ordering state</div>
+      <div class="option-desc">Store ordering state as <code>void*</code> or <code>shared_ptr&lt;void&gt;</code> inside <code>TOptimizerStatistics</code>, cast at point of use.</div>
+      <div class="option-why">Eliminates compile-time type safety across every ordering-related site. The FSM interaction (creating <code>TLogicalOrderings</code>, querying states, combining them) is pervasive in stat inference. Opaque handles would require casts at every site and hide the type relationship that CHECK_DEPENDENT_DIRS is supposed to enforce structurally.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The independent struct is necessary because the include graph constraint is real and structural, not stylistic. The field-by-field duplication is a small one-time cost that enables KQP to add fields like <code>SortingOrderingIdx</code> and <code>ShuffledByColumns</code> without asking the YQL team for permission.</div>
+</div>
+</div>
+
+<!-- ─── Decision 5 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>5. <code>EJoinAlgoType</code> — Duplicate Enum vs. Shared Reference</h3>
+  <span class="problem-tag">enum independence</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>NYql::EJoinAlgoType</code> lives in <code>yql/essentials/core/yql_cost_function.h</code>. The fork's <code>cbo_optimizer_new.h</code> and <code>TJoinAlgoHints</code> need a join-algorithm enum. Including <code>yql_cost_function.h</code> from <code>ydb/core/kqp/opt/cbo</code> would require the CBO library to depend on <code>yql/essentials/core</code> — currently it only depends on <code>yql/essentials/ast</code> and utilities, keeping it lightweight.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Duplicate enum with identical integer values</div>
+      <div class="option-desc">Define <code>NKikimr::NKqp::EJoinAlgoType</code> with the same enumerator names and same implicit integer values as <code>NYql::EJoinAlgoType</code>. At the one boundary point (<code>TEquiJoinLinkSettings::JoinAlgo</code>), use <code>static_cast</code>.</div>
+      <div class="option-why">No new includes in the CBO library. <code>static_cast</code> is zero-cost. Identical integer values mean the cast is semantically correct. Enum names match, so <code>FromString</code>/<code>ToString</code> work the same way.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Include <code>yql_cost_function.h</code> in the CBO library</div>
+      <div class="option-desc">Just use <code>NYql::EJoinAlgoType</code> everywhere in the fork. Don't duplicate the enum.</div>
+      <div class="option-why">Adds <code>yql/essentials/core</code> (and its transitive deps including <code>yql/essentials/core/cbo</code>) to the CBO library's dependency cone. Breaks <code>CHECK_DEPENDENT_DIRS</code>. The CBO library would no longer be lightweight or independently testable.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Type alias <code>using EJoinAlgoType = NYql::EJoinAlgoType</code></div>
+      <div class="option-desc">Alias the enum in the fork's namespace. Same effect as the duplicate, but declared as an alias.</div>
+      <div class="option-why">An alias still requires <code>#include &lt;yql_cost_function.h&gt;</code> to reach the original definition. The include-path problem is not solved by aliasing — the build system violations happen at the file inclusion level, not at the declaration level.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Use raw <code>int</code> / forward-declared opaque enum</div>
+      <div class="option-desc">Store join algorithm as an integer or a forward-declared opaque enum whose body is not included in the CBO headers.</div>
+      <div class="option-why">Loses type safety at every call site that compares or switches on the enum. The forward-declaration trick for scoped enums requires knowing the underlying type; for unscoped enums it is not possible in standard C++. Makes all algorithm-selection code harder to read and validate.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">Duplicating a seven-value enum is a trivial cost. The identical integer values make the <code>static_cast</code> at <code>dq_opt_join.cpp:182–189</code> provably correct. An explicit comment in <code>cbo_optimizer_new.h</code> documents the invariant that the two enums must stay in sync.</div>
+</div>
+</div>
+
+<!-- ─── Decision 6 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>6. <code>TJoinColumn</code> — Inline vs. Shared vs. Own Header</h3>
+  <span class="problem-tag">struct placement</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>NYql::NDq::TJoinColumn</code> is defined in <code>yql/essentials/core/yql_cost_function.h</code>. It is used by <code>TOrdering</code>, <code>TFunctionalDependency</code>, and <code>TFDStorage</code> inside <code>cbo_interesting_orderings.h</code>. The fork needs its own <code>NKqp::TJoinColumn</code>, but <code>yql_cost_function.h</code> cannot be included from the CBO library.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Inline into <code>cbo_interesting_orderings.h</code></div>
+      <div class="option-desc"><code>TJoinColumn</code> struct (with its <code>THashFunction</code>, <code>operator==</code>, <code>operator&lt;</code>) is placed directly at the top of <code>cbo_interesting_orderings.h</code>, before <code>TOrdering</code> and other consumers.</div>
+      <div class="option-why"><code>TJoinColumn</code> is tiny (5 fields, two free functions). The primary consumer is <code>TOrdering</code> in the same header. Inlining avoids creating a trivial single-purpose header.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Separate <code>kqp_join_column.h</code> header</div>
+      <div class="option-desc">Put <code>NKqp::TJoinColumn</code> in its own header, include it from <code>cbo_interesting_orderings.h</code>.</div>
+      <div class="option-why">Reasonable but adds a file for a struct that is only ~30 lines. The struct has no other independent consumers within the CBO library; every user of <code>TJoinColumn</code> also uses <code>TOrdering</code> or <code>TFDStorage</code>. One extra indirection for no gain.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Use <code>NYql::NDq::TJoinColumn</code> directly</div>
+      <div class="option-desc">Keep a PEERDIR on <code>yql/essentials/core</code> from <code>kqp/opt/cbo</code>, use the original struct.</div>
+      <div class="option-why">The current <code>kqp/opt/cbo/ya.make</code> deliberately avoids depending on <code>yql/essentials/core</code> (which transitively pulls <code>yql/essentials/core/cbo</code>). Adding that PEERDIR would break <code>CHECK_DEPENDENT_DIRS</code>. It would also mean <code>TOptimizerStatistics::TKeyColumns::ToJoinColumns()</code> returns <code>NYql::NDq::TJoinColumn</code>, mixing types.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Type alias within <code>cbo_interesting_orderings.h</code></div>
+      <div class="option-desc"><code>using TJoinColumn = NYql::NDq::TJoinColumn;</code> in the <code>NKikimr::NKqp</code> namespace.</div>
+      <div class="option-why">Same problem as before: the alias declaration needs <code>NYql::NDq::TJoinColumn</code> to be defined, which requires including <code>yql_cost_function.h</code>, which is the forbidden dependency. An alias does not change the include requirement.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">Inlining <code>TJoinColumn</code> into <code>cbo_interesting_orderings.h</code> mirrors exactly how <code>NYql::NDq::TJoinColumn</code> ended up in <code>yql_cost_function.h</code> originally: as a supporting type for the orderings machinery. The placement is logical and needs no extra files.</div>
+</div>
+</div>
+
+<!-- ─── Decision 7 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>7. <code>FromYqlColumnStatMap</code> Placement</h3>
+  <span class="problem-tag">boundary conversion locality</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    Somewhere, <code>NYql::TOptimizerStatistics::TColumnStatMap</code> (from <code>yql_statistics.h</code>) must be converted into <code>NKqp::TOptimizerStatistics::TColumnStatMap</code> (from <code>kqp_statistics.h</code>). The function's argument type forces whoever defines it to <code>#include &lt;yql/essentials/core/yql_statistics.h&gt;</code>. That header includes <code>yql/essentials/core/cbo/cbo_interesting_orderings.h</code>, so the defining file's library must be allowed to depend on <code>yql/essentials/core/cbo</code>.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — File-scope <code>static</code> in <code>kqp_statistics_transformer.cpp</code></div>
+      <div class="option-desc">Defined as a <code>static</code> function in the translation unit. <code>kqp_statistics_transformer.cpp</code> is part of <code>ydb/core/kqp/opt</code> (not <code>kqp/opt/cbo</code>), which is allowed to include both YQL and KQP headers. The function is only called from that file anyway.</div>
+      <div class="option-why">The only caller is in the same file. <code>static</code> scope prevents accidental use elsewhere. The library constraint is satisfied because the TU lives outside the restricted <code>kqp/opt/cbo</code> boundary.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Member/free function in <code>kqp_statistics.h/cpp</code></div>
+      <div class="option-desc">Declare the converter in the CBO library's stats header, so it lives next to the type it creates.</div>
+      <div class="option-why">Fails: <code>kqp_statistics.h</code> would need <code>#include &lt;yql/essentials/core/yql_statistics.h&gt;</code> for the argument type. <code>yql_statistics.h</code> includes <code>yql/essentials/core/cbo/cbo_interesting_orderings.h</code>. This violates <code>CHECK_DEPENDENT_DIRS(DENY PEERDIRS yql/essentials/core/cbo)</code> in <code>kqp/opt/cbo/ya.make</code>. The build fails.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Separate boundary-conversion library</div>
+      <div class="option-desc">Create <code>ydb/core/kqp/opt/cbo/boundary/</code> with a new <code>ya.make</code> that is allowed to PEERDIR on both sides.</div>
+      <div class="option-why">Over-engineering one function. A dedicated library for a 15-line static function adds a new <code>ya.make</code>, a new directory, and an extra PEERDIR chain for every future consumer. The transformer file is already the only caller; moving the definition there is simpler and more auditable.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Store <code>NYql::TColumnStatistics</code> directly (no conversion)</div>
+      <div class="option-desc">Make <code>NKqp::TOptimizerStatistics::TColumnStatMap</code> store <code>NYql::TColumnStatistics</code> instead of duplicating it.</div>
+      <div class="option-why">Same include-graph problem: <code>kqp_statistics.h</code> would need to reach <code>NYql::TColumnStatistics</code>, which lives in <code>yql_statistics.h</code>, which pulls <code>yql/essentials/core/cbo</code>. Also, if KQP ever needs to add column stat fields, it could not without modifying the shared YQL type.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The placement in <code>kqp_statistics_transformer.cpp</code> is the minimum-invasive solution: the function is private to its only caller, no new files are needed, and the include constraint is respected by the file's library affiliation rather than by restructuring the code.</div>
+</div>
+</div>
+
+<!-- ─── Decision 8 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>8. ODR Conflict Prevention — Different Namespaces</h3>
+  <span class="problem-tag">symbol identity</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    Both <code>NYql::NDq::DqOptimizeEquiJoinWithCosts</code> (original) and the fork's version of the same function will be compiled and linked into the same <code>ydbd</code> binary. Under the C++ One Definition Rule, two definitions of a function with the same mangled name in the same translation unit are illegal (and in different TUs they must be identical). The functions are intentionally different, so they must have different mangled names.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Different top-level namespaces</div>
+      <div class="option-desc">Fork lives in <code>NKikimr::NKqp</code>, original stays in <code>NYql::NDq</code>. The mangled names are different by construction. No runtime mechanism needed.</div>
+      <div class="option-why">Zero runtime cost; compile-time enforcement; human-readable in stack traces and diagnostics. Namespacing is the standard C++ mechanism for this.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Inline namespace versioning (<code>NYql::NDq::V2</code>)</div>
+      <div class="option-desc">Put the fork into <code>inline namespace V2</code> inside <code>NYql::NDq</code>. Unversioned references in consumer code resolve to <code>V2</code> by default.</div>
+      <div class="option-why">Inline namespaces are designed for ABI versioning of a <em>single</em> evolving library, not for two independent parallel implementations. Having <code>V2</code> inside <code>NYql::NDq</code> would still give the fork a logical home in the YQL library, blurring ownership. Also, both <code>V1</code> and <code>V2</code> would still be reachable from the same namespace — consumer code could accidentally call the wrong version.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Preprocessor <code>#ifdef</code> guards</div>
+      <div class="option-desc">Use a build-system-controlled macro to include either the YQL or the KQP version of the CBO headers, but not both.</div>
+      <div class="option-why">Both CBO implementations are used simultaneously in the same binary (YQL-path queries use <code>NYql::NDq</code>; KQP-path queries use <code>NKikimr::NKqp</code>). A compile-time switch would exclude one entirely. This makes it impossible to run both code paths in the same binary, which is required during the transition period.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Weak symbol linking tricks</div>
+      <div class="option-desc">Mark one definition as <code>__attribute__((weak))</code> so the linker prefers the strong one.</div>
+      <div class="option-why">Dangerous: weak symbols mean one implementation silently shadows the other. Which one wins depends on link order. Both implementations are correct for their own callers; neither should ever shadow the other. This also does not work portably on all platforms/toolchains the build supports.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">Different namespaces are the only mechanism that is both zero-cost and allows both implementations to coexist in the same binary at full strength. The namespace choice also communicates ownership clearly: <code>NYql::NDq</code> is owned by the YQL team, <code>NKikimr::NKqp</code> is owned by the KQP team.</div>
+</div>
+</div>
+
+<!-- ─── Decision 9 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>9. <code>dq_opt_join.cpp</code> Namespace Strategy</h3>
+  <span class="problem-tag">namespace vs. include plumbing</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>dq_opt_join.cpp</code> has ~600 lines that use many <code>NYql::NDq</code> types (nodes, expression builders, graph matchers) internally, but its exported functions (<code>DqRewriteEquiJoin</code>, <code>DqBuildPhyJoin</code>, …) must live in <code>NKikimr::NKqp</code> to avoid ODR conflict. If the file simply opens <code>namespace NKikimr::NKqp { ... }</code>, every reference to an <code>NDq</code> type must be re-qualified.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — <code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code> inside</div>
+      <div class="option-desc">The file wraps everything in <code>namespace NKikimr::NKqp { ... }</code> and immediately follows with <code>using namespace NYql::NDq;</code>. All <code>NDq</code> types are visible unqualified inside; exported symbols mangle as <code>NKikimr::NKqp</code>.</div>
+      <div class="option-why">Minimal change to the file body: only the namespace wrapper and the <code>using</code> declaration change from the original. Avoids re-qualifying hundreds of <code>NDq::</code> references throughout the file.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Keep <code>namespace NYql::NDq</code>, rename functions</div>
+      <div class="option-desc">Leave the original namespace, rename the exported functions (<code>KqpRewriteEquiJoin</code> instead of <code>DqRewriteEquiJoin</code>), update all callers.</div>
+      <div class="option-why">Renames proliferate through every KQP call site and break the diff-based comparison with the YQL original. The <code>diff_copies.sh</code> normalization would need to handle function renames in addition to namespace renames. The ODR problem is only solved if the original is <em>not</em> also linked — but it is.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Wrapper file that delegates to the original</div>
+      <div class="option-desc">Add a new <code>dq_opt_join_kqp.cpp</code> in <code>NKikimr::NKqp</code> that calls the original <code>NYql::NDq::DqRewriteEquiJoin</code>, adapting the <code>TKqpStatsStore</code> argument.</div>
+      <div class="option-why">The function body accesses the stats store in ~30 different places. A wrapper would need to either: (a) convert <code>TKqpStatsStore</code> into a <code>TTypeAnnotationContext</code> then convert back (expensive, lossy), or (b) rewrite the entire function body anyway. Neither is a genuine delegation.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Re-qualify every <code>NDq::</code> reference in the file</div>
+      <div class="option-desc">Open <code>namespace NKikimr::NKqp</code> but do not add <code>using namespace NYql::NDq</code>. Manually qualify every node matcher, expression builder, and helper.</div>
+      <div class="option-why">Makes the file's diff against the YQL original enormous and unreadable, hiding the actual semantic changes. Every added <code>NYql::NDq::</code> prefix is noise. The file is already ~600 lines; qualifying every reference multiplies its size with no information gain.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The <code>using namespace NYql::NDq</code> inside the outer <code>NKikimr::NKqp</code> block is the minimal diff strategy: the exported symbols get the new mangled names, and the file body is nearly identical to the YQL original, keeping the diff reviewable and merge-friendly.</div>
+</div>
+</div>
+
+<!-- ─── Decision 10 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>10. PG Optimizer — <code>Y_ABORT</code> vs. Keep</h3>
+  <span class="problem-tag">feature scope</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>dq_opt_join_cbo_factory.cpp</code> (in both the YQL original and the fork) has a <code>MakeJoinCostBasedOptimizerPG</code> path that calls <code>MakePgOptimizerNew()</code> from <code>yql/essentials/parser/pg_wrapper</code>. KQP does not have a PG optimizer. Keeping the call requires a PEERDIR on <code>pg_wrapper</code>, which adds a substantial dependency and a path that can never be exercised.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — <code>Y_ABORT</code> with explanatory message</div>
+      <div class="option-desc">Replace the PG path with <code>Y_ABORT("PG optimizer is not supported in the ydb-owned CBO")</code>. Remove the <code>pg_wrapper/interface/optimizer.h</code> include entirely.</div>
+      <div class="option-why">Makes the unsupported path loudly visible instead of silently unreachable. Removes the <code>pg_wrapper</code> dependency from the fork. If someone accidentally routes a PG query through the KQP CBO, they get an immediate actionable error rather than undefined behaviour.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Keep the PG path with the PEERDIR</div>
+      <div class="option-desc">Add <code>yql/essentials/parser/pg_wrapper/interface</code> to <code>solver/ya.make</code> and keep the code unchanged.</div>
+      <div class="option-why">Adds a large transitive dependency for dead code. The PG optimizer factory will never be invoked from KQP. Dead code with live dependencies increases compile time, link size, and obscures the intent of the fork.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Return <code>nullptr</code> silently</div>
+      <div class="option-desc">Replace the body with <code>return nullptr;</code>. Any caller would get a null pointer and likely crash later with a worse diagnostic.</div>
+      <div class="option-why">Null pointer dereferences produce crashes far from the unsupported call site, making root-cause analysis hard. <code>Y_ABORT</code> at the entry point is strictly better: same crash, better message, correct location in the stack trace.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Delete the function entirely</div>
+      <div class="option-desc">Remove <code>MakeJoinCostBasedOptimizerPG</code> from the fork's <code>IOptimizerFactory</code>.</div>
+      <div class="option-why">The function is part of the <code>IOptimizerFactory</code> interface. Removing it changes the interface contract, making the fork's factory a strict subset of the YQL one. Code that stores an <code>IOptimizerFactory*</code> and calls the PG method would fail to compile even on code paths that never reach the KQP fork. Keeping the signature but aborting is safer.</div>
+    </div>
+  </div>
+  <div class="chosen-summary"><code>Y_ABORT</code> is the correct tool for "this code path exists in the interface but is intentionally not supported here". It preserves the interface contract, produces a clear diagnostic, and removes the unnecessary dependency.</div>
+</div>
+</div>
+
+<!-- ─── Decision 11 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>11. <code>IProviderStatistics</code> for S3 — Dual Inheritance</h3>
+  <span class="problem-tag">provider stats boundary</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    <code>TOptimizerStatistics::Specific</code> stores provider-specific stats as a <code>shared_ptr&lt;IProviderStatistics&gt;</code>. The S3 provider creates <code>NYql::TS3ProviderStatistics</code> objects and stores them through the YQL boundary. After conversion to <code>NKqp::TOptimizerStatistics</code>, KQP code that wants to inspect S3-specific stats calls <code>dynamic_cast&lt;NYql::TS3ProviderStatistics*&gt;(stats.Specific.get())</code>. The problem: if <code>Specific</code> is typed <code>NKqp::IProviderStatistics*</code>, the cast requires <code>NKqp::IProviderStatistics</code> and <code>NYql::TS3ProviderStatistics</code> to share a virtual base.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — <code>TKqpS3ProviderStatistics</code> with dual inheritance</div>
+      <div class="option-desc"><code>struct TKqpS3ProviderStatistics : public NKqp::IProviderStatistics, public NYql::TS3ProviderStatistics</code>. The S3 stats object is both, so it can be stored as the KQP base type and cast to the YQL concrete type.</div>
+      <div class="option-why">Zero overhead vs. a straight pointer. The <code>dynamic_cast</code> chain works because the object is actually both types simultaneously. No conversion or copying of S3 data.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Type alias <code>IProviderStatistics = NYql::IProviderStatistics</code></div>
+      <div class="option-desc">Make <code>NKqp::IProviderStatistics</code> a pure alias for the YQL type. No wrapper needed; <code>TS3ProviderStatistics</code> already inherits from it.</div>
+      <div class="option-why">Reasonable; this alias <em>was</em> present in an earlier version of the fork. Reverted because it creates a direct include dependency on <code>yql_statistics.h</code> from <code>kqp_statistics.h</code> (the same chain that violates <code>CHECK_DEPENDENT_DIRS</code>). Dual inheritance keeps the KQP type truly independent.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Convert <code>NYql::TS3ProviderStatistics</code> at the boundary</div>
+      <div class="option-desc">Create a <code>NKqp::TS3ProviderStatistics</code> that copies all fields from the YQL version. Store the KQP copy in <code>Specific</code>.</div>
+      <div class="option-why">Requires duplicating the S3 statistics struct (which may grow). Every time <code>NYql::TS3ProviderStatistics</code> gains a new field, the copy function silently drops it. Dual inheritance avoids this by reusing the original type without copying.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Store <code>shared_ptr&lt;void&gt;</code> and cast directly</div>
+      <div class="option-desc">Make <code>Specific</code> a <code>shared_ptr&lt;void&gt;</code>. Any provider-specific type can be stored; callers cast to whatever they expect.</div>
+      <div class="option-why">Completely type-unsafe. There is no way to know at compile time what type is actually stored, and a mis-cast gives undefined behaviour without any diagnostic. The virtual base approach keeps type safety via <code>dynamic_cast</code> and the vtable.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">Dual inheritance is an unusual but correct use of C++ multiple inheritance: the object <em>is</em> both types. It is contained in <code>kqp_statistics_transformer.cpp</code> (the only creation site), so the unusual pattern is localised and documented.</div>
+</div>
+</div>
+
+<!-- ─── Decision 12 ─────────────────────────────────────────── -->
+<div class="decision-block">
+<div class="decision-header">
+  <h3>12. Solver Cannot Deny <code>yql/essentials/core/cbo</code></h3>
+  <span class="problem-tag">transitive dependency ceiling</span>
+</div>
+<div class="decision-body">
+  <div class="decision-problem">
+    Ideally the solver library (<code>ydb/core/kqp/opt/cbo/solver</code>) should also have <code>CHECK_DEPENDENT_DIRS(DENY yql/essentials/core/cbo)</code>, like <code>kqp/opt/cbo</code> does. But the solver depends on <code>yql/essentials/core</code> (for <code>TTypeAnnotationContext</code>, <code>TExprNode</code>, etc.), and that library depends on <code>yql/essentials/minikql</code> which depends on <code>yql/essentials/parser/pg_wrapper/interface</code> which depends on <code>yql/essentials/core/cbo</code>. The transitive chain makes the denial impossible to satisfy.
+  </div>
+  <div class="options-grid">
+    <div class="option-card chosen">
+      <div class="option-label">✓ CHOSEN — Accept solver as intentional bridge layer; no denial</div>
+      <div class="option-desc">The <code>CHECK_DEPENDENT_DIRS</code> denial is placed on the inner <code>kqp/opt/cbo</code> library (pure types, no <code>yql/essentials/core</code> dep). The solver is the bridge: it uses both KQP types and YQL infrastructure.</div>
+      <div class="option-why">The solver's use of <code>yql/essentials/core/cbo</code> is unavoidable via the transitive chain. Documenting this explicitly is more honest than a guard that would fail on the first build.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Remove <code>yql/essentials/core</code> dep from solver</div>
+      <div class="option-desc">Eliminate all solver uses of <code>TTypeAnnotationContext</code>. Functions that still need it accept a void pointer or a minimal interface instead.</div>
+      <div class="option-why">Significant refactor: <code>InferStatisticsForExtendBase</code>, <code>InferStatisticsForAggregateBase</code>, <code>InferStatisticsForTopBase</code>, and others need <code>TTypeAnnotationContext</code> for orderings FSM data (non-stats uses). Removing this dependency would require either duplicating more of <code>TTypeAnnotationContext</code> into a KQP-owned struct, or passing the FSM data through many extra parameters. The marginal gain (one more denial) does not justify that refactor.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Break the transitive chain upstream</div>
+      <div class="option-desc">Remove the dep from <code>minikql</code> → <code>pg_wrapper/interface</code> → <code>core/cbo</code>, or from <code>yql/essentials/core</code> → <code>minikql</code>.</div>
+      <div class="option-why">These dependencies are structural in the YQL build graph and serve other purposes. Removing them would affect all consumers of those libraries, not just this fork. This is not a change that the KQP team can make unilaterally.</div>
+    </div>
+    <div class="option-card rejected">
+      <div class="option-label">✗ Add the denial and suppress it with <code>ALLOW_DEPENDENT_DIRS</code></div>
+      <div class="option-desc">Keep the <code>CHECK_DEPENDENT_DIRS</code> denial in the solver but add an explicit <code>ALLOW</code> exception for the transitive path.</div>
+      <div class="option-why">Defeats the purpose of the guard: a denial with a blanket exception for the exact dependency being denied is meaningless. The exception would need to list <code>yql/essentials/core/cbo</code>, which is the forbidden dependency. Better to document the reason in a comment and omit the guard.</div>
+    </div>
+  </div>
+  <div class="chosen-summary">The solver's transitive exposure to <code>yql/essentials/core/cbo</code> is structural and cannot be removed without a major refactor of the YQL build graph. The guard on <code>kqp/opt/cbo</code> (the pure-types library) provides the meaningful protection: it ensures the CBO types themselves are defined independently of the YQL CBO types. The solver is documented as the intentional bridge layer.</div>
+</div>
 </div>
 
 </body>

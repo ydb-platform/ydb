@@ -94,7 +94,7 @@ private:
                         processingDuration.MilliSeconds()
                     )
                 );
-            } else {
+            } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
                 if (IsBatch_) {
                     MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
                 }

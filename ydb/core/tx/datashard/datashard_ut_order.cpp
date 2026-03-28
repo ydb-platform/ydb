@@ -2898,6 +2898,7 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
 
     // Capture and block all readset messages
     TVector<THolder<IEventHandle>> readSets;
+    size_t immediateWriteArrived = 0;
     size_t delayedProposeCount = 0;
     auto captureRS = [&](TAutoPtr<IEventHandle>& ev) -> auto {
         switch (ev->GetTypeRewrite()) {
@@ -2905,8 +2906,25 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
                 readSets.push_back(std::move(ev));
                 return TTestActorRuntime::EEventAction::DROP;
             }
+            case NKikimr::NEvents::TDataEvents::EvWrite: {
+                // Detect when immediate upsert reaches a datashard.
+                // Count only MODE_IMMEDIATE writes without LockTxId.
+                // MODE_IMMEDIATE && LockTxId != 0 is used for distributed tx's writes.
+                auto* msg = ev->Get<NEvents::TDataEvents::TEvWrite>();
+                if (msg->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+                    && msg->Record.GetLockTxId() == 0)
+                {
+                    ++immediateWriteArrived;
+                }
+                break;
+            }
             case EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 2 /* EvDelayedProposeTransaction */: {
-                ++delayedProposeCount;
+                // Count EvDelayedProposeTransaction only after the immediate upsert
+                // has reached the datashard. Distributed tx's commit writes also
+                // trigger EvDelayedProposeTransaction and must not be counted.
+                if (immediateWriteArrived > 0) {
+                    ++delayedProposeCount;
+                }
                 break;
             }
         }
@@ -2925,12 +2943,14 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
     UNIT_ASSERT_VALUES_EQUAL(readSets.size(), expectedReadSets);
 
     // Now send an upsert to table-1, it should be blocked by our in-progress tx
-    delayedProposeCount = 0;
     Cerr << "... sending immediate upsert" << Endl;
     auto f3 = SendRequest(runtime, MakeSimpleRequestRPC(Q_(R"(
         UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 42), (3, 51))"), sender3Session, "", true));
 
-    // Wait unti that propose starts to execute
+    // Wait until the immediate upsert's propose starts to execute on the datashard.
+    // We use a two-phase check: first the immediate upsert's TEvWrite (MODE_IMMEDIATE
+    // without LockTxId) must arrive at the shard, then the EvDelayedProposeTransaction
+    // self-send confirms it has been enqueued in the ProposeQueue.
     waitFor([&]{ return delayedProposeCount >= 1; }, "immediate propose");
     UNIT_ASSERT_VALUES_EQUAL(delayedProposeCount, 1u);
     Cerr << "... immediate upsert is blocked" << Endl;

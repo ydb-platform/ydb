@@ -18,6 +18,7 @@
 #include <util/string/split.h>
 
 #include <cmath>
+#include <cctype>
 #include <optional>
 #include <regex>
 #include <algorithm>
@@ -316,6 +317,24 @@ namespace {
         TVector<TPrometheusLabelMatcher> Matchers;
     };
 
+    enum class EPrometheusAggregationOp {
+        Sum,
+        Avg,
+        Min,
+        Max,
+        Count,
+    };
+
+    struct TPrometheusAggregation {
+        EPrometheusAggregationOp Op = EPrometheusAggregationOp::Sum;
+        TVector<TString> ByLabels;
+    };
+
+    struct TPrometheusQueryExpression {
+        TPrometheusVectorSelector Selector;
+        std::optional<TPrometheusAggregation> Aggregation;
+    };
+
     inline void SplitPrometheusMatchers(TStringBuf raw, TVector<TString>& items) {
         size_t start = 0;
         bool inQuotes = false;
@@ -434,6 +453,175 @@ namespace {
         return true;
     }
 
+    inline bool TryConsumePrometheusKeyword(TStringBuf input, size_t& pos, TStringBuf keyword) {
+        if (input.SubString(pos, input.size() - pos).StartsWith(keyword)) {
+            pos += keyword.size();
+            return true;
+        }
+        return false;
+    }
+
+    inline void SkipPrometheusWhitespace(TStringBuf input, size_t& pos) {
+        while (pos < input.size() && IsAsciiSpace(input[pos])) {
+            ++pos;
+        }
+    }
+
+    inline bool FindMatchingParen(TStringBuf input, size_t openPos, size_t& closePos) {
+        if (openPos >= input.size() || input[openPos] != '(') {
+            return false;
+        }
+
+        int depth = 0;
+        bool inQuotes = false;
+        bool escaped = false;
+        for (size_t pos = openPos; pos < input.size(); ++pos) {
+            const char ch = input[pos];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (inQuotes && ch == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (inQuotes) {
+                continue;
+            }
+            if (ch == '(') {
+                ++depth;
+            } else if (ch == ')') {
+                --depth;
+                if (depth == 0) {
+                    closePos = pos;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    inline bool ParsePrometheusLabelList(TStringBuf raw, TVector<TString>& labels, TString& error) {
+        labels.clear();
+        TVector<TString> items;
+        SplitPrometheusMatchers(raw, items);
+        for (const TString& item : items) {
+            const TStringBuf label = StripString(TStringBuf(item));
+            if (label.empty()) {
+                continue;
+            }
+            if (label.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != TStringBuf::npos) {
+                error = TStringBuilder() << "invalid label name in aggregation: " << item;
+                labels.clear();
+                return false;
+            }
+            labels.push_back(TString(label));
+        }
+        Sort(labels);
+        labels.erase(std::unique(labels.begin(), labels.end()), labels.end());
+        return true;
+    }
+
+    inline std::optional<EPrometheusAggregationOp> TryParsePrometheusAggregationOp(TStringBuf name) {
+        if (name == "sum") {
+            return EPrometheusAggregationOp::Sum;
+        }
+        if (name == "avg") {
+            return EPrometheusAggregationOp::Avg;
+        }
+        if (name == "min") {
+            return EPrometheusAggregationOp::Min;
+        }
+        if (name == "max") {
+            return EPrometheusAggregationOp::Max;
+        }
+        if (name == "count") {
+            return EPrometheusAggregationOp::Count;
+        }
+        return {};
+    }
+
+    inline bool TryParsePrometheusQueryExpression(TStringBuf expression, TPrometheusQueryExpression& query, TString& error) {
+        query = {};
+        error.clear();
+
+        const TStringBuf stripped = StripString(expression);
+        if (stripped.empty()) {
+            error = "empty query";
+            return false;
+        }
+
+        size_t pos = 0;
+        while (pos < stripped.size() && std::isalpha(static_cast<unsigned char>(stripped[pos]))) {
+            ++pos;
+        }
+
+        const TStringBuf candidateOp = stripped.SubString(0, pos);
+        const auto aggregationOp = TryParsePrometheusAggregationOp(candidateOp);
+        if (!aggregationOp) {
+            return TryParsePrometheusVectorSelector(stripped, query.Selector, error);
+        }
+        if (pos < stripped.size() && !IsAsciiSpace(stripped[pos])) {
+            return TryParsePrometheusVectorSelector(stripped, query.Selector, error);
+        }
+
+        SkipPrometheusWhitespace(stripped, pos);
+        if (!TryConsumePrometheusKeyword(stripped, pos, "by")) {
+            error = "only selector-only queries and '<aggregation> by (...) (...)' are supported";
+            return false;
+        }
+
+        SkipPrometheusWhitespace(stripped, pos);
+        if (pos >= stripped.size() || stripped[pos] != '(') {
+            error = "aggregation labels must be enclosed in parentheses";
+            return false;
+        }
+
+        size_t labelsClosePos = TStringBuf::npos;
+        if (!FindMatchingParen(stripped, pos, labelsClosePos)) {
+            error = "unterminated aggregation label list";
+            return false;
+        }
+
+        TPrometheusAggregation aggregation;
+        aggregation.Op = *aggregationOp;
+        if (!ParsePrometheusLabelList(stripped.SubString(pos + 1, labelsClosePos - pos - 1), aggregation.ByLabels, error)) {
+            return false;
+        }
+
+        pos = labelsClosePos + 1;
+        SkipPrometheusWhitespace(stripped, pos);
+        if (pos >= stripped.size() || stripped[pos] != '(') {
+            error = "aggregation argument must be enclosed in parentheses";
+            return false;
+        }
+
+        size_t selectorClosePos = TStringBuf::npos;
+        if (!FindMatchingParen(stripped, pos, selectorClosePos)) {
+            error = "unterminated aggregation argument";
+            return false;
+        }
+
+        size_t tailPos = selectorClosePos + 1;
+        SkipPrometheusWhitespace(stripped, tailPos);
+        if (tailPos != stripped.size()) {
+            error = "unexpected trailing data after aggregation";
+            return false;
+        }
+
+        if (!TryParsePrometheusVectorSelector(stripped.SubString(pos + 1, selectorClosePos - pos - 1), query.Selector, error)) {
+            return false;
+        }
+
+        query.Aggregation = std::move(aggregation);
+        return true;
+    }
+
     inline TString FindLineLabelValue(const TVector<TLabel>& commonLabels, const TLineSnapshot& line, TStringBuf labelName) {
         if (labelName == "__name__") {
             return line.Name;
@@ -535,6 +723,15 @@ namespace {
             exactNodeId = nodeId;
         }
         return exactNodeId;
+    }
+
+    inline TString FindMetricLabelValue(const TVector<TLabel>& labels, TStringBuf labelName) {
+        for (const auto& label : labels) {
+            if (label.Name == labelName) {
+                return label.Value;
+            }
+        }
+        return {};
     }
 
 } // namespace
@@ -1046,11 +1243,11 @@ public:
                 return {};
             }
 
-            TPrometheusVectorSelector selector;
-            if (!ParseSelectorParam(query, selector, error)) {
+            TPrometheusQueryExpression expression;
+            if (!ParseQueryParam(query, expression, error)) {
                 return {};
             }
-            return {std::move(selector)};
+            return {std::move(expression.Selector)};
         }
 
         if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/series"
@@ -1062,6 +1259,26 @@ public:
         }
 
         return {};
+    }
+
+    bool UsesAggregation(TString& error) const {
+        error.clear();
+        if (Path != "/viewer/inmemory_metrics/prometheus/api/v1/query"
+                && Path != "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
+        {
+            return false;
+        }
+
+        const TString query = Params.Get("query");
+        if (query.empty()) {
+            return false;
+        }
+
+        TPrometheusQueryExpression expression;
+        if (!ParseQueryParam(query, expression, error)) {
+            return false;
+        }
+        return expression.Aggregation.has_value();
     }
 
     TResult Execute(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
@@ -1120,6 +1337,61 @@ private:
         return FromStringWithDefault<double>(Params.Get(name), 0);
     }
 
+    struct TInstantSample {
+        TString MetricName;
+        TVector<TLabel> Labels;
+        ui64 Timestamp = 0;
+        double Value = 0;
+    };
+
+    struct TRangeSample {
+        TString MetricName;
+        TVector<TLabel> Labels;
+        TVector<std::pair<ui64, double>> Values;
+    };
+
+    struct TAggregationState {
+        ui64 Timestamp = 0;
+        double Sum = 0;
+        double Min = 0;
+        double Max = 0;
+        ui64 Count = 0;
+        bool HasValue = false;
+
+        void Add(ui64 timestamp, double value) {
+            if (!HasValue) {
+                Timestamp = timestamp;
+                Sum = value;
+                Min = value;
+                Max = value;
+                Count = 1;
+                HasValue = true;
+                return;
+            }
+
+            Timestamp = std::max(Timestamp, timestamp);
+            Sum += value;
+            Min = std::min(Min, value);
+            Max = std::max(Max, value);
+            ++Count;
+        }
+
+        double GetValue(EPrometheusAggregationOp op) const {
+            switch (op) {
+                case EPrometheusAggregationOp::Sum:
+                    return Sum;
+                case EPrometheusAggregationOp::Avg:
+                    return Count ? Sum / static_cast<double>(Count) : 0;
+                case EPrometheusAggregationOp::Min:
+                    return Min;
+                case EPrometheusAggregationOp::Max:
+                    return Max;
+                case EPrometheusAggregationOp::Count:
+                    return static_cast<double>(Count);
+            }
+        }
+    };
+
     bool ParseSelectorParam(TStringBuf query, TPrometheusVectorSelector& selector, TString& error) const {
         if (!TryParsePrometheusVectorSelector(query, selector, error)) {
             return false;
@@ -1127,9 +1399,16 @@ private:
         if (query.find_first_of("()[]+-/*") != TStringBuf::npos && query.find('{') == TStringBuf::npos) {
             const TStringBuf trimmed = StripString(query);
             if (trimmed.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:") != TStringBuf::npos) {
-                error = "only selector-only Prometheus queries are supported";
+                error = "only selector-only Prometheus matchers are supported";
                 return false;
             }
+        }
+        return true;
+    }
+
+    bool ParseQueryParam(TStringBuf query, TPrometheusQueryExpression& expression, TString& error) const {
+        if (!TryParsePrometheusQueryExpression(query, expression, error)) {
+            return false;
         }
         return true;
     }
@@ -1194,6 +1473,236 @@ private:
 
     static TString FormatSampleValue(double value) {
         return TStringBuilder() << value;
+    }
+
+    static NJson::TJsonValue BuildMetricObject(const TString& metricName, const TVector<TLabel>& labels) {
+        NJson::TJsonValue metric;
+        if (!metricName.empty()) {
+            metric["__name__"] = metricName;
+        }
+        for (const auto& label : labels) {
+            metric[label.Name] = label.Value;
+        }
+        return metric;
+    }
+
+    static TString BuildAggregationGroupKey(const TVector<TLabel>& labels, const TVector<TString>& byLabels) {
+        TVector<TLabel> selected;
+        selected.reserve(byLabels.size());
+        for (const auto& byLabel : byLabels) {
+            const TString value = FindMetricLabelValue(labels, byLabel);
+            if (!value.empty()) {
+                selected.push_back(TLabel{
+                    .Name = byLabel,
+                    .Value = value,
+                });
+            }
+        }
+        return SerializeJsonValue(BuildMetricObject("", selected), true);
+    }
+
+    static TVector<TLabel> BuildAggregationMetricLabels(const TVector<TLabel>& labels, const TVector<TString>& byLabels) {
+        TVector<TLabel> selected;
+        selected.reserve(byLabels.size());
+        for (const auto& byLabel : byLabels) {
+            const TString value = FindMetricLabelValue(labels, byLabel);
+            if (!value.empty()) {
+                selected.push_back(TLabel{
+                    .Name = byLabel,
+                    .Value = value,
+                });
+            }
+        }
+        return selected;
+    }
+
+    TVector<TInstantSample> CollectInstantSamples(const TVector<TLabel>& commonLabels,
+            const TVector<TLineSnapshot>& lines,
+            const TPrometheusVectorSelector& selector,
+            ui64 evalTimestamp,
+            TString& error) const
+    {
+        TVector<TInstantSample> samples;
+        for (const auto& line : lines) {
+            const size_t prevErrorSize = error.size();
+            const bool matched = MatchPrometheusSelector(commonLabels, line, selector, error);
+            if (!error.empty() && error.size() != prevErrorSize) {
+                samples.clear();
+                return samples;
+            }
+            if (!matched) {
+                continue;
+            }
+
+            struct TLastPoint {
+                ui64 Timestamp = 0;
+                double Value = 0;
+            };
+            std::optional<TLastPoint> lastPoint;
+            line.ForEachRecord([&](const TRecordView& record) {
+                const ui64 ts = record.Timestamp.Seconds();
+                if (ts <= evalTimestamp) {
+                    lastPoint = TLastPoint{
+                        .Timestamp = ts,
+                        .Value = static_cast<double>(record.Value),
+                    };
+                }
+            });
+            if (!lastPoint) {
+                continue;
+            }
+
+            samples.push_back(TInstantSample{
+                .MetricName = line.Name,
+                .Labels = BuildEffectiveMetricLabels(commonLabels, line),
+                .Timestamp = lastPoint->Timestamp,
+                .Value = lastPoint->Value,
+            });
+        }
+        return samples;
+    }
+
+    TVector<TRangeSample> CollectRangeSamples(const TVector<TLabel>& commonLabels,
+            const TVector<TLineSnapshot>& lines,
+            const TPrometheusVectorSelector& selector,
+            ui64 startTs,
+            ui64 endTs,
+            TString& error) const
+    {
+        TVector<TRangeSample> samples;
+        for (const auto& line : lines) {
+            const size_t prevErrorSize = error.size();
+            const bool matched = MatchPrometheusSelector(commonLabels, line, selector, error);
+            if (!error.empty() && error.size() != prevErrorSize) {
+                samples.clear();
+                return samples;
+            }
+            if (!matched) {
+                continue;
+            }
+
+            TRangeSample sample;
+            sample.MetricName = line.Name;
+            sample.Labels = BuildEffectiveMetricLabels(commonLabels, line);
+            line.ForEachRecord([&](const TRecordView& record) {
+                const ui64 ts = record.Timestamp.Seconds();
+                if (ts < startTs || ts > endTs) {
+                    return;
+                }
+                sample.Values.emplace_back(ts, static_cast<double>(record.Value));
+            });
+            if (!sample.Values.empty()) {
+                samples.push_back(std::move(sample));
+            }
+        }
+        return samples;
+    }
+
+    void AppendInstantResult(NJson::TJsonValue& output, const TInstantSample& sample) const {
+        NJson::TJsonValue& item = output.AppendValue({});
+        item["metric"] = BuildMetricObject(sample.MetricName, sample.Labels);
+        NJson::TJsonValue& value = item["value"];
+        value.SetType(NJson::JSON_ARRAY);
+        value.AppendValue(sample.Timestamp);
+        value.AppendValue(FormatSampleValue(sample.Value));
+    }
+
+    void AppendRangeResult(NJson::TJsonValue& output, const TRangeSample& sample) const {
+        NJson::TJsonValue values(NJson::JSON_ARRAY);
+        for (const auto& [timestamp, value] : sample.Values) {
+            NJson::TJsonValue& item = values.AppendValue(NJson::TJsonValue(NJson::JSON_ARRAY));
+            item.AppendValue(timestamp);
+            item.AppendValue(FormatSampleValue(value));
+        }
+
+        NJson::TJsonValue& item = output.AppendValue({});
+        item["metric"] = BuildMetricObject(sample.MetricName, sample.Labels);
+        item["values"] = std::move(values);
+    }
+
+    TVector<TInstantSample> AggregateInstantSamples(const TVector<TInstantSample>& input, const TPrometheusAggregation& aggregation) const {
+        struct TGroupedResult {
+            TVector<TLabel> Labels;
+            TAggregationState State;
+        };
+
+        THashMap<TString, TGroupedResult> grouped;
+        for (const auto& sample : input) {
+            const TString key = BuildAggregationGroupKey(sample.Labels, aggregation.ByLabels);
+            auto& result = grouped[key];
+            if (result.Labels.empty()) {
+                result.Labels = BuildAggregationMetricLabels(sample.Labels, aggregation.ByLabels);
+            }
+            result.State.Add(sample.Timestamp, sample.Value);
+        }
+
+        TVector<TString> keys;
+        keys.reserve(grouped.size());
+        for (const auto& [key, _] : grouped) {
+            keys.push_back(key);
+        }
+        Sort(keys);
+
+        TVector<TInstantSample> output;
+        output.reserve(keys.size());
+        for (const auto& key : keys) {
+            const auto& result = grouped.at(key);
+            output.push_back(TInstantSample{
+                .MetricName = "",
+                .Labels = result.Labels,
+                .Timestamp = result.State.Timestamp,
+                .Value = result.State.GetValue(aggregation.Op),
+            });
+        }
+        return output;
+    }
+
+    TVector<TRangeSample> AggregateRangeSamples(const TVector<TRangeSample>& input, const TPrometheusAggregation& aggregation) const {
+        struct TGroupedRange {
+            TVector<TLabel> Labels;
+            THashMap<ui64, TAggregationState> Points;
+        };
+
+        THashMap<TString, TGroupedRange> grouped;
+        for (const auto& sample : input) {
+            const TString key = BuildAggregationGroupKey(sample.Labels, aggregation.ByLabels);
+            auto& result = grouped[key];
+            if (result.Labels.empty()) {
+                result.Labels = BuildAggregationMetricLabels(sample.Labels, aggregation.ByLabels);
+            }
+            for (const auto& [timestamp, value] : sample.Values) {
+                result.Points[timestamp].Add(timestamp, value);
+            }
+        }
+
+        TVector<TString> keys;
+        keys.reserve(grouped.size());
+        for (const auto& [key, _] : grouped) {
+            keys.push_back(key);
+        }
+        Sort(keys);
+
+        TVector<TRangeSample> output;
+        output.reserve(keys.size());
+        for (const auto& key : keys) {
+            auto& result = grouped[key];
+            TVector<ui64> timestamps;
+            timestamps.reserve(result.Points.size());
+            for (const auto& [timestamp, _] : result.Points) {
+                timestamps.push_back(timestamp);
+            }
+            Sort(timestamps);
+
+            TRangeSample sample;
+            sample.MetricName = "";
+            sample.Labels = result.Labels;
+            sample.Values.reserve(timestamps.size());
+            for (ui64 timestamp : timestamps) {
+                sample.Values.emplace_back(timestamp, result.Points.at(timestamp).GetValue(aggregation.Op));
+            }
+            output.push_back(std::move(sample));
+        }
+        return output;
     }
 
     TResult HandleLabels(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
@@ -1293,9 +1802,9 @@ private:
             return MakeError("bad_data", "query is required");
         }
 
-        TPrometheusVectorSelector selector;
+        TPrometheusQueryExpression expression;
         TString error;
-        if (!ParseSelectorParam(query, selector, error)) {
+        if (!ParseQueryParam(query, expression, error)) {
             return MakeError("bad_data", error);
         }
 
@@ -1304,6 +1813,10 @@ private:
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
+        const auto samples = CollectInstantSamples(snapshot.CommonLabels, lines, expression.Selector, evalTimestamp, error);
+        if (!error.empty()) {
+            return MakeError("bad_data", error);
+        }
 
         TResult result;
         result.Json["status"] = "success";
@@ -1311,40 +1824,11 @@ private:
         NJson::TJsonValue& output = result.Json["data"]["result"];
         output.SetType(NJson::JSON_ARRAY);
 
-        for (const auto& line : lines) {
-            const size_t prevErrorSize = error.size();
-            const bool matched = MatchPrometheusSelector(snapshot.CommonLabels, line, selector, error);
-            if (!error.empty() && error.size() != prevErrorSize) {
-                return MakeError("bad_data", error);
-            }
-            if (!matched) {
-                continue;
-            }
-
-            struct TLastPoint {
-                ui64 Timestamp = 0;
-                double Value = 0;
-            };
-            std::optional<TLastPoint> lastPoint;
-            line.ForEachRecord([&](const TRecordView& record) {
-                const ui64 ts = record.Timestamp.Seconds();
-                if (ts <= evalTimestamp) {
-                    lastPoint = TLastPoint{
-                        .Timestamp = ts,
-                        .Value = static_cast<double>(record.Value),
-                    };
-                }
-            });
-            if (!lastPoint) {
-                continue;
-            }
-
-            NJson::TJsonValue& item = output.AppendValue({});
-            item["metric"] = BuildMetricObject(snapshot.CommonLabels, line);
-            NJson::TJsonValue& value = item["value"];
-            value.SetType(NJson::JSON_ARRAY);
-            value.AppendValue(lastPoint->Timestamp);
-            value.AppendValue(FormatSampleValue(lastPoint->Value));
+        const auto rendered = expression.Aggregation
+            ? AggregateInstantSamples(samples, *expression.Aggregation)
+            : samples;
+        for (const auto& sample : rendered) {
+            AppendInstantResult(output, sample);
         }
 
         return result;
@@ -1364,9 +1848,9 @@ private:
             return MakeError("bad_data", "end must be greater than or equal to start");
         }
 
-        TPrometheusVectorSelector selector;
+        TPrometheusQueryExpression expression;
         TString error;
-        if (!ParseSelectorParam(query, selector, error)) {
+        if (!ParseQueryParam(query, expression, error)) {
             return MakeError("bad_data", error);
         }
 
@@ -1375,6 +1859,10 @@ private:
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
+        const auto samples = CollectRangeSamples(snapshot.CommonLabels, lines, expression.Selector, startTs, endTs, error);
+        if (!error.empty()) {
+            return MakeError("bad_data", error);
+        }
 
         TResult result;
         result.Json["status"] = "success";
@@ -1382,36 +1870,11 @@ private:
         NJson::TJsonValue& output = result.Json["data"]["result"];
         output.SetType(NJson::JSON_ARRAY);
 
-        for (const auto& line : lines) {
-            const size_t prevErrorSize = error.size();
-            const bool matched = MatchPrometheusSelector(snapshot.CommonLabels, line, selector, error);
-            if (!error.empty() && error.size() != prevErrorSize) {
-                return MakeError("bad_data", error);
-            }
-            if (!matched) {
-                continue;
-            }
-
-            NJson::TJsonValue values(NJson::JSON_ARRAY);
-            bool hasValues = false;
-            line.ForEachRecord([&](const TRecordView& record) {
-                const ui64 ts = record.Timestamp.Seconds();
-                if (ts < startTs || ts > endTs) {
-                    return;
-                }
-
-                NJson::TJsonValue& item = values.AppendValue(NJson::TJsonValue(NJson::JSON_ARRAY));
-                item.AppendValue(ts);
-                item.AppendValue(FormatSampleValue(static_cast<double>(record.Value)));
-                hasValues = true;
-            });
-            if (!hasValues) {
-                continue;
-            }
-
-            NJson::TJsonValue& item = output.AppendValue({});
-            item["metric"] = BuildMetricObject(snapshot.CommonLabels, line);
-            item["values"] = std::move(values);
+        const auto rendered = expression.Aggregation
+            ? AggregateRangeSamples(samples, *expression.Aggregation)
+            : samples;
+        for (const auto& sample : rendered) {
+            AppendRangeResult(output, sample);
         }
 
         return result;
@@ -1443,10 +1906,17 @@ public:
             return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
         }
 
+        const bool usesAggregation = processor.UsesAggregation(error);
+        if (!error.empty()) {
+            return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
+        }
+
         if (const auto exactNodeId = GetRequestedExactNodeId()) {
             if (*exactNodeId != TActivationContext::ActorSystem()->NodeId) {
                 return ReplyAndPassAway(MakeForward({*exactNodeId}));
             }
+        } else if (usesAggregation && processor.SupportsFanout()) {
+            return ReplyAndPassAway(BuildErrorResponse("not_implemented", "Prometheus aggregations with multi-node fanout are not implemented"));
         } else if (processor.SupportsFanout()) {
             NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
             return Become(&TThis::StateFanout, Timeout, new TEvents::TEvWakeup());

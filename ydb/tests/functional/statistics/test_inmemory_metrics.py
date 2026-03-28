@@ -395,6 +395,44 @@ def test_inmemory_metrics_prometheus_query_grafana_quoted_metric_selector(ydb_cl
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
 
 
+def test_inmemory_metrics_prometheus_query_supports_count_by_aggregation(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{POOL_TARGET}{{node_id="'),
+    )
+    node_id = extract_label(target, "node_id")
+
+    last_query = None
+
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            base_url,
+            "/query",
+            params={
+                "query": f'count by (node_id) ({POOL_TARGET}{{node_id="{node_id}"}})',
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus aggregation query result: %s", last_query)
+        result = last_query.get("result", [])
+        return last_query.get("resultType") == "vector" and any(
+            item.get("metric", {}).get("node_id") == node_id
+            and "__name__" not in item.get("metric", {})
+            and "pool" not in item.get("metric", {})
+            and float(item.get("value", [0, "0"])[1]) > 0
+            for item in result
+        )
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
 def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
@@ -428,6 +466,48 @@ def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
         return last_query_range.get("resultType") == "matrix" and any(
             item.get("metric", {}).get("__name__") == TARGET
             and item.get("metric", {}).get("node_id")
+            and item.get("values")
+            for item in result
+        )
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
+
+
+def test_inmemory_metrics_prometheus_query_range_supports_count_by_aggregation(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{POOL_TARGET}{{node_id="'),
+    )
+    node_id = extract_label(target, "node_id")
+
+    last_query_range = None
+    end = int(time.time())
+    start = end - 300
+
+    def query_range_ready():
+        nonlocal last_query_range
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": f'count by (node_id) ({POOL_TARGET}{{node_id="{node_id}"}})',
+                "start": start,
+                "end": end,
+                "step": 30,
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus aggregation query_range result: %s", last_query_range)
+        result = last_query_range.get("result", [])
+        return last_query_range.get("resultType") == "matrix" and any(
+            item.get("metric", {}).get("node_id") == node_id
+            and "__name__" not in item.get("metric", {})
+            and "pool" not in item.get("metric", {})
             and item.get("values")
             for item in result
         )
@@ -472,6 +552,25 @@ def test_inmemory_metrics_prometheus_query_routes_to_exact_remote_node(ydb_clust
         )
 
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
+def test_inmemory_metrics_prometheus_rejects_aggregation_without_exact_node_id(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+
+    response = requests.get(
+        f"{base_url}{PROMETHEUS_API_PREFIX}/query",
+        params={
+            "query": f"count by (node_id) ({POOL_TARGET})",
+            "time": int(time.time()),
+        },
+        timeout=10,
+    )
+
+    assert_that(response.status_code, equal_to(400))
+    payload = response.json()
+    assert_that(payload.get("status"), equal_to("error"))
+    assert_that(payload.get("errorType"), equal_to("not_implemented"))
 
 
 def test_inmemory_metrics_prometheus_node_id_values_fanout(ydb_cluster):

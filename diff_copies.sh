@@ -38,8 +38,6 @@ declare -a PAIRS=(
     "$SOLVER/dq_opt_join_hypergraph.h            $YQLDQ/dq_opt_join_hypergraph.h"
     "$SOLVER/dq_opt_join_tree_node.h             $YQLDQ/dq_opt_join_tree_node.h"
     "$SOLVER/dq_opt_join_tree_node.cpp           $YQLDQ/dq_opt_join_tree_node.cpp"
-    "$SOLVER/dq_opt_log.h                        $YQLDQ/dq_opt_log.h"
-    "$SOLVER/dq_opt_log.cpp                      $YQLDQ/dq_opt_log.cpp"
     "$SOLVER/dq_opt_make_join_hypergraph.h       $YQLDQ/dq_opt_make_join_hypergraph.h"
     "$SOLVER/dq_opt_stat.h                       $YQLDQ/dq_opt_stat.h"
     "$SOLVER/dq_opt_stat.cpp                     $YQLDQ/dq_opt_stat.cpp"

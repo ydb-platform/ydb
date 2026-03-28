@@ -798,6 +798,15 @@ public:
         return Nodes.size();
     }
 
+    bool HostHasSysTablet(const TString &hostName) const {
+        for (const auto *node : HostNodes(hostName)) {
+            if (NodeToTabletTypes.contains(node->NodeId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     size_t NodesCount(const TString &hostName) const {
         ui32 nodeId;
         if (TryFromString(hostName, nodeId)) {

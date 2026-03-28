@@ -903,6 +903,18 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     return true;
 }
 
+void TCms::SortActionsBySysTabletPriority(
+    TPermissionRequest &request) const
+{
+    auto *actions = request.MutableActions();
+    std::stable_sort(actions->begin(), actions->end(),
+        [this](const TAction &a, const TAction &b) {
+            bool aHasSys = ClusterInfo->HostHasSysTablet(a.GetHost());
+            bool bHasSys = ClusterInfo->HostHasSysTablet(b.GetHost());
+            return !aHasSys && bHasSys;
+        });
+}
+
 bool TCms::TryToLockNode(const TAction& action,
                          const TActionOptions& opts,
                          const TNodeInfo& node,
@@ -2135,6 +2147,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
         }
     }
 
+    SortActionsBySysTabletPriority(rec);
+
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {
             if (State->HostMarkers.contains(action.GetHost())) {
@@ -2231,6 +2245,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
     TRequestInfo scheduled;
 
     auto requestStartTime = TInstant::Now();
+
+    SortActionsBySysTabletPriority(request.Request);
 
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {

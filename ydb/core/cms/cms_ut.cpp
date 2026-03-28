@@ -2941,6 +2941,150 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // Works as max availability
         env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
     }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrder)
+    {
+        // 8 nodes, 0 vdisks to simplify: no erasure/vdisk checks
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Build custom bootstrap config: only nodes 0-3 are sys tablet candidates.
+        // Nodes 4-7 have no sys tablets in bootstrap config.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 4; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        addTablet(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+        addTablet(NKikimrConfig::TBootstrap::CMS);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Request restart of sys-tablet nodes (0,1) and non-sys-tablet nodes (4,5)
+        // in interleaved order: sys, non-sys, sys, non-sys.
+        // Expect the response to have non-sys-tablet nodes first.
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 4);
+        // Non-sys-tablet nodes (4, 5) should come first (stable sort preserves relative order)
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(0).GetAction().GetHost(), ToString(env.GetNodeId(4)));
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(1).GetAction().GetHost(), ToString(env.GetNodeId(5)));
+        // Sys-tablet nodes (0, 1) come after
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(2).GetAction().GetHost(), ToString(env.GetNodeId(0)));
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(3).GetAction().GetHost(), ToString(env.GetNodeId(1)));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrderPartialWithLimit)
+    {
+        // 8 nodes, 0 vdisks. With sys-tablet limits, partial permission should
+        // grant non-sys-tablet nodes first, then grant sys-tablet nodes until limit.
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 6; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Request restart of all 8 nodes: 6 sys-tablet + 2 non-sys-tablet.
+        // In MODE_MAX_AVAILABILITY, limit is ~N/2 = 3 sys-tablet nodes can be locked.
+        // Non-sys-tablet nodes (6, 7) should get permission first,
+        // then 3 sys-tablet nodes get permission, remaining 3 sys-tablet nodes get scheduled.
+        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        // 2 non-sys-tablet + 3 sys-tablet = 5 permissions
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
+        // First two permissions should be for non-sys-tablet nodes
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(0).GetAction().GetHost(), ToString(env.GetNodeId(6)));
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(1).GetAction().GetHost(), ToString(env.GetNodeId(7)));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrderScheduledRequest)
+    {
+        // Verify sorting also works for scheduled (rolling) requests on re-check.
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 6; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Request restart of all 8 nodes with schedule + partial.
+        // First round: non-sys-tablet nodes + some sys-tablet nodes get permission.
+        // Remaining sys-tablet nodes get scheduled.
+        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        // Mark all granted permissions as done
+        for (size_t i = 0; i < static_cast<size_t>(resp.PermissionsSize()); ++i) {
+            env.CheckDonePermission("user", resp.GetPermissions(i).GetId());
+        }
+
+        // Now check the scheduled request: the remaining 3 sys-tablet nodes
+        // should all get permission since the previous locks are released.
+        auto resp2 = env.CheckRequest("user", resp.GetRequestId(), false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW, 3);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 3);
+    }
 }
 
 }

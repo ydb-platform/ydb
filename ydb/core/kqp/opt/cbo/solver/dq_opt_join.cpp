@@ -179,19 +179,15 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             std::unordered_set<std::string>(hint.JoinLabels.begin(), hint.JoinLabels.end()) ==
             std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
         ) {
-            // hint.Algo is NKikimr::NKqp::EJoinAlgoType; TEquiJoinLinkSettings::JoinAlgo is NYql::EJoinAlgoType.
-            // Both enums have identical integer values — static_cast is safe.
-            linkSettings.JoinAlgo = static_cast<NYql::EJoinAlgoType>(hint.Algo);
+            linkSettings.JoinAlgo = hint.Algo;
             hint.Applied = true;
         }
     }
-    // Convert YQL linkSettings.JoinAlgo to KQP type for comparisons against KQP enum values.
-    const EJoinAlgoType kqpJoinAlgo = static_cast<EJoinAlgoType>(linkSettings.JoinAlgo);
-    YQL_ENSURE(kqpJoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
+    YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
 
-    if (kqpJoinAlgo == EJoinAlgoType::MapJoin) {
+    if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
         mode = EHashJoinMode::Map;
-    } else if (kqpJoinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
         mode = EHashJoinMode::GraceAndSelf;
     }
 
@@ -264,7 +260,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
-    bool needAnyJoinFallback = kqpJoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode);
+    bool needAnyJoinFallback = linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode);
 
     auto dqJoinBuilder =
         Build<TDqJoin>(ctx, joinTuple.Pos())
@@ -339,7 +335,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             .Add(std::move(shuffleRhsBy))
             .Build();
 
-    if ((kqpJoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.JoinAlgoOptions.empty())) {
+    if ((linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.JoinAlgoOptions.empty())) {
         auto dqJoin = dqJoinBuilder.Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {

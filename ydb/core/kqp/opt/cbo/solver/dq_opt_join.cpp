@@ -1,5 +1,6 @@
 #include "dq_opt_join.h"
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <yql/essentials/core/yql_cost_function.h>
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -15,6 +16,32 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
+
+EJoinAlgoType JoinAlgoFromYql(NYql::EJoinAlgoType yqlAlgo) {
+    switch (yqlAlgo) {
+        case NYql::EJoinAlgoType::Undefined:        return EJoinAlgoType::Undefined;
+        case NYql::EJoinAlgoType::LookupJoin:       return EJoinAlgoType::LookupJoin;
+        case NYql::EJoinAlgoType::LookupJoinReverse:return EJoinAlgoType::LookupJoinReverse;
+        case NYql::EJoinAlgoType::MapJoin:          return EJoinAlgoType::MapJoin;
+        case NYql::EJoinAlgoType::GraceJoin:        return EJoinAlgoType::GraceJoin;
+        case NYql::EJoinAlgoType::StreamLookupJoin: return EJoinAlgoType::StreamLookupJoin;
+        case NYql::EJoinAlgoType::MergeJoin:        return EJoinAlgoType::MergeJoin;
+    }
+    Y_ABORT("Unknown NYql::EJoinAlgoType value: %d", static_cast<int>(yqlAlgo));
+}
+
+NYql::EJoinAlgoType JoinAlgoToYql(EJoinAlgoType kqpAlgo) {
+    switch (kqpAlgo) {
+        case EJoinAlgoType::Undefined:        return NYql::EJoinAlgoType::Undefined;
+        case EJoinAlgoType::LookupJoin:       return NYql::EJoinAlgoType::LookupJoin;
+        case EJoinAlgoType::LookupJoinReverse:return NYql::EJoinAlgoType::LookupJoinReverse;
+        case EJoinAlgoType::MapJoin:          return NYql::EJoinAlgoType::MapJoin;
+        case EJoinAlgoType::GraceJoin:        return NYql::EJoinAlgoType::GraceJoin;
+        case EJoinAlgoType::StreamLookupJoin: return NYql::EJoinAlgoType::StreamLookupJoin;
+        case EJoinAlgoType::MergeJoin:        return NYql::EJoinAlgoType::MergeJoin;
+    }
+    Y_ABORT("Unknown NKikimr::NKqp::EJoinAlgoType value: %d", static_cast<int>(kqpAlgo));
+}
 
 namespace {
 
@@ -174,20 +201,22 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
 
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    EJoinAlgoType joinAlgo = JoinAlgoFromYql(linkSettings.JoinAlgo);
     for (auto& hint: hints.JoinAlgoHints->Hints) {
         if (
             std::unordered_set<std::string>(hint.JoinLabels.begin(), hint.JoinLabels.end()) ==
             std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
         ) {
-            linkSettings.JoinAlgo = hint.Algo;
+            joinAlgo = hint.Algo;
+            linkSettings.JoinAlgo = JoinAlgoToYql(joinAlgo);
             hint.Applied = true;
         }
     }
-    YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
+    YQL_ENSURE(joinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
 
-    if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+    if (joinAlgo == EJoinAlgoType::MapJoin) {
         mode = EHashJoinMode::Map;
-    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
         mode = EHashJoinMode::GraceAndSelf;
     }
 
@@ -220,7 +249,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
     leftJoinKeyNames.reserve(joinKeysCount);
     TVector<TCoAtom> rightJoinKeyNames;
     rightJoinKeyNames.reserve(joinKeysCount);
-    auto joinAlgo = BuildAtom(ToString(linkSettings.JoinAlgo), joinTuple.Pos(), ctx).Ptr();
+    auto joinAlgoAtom = BuildAtom(ToString(joinAlgo), joinTuple.Pos(), ctx).Ptr();
 
     auto joinKeysBuilder = Build<TDqJoinKeyTupleList>(ctx, left->Input.Pos());
 
@@ -260,7 +289,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
-    bool needAnyJoinFallback = linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode);
+    bool needAnyJoinFallback = joinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode);
 
     auto dqJoinBuilder =
         Build<TDqJoin>(ctx, joinTuple.Pos())
@@ -276,7 +305,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             .RightJoinKeyNames()
                 .Add(rightJoinKeyNames)
                 .Build()
-            .JoinAlgo(joinAlgo);
+            .JoinAlgo(joinAlgoAtom);
 
     auto getShuffleByExprListFromSettings = [&](const TVector<NYql::NDq::TJoinColumn>& shuffleBy) -> TExprNode::TListType {
         TExprNode::TListType shuffleByExprList;
@@ -335,7 +364,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             .Add(std::move(shuffleRhsBy))
             .Build();
 
-    if ((linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.JoinAlgoOptions.empty())) {
+    if ((joinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode)) || !(leftAny || rightAny || !linkSettings.JoinAlgoOptions.empty())) {
         auto dqJoin = dqJoinBuilder.Done();
         return TJoinInputDesc(Nothing(), dqJoin, std::move(resultKeys));
     } else {

@@ -19,12 +19,29 @@
 // TExprContext lives in yql/essentials/core — forward-declare it.
 namespace NYql { struct TExprContext; }
 
-#include <yql/essentials/core/yql_cost_function.h>
-
 namespace NKikimr::NKqp {
 
-using NYql::EJoinAlgoType;
-using NYql::AllJoinAlgos;
+// Independent fork of NYql::EJoinAlgoType (yql/essentials/core/yql_cost_function.h).
+// Enumerator NAMES must match for FromString/ToString compatibility.
+// Integer values need NOT match — boundary conversions use switch/case (see dq_opt_join.cpp).
+enum class EJoinAlgoType {
+    Undefined,
+    LookupJoin,
+    LookupJoinReverse,
+    MapJoin,
+    GraceJoin,
+    StreamLookupJoin,
+    MergeJoin
+};
+
+// StreamLookupJoin is not a subject for CBO and not included here.
+static constexpr auto AllJoinAlgos = {
+    EJoinAlgoType::LookupJoin,
+    EJoinAlgoType::LookupJoinReverse,
+    EJoinAlgoType::MapJoin,
+    EJoinAlgoType::GraceJoin,
+    EJoinAlgoType::MergeJoin
+};
 
 /**
  * OptimizerNodes are the internal representations of operators inside the

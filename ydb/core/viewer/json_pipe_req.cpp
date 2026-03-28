@@ -454,6 +454,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
             case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
                 response.Span.Attribute("request_type", "AutocompleteRequest");
                 break;
+            case NKikimrViewer::TEvViewerRequest::kInMemoryMetricsRequest:
+                response.Span.Attribute("request_type", "InMemoryMetricsRequest");
+                break;
             default:
                 response.Span.Attribute("request_type", ::ToString(static_cast<int>(ev->Record.Request_case())));
                 break;
@@ -525,6 +528,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
                 break;
             case NKikimrViewer::TEvViewerRequest::kAutocompleteRequest:
                 requestTypeString = "AutocompleteRequest";
+                break;
+            case NKikimrViewer::TEvViewerRequest::kInMemoryMetricsRequest:
+                requestTypeString = "InMemoryMetricsRequest";
                 break;
             default:
                 requestTypeString = ::ToString(static_cast<int>(requestType));

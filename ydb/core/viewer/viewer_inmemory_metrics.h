@@ -5,8 +5,10 @@
 #include "log.h"
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
 #include <util/generic/hash.h>
@@ -427,8 +429,7 @@ namespace {
         return {};
     }
 
-    inline bool MatchPrometheusLabelMatcher(const TLineSnapshot& line, const TPrometheusLabelMatcher& matcher, TString& error) {
-        const TString actual = FindLineLabelValue(line, matcher.Name);
+    inline bool MatchPrometheusLabelValue(TStringBuf actual, const TPrometheusLabelMatcher& matcher, TString& error) {
         switch (matcher.Op) {
             case EPrometheusLabelMatchOp::Equal:
                 return actual == matcher.Value;
@@ -437,7 +438,8 @@ namespace {
             case EPrometheusLabelMatchOp::Regex:
             case EPrometheusLabelMatchOp::NotRegex:
                 try {
-                    const bool matches = std::regex_match(actual.c_str(), std::regex(matcher.Value.c_str()));
+                    const std::string actualString(actual.data(), actual.size());
+                    const bool matches = std::regex_match(actualString, std::regex(matcher.Value.c_str()));
                     return matcher.Op == EPrometheusLabelMatchOp::Regex ? matches : !matches;
                 } catch (const std::regex_error& e) {
                     error = TStringBuilder() << "invalid regex for label '" << matcher.Name << "': " << e.what();
@@ -445,6 +447,25 @@ namespace {
                 }
         }
         return false;
+    }
+
+    inline bool MatchPrometheusLabelMatcher(const TLineSnapshot& line, const TPrometheusLabelMatcher& matcher, TString& error) {
+        const TString actual = FindLineLabelValue(line, matcher.Name);
+        return MatchPrometheusLabelValue(actual, matcher, error);
+    }
+
+    inline TString SerializeJsonValue(const NJson::TJsonValue& json, bool sortKeys = false) {
+        TStringStream content;
+        NJson::WriteJson(&content, &json, {
+            .FormatOutput = false,
+            .SortKeys = sortKeys,
+            .ValidateUtf8 = false,
+        });
+        return content.Str();
+    }
+
+    inline bool ParseJsonValue(TStringBuf raw, NJson::TJsonValue& json) {
+        return NJson::ReadJsonTree(raw, &json, false);
     }
 
     inline bool MatchPrometheusSelector(const TLineSnapshot& line, const TPrometheusVectorSelector& selector, TString& error) {
@@ -467,6 +488,10 @@ namespace {
     inline void SortAndUniqueStrings(TVector<TString>& values) {
         Sort(values);
         values.erase(std::unique(values.begin(), values.end()), values.end());
+    }
+
+    inline TString BuildCanonicalMetricKey(const NJson::TJsonValue& metric) {
+        return SerializeJsonValue(metric, true);
     }
 
     inline std::optional<ui32> TryGetExactNodeIdMatcher(const TPrometheusVectorSelector& selector) {
@@ -962,160 +987,36 @@ private:
     }
 };
 
-class TJsonInMemoryMetricsPrometheus : public TViewerPipeClient {
-    using TThis = TJsonInMemoryMetricsPrometheus;
-    using TBase = TViewerPipeClient;
-    using TBase::ReplyAndPassAway;
-
-    struct TSelectedSeries {
-        const TLineSnapshot* Line = nullptr;
+class TInMemoryMetricsPrometheusProcessor {
+public:
+    struct TResult {
+        bool Success = true;
+        NJson::TJsonValue Json;
     };
 
-public:
-    TJsonInMemoryMetricsPrometheus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TViewerPipeClient(viewer, ev)
-    {
-        NeedRedirect = false;
-        CheckDatabase = false;
+    TInMemoryMetricsPrometheusProcessor(TString path, const TCgiParameters& params)
+        : Path(std::move(path))
+        , Params(params)
+    {}
+
+    const TString& GetPath() const {
+        return Path;
     }
 
-    void Bootstrap() override {
-        if (const auto forwardResponse = MaybeForwardToExactNode()) {
-            return ReplyAndPassAway(*forwardResponse);
-        }
-
-        const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
-        if (!inMemoryMetrics) {
-            return ReplyAndPassAway(BuildErrorResponse("execution", "In-memory metrics subsystem is not registered"));
-        }
-
-        ReplyAndPassAway(HandleRequest(*inMemoryMetrics));
+    bool SupportsFanout() const {
+        return Path == "/viewer/inmemory_metrics/prometheus/api/v1/query"
+            || Path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range"
+            || Path == "/viewer/inmemory_metrics/prometheus/api/v1/series"
+            || Path == "/viewer/inmemory_metrics/prometheus/api/v1/labels"
+            || Path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values"
+            || (Path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && Path.EndsWith("/values"));
     }
 
-    void ReplyAndPassAway() override {}
-
-    static YAML::Node GetSwagger() {
-        TSimpleYamlBuilder yaml({
-            .Method = "get",
-            .Tag = "viewer",
-            .Summary = "Prometheus-compatible in-memory metrics API",
-            .Description = "Returns selector-only Prometheus-compatible responses for in-memory metrics",
-        });
-        yaml.AddParameter({
-            .Name = "query",
-            .Description = "Prometheus vector selector",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "match[]",
-            .Description = "Prometheus series selector",
-            .Type = "string",
-        });
-        yaml.AddParameter({
-            .Name = "start",
-            .Description = "range start timestamp in seconds",
-            .Type = "number",
-        });
-        yaml.AddParameter({
-            .Name = "end",
-            .Description = "range end timestamp in seconds",
-            .Type = "number",
-        });
-        yaml.AddParameter({
-            .Name = "time",
-            .Description = "evaluation timestamp in seconds",
-            .Type = "number",
-        });
-        yaml.AddParameter({
-            .Name = "step",
-            .Description = "query range step",
-            .Type = "string",
-        });
-        return yaml;
-    }
-
-private:
-    TString GetRequestPath() const {
-        if (Event) {
-            return TString("/") + Event->Get()->Request.GetPage()->Path + Event->Get()->Request.GetPathInfo();
-        }
-        if (HttpEvent) {
-            return TString(HttpEvent->Get()->Request->GetURI());
-        }
-        return {};
-    }
-
-    TString GetLabelNameFromPath() const {
-        static constexpr TStringBuf Prefix = "/viewer/inmemory_metrics/prometheus/api/v1/label/";
-        static constexpr TStringBuf Suffix = "/values";
-        const TString path = GetRequestPath();
-        if (!path.StartsWith(Prefix) || !path.EndsWith(Suffix)) {
-            return {};
-        }
-        return path.substr(Prefix.size(), path.size() - Prefix.size() - Suffix.size());
-    }
-
-    TString BuildErrorResponse(TStringBuf errorType, TStringBuf message) {
-        NJson::TJsonValue json;
-        json["status"] = "error";
-        json["errorType"] = TString(errorType);
-        json["error"] = TString(message);
-
-        TStringStream content;
-        NJson::WriteJson(&content, &json, {
-            .FormatOutput = false,
-            .SortKeys = false,
-            .ValidateUtf8 = false,
-        });
-        return GetHTTPBADREQUEST("application/json", content.Str());
-    }
-
-    TString HandleRequest(const TInMemoryMetricsRegistry& inMemoryMetrics) {
-        const TString path = GetRequestPath();
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/labels") {
-            return HandleLabels(inMemoryMetrics);
-        }
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/series") {
-            return HandleSeries(inMemoryMetrics);
-        }
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
-            return HandleQuery(inMemoryMetrics);
-        }
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range") {
-            return HandleQueryRange(inMemoryMetrics);
-        }
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values") {
-            return HandleLabelValues(inMemoryMetrics, "__name__");
-        }
-        if (path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && path.EndsWith("/values")) {
-            const TString labelName = GetLabelNameFromPath();
-            if (labelName.empty()) {
-                return BuildErrorResponse("bad_data", "invalid label path");
-            }
-            return HandleLabelValues(inMemoryMetrics, labelName);
-        }
-
-        return BuildErrorResponse("bad_data", "unsupported endpoint");
-    }
-
-    std::optional<TString> MaybeForwardToExactNode() {
-        TString error;
-        const auto exactNodeId = GetRequestedExactNodeId(error);
-        if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
-        }
-        if (!exactNodeId || *exactNodeId == TActivationContext::ActorSystem()->NodeId) {
-            return {};
-        }
-        return MakeForward({*exactNodeId});
-    }
-
-    std::optional<ui32> GetRequestedExactNodeId(TString& error) const {
+    TVector<TPrometheusVectorSelector> GetRoutingSelectors(TString& error) const {
         error.clear();
 
-        const TString path = GetRequestPath();
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query"
-                || path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query"
+                || Path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
         {
             const TString query = Params.Get("query");
             if (query.empty()) {
@@ -1126,34 +1027,67 @@ private:
             if (!ParseSelectorParam(query, selector, error)) {
                 return {};
             }
-            return TryGetExactNodeIdMatcher(selector);
+            return {std::move(selector)};
         }
 
-        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/series"
-                || path == "/viewer/inmemory_metrics/prometheus/api/v1/labels"
-                || path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values"
-                || (path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && path.EndsWith("/values")))
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/series"
+                || Path == "/viewer/inmemory_metrics/prometheus/api/v1/labels"
+                || Path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values"
+                || (Path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && Path.EndsWith("/values")))
         {
-            const auto selectors = ParseMatchers("match[]", error);
-            if (!error.empty() || selectors.empty()) {
-                return {};
-            }
-
-            std::optional<ui32> nodeId;
-            for (const auto& selector : selectors) {
-                const auto selectorNodeId = TryGetExactNodeIdMatcher(selector);
-                if (!selectorNodeId) {
-                    return {};
-                }
-                if (nodeId && *nodeId != *selectorNodeId) {
-                    return {};
-                }
-                nodeId = selectorNodeId;
-            }
-            return nodeId;
+            return ParseMatchers("match[]", error);
         }
 
         return {};
+    }
+
+    TResult Execute(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/labels") {
+            return HandleLabels(inMemoryMetrics);
+        }
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/series") {
+            return HandleSeries(inMemoryMetrics);
+        }
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            return HandleQuery(inMemoryMetrics);
+        }
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range") {
+            return HandleQueryRange(inMemoryMetrics);
+        }
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values") {
+            return HandleLabelValues(inMemoryMetrics, "__name__");
+        }
+        if (Path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && Path.EndsWith("/values")) {
+            const TString labelName = GetLabelNameFromPath();
+            if (labelName.empty()) {
+                return MakeError("bad_data", "invalid label path");
+            }
+            return HandleLabelValues(inMemoryMetrics, labelName);
+        }
+
+        return MakeError("bad_data", "unsupported endpoint");
+    }
+
+private:
+    TString Path;
+    const TCgiParameters& Params;
+
+    static TResult MakeError(TStringBuf errorType, TStringBuf message) {
+        TResult result;
+        result.Success = false;
+        result.Json["status"] = "error";
+        result.Json["errorType"] = TString(errorType);
+        result.Json["error"] = TString(message);
+        return result;
+    }
+
+    TString GetLabelNameFromPath() const {
+        static constexpr TStringBuf Prefix = "/viewer/inmemory_metrics/prometheus/api/v1/label/";
+        static constexpr TStringBuf Suffix = "/values";
+        if (!Path.StartsWith(Prefix) || !Path.EndsWith(Suffix)) {
+            return {};
+        }
+        return Path.substr(Prefix.size(), Path.size() - Prefix.size() - Suffix.size());
     }
 
     std::optional<double> GetFloatParam(TStringBuf name) const {
@@ -1168,7 +1102,6 @@ private:
             return false;
         }
         if (query.find_first_of("()[]+-/*") != TStringBuf::npos && query.find('{') == TStringBuf::npos) {
-            // Keep the contract explicit: bare metric name is fine, anything else is not.
             const TStringBuf trimmed = StripString(query);
             if (trimmed.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_:") != TStringBuf::npos) {
                 error = "only selector-only Prometheus queries are supported";
@@ -1239,17 +1172,17 @@ private:
         return TStringBuilder() << value;
     }
 
-    TString HandleLabels(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+    TResult HandleLabels(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         TString error;
         const auto selectors = ParseMatchers("match[]", error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
         auto selected = SelectSeries(lines, selectors, error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
 
         TVector<TString> labels;
@@ -1262,27 +1195,27 @@ private:
         }
         SortAndUniqueStrings(labels);
 
-        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        TResult result;
+        result.Json["status"] = "success";
+        NJson::TJsonValue& data = result.Json["data"];
+        data.SetType(NJson::JSON_ARRAY);
         for (const auto& label : labels) {
             data.AppendValue(label);
         }
-        NJson::TJsonValue json;
-        json["status"] = "success";
-        json["data"] = std::move(data);
-        return GetHTTPOKJSON(json);
+        return result;
     }
 
-    TString HandleLabelValues(const TInMemoryMetricsRegistry& inMemoryMetrics, TStringBuf labelName) {
+    TResult HandleLabelValues(const TInMemoryMetricsRegistry& inMemoryMetrics, TStringBuf labelName) const {
         TString error;
         const auto selectors = ParseMatchers("match[]", error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
         auto selected = SelectSeries(lines, selectors, error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
 
         TVector<TString> values;
@@ -1294,49 +1227,49 @@ private:
         }
         SortAndUniqueStrings(values);
 
-        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        TResult result;
+        result.Json["status"] = "success";
+        NJson::TJsonValue& data = result.Json["data"];
+        data.SetType(NJson::JSON_ARRAY);
         for (const auto& value : values) {
             data.AppendValue(value);
         }
-        NJson::TJsonValue json;
-        json["status"] = "success";
-        json["data"] = std::move(data);
-        return GetHTTPOKJSON(json);
+        return result;
     }
 
-    TString HandleSeries(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+    TResult HandleSeries(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         TString error;
         const auto selectors = ParseMatchers("match[]", error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
         auto selected = SelectSeries(lines, selectors, error);
         if (!error.empty()) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
 
-        NJson::TJsonValue data(NJson::JSON_ARRAY);
+        TResult result;
+        result.Json["status"] = "success";
+        NJson::TJsonValue& data = result.Json["data"];
+        data.SetType(NJson::JSON_ARRAY);
         for (const auto* line : selected) {
             data.AppendValue(BuildMetricObject(*line));
         }
-        NJson::TJsonValue json;
-        json["status"] = "success";
-        json["data"] = std::move(data);
-        return GetHTTPOKJSON(json);
+        return result;
     }
 
-    TString HandleQuery(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+    TResult HandleQuery(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         const TString query = Params.Get("query");
         if (query.empty()) {
-            return BuildErrorResponse("bad_data", "query is required");
+            return MakeError("bad_data", "query is required");
         }
 
         TPrometheusVectorSelector selector;
         TString error;
         if (!ParseSelectorParam(query, selector, error)) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
 
         const double evalTime = GetFloatParam("time").value_or(TInstant::Now().Seconds());
@@ -1344,13 +1277,18 @@ private:
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
-        NJson::TJsonValue result(NJson::JSON_ARRAY);
+
+        TResult result;
+        result.Json["status"] = "success";
+        result.Json["data"]["resultType"] = "vector";
+        NJson::TJsonValue& output = result.Json["data"]["result"];
+        output.SetType(NJson::JSON_ARRAY);
 
         for (const auto& line : lines) {
             const size_t prevErrorSize = error.size();
             const bool matched = MatchPrometheusSelector(line, selector, error);
             if (!error.empty() && error.size() != prevErrorSize) {
-                return BuildErrorResponse("bad_data", error);
+                return MakeError("bad_data", error);
             }
             if (!matched) {
                 continue;
@@ -1374,7 +1312,7 @@ private:
                 continue;
             }
 
-            NJson::TJsonValue& item = result.AppendValue({});
+            NJson::TJsonValue& item = output.AppendValue({});
             item["metric"] = BuildMetricObject(line);
             NJson::TJsonValue& value = item["value"];
             value.SetType(NJson::JSON_ARRAY);
@@ -1382,31 +1320,27 @@ private:
             value.AppendValue(FormatSampleValue(lastPoint->Value));
         }
 
-        NJson::TJsonValue json;
-        json["status"] = "success";
-        json["data"]["resultType"] = "vector";
-        json["data"]["result"] = std::move(result);
-        return GetHTTPOKJSON(json);
+        return result;
     }
 
-    TString HandleQueryRange(const TInMemoryMetricsRegistry& inMemoryMetrics) {
+    TResult HandleQueryRange(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         const TString query = Params.Get("query");
         if (query.empty()) {
-            return BuildErrorResponse("bad_data", "query is required");
+            return MakeError("bad_data", "query is required");
         }
         const auto start = GetFloatParam("start");
         const auto end = GetFloatParam("end");
         if (!start || !end) {
-            return BuildErrorResponse("bad_data", "start and end are required");
+            return MakeError("bad_data", "start and end are required");
         }
         if (*end < *start) {
-            return BuildErrorResponse("bad_data", "end must be greater than or equal to start");
+            return MakeError("bad_data", "end must be greater than or equal to start");
         }
 
         TPrometheusVectorSelector selector;
         TString error;
         if (!ParseSelectorParam(query, selector, error)) {
-            return BuildErrorResponse("bad_data", error);
+            return MakeError("bad_data", error);
         }
 
         const ui64 startTs = static_cast<ui64>(*start);
@@ -1414,13 +1348,18 @@ private:
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
-        NJson::TJsonValue result(NJson::JSON_ARRAY);
+
+        TResult result;
+        result.Json["status"] = "success";
+        result.Json["data"]["resultType"] = "matrix";
+        NJson::TJsonValue& output = result.Json["data"]["result"];
+        output.SetType(NJson::JSON_ARRAY);
 
         for (const auto& line : lines) {
             const size_t prevErrorSize = error.size();
             const bool matched = MatchPrometheusSelector(line, selector, error);
             if (!error.empty() && error.size() != prevErrorSize) {
-                return BuildErrorResponse("bad_data", error);
+                return MakeError("bad_data", error);
             }
             if (!matched) {
                 continue;
@@ -1443,16 +1382,443 @@ private:
                 continue;
             }
 
-            NJson::TJsonValue& item = result.AppendValue({});
+            NJson::TJsonValue& item = output.AppendValue({});
             item["metric"] = BuildMetricObject(line);
             item["values"] = std::move(values);
         }
 
+        return result;
+    }
+};
+
+class TJsonInMemoryMetricsPrometheus : public TViewerPipeClient {
+    using TThis = TJsonInMemoryMetricsPrometheus;
+    using TBase = TViewerPipeClient;
+    using TBase::ReplyAndPassAway;
+
+    TRequestResponse<TEvInterconnect::TEvNodesInfo> NodesInfo;
+    THashMap<ui32, TRequestResponse<TEvViewer::TEvViewerResponse>> RemoteResponses;
+    TVector<TPrometheusVectorSelector> RoutingSelectors;
+
+public:
+    TJsonInMemoryMetricsPrometheus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+        : TViewerPipeClient(viewer, ev)
+    {
+        NeedRedirect = false;
+        CheckDatabase = false;
+    }
+
+    void Bootstrap() override {
+        TString error;
+        const TInMemoryMetricsPrometheusProcessor processor(GetRequestPath(), Params);
+        RoutingSelectors = processor.GetRoutingSelectors(error);
+        if (!error.empty()) {
+            return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
+        }
+
+        if (const auto exactNodeId = GetRequestedExactNodeId()) {
+            if (*exactNodeId != TActivationContext::ActorSystem()->NodeId) {
+                return ReplyAndPassAway(MakeForward({*exactNodeId}));
+            }
+        } else if (processor.SupportsFanout()) {
+            NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+            return Become(&TThis::StateFanout, Timeout, new TEvents::TEvWakeup());
+        }
+
+        const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
+        if (!inMemoryMetrics) {
+            return ReplyAndPassAway(BuildErrorResponse("execution", "In-memory metrics subsystem is not registered"));
+        }
+
+        ReplyAndPassAway(BuildHttpResponse(processor.Execute(*inMemoryMetrics)));
+    }
+
+    void ReplyAndPassAway() override {}
+
+    static YAML::Node GetSwagger() {
+        TSimpleYamlBuilder yaml({
+            .Method = "get",
+            .Tag = "viewer",
+            .Summary = "Prometheus-compatible in-memory metrics API",
+            .Description = "Returns selector-only Prometheus-compatible responses for in-memory metrics",
+        });
+        yaml.AddParameter({
+            .Name = "query",
+            .Description = "Prometheus vector selector",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "match[]",
+            .Description = "Prometheus series selector",
+            .Type = "string",
+        });
+        yaml.AddParameter({
+            .Name = "start",
+            .Description = "range start timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "end",
+            .Description = "range end timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "time",
+            .Description = "evaluation timestamp in seconds",
+            .Type = "number",
+        });
+        yaml.AddParameter({
+            .Name = "step",
+            .Description = "query range step",
+            .Type = "string",
+        });
+        return yaml;
+    }
+
+private:
+    STATEFN(StateFanout) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
+            hFunc(TEvViewer::TEvViewerResponse, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleFanoutTimeout);
+        }
+    }
+
+    TString GetRequestPath() const {
+        if (Event) {
+            return TString("/") + Event->Get()->Request.GetPage()->Path + Event->Get()->Request.GetPathInfo();
+        }
+        if (HttpEvent) {
+            return TString(HttpEvent->Get()->Request->GetURI());
+        }
+        return {};
+    }
+
+    TString GetRawQueryString() const {
+        if (Event) {
+            return TString(TStringBuf(Event->Get()->Request.GetUri()).After('?'));
+        }
+        if (HttpEvent) {
+            return TString(TStringBuf(HttpEvent->Get()->Request->GetURI()).After('?'));
+        }
+        return {};
+    }
+
+    TString BuildErrorResponse(TStringBuf errorType, TStringBuf message) {
+        NJson::TJsonValue json;
+        json["status"] = "error";
+        json["errorType"] = TString(errorType);
+        json["error"] = TString(message);
+        return GetHTTPBADREQUEST("application/json", SerializeJsonValue(json));
+    }
+
+    TString BuildHttpResponse(const TInMemoryMetricsPrometheusProcessor::TResult& result) {
+        const TString json = SerializeJsonValue(result.Json);
+        if (!result.Success) {
+            return GetHTTPBADREQUEST("application/json", json);
+        }
+        return GetHTTPOKJSON(json);
+    }
+
+    std::optional<ui32> GetRequestedExactNodeId() const {
+        if (RoutingSelectors.empty()) {
+            return {};
+        }
+
+        std::optional<ui32> nodeId;
+        for (const auto& selector : RoutingSelectors) {
+            const auto selectorNodeId = TryGetExactNodeIdMatcher(selector);
+            if (!selectorNodeId) {
+                return {};
+            }
+            if (nodeId && *nodeId != *selectorNodeId) {
+                return {};
+            }
+            nodeId = selectorNodeId;
+        }
+        return nodeId;
+    }
+
+    bool SelectorMatchesNodeId(const TPrometheusVectorSelector& selector, ui32 nodeId, TString& error) const {
+        const TString actual = ToString(nodeId);
+        bool hasNodeMatcher = false;
+        for (const auto& matcher : selector.Matchers) {
+            if (matcher.Name != "node_id") {
+                continue;
+            }
+            hasNodeMatcher = true;
+            if (!MatchPrometheusLabelValue(actual, matcher, error)) {
+                return false;
+            }
+            if (!error.empty()) {
+                return false;
+            }
+        }
+        return !hasNodeMatcher || error.empty();
+    }
+
+    bool ShouldQueryNode(ui32 nodeId, TString& error) const {
+        error.clear();
+        if (RoutingSelectors.empty()) {
+            return true;
+        }
+        for (const auto& selector : RoutingSelectors) {
+            const bool matched = SelectorMatchesNodeId(selector, nodeId, error);
+            if (!error.empty()) {
+                return false;
+            }
+            if (matched) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
+        if (!NodesInfo.Set(std::move(ev))) {
+            return;
+        }
+
+        TString error;
+        THashSet<ui32> uniqueNodes;
+        for (const auto& node : NodesInfo->Nodes) {
+            if (ShouldQueryNode(node.NodeId, error)) {
+                uniqueNodes.insert(node.NodeId);
+            }
+        }
+        if (!error.empty()) {
+            return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
+        }
+
+        for (ui32 nodeId : uniqueNodes) {
+            if (nodeId == TActivationContext::ActorSystem()->NodeId) {
+                continue;
+            }
+
+            auto request = MakeHolder<TEvViewer::TEvViewerRequest>();
+            request->Record.MutableLocation()->AddNodeId(nodeId);
+            auto* inMemoryRequest = request->Record.MutableInMemoryMetricsRequest();
+            inMemoryRequest->SetPath(GetRequestPath());
+            inMemoryRequest->SetQuery(GetRawQueryString());
+
+            RemoteResponses.emplace(nodeId,
+                MakeRequestViewer(nodeId,
+                    request.Release(),
+                    IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
+        }
+
+        if (RemoteResponses.empty()) {
+            ReplyAndPassAway(BuildFanoutResponse(false));
+        }
+    }
+
+    void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
+        const ui32 nodeId = ev.Get()->Cookie;
+        auto it = RemoteResponses.find(nodeId);
+        if (it == RemoteResponses.end()) {
+            return;
+        }
+        if (it->second.Set(std::move(ev)) && AllRemoteResponsesDone()) {
+            ReplyAndPassAway(BuildFanoutResponse(false));
+        }
+    }
+
+    void HandleFanoutTimeout() {
+        ReplyAndPassAway(BuildFanoutResponse(true));
+    }
+
+    bool AllRemoteResponsesDone() const {
+        for (const auto& [_, response] : RemoteResponses) {
+            if (!response.IsDone()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    NJson::TJsonValue BuildEmptyMergedResponse() const {
+        const TString path = GetRequestPath();
         NJson::TJsonValue json;
         json["status"] = "success";
-        json["data"]["resultType"] = "matrix";
-        json["data"]["result"] = std::move(result);
-        return GetHTTPOKJSON(json);
+
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            json["data"]["resultType"] = "vector";
+            json["data"]["result"].SetType(NJson::JSON_ARRAY);
+            return json;
+        }
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range") {
+            json["data"]["resultType"] = "matrix";
+            json["data"]["result"].SetType(NJson::JSON_ARRAY);
+            return json;
+        }
+
+        json["data"].SetType(NJson::JSON_ARRAY);
+        return json;
+    }
+
+    void MergeResponseData(NJson::TJsonValue& merged, const NJson::TJsonValue& response) const {
+        const TString path = GetRequestPath();
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/labels"
+                || path == "/viewer/inmemory_metrics/prometheus/api/v1/label/__name__/values"
+                || (path.StartsWith("/viewer/inmemory_metrics/prometheus/api/v1/label/") && path.EndsWith("/values")))
+        {
+            THashSet<TString> seen;
+            TVector<TString> values;
+            auto collect = [&](const NJson::TJsonValue& value) {
+                for (const auto& item : value["data"].GetArray()) {
+                    const TString raw = item.GetStringRobust();
+                    if (seen.emplace(raw).second) {
+                        values.push_back(raw);
+                    }
+                }
+            };
+            collect(merged);
+            collect(response);
+            SortAndUniqueStrings(values);
+
+            NJson::TJsonValue data(NJson::JSON_ARRAY);
+            for (const auto& value : values) {
+                data.AppendValue(value);
+            }
+            merged["data"] = std::move(data);
+            return;
+        }
+
+        if (path == "/viewer/inmemory_metrics/prometheus/api/v1/series") {
+            THashMap<TString, NJson::TJsonValue> byKey;
+            auto collect = [&](const NJson::TJsonValue& value) {
+                for (const auto& item : value["data"].GetArray()) {
+                    byKey[BuildCanonicalMetricKey(item)] = item;
+                }
+            };
+            collect(merged);
+            collect(response);
+
+            TVector<TString> keys;
+            keys.reserve(byKey.size());
+            for (const auto& [key, _] : byKey) {
+                keys.push_back(key);
+            }
+            Sort(keys);
+
+            NJson::TJsonValue data(NJson::JSON_ARRAY);
+            for (const auto& key : keys) {
+                data.AppendValue(byKey.at(key));
+            }
+            merged["data"] = std::move(data);
+            return;
+        }
+
+        THashMap<TString, NJson::TJsonValue> byKey;
+        auto collect = [&](const NJson::TJsonValue& value) {
+            for (const auto& item : value["data"]["result"].GetArray()) {
+                const TString key = BuildCanonicalMetricKey(item["metric"]);
+                if (path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+                    byKey[key] = item;
+                    continue;
+                }
+
+                auto& target = byKey[key];
+                if (target.GetType() == NJson::JSON_UNDEFINED) {
+                    target = item;
+                    continue;
+                }
+
+                THashSet<ui64> timestamps;
+                NJson::TJsonValue values(NJson::JSON_ARRAY);
+                auto append = [&](const NJson::TJsonValue& source) {
+                    for (const auto& sourceValue : source["values"].GetArray()) {
+                        const ui64 ts = sourceValue[0].GetUIntegerRobust();
+                        if (timestamps.emplace(ts).second) {
+                            values.AppendValue(sourceValue);
+                        }
+                    }
+                };
+                append(target);
+                append(item);
+                target["values"] = std::move(values);
+            }
+        };
+        collect(merged);
+        collect(response);
+
+        TVector<TString> keys;
+        keys.reserve(byKey.size());
+        for (const auto& [key, _] : byKey) {
+            keys.push_back(key);
+        }
+        Sort(keys);
+
+        NJson::TJsonValue result(NJson::JSON_ARRAY);
+        for (const auto& key : keys) {
+            result.AppendValue(byKey.at(key));
+        }
+        merged["data"]["result"] = std::move(result);
+    }
+
+    TString BuildFanoutResponse(bool timedOut) {
+        const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
+        if (!inMemoryMetrics) {
+            return BuildErrorResponse("execution", "In-memory metrics subsystem is not registered");
+        }
+
+        TInMemoryMetricsPrometheusProcessor processor(GetRequestPath(), Params);
+        NJson::TJsonValue merged = BuildEmptyMergedResponse();
+        TVector<TString> warnings;
+
+        TString selfError;
+        const bool includeSelf = ShouldQueryNode(TActivationContext::ActorSystem()->NodeId, selfError);
+        if (!selfError.empty()) {
+            return BuildErrorResponse("bad_data", selfError);
+        }
+        if (includeSelf) {
+            const auto localResult = processor.Execute(*inMemoryMetrics);
+            if (!localResult.Success) {
+                return BuildHttpResponse(localResult);
+            }
+            MergeResponseData(merged, localResult.Json);
+        }
+
+        if (!NodesInfo.IsDone()) {
+            warnings.push_back("node discovery timed out; returning local response only");
+        } else if (!NodesInfo.IsOk()) {
+            warnings.push_back("failed to discover cluster nodes; returning local response only");
+        }
+
+        for (const auto& [nodeId, response] : RemoteResponses) {
+            if (!response.IsDone()) {
+                if (timedOut) {
+                    warnings.push_back(TStringBuilder() << "node " << nodeId << " did not respond before timeout");
+                }
+                continue;
+            }
+            if (!response.IsOk() || response->Record.Response_case() != NKikimrViewer::TEvViewerResponse::kInMemoryMetricsResponse) {
+                warnings.push_back(TStringBuilder() << "node " << nodeId << " returned invalid in-memory metrics response");
+                continue;
+            }
+
+            NJson::TJsonValue json;
+            if (!ParseJsonValue(response->Record.GetInMemoryMetricsResponse().GetJson(), json)) {
+                warnings.push_back(TStringBuilder() << "node " << nodeId << " returned malformed json");
+                continue;
+            }
+            if (json["status"].GetStringSafe() != "success") {
+                warnings.push_back(TStringBuilder() << "node " << nodeId << " returned error: " << json["error"].GetStringSafe());
+                continue;
+            }
+            MergeResponseData(merged, json);
+        }
+
+        if (!warnings.empty()) {
+            SortAndUniqueStrings(warnings);
+            NJson::TJsonValue& jsonWarnings = merged["warnings"];
+            jsonWarnings.SetType(NJson::JSON_ARRAY);
+            for (const auto& warning : warnings) {
+                jsonWarnings.AppendValue(warning);
+            }
+        }
+
+        return GetHTTPOKJSON(SerializeJsonValue(merged));
     }
 };
 

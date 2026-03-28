@@ -472,3 +472,95 @@ def test_inmemory_metrics_prometheus_query_routes_to_exact_remote_node(ydb_clust
         )
 
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
+def test_inmemory_metrics_prometheus_node_id_values_fanout(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    source_base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    target_base_url = f"http://localhost:{ydb_cluster.nodes[2].mon_port}"
+    target = wait_for_target(
+        target_base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+    remote_node_id = extract_label(target, "node_id")
+
+    last_node_ids = None
+
+    def node_ids_ready():
+        nonlocal last_node_ids
+        data = get_prometheus_json(source_base_url, "/label/node_id/values")
+        if not data:
+            return False
+
+        last_node_ids = data
+        logger.info("prometheus multi-node node_id labels: %s", last_node_ids)
+        return remote_node_id in last_node_ids
+
+    assert wait_for(node_ids_ready, timeout_seconds=30, step_seconds=1.0), last_node_ids
+
+
+def test_inmemory_metrics_prometheus_series_fanout_without_exact_node_id(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    last_series = None
+
+    def series_ready():
+        nonlocal last_series
+        data = get_prometheus_json(
+            base_url,
+            "/series",
+            params={"match[]": TARGET},
+        )
+        if not data:
+            return False
+
+        last_series = data
+        logger.info("prometheus multi-node series: %s", last_series)
+        node_ids = {
+            series.get("node_id")
+            for series in last_series
+            if series.get("__name__") == TARGET and series.get("node_id")
+        }
+        return len(node_ids) >= 2
+
+    assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
+
+
+def test_inmemory_metrics_prometheus_query_range_fanout_without_exact_node_id(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    last_query_range = None
+    end = int(time.time())
+    start = end - 300
+
+    def query_range_ready():
+        nonlocal last_query_range
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": TARGET,
+                "start": start,
+                "end": end,
+                "step": 30,
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus multi-node query_range result: %s", last_query_range)
+        node_ids = {
+            item.get("metric", {}).get("node_id")
+            for item in last_query_range.get("result", [])
+            if item.get("metric", {}).get("__name__") == TARGET and item.get("values")
+        }
+        return len(node_ids) >= 2
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range

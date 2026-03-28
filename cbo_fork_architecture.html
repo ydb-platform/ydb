@@ -1508,17 +1508,17 @@ flowchart TD
 sequenceDiagram
     participant Svc as Statistics Service
     participant KqpCtx as TKqpStatsStore
-    participant Tx as kqp_statistics_transformer.cpp
+    participant Tx as kqp_statistics_transformer
     participant TypeCtx as TTypeAnnotationContext
 
     Note over Svc,TypeCtx: Phase 1 - pre-populate KqpStats from the statistics service
-    Svc->>KqpCtx: Pre-populate per-table TOptimizerStatistics<br/>(Nrows, Nattrs, ByteSize, cost model params)
-    Note over Tx: For each TKqpReadTable / TKqpReadTableRanges node
-    Tx->>KqpCtx: Read TOptimizerStatistics from KqpStats[node.UniqueId()]
-    Tx->>TypeCtx: Write NYql::TOptimizerStatistics to StatisticsMap[node]
-    Note over Tx: InferStatisticsForExtendBase, InferStatisticsForAggregateBase etc.<br/>propagate statistics upward through the AST tree
-    Tx->>TypeCtx: Propagate statistics upward through AST
-    Note over KqpCtx: Also: BuildShuffleEliminationFSM() runs here;<br/>KqpStats.ShufflingsFSM built once from PartitionedByColumns
+    Svc->>KqpCtx: pre-populate TOptimizerStatistics per table
+    Note over Tx: visits each TKqpReadTable and TKqpReadTableRanges node
+    Tx->>KqpCtx: read NKqp TOptimizerStatistics from KqpStats by node id
+    Tx->>TypeCtx: write NYql TOptimizerStatistics to StatisticsMap
+    Note over Tx: InferStatisticsForExtend etc. propagate stats up the AST
+    Tx->>TypeCtx: propagate statistics upward through AST
+    Note over KqpCtx: BuildShuffleEliminationFSM builds ShufflingsFSM once
 </pre>
 </div>
 
@@ -1527,30 +1527,30 @@ sequenceDiagram
 <pre class="mermaid">
 sequenceDiagram
     participant KqpLog as kqp_opt_log.cpp
-    participant CostBased as dq_opt_join_cost_based.cpp
+    participant CostBased as dq_opt_join_cost_based
     participant Collect as DqCollectJoinRelationsWithStats
     participant Convert as ConvertToJoinTree
     participant Hypergraph as MakeJoinHypergraph
     participant Solver as DPHyp Solver
-    participant Rewrite as DqBuildJoin / DqRewriteEquiJoin
+    participant Rewrite as DqBuildJoin
     participant Plan as Physical plan node
 
-    KqpLog->>KqpLog: MakeNativeOptimizerNew(providerCtx, settings, SE-flag, ShufflingsFSM)
-    KqpLog->>CostBased: DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, KqpStats, *opt, ...)
-    CostBased->>Collect: DqCollectJoinRelationsWithStats(rels, ctx, node, relBuilder)
-    Note over Collect: For each EquiJoin leaf:<br/>look up NKqp::TOptimizerStatistics in KqpStats<br/>relBuilder creates TKqpRelOptimizerNode
-    Collect-->>CostBased: rels: vector of TRelOptimizerNode
-    CostBased->>Convert: ConvertToJoinTree(equiJoinTuple, rels, ctx, hints)
-    Note over Convert: Walks TCoEquiJoinTuple AST recursively;<br/>builds TJoinOptimizerNode tree with NKqp::EJoinAlgoType
-    Convert-->>CostBased: root: shared_ptr of TJoinOptimizerNode
-    CostBased->>Hypergraph: MakeJoinHypergraph(graph, root)
-    Note over Hypergraph: Extracts predicates as hyperedges;<br/>annotates nodes with TOptimizerStatistics
-    Hypergraph-->>CostBased: TJoinHypergraph with edge set
-    CostBased->>Solver: Enumerate(graph) - DPHyp dynamic programming
-    Note over Solver: BitSet-based partition enumeration;<br/>calls IProviderContext::ComputeJoinStats() per candidate;<br/>selects minimum-cost plan tree
-    Solver-->>CostBased: best root: shared_ptr of IBaseOptimizerNode
-    CostBased->>Rewrite: DqBuildJoin / DqRewriteEquiJoin on the reordered tree
-    Rewrite-->>Plan: Rewritten TExprNode (physical EquiJoin tree)
+    KqpLog->>KqpLog: MakeNativeOptimizerNew with providerCtx and ShufflingsFSM
+    KqpLog->>CostBased: DqOptimizeEquiJoinWithCosts with node and KqpStats
+    CostBased->>Collect: collect join relations with statistics
+    Note over Collect: for each EquiJoin leaf - look up NKqp stats in KqpStats
+    Collect-->>CostBased: rels - vector of TKqpRelOptimizerNode
+    CostBased->>Convert: ConvertToJoinTree with equiJoinTuple and hints
+    Note over Convert: builds TJoinOptimizerNode tree from AST
+    Convert-->>CostBased: root - TJoinOptimizerNode
+    CostBased->>Hypergraph: MakeJoinHypergraph with join tree root
+    Note over Hypergraph: join predicates become hyperedges
+    Hypergraph-->>CostBased: TJoinHypergraph
+    CostBased->>Solver: Enumerate - DPHyp over all partition subsets
+    Note over Solver: ComputeJoinStats per candidate, select min-cost tree
+    Solver-->>CostBased: best root - minimum-cost join ordering
+    CostBased->>Rewrite: DqBuildJoin on the reordered tree
+    Rewrite-->>Plan: rewritten TExprNode
 </pre>
 </div>
 

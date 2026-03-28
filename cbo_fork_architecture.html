@@ -226,12 +226,13 @@ nav.toc li { margin: 6px 0; }
 <nav class="toc">
 <h3>Contents</h3>
 <ol>
-<li><a href="#sec-deps">Library Dependency Graph</a></li>
-<li><a href="#sec-files">File Map &amp; Classification</a></li>
-<li><a href="#sec-boundary">Type Boundary</a></li>
-<li><a href="#sec-rationale">Substantive Change Rationale</a></li>
-<li><a href="#sec-noncbo">Why Each Non-CBO File Is Copied</a></li>
-<li><a href="#sec-entry">Entry Points</a></li>
+<li><a href="#sec-deps">1. Library Dependency Graph</a></li>
+<li><a href="#sec-files">2. File Map &amp; Classification</a></li>
+<li><a href="#sec-boundary">3. Type Boundary</a></li>
+<li><a href="#sec-rationale">4. Substantive Change Rationale</a></li>
+<li><a href="#sec-noncbo">5. Why Each Non-CBO File Is Copied</a></li>
+<li><a href="#sec-enforce">6. Build-System Enforcement</a></li>
+<li><a href="#sec-entry">7. Entry Points</a></li>
 </ol>
 </nav>
 
@@ -305,7 +306,7 @@ graph TD
 <div class="file-grid">
   <div class="file-row">
     <div class="file-name">kqp_statistics.h/cpp</div>
-    <div class="file-desc">KQP-owned <code>TOptimizerStatistics</code>, <code>TColumnStatistics</code>, <code>TKqpStatsStore</code> (per-node stats map), and boundary converters <code>FromYql*/ToYql*</code>. The central boundary layer between NYql and NKikimr::NKqp types.</div>
+    <div class="file-desc">KQP-owned <code>TOptimizerStatistics</code>, <code>TColumnStatistics</code>, <code>TKqpStatsStore</code> (per-node stats map), and <code>OverrideStatistics()</code>. Does not include <code>yql/essentials/core/yql_statistics.h</code> &mdash; boundary conversion (<code>FromYqlColumnStatMap</code>) lives in <code>kqp_statistics_transformer.cpp</code> to avoid a transitive pull of <code>yql/essentials/core/cbo</code>.</div>
     <div><span class="tag tag-cbo">CBO</span></div>
   </div>
   <div class="file-row">
@@ -479,9 +480,7 @@ flowchart LR
     KqpJoinAlgo["NKqp::EJoinAlgoType"]
   end
 
-  YqlColStat -->|"FromYqlColumnStat()"| KqpColStat
-  KqpColStat -->|"ToYqlColumnStat()"| YqlColStat
-  TAC -->|"FromYqlColumnStatMap()\nin kqp_statistics_transformer"| KqpStats
+  TAC -->|"FromYqlColumnStatMap()\nin kqp_statistics_transformer.cpp"| KqpStats
   TEN -->|"UniqueId as key"| KqpStats
   YqlJoinAlgo -->|"static_cast\nin dq_opt_join.cpp"| KqpJoinAlgo
   KqpJoinAlgo -->|"static_cast\nin dq_opt_join.cpp"| YqlJoinAlgo
@@ -491,13 +490,8 @@ flowchart LR
 <h3>Boundary Point Details</h3>
 
 <div class="boundary-point">
-  <div class="location">kqp_statistics.cpp &mdash; FromYqlColumnStat() / ToYqlColumnStat()</div>
-  <p>Field-by-field copy between <code>NYql::TColumnStatistics</code> and <code>NKikimr::NKqp::TColumnStatistics</code>. Both structs have identical fields (<code>NumUniqueVals</code>, <code>HyperLogLog</code>, <code>CountMinSketch</code>, <code>EqWidthHistogramEstimator</code>, <code>Type</code>). The shared pointers to sketch/histogram objects are copied as-is (they point to the same underlying data).</p>
-</div>
-
-<div class="boundary-point">
-  <div class="location">kqp_statistics.cpp &mdash; FromYqlColumnStatMap() / ToYqlColumnStatMap()</div>
-  <p>Iterates <code>THashMap&lt;TString, TColumnStatistics&gt;</code>, converting each entry via <code>FromYqlColumnStat</code>/<code>ToYqlColumnStat</code>. Used at the ingestion boundary when <code>kqp_statistics_transformer.cpp</code> reads column stats from <code>TTypeAnnotationContext::ColumnStatisticsByTableName</code> (NYql) and stores them into <code>TKqpStatsStore</code> (NKqp).</p>
+  <div class="location">kqp_statistics_transformer.cpp &mdash; FromYqlColumnStatMap() (file-scope static)</div>
+  <p>Iterates <code>THashMap&lt;TString, NYql::TColumnStatistics&gt;</code> and field-by-field copies each entry into <code>NKikimr::NKqp::TColumnStatistics</code>. Both structs have identical fields (<code>NumUniqueVals</code>, <code>HyperLogLog</code>, <code>CountMinSketch</code>, <code>EqWidthHistogramEstimator</code>, <code>Type</code>); shared pointers are copied as-is. Lives in the transformer rather than <code>kqp_statistics.cpp</code> because the argument type requires <code>#include &lt;yql/essentials/core/yql_statistics.h&gt;</code>, which transitively includes <code>yql/essentials/core/cbo</code> &mdash; a dependency that <code>kqp/opt/cbo</code> explicitly denies via <code>CHECK_DEPENDENT_DIRS</code>.</p>
 </div>
 
 <div class="boundary-point">
@@ -524,7 +518,7 @@ flowchart LR
 <div class="rationale-card">
   <h4>kqp_statistics.h (+80/-34)</h4>
   <p>Completely restructured. <strong>Root cause:</strong> <code>TOptimizerStatistics</code> in <code>yql/essentials/core/yql_statistics.h</code> uses <code>NYql::NDq::TJoinColumn</code>, <code>NYql::NDq::TOrderingsStateMachine::TLogicalOrderings</code>, and <code>NYql::TColumnStatistics</code>. If we just included that header, every CBO type in the fork would be an NYql type, defeating the purpose.</p>
-  <div class="chain"><span class="arrow">&rarr;</span> So we duplicated <code>TOptimizerStatistics</code> and all its nested types into <code>NKikimr::NKqp</code>, using the fork's own <code>TJoinColumn</code> and <code>TOrderingsStateMachine</code>. Added <code>TKqpStatsStore</code> as a KQP-owned stats map (parallel to <code>TTypeAnnotationContext::StatisticsMap</code>). Added boundary converters for the types that cross the YQL/KQP boundary.</div>
+  <div class="chain"><span class="arrow">&rarr;</span> So we duplicated <code>TOptimizerStatistics</code> and all its nested types into <code>NKikimr::NKqp</code>, using the fork's own <code>TJoinColumn</code> and <code>TOrderingsStateMachine</code>. Added <code>TKqpStatsStore</code> as a KQP-owned stats map (parallel to <code>TTypeAnnotationContext::StatisticsMap</code>). The one boundary conversion (<code>FromYqlColumnStatMap</code>) lives in <code>kqp_statistics_transformer.cpp</code> rather than here because including <code>yql_statistics.h</code> in the <code>kqp/opt/cbo</code> library would transitively pull in <code>yql/essentials/core/cbo</code>, violating the <code>CHECK_DEPENDENT_DIRS</code> restriction.</div>
 </div>
 
 <div class="rationale-card">
@@ -629,7 +623,56 @@ flowchart LR
 <div class="sep"></div>
 
 <!-- ============================================================ -->
-<h2 id="sec-entry">6. Entry Points</h2>
+<h2 id="sec-enforce">6. Build-System Enforcement</h2>
+<p>Cross-contamination between the two CBO libraries is enforced at the Arcadia build-system level via <code>CHECK_DEPENDENT_DIRS(DENY PEERDIRS ...)</code>. A violation causes a build error, not just a lint warning.</p>
+
+<h3>YQL side — cannot depend on KQP CBO</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">yql/essentials/core/cbo</div>
+    <div class="file-desc">Denies <code>ydb/core/kqp/opt/cbo</code> and <code>…/solver</code>.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">yql/essentials/core/cbo/simple</div>
+    <div class="file-desc">Same denial.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">ydb/library/yql/dq/opt</div>
+    <div class="file-desc">Denies <code>ydb/core/kqp/opt/cbo</code> and <code>…/solver</code>.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">ydb/library/yql/dq/opt/core</div>
+    <div class="file-desc">Same denial.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">ydb/library/yql/dq/type_ann</div>
+    <div class="file-desc">Same denial.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">ydb/library/yql/providers/dq/provider</div>
+    <div class="file-desc">Same denial. This module was the actual bug in the branch (had accidentally used KQP types); the guard prevents recurrence.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+</div>
+
+<h3>KQP side — cannot depend on YQL CBO</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">ydb/core/kqp/opt/cbo</div>
+    <div class="file-desc">Denies <code>yql/essentials/core/cbo</code>. Note: the solver (<code>…/cbo/solver</code>) cannot carry this restriction because it depends on <code>yql/essentials/core</code> which transitively pulls in <code>yql/essentials/core/cbo</code> via <code>minikql</code> → <code>pg_wrapper/interface</code>. The solver is the intentional bridge layer.</div>
+    <div><span class="tag tag-mech">GUARD</span></div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-entry">7. Entry Points</h2>
 <p>The KQP optimizer calls into the fork at exactly two function entry points, plus the statistics transformer:</p>
 
 <div class="boundary-point">
@@ -640,6 +683,11 @@ flowchart LR
 <div class="boundary-point">
   <div class="location">kqp_opt_log.cpp:230 &mdash; DqRewriteEquiJoin()</div>
   <p>The non-CBO path (rule-based join rewriting). Also uses <code>KqpCtx.KqpStats</code> for statistics propagation even when CBO is off.</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">ydb/core/kqp/opt/rbo/rules/apply_cbo.cpp &mdash; TOptimizeCBOTreeRule::SimpleMatchAndApply()</div>
+  <p>The RBO → CBO bridge. When the rule-based optimizer produces a <code>TOpCBOTree</code> operator, this rule fires. It converts the RBO join tree into CBO types (<code>TRelOptimizerNode</code>, <code>TJoinOptimizerNode</code>), calls <code>MakeNativeOptimizerNew()</code> to get an <code>IOptimizerNew</code>, runs <code>JoinSearch()</code>, then converts the optimized tree back to RBO operators via <code>ConvertOptimizedTree()</code>. Distinct from the DQ logical rewrite path in <code>kqp_opt_log.cpp</code>.</p>
 </div>
 
 <div class="boundary-point">

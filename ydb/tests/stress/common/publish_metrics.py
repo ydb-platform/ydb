@@ -9,6 +9,7 @@ Provides:
 """
 
 import atexit
+import logging
 import time
 import functools
 import os
@@ -65,7 +66,7 @@ class MetricsPublisher:
     overwriting values with identical timestamps.
     """
 
-    _FLUSH_INTERVAL = 5  # seconds
+    _FLUSH_INTERVAL = 40  # seconds
 
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",
@@ -287,31 +288,32 @@ class MetricsPublisher:
         Args:
             buffer: Snapshot of the internal buffer to send
         """
+        logger = logging.getLogger(__name__)
+
         metrics = []
         for metric_data in buffer.values():
             aggregated = self._aggregate_timeseries(metric_data["timeseries"])
 
-            if len(aggregated) == 1:
-                # Single point: use ts/value directly
-                metrics.append({
-                    "labels": metric_data["labels"],
-                    "ts": aggregated[0]["ts"],
-                    "value": aggregated[0]["value"],
-                })
-            else:
-                # Multiple points: use timeseries field
-                metrics.append({
-                    "labels": metric_data["labels"],
-                    "timeseries": aggregated,
-                })
+            # Always use timeseries format to avoid overwriting values
+            # with identical timestamps across consecutive flushes.
+            # The timeseries field is mutually exclusive with ts/value.
+            metrics.append({
+                "labels": metric_data["labels"],
+                "timeseries": aggregated,
+            })
 
         payload = {"metrics": metrics}
         headers = {'Content-Type': 'application/json'}
+
+        logger.info("Sending metrics payload to %s: %s",
+                    self.server_url, json.dumps(payload))
 
         try:
             response = requests.post(self.server_url, json=payload,
                                      headers=headers, timeout=5)
             response.raise_for_status()
+            logger.info("Metrics payload sent successfully (status %d)",
+                        response.status_code)
         except requests.exceptions.ConnectionError:
             print(f"Error: Could not connect to {self.server_url}. "
                   f"Is the server running?", file=sys.stderr)

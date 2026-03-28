@@ -282,7 +282,7 @@ class YdbQueue(object):
 
     def send_query(self, query, parameters, event_kind):
         try:
-            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops, operation_name=event_kind)
             self.update_stats(event_kind)
             return result_list
         except ydb.Error as e:

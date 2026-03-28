@@ -100,6 +100,14 @@ private:
                 }
 
                 MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+            } else {
+                if (IsBatch_) {
+                    ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(requestIndexInBatch),
+                        TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed);
+                } else {
+                    ProcessAnswer(Response_.MutableDeleteMessage(),
+                        TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::Failed);
+                }
             }
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());

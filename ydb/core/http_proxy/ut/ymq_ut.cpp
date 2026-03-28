@@ -1288,6 +1288,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
 
         DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}}, 500);
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage_TableImplementation, THttpProxyTestMock) {
@@ -1617,6 +1620,18 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         json = ReceiveMessage({{"QueueUrl", queueUrl}});
 
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"].GetArray().size(), 2, json.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][1]["Id"], "Id-1");
 
     }
 

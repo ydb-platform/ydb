@@ -571,8 +571,8 @@ void InferStatisticsForBlockHashJoin(
             EJoinAlgoType::GraceJoin,
             ConvertToJoinKind(join.JoinKind().StringValue()),
             FindCardHint(unionOfLabels, *hints.CardinalityHints),
-            false,
-            false,
+            join.LeftInput().Maybe<TDqCnHashShuffle>().IsValid(),
+            join.RightInput().Maybe<TDqCnHashShuffle>().IsValid(),
             FindBytesHint(unionOfLabels, *hints.BytesHints)
         )
     );

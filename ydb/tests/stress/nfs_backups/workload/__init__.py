@@ -7,7 +7,6 @@ import threading
 import time
 import uuid
 import ydb
-from typing import Any, Dict, List, Optional
 
 from ydb.tests.stress.common.common import WorkloadBase
 
@@ -140,24 +139,28 @@ class FsExportClient:
 
 
 class WorkloadNfsExportImport(WorkloadBase):
-    def __init__(self, client, stop, nfs_mount_path):
+    # Expected table schema:
+    #   c0: Uint64 (PRIMARY KEY)
+    #   c1: String
+    TABLE_NAME = "large_test_table"
+
+    def __init__(self, client, stop, nfs_mount_path, fatal_error_event):
         super().__init__(client, "", "nfs_export_import", stop)
         self.lock = threading.Lock()
         self.nfs_mount_path = nfs_mount_path
+        self.fatal_error_event = fatal_error_event
         self.fs_client = FsExportClient(self.client.driver)
         self.op_client = OperationClient(self.client.driver)
 
-        self.export_limit = 10
-        self.export_in_progress = []
+        self.export_in_progress = None  # (export_id, base_path, run_id) or None
+        self.pending_import = None  # (base_path, run_id) or None
 
         self._stats = {
             "export_started": 0,
             "export_done": 0,
-            "export_cancelled": 0,
             "export_error": 0,
             "import_started": 0,
             "import_done": 0,
-            "import_cancelled": 0,
             "import_error": 0,
         }
 
@@ -169,60 +172,9 @@ class WorkloadNfsExportImport(WorkloadBase):
         with self.lock:
             self._stats[key] += 1
 
-    def _create_tables(self, table_names: List[str]):
-        logger.info("[schema] Creating %d tables under prefix %s", len(table_names), table_names[0].rsplit("/", 1)[0] if table_names else "?")
-        for name in table_names:
-            if self.is_stop_requested():
-                return
-            self.client.query(
-                f"""
-                    CREATE TABLE `{name}` (
-                        id Uint32 NOT NULL,
-                        message Utf8,
-                        INDEX idx_message GLOBAL SYNC ON (message),
-                        PRIMARY KEY (id)
-                    );
-                """,
-                True
-            )
-        logger.info("[schema] Created %d tables", len(table_names))
-
-    def _create_topics(self, topic_names: List[str], consumers: Optional[Dict[str, List[str]]] = None):
-        logger.info("[schema] Creating %d topics with consumers", len(topic_names))
-        for name in topic_names:
-            if self.is_stop_requested():
-                return
-            self.client.query(f"CREATE TOPIC `{name}`;", True)
-            if consumers and name in consumers:
-                for consumer in consumers[name]:
-                    self.client.query(
-                        f"ALTER TOPIC `{name}` ADD CONSUMER {consumer};",
-                        True
-                    )
-        logger.info("[schema] Created %d topics", len(topic_names))
-
-    def _insert_into_table(self, table_name: str, rows: List[Dict[str, Any]]):
-        for row in rows:
-            if self.is_stop_requested():
-                return
-            id_val = row["id"]
-            msg_val = row["message"]
-            self.client.query(
-                f"INSERT INTO `{table_name}` (id, message) VALUES ({id_val}, '{msg_val}');",
-                True
-            )
-
-    def _insert_rows(self, tables: List[str]):
-        logger.info("[data] Inserting rows into %d tables", len(tables))
-        for idx, table in enumerate(tables, 1):
-            if self.is_stop_requested():
-                return
-            rows = [
-                {"id": row_id, "message": f"Table {idx} ({table}) row {row_id}"}
-                for row_id in range(1, 6)
-            ]
-            self._insert_into_table(table, rows)
-        logger.info("[data] Inserted rows into %d tables", len(tables))
+    def _signal_fatal_error(self, message):
+        logger.error("[FATAL] %s", message)
+        self.fatal_error_event.set()
 
     def _op_forget(self, op_id):
         try:
@@ -231,14 +183,13 @@ class WorkloadNfsExportImport(WorkloadBase):
             pass
 
     def _poll_export(self, export_id):
-        """Check export status. Returns terminal status string or None if still in progress."""
         try:
             op = self.fs_client.get_export_operation(export_id)
             logger.debug("[export] Poll op=%s ready=%s progress=%s", export_id, op.ready, op.progress)
             if op.ready:
                 return op.progress if op.progress != "UNSPECIFIED" else "DONE"
         except ydb_issues.NotFound:
-            logger.debug("[export] Poll op=%s: NOT_FOUND (auto-dropped, treating as DONE)", export_id)
+            logger.debug("[export] Poll op=%s: NOT_FOUND (treating as DONE)", export_id)
             return "DONE"
         except Exception as e:
             logger.warning("[export] Poll op=%s failed: %s", export_id, e)
@@ -246,204 +197,164 @@ class WorkloadNfsExportImport(WorkloadBase):
         return None
 
     def _poll_import(self, import_id):
-        """Check import status. Returns terminal status string or None if still in progress."""
         try:
             op = self.fs_client.get_import_operation(import_id)
             logger.debug("[import] Poll op=%s ready=%s progress=%s", import_id, op.ready, op.progress)
             if op.ready:
                 return op.progress if op.progress != "UNSPECIFIED" else "DONE"
         except ydb_issues.NotFound:
-            logger.debug("[import] Poll op=%s: NOT_FOUND (auto-dropped, treating as DONE)", import_id)
+            logger.debug("[import] Poll op=%s: NOT_FOUND (treating as DONE)", import_id)
             return "DONE"
         except Exception as e:
             logger.warning("[import] Poll op=%s failed: %s", import_id, e)
             return "ERROR"
         return None
 
-    def _cleanup_exports(self):
-        """Clean up completed exports. No lock held during gRPC calls."""
-        current = list(self.export_in_progress)
-        completed = []
-        for eid in current:
-            status = self._poll_export(eid)
+    def _wait_for_export(self) -> bool:
+        """Wait for current export to complete. Returns False on error."""
+        if self.export_in_progress is None:
+            return True
+
+        export_id, base_path, run_id = self.export_in_progress
+
+        while True:
+            if self.is_stop_requested() or self.fatal_error_event.is_set():
+                return True
+
+            status = self._poll_export(export_id)
             if status is not None:
-                completed.append((eid, status))
+                self.export_in_progress = None
+                self._op_forget(export_id)
 
-        if completed:
-            with self.lock:
-                for eid, status in completed:
-                    if eid in self.export_in_progress:
-                        self.export_in_progress.remove(eid)
-                    if status == "DONE":
-                        self._stats["export_done"] += 1
-                    elif status == "CANCELLED":
-                        self._stats["export_cancelled"] += 1
-                    else:
-                        self._stats["export_error"] += 1
-            for eid, _ in completed:
-                self._op_forget(eid)
-            logger.info("[cleanup] Cleaned up %d exports: %s",
-                        len(completed), ", ".join(f"{eid[:12]}..={s}" for eid, s in completed))
-
-    def _wait_for_export_slot(self):
-        if len(self.export_in_progress) >= self.export_limit:
-            logger.info("[export] Waiting for export slot (%d/%d in progress)",
-                        len(self.export_in_progress), self.export_limit)
-        while len(self.export_in_progress) >= self.export_limit:
-            if self.is_stop_requested():
-                return
-            self._cleanup_exports()
-            if len(self.export_in_progress) >= self.export_limit:
-                time.sleep(0.5)
-
-    def _do_export(self, base_path, source_prefix, run_id):
-        self._cleanup_exports()
-        self._wait_for_export_slot()
-        if self.is_stop_requested():
-            return None
-        logger.info("[export] Starting ExportToFs run_id=%s base_path=%s prefix=%s",
-                    run_id, base_path, source_prefix)
-        result = self.fs_client.export_to_fs(
-            base_path=base_path,
-            items=[(source_prefix, source_prefix)],
-            description=f"stress_export_{run_id}",
-        )
-        with self.lock:
-            self._stats["export_started"] += 1
-            self.export_in_progress.append(result.id)
-        logger.info("[export] ExportToFs started: op=%s progress=%s", result.id, result.progress)
-        return result.id
-
-    def _wait_op_done(self, op_id, poll_fn, op_type="op", timeout=120):
-        logger.info("[%s] Waiting for op=%s (timeout=%ds)", op_type, op_id, timeout)
-        deadline = time.time() + timeout
-        poll_count = 0
-        while time.time() < deadline:
-            if self.is_stop_requested():
-                logger.info("[%s] Stop requested while waiting for op=%s", op_type, op_id)
-                return None
-            status = poll_fn(op_id)
-            poll_count += 1
-            if status is not None:
-                logger.info("[%s] Op=%s finished with status=%s after %d polls", op_type, op_id, status, poll_count)
-                self._op_forget(op_id)
-                return status
-            time.sleep(1)
-        logger.warning("[%s] Op=%s timed out after %ds (%d polls)", op_type, op_id, timeout, poll_count)
-        return None
-
-    def _export_loop(self):
-        """Continuously create data and export to NFS."""
-        iteration = 0
-        logger.info("[export_loop] Started, nfs_mount_path=%s", self.nfs_mount_path)
-        while not self.is_stop_requested():
-            iteration += 1
-            run_id = f"{uuid.uuid1()}".replace("-", "_")
-            prefix = f"export_block_{run_id}"
-            base_path = os.path.join(self.nfs_mount_path, f"export_{run_id}")
-
-            logger.info("[export_loop] === Iteration %d, run_id=%s ===", iteration, run_id[:16])
-
-            tables = [f"{prefix}/table{i}" for i in range(1, 10)]
-            topics = [f"{prefix}/topic{i}" for i in range(1, 10)]
-            consumers = {
-                topic: [f"consumerA_{i}", f"consumerB_{i}"]
-                for i, topic in enumerate(topics, 1)
-            }
-
-            self._create_tables(tables)
-            if self.is_stop_requested():
-                break
-            self._create_topics(topics, consumers)
-            if self.is_stop_requested():
-                break
-            self._insert_rows(tables)
-            if self.is_stop_requested():
-                break
-
-            try:
-                self._do_export(base_path, prefix, run_id)
-            except Exception as e:
-                logger.error("[export_loop] Export failed: %s", e, exc_info=True)
-                self._inc_stat("export_error")
-
-        logger.info("[export_loop] Stopped after %d iterations", iteration)
-
-    def _export_import_loop(self):
-        """Export data to NFS, then import it back (round-trip)."""
-        iteration = 0
-        logger.info("[roundtrip_loop] Started, nfs_mount_path=%s", self.nfs_mount_path)
-        while not self.is_stop_requested():
-            iteration += 1
-            run_id = f"{uuid.uuid1()}".replace("-", "_")
-            prefix = f"rt_block_{run_id}"
-            base_path = os.path.join(self.nfs_mount_path, f"roundtrip_{run_id}")
-
-            logger.info("[roundtrip_loop] === Iteration %d, run_id=%s ===", iteration, run_id[:16])
-
-            tables = [f"{prefix}/table{i}" for i in range(1, 4)]
-            self._create_tables(tables)
-            if self.is_stop_requested():
-                break
-            self._insert_rows(tables)
-            if self.is_stop_requested():
-                break
-
-            try:
-                export_id = self._do_export(base_path, prefix, run_id)
-                if export_id is None:
-                    break
-
-                status = self._wait_op_done(export_id, self._poll_export, op_type="export")
-                if status is None or self.is_stop_requested():
-                    break
-                with self.lock:
-                    if export_id in self.export_in_progress:
-                        self.export_in_progress.remove(export_id)
-                    if status == "DONE":
-                        self._stats["export_done"] += 1
-                    else:
-                        self._stats["export_error"] += 1
-
-                if status != "DONE":
-                    logger.warning("[roundtrip_loop] Export finished with status=%s, skipping import", status)
-                    continue
-
-                db = self.client.database.rstrip("/")
-                import_items = [(t, f"{db}/imported_{t}") for t in tables]
-                logger.info("[roundtrip_loop] Starting ImportFromFs base_path=%s items=%s", base_path, import_items)
-                result = self.fs_client.import_from_fs(
-                    base_path=base_path,
-                    items=import_items,
-                )
-                self._inc_stat("import_started")
-                logger.info("[roundtrip_loop] ImportFromFs started: op=%s progress=%s", result.id, result.progress)
-
-                imp_status = self._wait_op_done(result.id, self._poll_import, op_type="import")
-                if imp_status == "DONE":
-                    self._inc_stat("import_done")
-                    logger.info("[roundtrip_loop] Import DONE for run_id=%s", run_id[:16])
-                elif imp_status == "CANCELLED":
-                    self._inc_stat("import_cancelled")
-                    logger.warning("[roundtrip_loop] Import CANCELLED for run_id=%s", run_id[:16])
+                if status == "DONE":
+                    self._inc_stat("export_done")
+                    logger.info("[export] Export DONE: op=%s, queuing import", export_id[:16])
+                    self.pending_import = (base_path, run_id)
+                    return True
                 else:
-                    self._inc_stat("import_error")
-                    logger.error("[roundtrip_loop] Import failed with status=%s for run_id=%s", imp_status, run_id[:16])
+                    self._inc_stat("export_error")
+                    logger.error("[export] Export FAILED: op=%s status=%s base_path=%s. NOT cleaning up for investigation.",
+                                 export_id[:16], status, base_path)
+                    self._signal_fatal_error(f"Export failed with status={status}, op={export_id}")
+                    return False
 
-            except Exception as e:
-                logger.error("[roundtrip_loop] Round-trip failed: %s", e, exc_info=True)
-                self._inc_stat("export_error")
-            finally:
-                try:
-                    if os.path.exists(base_path):
-                        shutil.rmtree(base_path, ignore_errors=True)
-                except Exception:
-                    pass
+            time.sleep(1)
 
-        logger.info("[roundtrip_loop] Stopped after %d iterations", iteration)
+    def _cleanup_fs_path(self, base_path: str):
+        """Remove export directory from filesystem."""
+        try:
+            if os.path.exists(base_path):
+                shutil.rmtree(base_path, ignore_errors=True)
+                logger.info("[cleanup] Removed export directory: %s", base_path)
+        except Exception as e:
+            logger.warning("[cleanup] Failed to remove directory %s: %s", base_path, e)
+
+    def _cleanup_imported_table(self, table_name: str):
+        """Drop imported table from database."""
+        try:
+            self.client.query(f"DROP TABLE `{table_name}`;", True)
+            logger.info("[cleanup] Dropped imported table: %s", table_name)
+        except Exception as e:
+            logger.warning("[cleanup] Failed to drop table %s: %s", table_name, e)
+
+    def _process_pending_import(self) -> bool:
+        """Process pending import if any. Returns False on error."""
+        if self.pending_import is None:
+            return True
+
+        base_path, run_id = self.pending_import
+        self.pending_import = None
+        import_dest = f"imported_{run_id}"
+
+        try:
+            logger.info("[import] Starting ImportFromFs base_path=%s dest=%s", base_path, import_dest)
+
+            result = self.fs_client.import_from_fs(
+                base_path=base_path,
+                items=[(self.TABLE_NAME, import_dest)],
+                description=f"stress_import_{run_id}",
+            )
+            self._inc_stat("import_started")
+            logger.info("[import] ImportFromFs started: op=%s", result.id)
+
+            while True:
+                if self.is_stop_requested() or self.fatal_error_event.is_set():
+                    return True
+
+                status = self._poll_import(result.id)
+                if status is not None:
+                    self._op_forget(result.id)
+                    if status == "DONE":
+                        self._inc_stat("import_done")
+                        logger.info("[import] Import DONE: op=%s, cleaning up", result.id[:16])
+                        self._cleanup_imported_table(import_dest)
+                        self._cleanup_fs_path(base_path)
+                    else:
+                        self._inc_stat("import_error")
+                        logger.error("[import] Import FAILED: op=%s status=%s. NOT cleaning up for investigation.",
+                                     result.id[:16], status)
+                        self._signal_fatal_error(f"Import failed with status={status}, op={result.id}")
+                        return False
+                    break
+                time.sleep(1)
+
+        except Exception as e:
+            self._inc_stat("import_error")
+            logger.error("[import] Import EXCEPTION for run_id=%s. NOT cleaning up for investigation. Error: %s",
+                         run_id[:16], e)
+            self._signal_fatal_error(f"Import exception: {e}")
+            return False
+
+        return True
+
+    def _start_export(self, run_id: str) -> bool:
+        """Start a new export. Returns False on error."""
+        base_path = os.path.join(self.nfs_mount_path, f"export_{run_id}")
+
+        try:
+            logger.info("[export] Starting ExportToFs run_id=%s base_path=%s", run_id[:16], base_path)
+            result = self.fs_client.export_to_fs(
+                base_path=base_path,
+                items=[(self.TABLE_NAME, self.TABLE_NAME)],
+                description=f"stress_export_{run_id}",
+            )
+            self._inc_stat("export_started")
+            self.export_in_progress = (result.id, base_path, run_id)
+            logger.info("[export] ExportToFs started: op=%s progress=%s", result.id, result.progress)
+            return True
+        except Exception as e:
+            self._inc_stat("export_error")
+            logger.error("[export] Export EXCEPTION for run_id=%s base_path=%s. NOT cleaning up for investigation. Error: %s",
+                         run_id[:16], base_path, e)
+            self._signal_fatal_error(f"Export exception: {e}")
+            return False
+
+    def _main_loop(self):
+        logger.info("[main_loop] Starting export/import cycle, nfs_mount_path=%s", self.nfs_mount_path)
+        logger.info("[main_loop] Using existing table: %s", self.TABLE_NAME)
+        iteration = 0
+
+        while not self.is_stop_requested() and not self.fatal_error_event.is_set():
+            iteration += 1
+            run_id = f"{uuid.uuid1()}".replace("-", "_")
+            logger.info("[main_loop] === Iteration %d, run_id=%s ===", iteration, run_id[:16])
+
+            # Start export
+            if not self._start_export(run_id):
+                return
+
+            # Wait for export to complete
+            if not self._wait_for_export():
+                return
+
+            # Process import
+            if not self._process_pending_import():
+                return
+
+        logger.info("[main_loop] Stopped after %d iterations", iteration)
 
     def get_workload_thread_funcs(self):
-        return [self._export_loop, self._export_import_loop]
+        return [self._main_loop]
 
 
 class WorkloadRunner:
@@ -473,9 +384,11 @@ class WorkloadRunner:
     def run(self):
         logger.info("[runner] Starting workload, duration=%ds", self.duration)
         stop = threading.Event()
+        fatal_error = threading.Event()
         nfs_mount_path = self._setup_nfs()
+
         workloads = [
-            WorkloadNfsExportImport(self.client, stop, nfs_mount_path)
+            WorkloadNfsExportImport(self.client, stop, nfs_mount_path, fatal_error)
         ]
 
         for w in workloads:
@@ -484,6 +397,10 @@ class WorkloadRunner:
 
         started_at = time.time()
         while time.time() - started_at < self.duration:
+            if fatal_error.is_set():
+                logger.error("[runner] Fatal error detected, stopping workload")
+                break
+
             elapsed = int(time.time() - started_at)
             for w in workloads:
                 stat = w.get_stat()
@@ -492,7 +409,7 @@ class WorkloadRunner:
                 print(msg, file=sys.stderr)
             time.sleep(10)
 
-        logger.info("[runner] Duration reached, sending stop signal")
+        logger.info("[runner] Sending stop signal")
         stop.set()
 
         for w in workloads:
@@ -503,4 +420,8 @@ class WorkloadRunner:
             else:
                 logger.info("[runner] %s finished", w.name)
 
-        logger.info("[runner] All workloads stopped")
+        if fatal_error.is_set():
+            logger.error("[runner] Workload terminated due to fatal error")
+            raise RuntimeError("Workload failed due to export/import error")
+
+        logger.info("[runner] All workloads stopped successfully")

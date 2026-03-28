@@ -734,6 +734,41 @@ namespace {
         return {};
     }
 
+    inline TString SerializePrometheusVectorSelector(const TPrometheusVectorSelector& selector) {
+        TStringBuilder builder;
+        if (!selector.MetricName.empty()) {
+            builder << selector.MetricName;
+        }
+        if (!selector.Matchers.empty()) {
+            builder << '{';
+            bool first = true;
+            for (const auto& matcher : selector.Matchers) {
+                if (!first) {
+                    builder << ',';
+                }
+                builder << matcher.Name;
+                switch (matcher.Op) {
+                    case EPrometheusLabelMatchOp::Equal:
+                        builder << '=';
+                        break;
+                    case EPrometheusLabelMatchOp::NotEqual:
+                        builder << "!=";
+                        break;
+                    case EPrometheusLabelMatchOp::Regex:
+                        builder << "=~";
+                        break;
+                    case EPrometheusLabelMatchOp::NotRegex:
+                        builder << "!~";
+                        break;
+                }
+                builder << '"' << EscapeInMemoryMetricLabelValue(matcher.Value) << '"';
+                first = false;
+            }
+            builder << '}';
+        }
+        return builder;
+    }
+
 } // namespace
 
 class TJsonInMemoryMetrics : public TViewerPipeClient {
@@ -1281,6 +1316,41 @@ public:
         return expression.Aggregation.has_value();
     }
 
+    bool ParseQueryExpression(TPrometheusQueryExpression& expression, TString& error) const {
+        error.clear();
+        if (Path != "/viewer/inmemory_metrics/prometheus/api/v1/query"
+                && Path != "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
+        {
+            error = "query expressions are only supported for query endpoints";
+            return false;
+        }
+
+        const TString query = Params.Get("query");
+        if (query.empty()) {
+            error = "query is required";
+            return false;
+        }
+
+        return ParseQueryParam(query, expression, error);
+    }
+
+    TString BuildSelectorOnlyQueryString(TString& error) const {
+        error.clear();
+
+        TPrometheusQueryExpression expression;
+        if (!ParseQueryExpression(expression, error)) {
+            return {};
+        }
+
+        if (!expression.Aggregation) {
+            return Params.Print();
+        }
+
+        TCgiParameters rewritten = Params;
+        rewritten.ReplaceUnescaped("query", SerializePrometheusVectorSelector(expression.Selector));
+        return rewritten.Print();
+    }
+
     TResult Execute(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/labels") {
             return HandleLabels(inMemoryMetrics);
@@ -1306,6 +1376,65 @@ public:
         }
 
         return MakeError("bad_data", "unsupported endpoint");
+    }
+
+    bool ApplyAggregationToResult(NJson::TJsonValue& json, TString& error) const {
+        error.clear();
+
+        TPrometheusQueryExpression expression;
+        if (!ParseQueryExpression(expression, error)) {
+            return false;
+        }
+        if (!expression.Aggregation) {
+            return true;
+        }
+
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            TVector<TInstantSample> input;
+            for (const auto& item : json["data"]["result"].GetArray()) {
+                const auto& metric = item["metric"];
+                input.push_back(TInstantSample{
+                    .MetricName = metric["__name__"].GetStringSafe(),
+                    .Labels = ExtractMetricLabels(metric),
+                    .Timestamp = item["value"][0].GetUIntegerRobust(),
+                    .Value = FromStringWithDefault<double>(item["value"][1].GetStringRobust(), 0),
+                });
+            }
+
+            const auto aggregated = AggregateInstantSamples(input, *expression.Aggregation);
+            NJson::TJsonValue result(NJson::JSON_ARRAY);
+            for (const auto& sample : aggregated) {
+                AppendInstantResult(result, sample);
+            }
+            json["data"]["result"] = std::move(result);
+            return true;
+        }
+
+        if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query_range") {
+            TVector<TRangeSample> input;
+            for (const auto& item : json["data"]["result"].GetArray()) {
+                TRangeSample sample;
+                const auto& metric = item["metric"];
+                sample.MetricName = metric["__name__"].GetStringSafe();
+                sample.Labels = ExtractMetricLabels(metric);
+                for (const auto& sourceValue : item["values"].GetArray()) {
+                    sample.Values.emplace_back(
+                        sourceValue[0].GetUIntegerRobust(),
+                        FromStringWithDefault<double>(sourceValue[1].GetStringRobust(), 0));
+                }
+                input.push_back(std::move(sample));
+            }
+
+            const auto aggregated = AggregateRangeSamples(input, *expression.Aggregation);
+            NJson::TJsonValue result(NJson::JSON_ARRAY);
+            for (const auto& sample : aggregated) {
+                AppendRangeResult(result, sample);
+            }
+            json["data"]["result"] = std::move(result);
+            return true;
+        }
+
+        return true;
     }
 
 private:
@@ -1705,6 +1834,24 @@ private:
         return output;
     }
 
+    static TVector<TLabel> ExtractMetricLabels(const NJson::TJsonValue& metric) {
+        TVector<TLabel> labels;
+        for (const auto& [name, value] : metric.GetMapSafe()) {
+            if (name == "__name__") {
+                continue;
+            }
+            labels.push_back(TLabel{
+                .Name = name,
+                .Value = value.GetStringRobust(),
+            });
+        }
+        Sort(labels, [](const TLabel& lhs, const TLabel& rhs) {
+            return lhs.Name < rhs.Name;
+        });
+        return labels;
+    }
+
+
     TResult HandleLabels(const TInMemoryMetricsRegistry& inMemoryMetrics) const {
         TString error;
         const auto selectors = ParseMatchers("match[]", error);
@@ -1889,6 +2036,7 @@ class TJsonInMemoryMetricsPrometheus : public TViewerPipeClient {
     TRequestResponse<TEvInterconnect::TEvNodesInfo> NodesInfo;
     THashMap<ui32, TRequestResponse<TEvViewer::TEvViewerResponse>> RemoteResponses;
     TVector<TPrometheusVectorSelector> RoutingSelectors;
+    TString FanoutQueryString;
 
 public:
     TJsonInMemoryMetricsPrometheus(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -1910,13 +2058,15 @@ public:
         if (!error.empty()) {
             return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
         }
+        FanoutQueryString = usesAggregation ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
+        if (!error.empty()) {
+            return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
+        }
 
         if (const auto exactNodeId = GetRequestedExactNodeId()) {
             if (*exactNodeId != TActivationContext::ActorSystem()->NodeId) {
                 return ReplyAndPassAway(MakeForward({*exactNodeId}));
             }
-        } else if (usesAggregation && processor.SupportsFanout()) {
-            return ReplyAndPassAway(BuildErrorResponse("not_implemented", "Prometheus aggregations with multi-node fanout are not implemented"));
         } else if (processor.SupportsFanout()) {
             NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
             return Become(&TThis::StateFanout, Timeout, new TEvents::TEvWakeup());
@@ -1989,10 +2139,6 @@ private:
             return TString(HttpEvent->Get()->Request->GetURI());
         }
         return {};
-    }
-
-    TString GetRawQueryString() const {
-        return Params.Print();
     }
 
     TString BuildErrorResponse(TStringBuf errorType, TStringBuf message) {
@@ -2090,7 +2236,7 @@ private:
             request->Record.MutableLocation()->AddNodeId(nodeId);
             auto* inMemoryRequest = request->Record.MutableInMemoryMetricsRequest();
             inMemoryRequest->SetPath(GetRequestPath());
-            inMemoryRequest->SetQuery(GetRawQueryString());
+            inMemoryRequest->SetQuery(FanoutQueryString);
 
             RemoteResponses.emplace(nodeId,
                 MakeRequestViewer(nodeId,
@@ -2254,6 +2400,17 @@ private:
         }
 
         TInMemoryMetricsPrometheusProcessor processor(GetRequestPath(), Params);
+        TString error;
+        const bool usesAggregation = processor.UsesAggregation(error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        const TString queryString = usesAggregation ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        TCgiParameters executionParams(queryString);
+        TInMemoryMetricsPrometheusProcessor executionProcessor(GetRequestPath(), executionParams);
         NJson::TJsonValue merged = BuildEmptyMergedResponse();
         TVector<TString> warnings;
 
@@ -2263,7 +2420,7 @@ private:
             return BuildErrorResponse("bad_data", selfError);
         }
         if (includeSelf) {
-            const auto localResult = processor.Execute(*inMemoryMetrics);
+            const auto localResult = executionProcessor.Execute(*inMemoryMetrics);
             if (!localResult.Success) {
                 return BuildHttpResponse(localResult);
             }
@@ -2298,6 +2455,12 @@ private:
                 continue;
             }
             MergeResponseData(merged, json);
+        }
+
+        if (usesAggregation) {
+            if (!processor.ApplyAggregationToResult(merged, error)) {
+                return BuildErrorResponse("bad_data", error);
+            }
         }
 
         if (!warnings.empty()) {

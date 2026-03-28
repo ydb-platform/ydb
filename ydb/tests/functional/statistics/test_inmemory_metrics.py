@@ -554,23 +554,36 @@ def test_inmemory_metrics_prometheus_query_routes_to_exact_remote_node(ydb_clust
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
 
 
-def test_inmemory_metrics_prometheus_rejects_aggregation_without_exact_node_id(ydb_cluster):
-    mon_port = ydb_cluster.nodes[1].mon_port
-    base_url = f"http://localhost:{mon_port}"
+def test_inmemory_metrics_prometheus_query_supports_fanout_aggregation(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
 
-    response = requests.get(
-        f"{base_url}{PROMETHEUS_API_PREFIX}/query",
-        params={
-            "query": f"count by (node_id) ({POOL_TARGET})",
-            "time": int(time.time()),
-        },
-        timeout=10,
-    )
+    base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    last_query = None
 
-    assert_that(response.status_code, equal_to(400))
-    payload = response.json()
-    assert_that(payload.get("status"), equal_to("error"))
-    assert_that(payload.get("errorType"), equal_to("not_implemented"))
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            base_url,
+            "/query",
+            params={
+                "query": f"count by (node_id) ({POOL_TARGET})",
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus fanout aggregation query result: %s", last_query)
+        node_ids = {
+            item.get("metric", {}).get("node_id")
+            for item in last_query.get("result", [])
+            if item.get("metric", {}).get("node_id")
+        }
+        return last_query.get("resultType") == "vector" and len(node_ids) >= 2
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
 
 
 def test_inmemory_metrics_prometheus_node_id_values_fanout(ydb_cluster):
@@ -661,5 +674,41 @@ def test_inmemory_metrics_prometheus_query_range_fanout_without_exact_node_id(yd
             if item.get("metric", {}).get("__name__") == TARGET and item.get("values")
         }
         return len(node_ids) >= 2
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
+
+
+def test_inmemory_metrics_prometheus_query_range_supports_fanout_aggregation(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    last_query_range = None
+    end = int(time.time())
+    start = end - 300
+
+    def query_range_ready():
+        nonlocal last_query_range
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": f"count by (node_id) ({POOL_TARGET})",
+                "start": start,
+                "end": end,
+                "step": 30,
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus fanout aggregation query_range result: %s", last_query_range)
+        node_ids = {
+            item.get("metric", {}).get("node_id")
+            for item in last_query_range.get("result", [])
+            if item.get("metric", {}).get("node_id") and item.get("values")
+        }
+        return last_query_range.get("resultType") == "matrix" and len(node_ids) >= 2
 
     assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range

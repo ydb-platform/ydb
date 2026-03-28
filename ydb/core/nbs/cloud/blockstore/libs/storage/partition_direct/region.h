@@ -35,10 +35,6 @@ public:
 private:
     NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
-    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

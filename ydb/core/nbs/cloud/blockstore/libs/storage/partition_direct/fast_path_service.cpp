@@ -1,6 +1,6 @@
 #include "fast_path_service.h"
 
-#include "direct_block_group_in_mem.h"
+#include "range_translate.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -58,27 +58,6 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     return regions;
 }
 
-size_t GetRegionIndex(ui64 blockIndex)
-{
-    return blockIndex / BlocksPerRegion;
-}
-
-size_t GetRegionOffset(ui64 blockIndex)
-{
-    return blockIndex % BlocksPerRegion;
-}
-
-std::pair<size_t, TBlockRange64> TranslateToRegion(
-    const TRequestHeaders& headers)
-{
-    const size_t regionIndex = GetRegionIndex(headers.Range.Start);
-    const size_t regionOffset = GetRegionOffset(headers.Range.Start);
-
-    return std::pair<size_t, TBlockRange64>{
-        regionIndex,
-        TBlockRange64::WithLength(regionOffset, headers.Range.Size())};
-}
-
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -86,12 +65,14 @@ std::pair<size_t, TBlockRange64> TranslateToRegion(
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     ui64 tabletId,
+    const TString& diskId,
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     const NProto::TStorageServiceConfig& storageConfig,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
+    , DiskId(diskId)
     , Regions(CreateRegions(
           this,
           blockCount,
@@ -104,6 +85,13 @@ TFastPathService::TFastPathService(
           std::move(counters),
           storageConfig.GetDDiskPoolName(),
           tabletId))
+    , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
+          .DiskId = DiskId,
+          .BlockSize = blockSize,
+          .BlockCount = blockCount,
+          .BlocksPerStripe = storageConfig.GetStripeSize()
+                                 ? storageConfig.GetStripeSize()
+                                 : DefaultStripeSize}))
 {
     Y_UNUSED(ActorSystem);
 }
@@ -129,9 +117,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
         EBlockStoreRequest::ReadBlocks,
         request->Headers.Range.Size() * DefaultBlockSize);
 
-    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
-    request->RegionRange = regionRange;
-
+    const size_t regionIndex =
+        GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
@@ -162,8 +149,8 @@ TFastPathService::WriteBlocksLocal(
         EBlockStoreRequest::WriteBlocks,
         request->Headers.Range.Size() * DefaultBlockSize);
 
-    const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
-    request->RegionRange = regionRange;
+    const size_t regionIndex =
+        GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
     request->Lsn = GenerateSequenceNumber();
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
@@ -198,6 +185,11 @@ NThreading::TFuture<TZeroBlocksLocalResponse> TFastPathService::ZeroBlocksLocal(
 void TFastPathService::ReportIOError()
 {
     // TODO: implement
+}
+
+TVolumeConfigPtr TFastPathService::GetVolumeConfig() const
+{
+    return VolumeConfig;
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

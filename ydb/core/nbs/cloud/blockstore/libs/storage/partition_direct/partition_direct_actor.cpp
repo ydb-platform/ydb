@@ -402,6 +402,7 @@ void TPartitionActor::Start(
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
+        DiskId,
         BlockCount,
         BlockSize,
         std::move(directBlockGroups),

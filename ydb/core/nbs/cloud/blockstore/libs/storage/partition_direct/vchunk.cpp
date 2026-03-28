@@ -1,6 +1,7 @@
 #include "vchunk.h"
 
 #include "flush_request.h"
+#include "range_translate.h"
 #include "read_request.h"
 #include "write_request.h"
 
@@ -63,15 +64,21 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 {
     // VHost thread
 
+    const TBlockRange64 regionRange = TranslateToRegion(
+        *request->Headers.VolumeConfig,
+        request->Headers.Range);
+    const TBlockRange64 vchunkRange =
+        TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "ReadBlocksLocal. Range %s, Region range %s, VChunk range %s",
         request->Headers.Range.Print().c_str(),
-        request->RegionRange.Print().c_str(),
-        request->VChunkRange.Print().c_str());
+        regionRange.Print().c_str(),
+        vchunkRange.Print().c_str());
 
-    if (request->VChunkRange.Start >= BlocksCount) {
+    if (vchunkRange.Start >= BlocksCount) {
         return MakeFuture<TReadBlocksLocalResponse>(TReadBlocksLocalResponse{
             .Error = MakeError(E_ARGUMENT, "out of range")});
     }
@@ -82,6 +89,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
          traceId = std::move(traceId)]() mutable
@@ -91,6 +99,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->DoReadBlocksLocal(
                     std::move(promise),
+                    vchunkRange,
                     std::move(callContext),
                     std::move(request),
                     std::move(traceId));
@@ -110,15 +119,21 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
 {
     // VHost thread
 
+    const TBlockRange64 regionRange = TranslateToRegion(
+        *request->Headers.VolumeConfig,
+        request->Headers.Range);
+    const TBlockRange64 vchunkRange =
+        TranslateToVChunk(*request->Headers.VolumeConfig, regionRange);
+
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "WriteBlocksLocal. Range %s, Region range %s, VChunk range %s",
         request->Headers.Range.Print().c_str(),
-        request->RegionRange.Print().c_str(),
-        request->VChunkRange.Print().c_str());
+        regionRange.Print().c_str(),
+        vchunkRange.Print().c_str());
 
-    if (request->VChunkRange.Start >= BlocksCount) {
+    if (vchunkRange.Start >= BlocksCount) {
         return MakeFuture<TWriteBlocksLocalResponse>(TWriteBlocksLocalResponse{
             .Error = MakeError(E_ARGUMENT, "out of range")});
     }
@@ -129,6 +144,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     Executor->ExecuteSimple(
         [weakSelf = weak_from_this(),
          promise = std::move(promise),
+         vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
          traceId = std::move(traceId)]() mutable
@@ -136,6 +152,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
             if (auto self = weakSelf.lock()) {
                 self->DoWriteBlocksLocal(
                     std::move(promise),
+                    vchunkRange,
                     std::move(callContext),
                     std::move(request),
                     std::move(traceId));
@@ -196,6 +213,7 @@ void TVChunk::DoStart()
 
 void TVChunk::DoReadBlocksLocal(
     TPromise<TReadBlocksLocalResponse> promise,
+    TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -208,7 +226,7 @@ void TVChunk::DoReadBlocksLocal(
         return;
     }
 
-    auto readHint = BlocksDirtyMap.MakeReadHint(request->VChunkRange);
+    auto readHint = BlocksDirtyMap.MakeReadHint(vchunkRange);
 
     if (readHint.RangeHints.empty()) {
         // Will try to repeat the request when the data is ready.
@@ -217,6 +235,7 @@ void TVChunk::DoReadBlocksLocal(
              executor = Executor,
              waitReady = readHint.WaitReady,
              promise = std::move(promise),
+             vchunkRange,
              callContext = std::move(callContext),
              request = std::move(request),
              traceId = std::move(traceId)]() mutable
@@ -225,6 +244,7 @@ void TVChunk::DoReadBlocksLocal(
                 if (auto self = weakSelf.lock()) {
                     self->DoReadBlocksLocal(
                         std::move(promise),
+                        vchunkRange,
                         std::move(callContext),
                         std::move(request),
                         std::move(traceId));
@@ -263,25 +283,25 @@ void TVChunk::DoReadBlocksLocal(
 
 void TVChunk::DoWriteBlocksLocal(
     TPromise<TWriteBlocksLocalResponse> promise,
+    TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto range = request->VChunkRange;
     auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
         ActorSystem,
         VChunkConfig,
         DirectBlockGroup,
-        range,
+        vchunkRange,
         std::move(callContext),
         std::move(request),
         std::move(traceId));
     auto future = writeExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
-         range,
+         vchunkRange,
          promise = std::move(promise)]   //
         (const TFuture<TWriteRequestExecutor::TResponse>& f) mutable
         {
@@ -294,7 +314,7 @@ void TVChunk::DoWriteBlocksLocal(
             }
             self->OnWriteBlocksResponse(
                 std::move(promise),
-                range,
+                vchunkRange,
                 f.GetValue());
         });
 

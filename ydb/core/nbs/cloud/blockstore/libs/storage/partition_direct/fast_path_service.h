@@ -19,6 +19,7 @@ class TFastPathService
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const TString DiskId;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
@@ -27,11 +28,13 @@ private:
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    TVolumeConfigPtr VolumeConfig;
 
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
+        const TString& diskId,
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
@@ -54,6 +57,9 @@ public:
         std::shared_ptr<TZeroBlocksLocalRequest> request) override;
 
     void ReportIOError() override;
+
+    // IPartitionDirectService implementation
+    TVolumeConfigPtr GetVolumeConfig() const override;
 
 private:
     ui64 GenerateSequenceNumber();

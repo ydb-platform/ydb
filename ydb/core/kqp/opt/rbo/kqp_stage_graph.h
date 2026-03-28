@@ -134,8 +134,14 @@ struct TStageGraph {
         ui32 res = AddStage();
         TVector<std::pair<TString, TInfoUnit>> renamePairs;
         if (needsMap) {
-            for (size_t i = 0; i < columns.size(); i++) {
-                renamePairs.emplace_back(columns[i], renames[i]);
+            if (columns.size() < renames.size()) {
+                for (ui32 i = 0; i < renames.size(); ++i) {
+                    renamePairs.emplace_back(renames[i].GetColumnName(), renames[i]);
+                }
+            } else {
+                for (size_t i = 0; i < columns.size(); i++) {
+                    renamePairs.emplace_back(columns[i], renames[i]);
+                }
             }
         }
 

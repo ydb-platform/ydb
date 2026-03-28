@@ -27,10 +27,6 @@
 #include <optional>
 #include <iostream>
 
-// YQL statistics included only for boundary conversion function signatures.
-// The fields of NKikimr::NKqp::TOptimizerStatistics use independent KQP types.
-#include <yql/essentials/core/yql_statistics.h>
-
 // Forward-declare TExprNode used by TKqpStatsStore.
 namespace NYql { class TExprNode; }
 
@@ -205,19 +201,6 @@ struct TOptimizerStatistics {
 
     TString ToString() const;
 };
-
-// -------------------------------------------------------------------------
-// Boundary conversion for TColumnStatistics / TColumnStatMap
-// (used at boundary with TypeAnnotationContext)
-// -------------------------------------------------------------------------
-TColumnStatistics FromYqlColumnStat(const NYql::TColumnStatistics& s);
-NYql::TColumnStatistics ToYqlColumnStat(const TColumnStatistics& s);
-
-TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
-    const TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>& m);
-
-TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap> ToYqlColumnStatMap(
-    const TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>& m);
 
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(
     const TOptimizerStatistics& s,

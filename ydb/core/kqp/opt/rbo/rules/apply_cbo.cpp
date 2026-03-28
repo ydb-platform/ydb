@@ -8,7 +8,6 @@
 #include <typeinfo>
 
 namespace {
-using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 

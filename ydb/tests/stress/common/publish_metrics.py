@@ -9,7 +9,6 @@ Provides:
 """
 
 import atexit
-import logging
 import time
 import functools
 import os
@@ -288,8 +287,6 @@ class MetricsPublisher:
         Args:
             buffer: Snapshot of the internal buffer to send
         """
-        logger = logging.getLogger(__name__)
-
         metrics = []
         for metric_data in buffer.values():
             aggregated = self._aggregate_timeseries(metric_data["timeseries"])
@@ -305,15 +302,13 @@ class MetricsPublisher:
         payload = {"metrics": metrics}
         headers = {'Content-Type': 'application/json'}
 
-        logger.info("Sending metrics payload to %s: %s",
-                    self.server_url, json.dumps(payload))
+        print(f"Sending metrics payload to {self.server_url}: {json.dumps(payload)}")
 
         try:
             response = requests.post(self.server_url, json=payload,
                                      headers=headers, timeout=5)
             response.raise_for_status()
-            logger.info("Metrics payload sent successfully (status %d)",
-                        response.status_code)
+            print(f"Metrics payload sent successfully (status {response.status_code})")
         except requests.exceptions.ConnectionError:
             print(f"Error: Could not connect to {self.server_url}. "
                   f"Is the server running?", file=sys.stderr)

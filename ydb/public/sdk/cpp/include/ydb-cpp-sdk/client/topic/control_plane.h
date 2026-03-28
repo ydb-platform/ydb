@@ -108,9 +108,6 @@ private:
     std::vector<ECodec> SupportedCodecs_;
     bool KeepMessagesOrder_;
     TDuration DefaultProcessingTimeout_;
-    bool ContentBasedDeduplication_;
-    TDuration DefaultDelayMessageTimeMs_;
-    TDuration DefaultReceiveMessageWaitTimeMs_;
     TDeadLetterPolicy DeadLetterPolicy_;
     TDuration ReceiveMessageWaitTime_;
     TDuration ReceiveMessageDelay_;
@@ -667,11 +664,7 @@ struct TConsumerSettings {
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
-    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
-
-    FLUENT_SETTING_OPTIONAL(bool, ContentBasedDeduplication);
-    FLUENT_SETTING_OPTIONAL(TDuration, DefaultDelayMessageTimeMs);
-    FLUENT_SETTING_OPTIONAL(TDuration, DefaultReceiveMessageWaitTimeMs);
+    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy);
 
     FLUENT_SETTING(TAttributes, Attributes);
 
@@ -748,10 +741,6 @@ struct TAlterConsumerSettings {
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
     FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
     FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
-
-    FLUENT_SETTING_OPTIONAL(bool, ContentBasedDeduplication);
-    FLUENT_SETTING_OPTIONAL(TDuration, DefaultDelayMessageTimeMs);
-    FLUENT_SETTING_OPTIONAL(TDuration, DefaultReceiveMessageWaitTimeMs);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);

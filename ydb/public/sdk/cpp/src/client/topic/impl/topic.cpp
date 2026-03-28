@@ -159,18 +159,6 @@ TDuration TConsumer::GetDefaultProcessingTimeout() const {
     return DefaultProcessingTimeout_;
 }
 
-bool TConsumer::GetContentBasedDeduplication() const {
-    return ContentBasedDeduplication_;
-}
-
-TDuration TConsumer::GetDefaultDelayMessageTimeMs() const {
-    return DefaultDelayMessageTimeMs_;
-}
-
-TDuration TConsumer::GetDefaultReceiveMessageWaitTimeMs() const {
-    return DefaultReceiveMessageWaitTimeMs_;
-}
-
 const TDeadLetterPolicy& TConsumer::GetDeadLetterPolicy() const {
     return DeadLetterPolicy_;
 }
@@ -751,10 +739,6 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , KeepMessagesOrder_(proto.shared_consumer_type().keep_messages_order())
     , DefaultProcessingTimeout_(TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds()))
     , DeadLetterPolicy_(proto.shared_consumer_type().dead_letter_policy())
-    // TODO: uncomment when these fields are in protobuf
-    // , ContentBasedDeduplication_(proto.shared_consumer_type().contentbaseddeduplication())
-    // , DefaultDelayMessageTimeMs_(TDuration::Milliseconds(proto.shared_consumer_type().defaultdelaymessagetimems()))
-    // , DefaultReceiveMessageWaitTimeMs_(TDuration::Milliseconds(proto.shared_consumer_type().defaultreceivemessagewaittimems()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
 {
@@ -803,16 +787,6 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                 shared->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(
                     DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
             }
-            // TODO: uncomment when these fields are in protobuf
-            // if (ContentBasedDeduplication_) {
-            //     shared->mutable_contentbaseddeduplication(ContentBasedDeduplication_.value());
-            // }
-            // if (DefaultDelayMessageTimeMs_) {
-            //     shared->mutable_defaultdelaymessagetimems(DefaultDelayMessageTimeMs_.value().Milliseconds());
-            // }
-            // if (DefaultReceiveMessageWaitTimeMs_) {
-            //     shared->mutable_defaultreceivemessagewaittimems(DefaultReceiveMessageWaitTimeMs_.value().Milliseconds());
-            // }
 
             switch (DeadLetterPolicy_.Action_) {
                 case EDeadLetterAction::Move:
@@ -865,19 +839,6 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
         proto.mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout()
             ->set_seconds(DefaultProcessingTimeout_.value().Seconds());
     }
-
-    // TODO: uncomment when these fields are in protobuf
-    // if (ContentBasedDeduplication_) {
-    //     proto.mutable_alter_shared_consumer_type()->mutable_set_contentbaseddeduplication(ContentBasedDeduplication_.value());
-    // }
-
-    // if (DefaultDelayMessageTimeMs_) {
-    //     proto.mutable_alter_shared_consumer_type()->mutable_set_defaultdelaymessagetimems(DefaultDelayMessageTimeMs_.value().Milliseconds());
-    // }
-
-    // if (DefaultReceiveMessageWaitTimeMs_) {
-    //     proto.mutable_alter_shared_consumer_type()->mutable_set_defaultreceivemessagewaittimems(DefaultReceiveMessageWaitTimeMs_.value().Milliseconds());
-    // }
 
     if (DeadLetterPolicy_.Enabled_) {
         proto.mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()

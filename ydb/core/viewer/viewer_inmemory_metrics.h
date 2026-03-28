@@ -1495,13 +1495,7 @@ private:
     }
 
     TString GetRawQueryString() const {
-        if (Event) {
-            return TString(TStringBuf(Event->Get()->Request.GetUri()).After('?'));
-        }
-        if (HttpEvent) {
-            return TString(TStringBuf(HttpEvent->Get()->Request->GetURI()).After('?'));
-        }
-        return {};
+        return Params.Print();
     }
 
     TString BuildErrorResponse(TStringBuf errorType, TStringBuf message) {

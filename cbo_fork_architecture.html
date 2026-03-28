@@ -335,7 +335,9 @@ nav.toc li { margin: 6px 0; }
 <li><a href="#sec-noncbo">5. Why Each Non-CBO File Is Copied</a></li>
 <li><a href="#sec-enforce">6. Build-System Enforcement</a></li>
 <li><a href="#sec-entry">7. Entry Points</a></li>
-<li><a href="#sec-decisions">8. Design Decision Analysis</a></li>
+<li><a href="#sec-includes">8. Header Include Graph</a></li>
+<li><a href="#sec-correspondence">9. Fork Correspondence Table</a></li>
+<li><a href="#sec-decisions">10. Design Decision Analysis</a></li>
 </ol>
 </nav>
 
@@ -490,11 +492,6 @@ graph TD
     <div class="file-name">dq_opt_conflict_rules_collector.h/cpp</div>
     <div class="file-desc">Join reordering legality: commutativity/associativity predicates, <code>TConflictRule</code>, <code>TConflictRulesCollector</code>, TES conversion. Uses <code>EJoinKind</code> from the fork.</div>
     <div><span class="tag tag-plumb">PLUMB</span></div>
-  </div>
-  <div class="file-row">
-    <div class="file-name">dq_opt_log.h</div>
-    <div class="file-desc">Re-export header of shared DQ integration declarations. Identical to original (purely mechanical namespace change).</div>
-    <div><span class="tag tag-ident">IDENTICAL</span></div>
   </div>
   <div class="file-row">
     <div class="file-name">bitset.h</div>
@@ -719,8 +716,8 @@ flowchart LR
 </div>
 
 <div class="rationale-card">
-  <h4>bitset.h, dq_opt_log.h</h4>
-  <p>No type dependencies at all &mdash; purely mechanical namespace change. Copied for organizational coherence: the solver directory is self-contained, all its headers live together. <code>dq_opt_log.h</code> is even IDENTICAL after normalization.</p>
+  <h4>bitset.h</h4>
+  <p>No type dependencies &mdash; purely mechanical namespace change. Copied for organizational coherence (solver is self-contained) and to allow KQP to freely modify the bitset utilities. The helpers (<code>Overlaps</code>, <code>IsSubset</code>, <code>GetLowestSetBit</code>, <code>GetNextSubset</code>) are called unqualified inside <code>NKikimr::NKqp</code> blocks; keeping them in the same namespace avoids explicit qualification at every call site. <code>dq_opt_log.h</code> and <code>dq_opt_log.cpp</code> were also initially copied but turned out to be dead files (the <code>.cpp</code> was never in SRCS, the header was only included by that <code>.cpp</code>) and have since been deleted.</p>
 </div>
 
 <div class="sep"></div>
@@ -802,7 +799,146 @@ flowchart LR
 <div class="sep"></div>
 
 <!-- ============================================================ -->
-<h2 id="sec-decisions">8. Design Decision Analysis</h2>
+<h2 id="sec-includes">8. Header Include Graph</h2>
+<p>Arrows mean <em>includes</em>. The <code>cbo/</code> layer (type foundation) sits at the bottom; solver files fan out above it. Shared infrastructure from <code>dq/opt/core</code> is shown separately on the left. <code>.cpp</code> files are omitted — each includes only its own <code>.h</code>.</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TD
+  subgraph Shared ["Shared — dq/opt/core"]
+    DqOpt["dq_opt.h"]
+  end
+
+  subgraph CboLayer ["cbo/ — type foundation"]
+    CboOrd["cbo_interesting_orderings.h"]
+    KqpStat["kqp_statistics.h"]
+    CboOpt["cbo_optimizer_new.h"]
+  end
+
+  subgraph SolverHyper ["solver/ — hypergraph &amp; DPHyp"]
+    Bitset["bitset.h"]
+    JTree["dq_opt_join_tree_node.h"]
+    CRules["dq_opt_conflict_rules_collector.h"]
+    Hyper["dq_opt_join_hypergraph.h"]
+    MakeH["dq_opt_make_join_hypergraph.h"]
+    DpHyp["dq_opt_dphyp_solver.h"]
+  end
+
+  subgraph SolverStats ["solver/ — statistics"]
+    Stat["dq_opt_stat.h"]
+    StatTx["dq_opt_stat_transformer_base.h"]
+  end
+
+  subgraph SolverJoin ["solver/ — join rewrites"]
+    Join["dq_opt_join.h"]
+    CboFact["dq_opt_join_cbo_factory.h"]
+    CboCost["dq_opt_join_cost_based.h"]
+  end
+
+  KqpStat --> CboOrd
+  CboOpt --> KqpStat
+  CboOpt --> CboOrd
+
+  JTree --> CboOpt
+  CRules --> CboOpt
+  Hyper --> Bitset
+  Hyper --> JTree
+  Hyper --> CboOpt
+  Hyper --> CboOrd
+  DpHyp --> Bitset
+  DpHyp --> Hyper
+  DpHyp --> JTree
+  MakeH --> CboOpt
+  MakeH --> CRules
+  MakeH --> Hyper
+
+  Stat --> CboOpt
+  Stat --> KqpStat
+  Stat --> DqOpt
+  StatTx --> CboOpt
+  StatTx --> KqpStat
+
+  Join --> CboOpt
+  Join --> KqpStat
+  Join --> DqOpt
+  CboFact --> CboOpt
+  CboCost --> CboOpt
+  CboCost --> KqpStat
+</pre>
+</div>
+
+<h3>Key observations</h3>
+<ul>
+  <li><code>cbo_interesting_orderings.h</code> and <code>bitset.h</code> are the two true leaves — no intra-fork includes.</li>
+  <li><code>cbo_optimizer_new.h</code> is the central hub: every solver subgroup depends on it, directly or transitively via <code>dq_opt_join_tree_node.h</code> or <code>dq_opt_join_hypergraph.h</code>.</li>
+  <li><code>kqp_statistics.h</code> is the second hub: all three solver subgroups include it (directly via <code>dq_opt_stat.h</code>, <code>dq_opt_join.h</code>, <code>dq_opt_join_cost_based.h</code>, or via <code>cbo_optimizer_new.h</code>).</li>
+  <li>The hypergraph group (<code>bitset.h</code> → <code>dq_opt_join_tree_node.h</code> → <code>dq_opt_join_hypergraph.h</code> → <code>dq_opt_dphyp_solver.h</code>) forms a strict linear chain; <code>dq_opt_make_join_hypergraph.h</code> fans in from the side.</li>
+  <li><code>dq_opt.h</code> (shared, not forked) is included by the two entry-point headers: <code>dq_opt_stat.h</code> and <code>dq_opt_join.h</code>.</li>
+</ul>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-correspondence">9. Fork Correspondence Table</h2>
+<p>Every forked file paired with its YQL original, current diff status from <code>diff_copies.sh</code>, and the primary reason the diff is non-mechanical (where applicable). MECHANICAL = only namespace/include/qualifier renames after normalization. SUBSTANTIVE = logic differences remain after normalization.</p>
+
+<style>
+.corr-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+.corr-table th { background: var(--surface2); color: var(--text-dim); text-transform: uppercase; font-size: 11px; letter-spacing: 0.6px; padding: 8px 12px; border-bottom: 1px solid var(--border-hi); text-align: left; }
+.corr-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.corr-table tr:hover td { background: var(--surface2); }
+.corr-table code { font-size: 11.5px; }
+.diff-mech { color: var(--accent); font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; }
+.diff-subst { color: var(--red); font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; }
+.diff-new { color: var(--accent2); font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 600; }
+.diff-stat { color: var(--text-dim); font-size: 11px; }
+</style>
+
+<h3>solver/ ↔ ydb/library/yql/dq/opt/</h3>
+<table class="corr-table">
+<thead><tr><th>KQP Fork (solver/)</th><th>YQL Original (dq/opt/)</th><th>Status</th><th>Reason for diff</th></tr></thead>
+<tbody>
+<tr><td><code>bitset.h</code></td><td><code>bitset.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace <code>NKikimr::NKqp</code></td></tr>
+<tr><td><code>dq_opt_conflict_rules_collector.h</code></td><td><code>dq_opt_conflict_rules_collector.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace; <code>EJoinKind</code> unqualified (already in <code>NKqp</code>)</td></tr>
+<tr><td><code>dq_opt_conflict_rules_collector.cpp</code></td><td><code>dq_opt_conflict_rules_collector.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace</td></tr>
+<tr><td><code>dq_opt_dphyp_solver.h</code></td><td><code>dq_opt_dphyp_solver.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace; local includes (no path prefix)</td></tr>
+<tr><td><code>dq_opt_join_cbo_factory.h</code></td><td><code>dq_opt_join_cbo_factory.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace</td></tr>
+<tr><td><code>dq_opt_join_hypergraph.h</code></td><td><code>dq_opt_join_hypergraph.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +0/-1</span></td><td>Removed <code>#include &lt;yql_cost_function.h&gt;</code> (1 line); <code>TJoinColumn</code> now from fork's <code>cbo_interesting_orderings.h</code></td></tr>
+<tr><td><code>dq_opt_join_tree_node.h</code></td><td><code>dq_opt_join_tree_node.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+5/-5</span></td><td>namespace; <code>ToString(EJoinKind)</code> declared free (not in <code>NYql::NDq</code>)</td></tr>
+<tr><td><code>dq_opt_join_tree_node.cpp</code></td><td><code>dq_opt_join_tree_node.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace</td></tr>
+<tr><td><code>dq_opt_make_join_hypergraph.h</code></td><td><code>dq_opt_make_join_hypergraph.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace; local includes</td></tr>
+<tr><td><code>dq_opt_join.h</code></td><td><code>dq_opt_join.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +6/-11</span></td><td><code>TKqpStatsStore&amp;</code> added to <code>DqRewriteEquiJoin</code> signatures; <code>DqCollectJoinRelationsWithStats</code> moved to <code>dq_opt_join_cost_based.h</code></td></tr>
+<tr><td><code>dq_opt_join.cpp</code></td><td><code>dq_opt_join.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-9</span></td><td><code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code>; <code>static_cast</code> between <code>NYql::EJoinAlgoType</code> and <code>NKqp::EJoinAlgoType</code>; stats store calls</td></tr>
+<tr><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +2/-3</span></td><td>PG optimizer path replaced with <code>Y_ABORT</code>; <code>pg_wrapper</code> include removed</td></tr>
+<tr><td><code>dq_opt_join_cost_based.h</code></td><td><code>dq_opt_join_cost_based.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +12/-1</span></td><td><code>TKqpStatsStore&amp;</code> added; <code>DqCollectJoinRelationsWithStats</code> moved here from <code>dq_opt_join.h</code></td></tr>
+<tr><td><code>dq_opt_join_cost_based.cpp</code></td><td><code>dq_opt_join_cost_based.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-7</span></td><td>All <code>typesCtx.GetStats/SetStats</code> → <code>kqpStats.GetStats/SetStats</code></td></tr>
+<tr><td><code>dq_opt_predicate_selectivity.cpp</code></td><td><code>dq_opt_predicate_selectivity.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +3/-1</span></td><td>Method definitions wrapped in <code>namespace NKikimr::NKqp</code></td></tr>
+<tr><td><code>dq_opt_stat.h</code></td><td><code>dq_opt_stat.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +29/-25</span></td><td>All function signatures: <code>TTypeAnnotationContext*</code> → <code>TKqpStatsStore*</code> (or both); <code>RemoveSorting/Shuffling/Orderings</code> added</td></tr>
+<tr><td><code>dq_opt_stat.cpp</code></td><td><code>dq_opt_stat.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +302/-304</span></td><td>All ~20 <code>InferStatisticsFor*</code> bodies: stats store parameter; using-declaration for <code>TOptimizerStatistics</code></td></tr>
+<tr><td><code>dq_opt_stat_transformer_base.h</code></td><td><code>dq_opt_stat_transformer_base.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +5/-2</span></td><td><code>TKqpStatsStore* KqpStats</code> member added; constructor updated</td></tr>
+<tr><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +37/-31</span></td><td>All <code>InferStatisticsFor*(input, TypeCtx)</code> → <code>InferStatisticsFor*(input, KqpStats)</code> or <code>(input, KqpStats, TypeCtx)</code></td></tr>
+<tr><td><code>dq_opt_stat_kqp.cpp</code></td><td><em>(no original — new file)</em></td><td><span class="diff-new">NEW</span></td><td><code>NKikimr::NKqp::IProviderContext</code> overloads of <code>InferStatisticsForMapJoin</code>, <code>InferStatisticsForGraceJoin</code>, <code>InferStatisticsForDqJoinBase</code></td></tr>
+</tbody>
+</table>
+
+<h3>cbo/ ↔ yql/essentials/core/cbo/ and yql/essentials/core/</h3>
+<table class="corr-table">
+<thead><tr><th>KQP Fork (cbo/)</th><th>YQL Original</th><th>Status</th><th>Reason for diff</th></tr></thead>
+<tbody>
+<tr><td><code>cbo_interesting_orderings.h</code></td><td><code>cbo/cbo_interesting_orderings.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +38/-1</span></td><td><code>TJoinColumn</code> struct inlined (was in <code>yql_cost_function.h</code>); <code>#include &lt;yql_cost_function.h&gt;</code> removed; <code>IsNatural</code>/<code>SetNatural()</code> removed; <code>GetColumns()</code> added</td></tr>
+<tr><td><code>cbo_interesting_orderings.cpp</code></td><td><code>cbo/cbo_interesting_orderings.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +14/-0</span></td><td><code>TJoinColumn</code> method implementations added (<code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code>)</td></tr>
+<tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +45/-37</span></td><td>Independent <code>EJoinAlgoType</code> enum + <code>AllJoinAlgos</code>; removed <code>#include &lt;yql_cost_function.h&gt;</code>; all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
+<tr><td><code>cbo_optimizer_new.cpp</code></td><td><code>cbo/cbo_optimizer_new.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+10/-10</span></td><td>namespace only</td></tr>
+<tr><td><code>cbo_hints.cpp</code></td><td><code>cbo/cbo_hints.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace only</td></tr>
+<tr><td><code>kqp_statistics.h</code></td><td><code>../yql_statistics.h</code> <em>(different name)</em></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +67/-34</span></td><td>Independent <code>TOptimizerStatistics</code> with KQP-specific fields (<code>SortingOrderingIdx</code>, <code>ShuffledByColumns</code>); <code>TKqpStatsStore</code> added; <code>TOrderingsStateMachine</code> from fork; no <code>yql_statistics.h</code> include</td></tr>
+<tr><td><code>kqp_statistics.cpp</code></td><td><code>../yql_statistics.cpp</code></td><td><em>not tracked by diff tool</em></td><td>Uses fork's types; <code>TKqpStatsStore::GetStats/SetStats/ContainsStats</code> implemented</td></tr>
+</tbody>
+</table>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-decisions">10. Design Decision Analysis</h2>
 <p>Each major structural decision during the fork had at least two viable paths. This section documents the problem each decision faced, the options that were on the table, which one was chosen and why, and what would have gone wrong with each rejected alternative.</p>
 
 <!-- ─── Decision 1 ─────────────────────────────────────────── -->

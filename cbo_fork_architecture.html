@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CBO Fork Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@10';
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    primaryColor: '#2a4a3a',
+    primaryTextColor: '#e0e8e4',
+    primaryBorderColor: '#4a8a6a',
+    lineColor: '#6aaa8a',
+    secondaryColor: '#1a2a3a',
+    tertiaryColor: '#2a3a4a',
+    fontFamily: 'IBM Plex Mono'
+  }
+});
+</script>
+<style>
+:root {
+  --bg: #0a0f0d;
+  --surface: #121a16;
+  --surface2: #1a2820;
+  --border: #2a3a30;
+  --border-hi: #4a8a6a;
+  --text: #d0ddd6;
+  --text-dim: #7a9a8a;
+  --accent: #5acea0;
+  --accent2: #e8a848;
+  --accent3: #c878d8;
+  --red: #e86868;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+  padding: 40px 60px 80px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+h1 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 42px;
+  font-weight: 400;
+  color: var(--accent);
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: var(--text-dim);
+  margin-bottom: 48px;
+  font-weight: 300;
+}
+
+h2 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--accent);
+  margin: 56px 0 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+h3 {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent2);
+  margin: 32px 0 12px;
+}
+
+h4 {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent3);
+  margin: 20px 0 6px;
+}
+
+p, li { color: var(--text); }
+
+ul { padding-left: 20px; margin: 8px 0; }
+li { margin: 4px 0; }
+
+code {
+  font-family: 'IBM Plex Mono', monospace;
+  background: var(--surface2);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.mermaid-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  margin: 20px 0;
+  overflow-x: auto;
+}
+
+.file-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.file-row {
+  display: grid;
+  grid-template-columns: 260px 1fr 120px;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  align-items: start;
+  font-size: 13.5px;
+}
+
+.file-row:hover { border-color: var(--border-hi); }
+
+.file-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 500;
+  color: var(--accent);
+  word-break: break-all;
+  font-size: 12.5px;
+}
+
+.file-desc { color: var(--text); font-size: 13px; }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tag-cbo { background: #1a3a2a; color: #5acea0; border: 1px solid #2a5a3a; }
+.tag-stats { background: #2a2a1a; color: #e8a848; border: 1px solid #4a3a1a; }
+.tag-plumb { background: #2a1a2a; color: #c878d8; border: 1px solid #4a2a4a; }
+.tag-ident { background: #1a2a2a; color: #6a9a8a; border: 1px solid #2a4a3a; }
+.tag-mech { background: #1a1a2a; color: #6888b8; border: 1px solid #2a3a5a; }
+.tag-new { background: #3a1a1a; color: #e86868; border: 1px solid #5a2a2a; }
+
+.rationale-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent2);
+  border-radius: 0 6px 6px 0;
+  padding: 16px 20px;
+  margin: 12px 0;
+}
+
+.rationale-card .chain {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}
+
+.boundary-point {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 10px 0;
+}
+
+.boundary-point .location {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  color: var(--accent3);
+  margin-bottom: 4px;
+}
+
+.sep {
+  width: 100%;
+  height: 1px;
+  background: var(--border);
+  margin: 48px 0;
+}
+
+.arrow { color: var(--accent2); font-weight: 600; }
+
+nav.toc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 28px;
+  margin: 0 0 40px;
+}
+nav.toc h3 { margin: 0 0 12px; color: var(--text-dim); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+nav.toc a { color: var(--accent); text-decoration: none; font-size: 14px; }
+nav.toc a:hover { text-decoration: underline; }
+nav.toc ol { padding-left: 20px; }
+nav.toc li { margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<h1>CBO Fork Architecture</h1>
+<p class="subtitle">KQP-owned Cost-Based Optimizer &mdash; structure, dependencies, type boundaries, and change rationale</p>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ol>
+<li><a href="#sec-deps">Library Dependency Graph</a></li>
+<li><a href="#sec-files">File Map &amp; Classification</a></li>
+<li><a href="#sec-boundary">Type Boundary</a></li>
+<li><a href="#sec-rationale">Substantive Change Rationale</a></li>
+<li><a href="#sec-noncbo">Why Each Non-CBO File Is Copied</a></li>
+<li><a href="#sec-entry">Entry Points</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="sec-deps">1. Library Dependency Graph</h2>
+<p>The fork creates two new libraries under <code>ydb/core/kqp/opt/cbo/</code>. The key invariant: the fork depends on shared DQ <em>infrastructure</em> (<code>dq/opt/core</code>) but never on the YQL-owned CBO code (<code>yql/essentials/core/cbo</code> or <code>ydb/library/yql/dq/opt</code>).</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+graph TD
+  subgraph fork ["KQP-Owned Fork"]
+    CBO["ydb/core/kqp/opt/cbo\n(types + boundary)"]
+    Solver["ydb/core/kqp/opt/cbo/solver\n(join rewriting + stats)"]
+    SolverUT["solver/ut"]
+  end
+
+  subgraph shared ["YQL Shared Infrastructure"]
+    YqlCore["yql/essentials/core\n(TTypeAnnotationContext, TExprNode)"]
+    DqOptCore["ydb/library/yql/dq/opt/core\n(dq_opt.h, dq_opt_phy.h, dq_opt_log.h)"]
+    DqExpr["ydb/library/yql/dq/expr_nodes"]
+    KqpExpr["ydb/core/kqp/expr_nodes"]
+  end
+
+  subgraph frozen ["YQL CBO (frozen, NOT used by fork)"]
+    YqlCBO["yql/essentials/core/cbo"]
+    DqOpt["ydb/library/yql/dq/opt"]
+  end
+
+  subgraph callers ["KQP Optimizer"]
+    KqpOpt["ydb/core/kqp/opt/logical\nkqp_opt_log.cpp"]
+    KqpStatsTx["ydb/core/kqp/opt\nkqp_statistics_transformer.cpp"]
+  end
+
+  Solver -->|PEERDIR| CBO
+  Solver -->|PEERDIR| DqOptCore
+  Solver -->|PEERDIR| DqExpr
+  Solver -->|PEERDIR| KqpExpr
+  CBO -->|PEERDIR| YqlCore
+  SolverUT -->|PEERDIR| Solver
+
+  KqpOpt -->|"DqOptimizeEquiJoinWithCosts()\nDqRewriteEquiJoin()"| Solver
+  KqpStatsTx -->|"InferStatisticsFor*()"| Solver
+  KqpStatsTx -->|"FromYqlColumnStatMap()"| CBO
+
+  DqOpt -->|PEERDIR| DqOptCore
+  DqOpt -->|PEERDIR| YqlCBO
+</pre>
+</div>
+
+<h3>Why this split?</h3>
+<p>The original <code>ydb/library/yql/dq/opt</code> is a single library containing both CBO solver code and shared DQ infrastructure (<code>dq_opt.h</code>, <code>dq_opt_phy.h</code>, etc.). To fork the CBO without duplicating infrastructure, we split <code>dq/opt</code> into:</p>
+<ul>
+<li><code>dq/opt/core</code> &mdash; infrastructure only (uses <code>SRCDIR</code> to compile files from the parent dir without moving them)</li>
+<li><code>dq/opt</code> &mdash; CBO solver (now depends on <code>core</code>)</li>
+</ul>
+<p>The fork's <code>solver/</code> depends on <code>dq/opt/core</code> for infrastructure but compiles its own copies of the CBO solver files.</p>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-files">2. File Map &amp; Classification</h2>
+
+<p>Every file in the fork falls into one of three tiers:</p>
+<ul>
+<li><span class="tag tag-cbo">CBO</span> &mdash; Core optimizer logic: algorithms, types, cost model, hypergraph</li>
+<li><span class="tag tag-stats">STATS</span> &mdash; Statistics infrastructure: stat inference, propagation, selectivity. Not CBO per se but tightly coupled to CBO types</li>
+<li><span class="tag tag-plumb">PLUMB</span> &mdash; Join rewrite plumbing: included because CBO type changes propagate through function signatures</li>
+</ul>
+
+<h3>Core CBO Types (<code>ydb/core/kqp/opt/cbo/</code>)</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">kqp_statistics.h/cpp</div>
+    <div class="file-desc">KQP-owned <code>TOptimizerStatistics</code>, <code>TColumnStatistics</code>, <code>TKqpStatsStore</code> (per-node stats map), and boundary converters <code>FromYql*/ToYql*</code>. The central boundary layer between NYql and NKikimr::NKqp types.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">cbo_optimizer_new.h/cpp</div>
+    <div class="file-desc">Independent <code>EJoinAlgoType</code> enum, <code>IBaseOptimizerNode</code>, <code>IProviderContext</code>, <code>TBaseProviderContext</code>, <code>TRelOptimizerNode</code>, <code>TJoinOptimizerNode</code>, <code>IOptimizerNew</code>, <code>TOptimizerHints</code>. The complete CBO API surface.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">cbo_interesting_orderings.h/cpp</div>
+    <div class="file-desc">Inlined <code>TJoinColumn</code> (from <code>yql_cost_function.h</code>), <code>TOrdering</code>, <code>TFunctionalDependency</code>, <code>TFDStorage</code>, <code>TOrderingsStateMachine</code> (NFSM/DFSM). Shuffle/sort elimination engine.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">cbo_hints.cpp</div>
+    <div class="file-desc"><code>TOptimizerHints::Parse()</code> &mdash; lexer/parser for hint strings (JoinAlgo, Rows, Bytes, JoinOrder).</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+</div>
+
+<h3>Solver (<code>ydb/core/kqp/opt/cbo/solver/</code>)</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">dq_opt_join_cost_based.h/cpp</div>
+    <div class="file-desc"><code>DqOptimizeEquiJoinWithCosts()</code> &mdash; main CBO entry point. Collects relations, builds hypergraph, runs DPHyp, applies shuffle elimination. <code>MakeNativeOptimizerNew()</code> factory.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_join_cbo_factory.h/cpp</div>
+    <div class="file-desc"><code>IOptimizerFactory</code> implementation. Native CBO delegates to <code>MakeNativeOptimizerNew()</code>; PG path replaced with <code>Y_ABORT</code> (not supported in KQP fork).</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_join_hypergraph.h</div>
+    <div class="file-desc"><code>TJoinHypergraph&lt;TNodeSet&gt;</code> &mdash; directed hypergraph for join enumeration. Template over bitset size.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_make_join_hypergraph.h</div>
+    <div class="file-desc"><code>MakeJoinHypergraph()</code> pipeline: builds <code>TJoinHypergraph</code> from equi-join using <code>TConflictRulesCollector</code> and TES.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_dphyp_solver.h</div>
+    <div class="file-desc">DPHyp algorithm ("Dynamic Programming Strikes Back"). Enumerates join orders over the hypergraph, builds DP table of <code>TBestJoin</code>.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_stat.h/cpp</div>
+    <div class="file-desc"><code>InferStatisticsFor*()</code> family &mdash; per-operator statistics inference (FlatMap, Filter, Aggregate, Join, etc.). <code>TPredicateSelectivityComputer</code>. <code>IsConstantExpr()</code>, <code>NeedCalc()</code>.</div>
+    <div><span class="tag tag-stats">STATS</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_stat_transformer_base.h/cpp</div>
+    <div class="file-desc"><code>TDqStatisticsTransformerBase</code> &mdash; graph transformer that walks the plan and calls <code>InferStatisticsFor*()</code>. KQP subclasses this to add KQP-specific matchers.</div>
+    <div><span class="tag tag-stats">STATS</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_predicate_selectivity.cpp</div>
+    <div class="file-desc"><code>TPredicateSelectivityComputer</code> methods: inequality/equality selectivity from histograms and column statistics.</div>
+    <div><span class="tag tag-stats">STATS</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_stat_kqp.cpp</div>
+    <div class="file-desc"><span class="tag tag-new">NEW</span> Not a copy. Provides <code>NKikimr::NKqp::IProviderContext</code> overloads of <code>InferStatisticsForMapJoin</code>, <code>InferStatisticsForGraceJoin</code>, <code>InferStatisticsForDqJoinBase</code> &mdash; needed because the KQP <code>IProviderContext</code> is now a distinct type from <code>NYql::IProviderContext</code>.</div>
+    <div><span class="tag tag-stats">STATS</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_join.h/cpp</div>
+    <div class="file-desc"><code>DqRewriteEquiJoin()</code>, <code>DqBuildPhyJoin()</code>, <code>DqBuildHashJoin()</code>, etc. Join rewrite transforms that convert logical joins to physical operators. Needed because signatures take <code>TKqpStatsStore&amp;</code>.</div>
+    <div><span class="tag tag-plumb">PLUMB</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_join_tree_node.h/cpp</div>
+    <div class="file-desc"><code>TJoinOptimizerNodeInternal</code> &mdash; non-owning internal CBO node. <code>ToString(EJoinKind)</code>, <code>ToString(EJoinAlgoType)</code> &mdash; must reference fork's enums.</div>
+    <div><span class="tag tag-plumb">PLUMB</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_conflict_rules_collector.h/cpp</div>
+    <div class="file-desc">Join reordering legality: commutativity/associativity predicates, <code>TConflictRule</code>, <code>TConflictRulesCollector</code>, TES conversion. Uses <code>EJoinKind</code> from the fork.</div>
+    <div><span class="tag tag-plumb">PLUMB</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_log.h</div>
+    <div class="file-desc">Re-export header of shared DQ integration declarations. Identical to original (purely mechanical namespace change).</div>
+    <div><span class="tag tag-ident">IDENTICAL</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">bitset.h</div>
+    <div class="file-desc">Header-only bitset utilities for join-set operations (<code>Overlaps</code>, <code>IsSubset</code>, <code>GetLowestSetBit</code>). No type dependencies, purely mechanical namespace change.</div>
+    <div><span class="tag tag-plumb">PLUMB</span></div>
+  </div>
+</div>
+
+<h3>Unit Tests (<code>ydb/core/kqp/opt/cbo/solver/ut/</code>)</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">dq_cbo_ut.cpp</div>
+    <div class="file-desc">CBO integration tests. Builds join trees, runs DPHyp, verifies cost-optimal join orders. Uses <code>TKqpStatsStore</code> instead of <code>TTypeAnnotationContext</code>. PG test removed.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_hypergraph_ut.cpp</div>
+    <div class="file-desc">Hypergraph construction tests: verifies <code>MakeJoinHypergraph()</code> with various topologies (chain, star, cross, clique).</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_interesting_orderings_ut.cpp</div>
+    <div class="file-desc">Tests for <code>TOrderingsStateMachine</code>, <code>TFDStorage</code>, and <code>TLogicalOrderings</code>. Verifies FD propagation and shuffle elimination.</div>
+    <div><span class="tag tag-cbo">CBO</span></div>
+  </div>
+</div>
+
+<h3>Files NOT Copied (shared infrastructure in <code>dq/opt/core</code>)</h3>
+<div class="file-grid">
+  <div class="file-row">
+    <div class="file-name">dq_opt.h/cpp</div>
+    <div class="file-desc">Main DQ optimization entrypoints / registration. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_phy.h/cpp</div>
+    <div class="file-desc">Physical DQ rewrites. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_build.h/cpp</div>
+    <div class="file-desc">Build-related transforms. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_log.cpp</div>
+    <div class="file-desc">DQ logging utilities. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_peephole.h/cpp</div>
+    <div class="file-desc">Peephole optimizations. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_hopping.h/cpp</div>
+    <div class="file-desc">Hopping window logic. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+  <div class="file-row">
+    <div class="file-name">dq_opt_phy_finalizing.h/cpp</div>
+    <div class="file-desc">Finalizing passes. No CBO types.</div>
+    <div><span class="tag tag-mech">SHARED</span></div>
+  </div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-boundary">3. Type Boundary</h2>
+<p>The fork introduces a clean boundary between <code>NYql</code> types (shared, read-only) and <code>NKikimr::NKqp</code> types (owned by KQP). Here is exactly where conversions occur:</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart LR
+  subgraph NYql ["NYql types (shared, read-only)"]
+    TAC["TTypeAnnotationContext\n.StatisticsMap\n.ColumnStatisticsByTableName\n.OrderingsFSM / .SortingsFSM"]
+    YqlColStat["NYql::TColumnStatistics"]
+    YqlJoinAlgo["NYql::EJoinAlgoType"]
+    TEN["NYql::TExprNode"]
+  end
+
+  subgraph NKqp ["NKikimr::NKqp types (owned)"]
+    KqpStats["TKqpStatsStore\n.Map_ keyed by UniqueId\n.ShufflingsFSM\n.SortingsFSM"]
+    KqpColStat["NKqp::TColumnStatistics"]
+    KqpJoinAlgo["NKqp::EJoinAlgoType"]
+  end
+
+  YqlColStat -->|"FromYqlColumnStat()"| KqpColStat
+  KqpColStat -->|"ToYqlColumnStat()"| YqlColStat
+  TAC -->|"FromYqlColumnStatMap()\nin kqp_statistics_transformer"| KqpStats
+  TEN -->|"UniqueId as key"| KqpStats
+  YqlJoinAlgo -->|"static_cast\nin dq_opt_join.cpp"| KqpJoinAlgo
+  KqpJoinAlgo -->|"static_cast\nin dq_opt_join.cpp"| YqlJoinAlgo
+</pre>
+</div>
+
+<h3>Boundary Point Details</h3>
+
+<div class="boundary-point">
+  <div class="location">kqp_statistics.cpp &mdash; FromYqlColumnStat() / ToYqlColumnStat()</div>
+  <p>Field-by-field copy between <code>NYql::TColumnStatistics</code> and <code>NKikimr::NKqp::TColumnStatistics</code>. Both structs have identical fields (<code>NumUniqueVals</code>, <code>HyperLogLog</code>, <code>CountMinSketch</code>, <code>EqWidthHistogramEstimator</code>, <code>Type</code>). The shared pointers to sketch/histogram objects are copied as-is (they point to the same underlying data).</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">kqp_statistics.cpp &mdash; FromYqlColumnStatMap() / ToYqlColumnStatMap()</div>
+  <p>Iterates <code>THashMap&lt;TString, TColumnStatistics&gt;</code>, converting each entry via <code>FromYqlColumnStat</code>/<code>ToYqlColumnStat</code>. Used at the ingestion boundary when <code>kqp_statistics_transformer.cpp</code> reads column stats from <code>TTypeAnnotationContext::ColumnStatisticsByTableName</code> (NYql) and stores them into <code>TKqpStatsStore</code> (NKqp).</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">kqp_statistics.cpp &mdash; TKqpStatsStore::GetStats() / SetStats()</div>
+  <p>Keyed by <code>NYql::TExprNode::UniqueId()</code> (a <code>ui64</code>). Stores <code>NKikimr::NKqp::TOptimizerStatistics</code>. This is the KQP parallel to <code>TTypeAnnotationContext::StatisticsMap</code> &mdash; decoupled so KQP optimizer passes own their stats without mutating the shared YQL context.</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">dq_opt_join.cpp:182-189 &mdash; EJoinAlgoType static_cast</div>
+  <p><code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code> (from the YQL equi-join infrastructure). <code>TOptimizerHints::TJoinAlgoHint::Algo</code> is <code>NKikimr::NKqp::EJoinAlgoType</code> (from the fork). Both enums have identical integer values by design. The cast occurs in two directions: hint &rarr; link settings, and link settings &rarr; local variable for KQP enum comparisons.</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">kqp_statistics_transformer.cpp:1012-1017 &mdash; FSM wiring</div>
+  <p>Builds <code>NKikimr::NKqp::TOrderingsStateMachine</code> instances (shufflings + sortings) from collected FDs and stores them on <code>TKqpStatsStore.ShufflingsFSM</code> / <code>.SortingsFSM</code>. The YQL <code>TTypeAnnotationContext</code> also gets its own FSMs built from the same data, but those use <code>NYql::NDq::TOrderingsStateMachine</code>. The two FSM types are structurally identical but live in different namespaces.</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-rationale">4. Substantive Change Rationale</h2>
+<p>For each file with non-mechanical diffs, here is <em>why</em> the change was necessary &mdash; expressed as dependency chains.</p>
+
+<div class="rationale-card">
+  <h4>kqp_statistics.h (+80/-34)</h4>
+  <p>Completely restructured. <strong>Root cause:</strong> <code>TOptimizerStatistics</code> in <code>yql/essentials/core/yql_statistics.h</code> uses <code>NYql::NDq::TJoinColumn</code>, <code>NYql::NDq::TOrderingsStateMachine::TLogicalOrderings</code>, and <code>NYql::TColumnStatistics</code>. If we just included that header, every CBO type in the fork would be an NYql type, defeating the purpose.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> So we duplicated <code>TOptimizerStatistics</code> and all its nested types into <code>NKikimr::NKqp</code>, using the fork's own <code>TJoinColumn</code> and <code>TOrderingsStateMachine</code>. Added <code>TKqpStatsStore</code> as a KQP-owned stats map (parallel to <code>TTypeAnnotationContext::StatisticsMap</code>). Added boundary converters for the types that cross the YQL/KQP boundary.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>cbo_optimizer_new.h (+45/-37)</h4>
+  <p><strong>Root cause:</strong> The original defines <code>NYql::EJoinAlgoType</code> (which lives in <code>yql/essentials/core/yql_cost_function.h</code>, not even in this file). The fork's copy needs its own <code>NKikimr::NKqp::EJoinAlgoType</code> so that all CBO types (<code>TJoinAlgoHints</code>, <code>IProviderContext</code>) use the KQP enum.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Added the <code>EJoinAlgoType</code> enum + <code>AllJoinAlgos</code> constexpr directly. Removed <code>#include &lt;yql_cost_function.h&gt;</code>. Changed all <code>NDq::TJoinColumn</code> references to the fork's <code>TJoinColumn</code>. Forward-declared <code>NYql::TExprContext</code> (needed by <code>IOptimizerFactory</code>).</div>
+</div>
+
+<div class="rationale-card">
+  <h4>cbo_interesting_orderings.h (+38/-6)</h4>
+  <p><strong>Root cause:</strong> The original <code>#include &lt;yql_cost_function.h&gt;</code> pulls in <code>NYql::NDq::TJoinColumn</code>. But the fork needs its own <code>TJoinColumn</code> in <code>NKikimr::NKqp</code> to avoid using YQL types.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Inlined the entire <code>TJoinColumn</code> struct (with <code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code> implementations in the .cpp). Removed <code>TShuffling::SetNatural()</code> and <code>IsNatural</code> field (unused after orderings rework). Added <code>GetColumns()</code> accessor.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_stat.h (+27/-23) and dq_opt_stat.cpp (+235/-237)</h4>
+  <p><strong>Root cause:</strong> Every <code>InferStatisticsFor*()</code> function takes <code>TTypeAnnotationContext*</code> and calls <code>typeCtx-&gt;GetStats()</code> / <code>typeCtx-&gt;SetStats()</code>. But <code>TTypeAnnotationContext</code> is shared YQL state. The fork needs its own stats store.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Replaced <code>TTypeAnnotationContext*</code> with <code>TKqpStatsStore*</code> in all 20+ function signatures. Changed all <code>typeCtx-&gt;GetStats/SetStats</code> to <code>kqpStats-&gt;GetStats/SetStats</code>. For functions that also need <code>typeCtx</code> for non-stats purposes (e.g., <code>InferStatisticsForExtendBase</code> accesses <code>OrderingsFSM</code>), added both parameters. Functions like <code>NeedCalc</code>, <code>IsConstantExpr</code>, <code>IsLiteralDataExpr</code> were moved into an anonymous namespace and reordered due to forward-declaration requirements.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_stat_transformer_base.h (+5/-2) and .cpp (+33/-27)</h4>
+  <p><strong>Root cause:</strong> <code>TDqStatisticsTransformerBase</code> stores <code>TypeCtx</code> and passes it to all <code>InferStatisticsFor*()</code> calls. After the stat function signatures changed, the transformer also needs <code>TKqpStatsStore*</code>.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore* KqpStats</code> member. Constructor takes it as a new parameter. All <code>InferStatisticsFor*(input, TypeCtx)</code> calls changed to <code>InferStatisticsFor*(input, KqpStats)</code> (or <code>InferStatisticsFor*(input, KqpStats, TypeCtx)</code> for the few that need both).</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_join.h (+13/-18) and dq_opt_join.cpp (+15/-7)</h4>
+  <p><strong>Root cause:</strong> <code>DqRewriteEquiJoin()</code> calls <code>typeCtx.GetStats()</code>/<code>typeCtx.SetStats()</code> to propagate equi-join statistics. It also processes <code>TOptimizerHints</code> which use the fork's <code>EJoinAlgoType</code>.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore&amp;</code> parameter to both <code>DqRewriteEquiJoin</code> overloads. Introduced <code>static_cast</code> between <code>NYql::EJoinAlgoType</code> (in <code>TEquiJoinLinkSettings</code>) and <code>NKikimr::NKqp::EJoinAlgoType</code> (in hints). Removed <code>DqCollectJoinRelationsWithStats</code> declaration (moved to <code>dq_opt_join_cost_based.h</code> where it uses <code>TKqpStatsStore</code>).</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_join_cost_based.h (+11/-0) and .cpp (+15/-5)</h4>
+  <p><strong>Root cause:</strong> <code>DqOptimizeEquiJoinWithCosts()</code> is the main CBO entry point. It calls <code>typesCtx.GetStats()</code> to collect relation stats and <code>typesCtx.SetStats()</code> to store results.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore&amp;</code> parameter to all overloads. <code>DqCollectJoinRelationsWithStats</code> moved here (was in <code>dq_opt_join.h</code>) with <code>TKqpStatsStore</code> parameter. All <code>typesCtx.GetStats/SetStats</code> calls replaced with <code>kqpStats.GetStats/SetStats</code>.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_join_cbo_factory.cpp (+2/-3)</h4>
+  <p><strong>Root cause:</strong> <code>MakeJoinCostBasedOptimizerPG</code> calls <code>MakePgOptimizerNew()</code> from <code>yql/essentials/parser/pg_wrapper</code>. The fork doesn't need/want the PG optimizer dependency.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Replaced PG path with <code>Y_ABORT("PG optimizer is not supported in the ydb-owned CBO")</code>. Removed <code>pg_wrapper/interface/optimizer.h</code> include.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_join_hypergraph.h (+0/-1)</h4>
+  <p><strong>Root cause:</strong> Original includes <code>yql_cost_function.h</code> (for <code>TJoinColumn</code>). The fork's <code>TJoinColumn</code> lives in <code>cbo_interesting_orderings.h</code> instead.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Removed the one include line. <code>TJoinColumn</code> is already available via <code>cbo_optimizer_new.h</code> <span class="arrow">&rarr;</span> <code>cbo_interesting_orderings.h</code>.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_predicate_selectivity.cpp (+3/-1)</h4>
+  <p><strong>Root cause:</strong> <code>TPredicateSelectivityComputer</code> methods were defined with explicit <code>NYql::NDq::</code> qualification. In the fork they live in <code>NKikimr::NKqp</code>.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Wrapped implementations in <code>namespace NKikimr::NKqp { ... }</code>. Removed explicit <code>NYql::NDq::</code> qualification on method definitions.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_cbo_ut.cpp (+4/-16)</h4>
+  <p><strong>Root cause:</strong> Tests use <code>TTypeAnnotationContext</code> as stats storage and call <code>MakePgOptimizerNew</code> for the PG test.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Replaced <code>TTypeAnnotationContext typeCtx</code> with <code>TKqpStatsStore kqpStats</code> in all test functions. Removed the <code>DqOptimizeEquiJoinWithCostsPG</code> test (PG not supported). Removed <code>pg_wrapper</code> include. Suite renamed from <code>DQCBO</code> to <code>KqpCBO</code>.</div>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_hypergraph_ut.cpp (+1/-3)</h4>
+  <p><strong>Root cause:</strong> Tests reference <code>NDq::TJoinColumn</code> and use <code>NYql::NDq</code> namespace.</p>
+  <div class="chain"><span class="arrow">&rarr;</span> Consolidated three <code>using namespace</code> lines into one <code>using namespace NKikimr::NKqp</code>. Changed include to the fork's <code>dq_opt_join.h</code>. Suite renamed to <code>KqpHypergraphBuild</code>.</div>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-noncbo">5. Why Each Non-CBO File Is Copied</h2>
+
+<h3>The dependency chain problem</h3>
+<p>Even files that aren't "CBO" in the algorithmic sense must be copied because of transitive type dependencies:</p>
+
+<div class="rationale-card">
+  <h4>dq_opt_join.h/cpp (Join rewrite plumbing)</h4>
+  <p><code>DqRewriteEquiJoin()</code> calls <code>GetStats()</code>/<code>SetStats()</code> on the stats store. If we kept using the original, it would call <code>typeCtx.GetStats()</code> &mdash; the shared YQL stats map. We need it to use <code>kqpStats.GetStats()</code> instead. The function also processes <code>TOptimizerHints</code> which contains <code>NKqp::EJoinAlgoType</code>, requiring <code>static_cast</code> at the boundary with <code>TEquiJoinLinkSettings::JoinAlgo</code> (<code>NYql::EJoinAlgoType</code>).</p>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_join_tree_node.h/cpp</h4>
+  <p>Defines <code>ToString(EJoinAlgoType)</code> and <code>TJoinOptimizerNodeInternal</code> which references the fork's <code>EJoinAlgoType</code>, <code>EJoinKind</code>, and <code>TJoinColumn</code>. If it used the originals, these types would be <code>NYql::*</code> and wouldn't match the fork's CBO interfaces.</p>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_conflict_rules_collector.h/cpp</h4>
+  <p>Uses <code>EJoinKind</code> for commutativity/associativity predicates. These predicates are called by <code>MakeJoinHypergraph()</code> which passes the fork's <code>NKqp::EJoinKind</code> values. A mismatch between enum types would cause compilation errors.</p>
+</div>
+
+<div class="rationale-card">
+  <h4>dq_opt_stat.h/cpp (Statistics infrastructure)</h4>
+  <p>Not CBO per se (doesn't decide join order), but provides the statistics <em>data</em> that CBO algorithms consume. Every stat inference function takes <code>TKqpStatsStore*</code> and produces <code>NKqp::TOptimizerStatistics</code>. Can't use the original because it produces <code>NYql::TOptimizerStatistics</code> and stores in <code>TTypeAnnotationContext</code>.</p>
+</div>
+
+<div class="rationale-card">
+  <h4>bitset.h, dq_opt_log.h</h4>
+  <p>No type dependencies at all &mdash; purely mechanical namespace change. Copied for organizational coherence: the solver directory is self-contained, all its headers live together. <code>dq_opt_log.h</code> is even IDENTICAL after normalization.</p>
+</div>
+
+<div class="sep"></div>
+
+<!-- ============================================================ -->
+<h2 id="sec-entry">6. Entry Points</h2>
+<p>The KQP optimizer calls into the fork at exactly two function entry points, plus the statistics transformer:</p>
+
+<div class="boundary-point">
+  <div class="location">kqp_opt_log.cpp:215 &mdash; DqOptimizeEquiJoinWithCosts()</div>
+  <p>The CBO path. Called when <code>useCBO</code> is enabled for the query. Passes <code>KqpCtx.KqpStats</code> (the KQP-owned stats store), constructs an <code>IOptimizerNew</code> via <code>MakeNativeOptimizerNew()</code>, and gets back a rewritten equi-join tree.</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">kqp_opt_log.cpp:230 &mdash; DqRewriteEquiJoin()</div>
+  <p>The non-CBO path (rule-based join rewriting). Also uses <code>KqpCtx.KqpStats</code> for statistics propagation even when CBO is off.</p>
+</div>
+
+<div class="boundary-point">
+  <div class="location">kqp_statistics_transformer.cpp &mdash; InferStatisticsFor*()</div>
+  <p>The statistics transformer walks the plan bottom-up and calls <code>InferStatisticsFor*()</code> for each operator. It passes <code>KqpStats</code> to all inference functions. This is where table-level stats (from <code>TTypeAnnotationContext</code>) enter the KQP stats store via <code>FromYqlColumnStatMap()</code>.</p>
+</div>
+
+</body>
+</html>

@@ -24,6 +24,11 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
 )
 
+CHECK_DEPENDENT_DIRS(DENY PEERDIRS
+    ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

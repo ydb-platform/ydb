@@ -1054,6 +1054,12 @@ flowchart TD
 <tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +45/-37</span></td><td>Independent <code>EJoinAlgoType</code> enum + <code>AllJoinAlgos</code>; removed <code>#include &lt;yql_cost_function.h&gt;</code>; all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
 <tr><td><code>cbo_optimizer_new.cpp</code></td><td><code>cbo/cbo_optimizer_new.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+10/-10</span></td><td>namespace only</td></tr>
 <tr><td><code>cbo_hints.cpp</code></td><td><code>cbo/cbo_hints.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace only</td></tr>
+<tr>
+  <td><em>(not forked)</em></td>
+  <td><code>cbo/simple/cbo_simple.cpp</code></td>
+  <td><span class="diff-new">NOT FORKED</span></td>
+  <td><code>cbo/simple</code> implements <code>IOptimizerFactory</code> with only the PostgreSQL optimizer backend (<code>MakePgOptimizerNew</code>). KQP never calls <code>MakeSimpleCBOOptimizerFactory()</code> — it uses <code>MakeNativeOptimizerNew</code> (DPhyp) exclusively. No KQP code path reaches this library, so there is nothing to fork. <code>cbo</code> only <code>RECURSE</code>s it (not <code>PEERDIR</code>s) to include it in bulk builds; it is not in <code>cbo</code>'s transitive dependency closure.</td>
+</tr>
 <tr><td><code>kqp_statistics.h</code></td><td><code>../yql_statistics.h</code> <em>(different name)</em></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +67/-34</span></td><td>Independent <code>TOptimizerStatistics</code> with KQP-specific fields (<code>SortingOrderingIdx</code>, <code>ShuffledByColumns</code>); <code>TKqpStatsStore</code> added; <code>TOrderingsStateMachine</code> from fork; no <code>yql_statistics.h</code> include</td></tr>
 <tr><td><code>kqp_statistics.cpp</code></td><td><code>../yql_statistics.cpp</code></td><td><em>not tracked by diff tool</em></td><td>Uses fork's types; <code>TKqpStatsStore::GetStats/SetStats/ContainsStats</code> implemented</td></tr>
 </tbody>

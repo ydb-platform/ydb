@@ -2290,6 +2290,8 @@ void TCms::Handle(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx)
 
     auto requestStartTime = TInstant::Now();
 
+    SortActionsBySysTabletPriority(request.Request);
+
     ClusterInfo->LogManager.PushRollbackPoint();
     for (const auto &scheduled_request : State->ScheduledRequests) {
         if (scheduled_request.second.Priority < request.Priority) {

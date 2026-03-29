@@ -165,6 +165,16 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
             ScriptCursor.reset();
             ClearStageData();
             ResetStageResultForNextPage();
+            // Clear ResourceGuards so that memory allocation guards from the previous page
+            // do not accumulate into the next page's fetch cycle.  Each page's
+            // TAllocateMemoryStep appends new guards via RegisterAllocationGuard(); without
+            // this clear the guard vector grows linearly with the page count, causing the
+            // memory limiter to over-account by a factor of N (where N is the page number).
+            ResourceGuards.clear();
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx())(
+                "event", "ContinueCursor_ResetState")(
+                "page_index", GetCurrentEarlyPageIndex())(
+                "total_pages", GetEarlyPages().size());
             InitStageData(std::make_unique<TFetchedData>(
                 GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
                     GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(),

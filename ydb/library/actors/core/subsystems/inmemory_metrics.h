@@ -93,6 +93,7 @@ namespace NActors {
         TVector<TLabel> Labels;
         bool Closed = false;
         TVector<TChunkView> Chunks;
+        TVector<TRecordView> InlineRecords;
 
     private:
         friend class TInMemoryMetricsRegistry;

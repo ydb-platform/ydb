@@ -247,6 +247,9 @@ namespace NActors {
 
     void TLineSnapshot::ForEachRecord(const std::function<void(const TRecordView&)>& cb) const {
         if (!Data) {
+            for (const auto& record : InlineRecords) {
+                cb(record);
+            }
             return;
         }
         for (size_t chunkIndex : ChunkIndexes) {
@@ -259,6 +262,9 @@ namespace NActors {
                     .Value = records[i].Value,
                 });
             }
+        }
+        for (const auto& record : InlineRecords) {
+            cb(record);
         }
     }
 
@@ -285,6 +291,13 @@ namespace NActors {
     TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
     namespace {
+        constexpr TStringBuf RegistryMemoryUsedBytesMetric = "inmemory_metrics.memory_used_bytes";
+        constexpr TStringBuf RegistryCommittedBytesMetric = "inmemory_metrics.committed_bytes";
+        constexpr TStringBuf RegistryFreeChunksMetric = "inmemory_metrics.free_chunks";
+        constexpr TStringBuf RegistryUsedChunksMetric = "inmemory_metrics.used_chunks";
+        constexpr TStringBuf RegistrySealedChunksMetric = "inmemory_metrics.sealed_chunks";
+        constexpr TStringBuf RegistryLinesMetric = "inmemory_metrics.lines";
+
         TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
             TLineKey key;
             key.Name = TString(name);
@@ -531,6 +544,7 @@ namespace NActors {
         bool CanFitRecord(const TChunk* chunk) {
             return sizeof(TStoredRecord) <= chunk->Payload.size();
         }
+
     }
 
     bool TInMemoryMetricsRegistry::Append(TLine* line, ui64 value) noexcept {
@@ -646,9 +660,28 @@ namespace NActors {
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
         snapshot.CommonLabels = GetCommonLabels();
+        const TInstant snapshotTime = TInstant::Now();
+
+        ui32 freeChunks = 0;
+        ui32 usedChunks = 0;
+        ui32 sealedChunks = 0;
+        ui64 committedBytes = 0;
+        for (const auto& chunk : Impl->Storage) {
+            const EChunkState state = chunk->State.load(std::memory_order_acquire);
+            if (state == EChunkState::Free) {
+                ++freeChunks;
+            } else {
+                ++usedChunks;
+                committedBytes += chunk->CommittedBytes.load(std::memory_order_acquire);
+                if (state == EChunkState::Sealed) {
+                    ++sealedChunks;
+                }
+            }
+        }
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
-        snapshot.SnapshotLines.reserve(Impl->LinesById.size());
+        const ui64 userLines = Impl->LinesById.size();
+        snapshot.SnapshotLines.reserve(userLines + 6);
 
         for (const auto& [lineId, line] : Impl->LinesById) {
             Y_UNUSED(lineId);
@@ -686,6 +719,24 @@ namespace NActors {
                 snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
             }
         }
+
+        auto addInlineMetricLine = [&](TStringBuf name, ui64 value) {
+            TLineSnapshot line;
+            line.Name = TString(name);
+            line.Closed = true;
+            line.InlineRecords.push_back(TRecordView{
+                .Timestamp = snapshotTime,
+                .Value = value,
+            });
+            snapshot.SnapshotLines.push_back(std::move(line));
+        };
+
+        addInlineMetricLine(RegistryMemoryUsedBytesMetric, static_cast<ui64>(usedChunks) * Impl->Config.ChunkSizeBytes);
+        addInlineMetricLine(RegistryCommittedBytesMetric, committedBytes);
+        addInlineMetricLine(RegistryFreeChunksMetric, freeChunks);
+        addInlineMetricLine(RegistryUsedChunksMetric, usedChunks);
+        addInlineMetricLine(RegistrySealedChunksMetric, sealedChunks);
+        addInlineMetricLine(RegistryLinesMetric, userLines);
 
         return snapshot;
     }

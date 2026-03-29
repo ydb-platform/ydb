@@ -18,9 +18,15 @@ TARGET = "harmonizer.max_used_cpu_x1e6"
 AWAKENING_TARGET = "harmonizer.avg_awakening_time_us"
 POOL_TARGET = "harmonizer.pool.avg_used_cpu_x1e6"
 PROMETHEUS_API_PREFIX = "/viewer/inmemory_metrics/prometheus/api/v1"
+MEMORY_USED_TARGET = "inmemory_metrics.memory_used_bytes"
+COMMITTED_BYTES_TARGET = "inmemory_metrics.committed_bytes"
+FREE_CHUNKS_TARGET = "inmemory_metrics.free_chunks"
+USED_CHUNKS_TARGET = "inmemory_metrics.used_chunks"
+SEALED_CHUNKS_TARGET = "inmemory_metrics.sealed_chunks"
+LINES_TARGET = "inmemory_metrics.lines"
 
 
-def wait_for_target(base_url, predicate):
+def wait_for_target(base_url, predicate, prefix="harmonizer"):
     last_targets = []
 
     def targets_ready():
@@ -28,7 +34,7 @@ def wait_for_target(base_url, predicate):
         try:
             response = requests.get(
                 f"{base_url}/viewer/inmemory_metrics/targets",
-                params={"prefix": "harmonizer"},
+                params={"prefix": prefix},
                 timeout=10,
             )
         except requests.exceptions.RequestException:
@@ -130,6 +136,43 @@ def test_inmemory_metrics_are_exposed(ydb_cluster):
     assert "node_id" in last_series[0]["tags"]
     assert_that(len(datapoints), greater_than(0))
     assert_that(datapoints[-1][1], greater_than(0))
+
+
+def test_inmemory_metrics_registry_meta_lines_are_exposed(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{MEMORY_USED_TARGET}{{node_id="'),
+        prefix="inmemory_metrics",
+    )
+
+    last_series = None
+
+    def series_ready():
+        nonlocal last_series
+        try:
+            response = requests.get(
+                f"{base_url}/viewer/inmemory_metrics/render",
+                params={"target": MEMORY_USED_TARGET},
+                timeout=10,
+            )
+        except requests.exceptions.RequestException:
+            return False
+
+        if response.status_code != 200:
+            return False
+
+        last_series = response.json()
+        logger.info("inmemory registry meta series: %s", last_series)
+        return (
+            bool(last_series)
+            and last_series[0].get("target") == target
+            and bool(last_series[0].get("datapoints"))
+            and last_series[0]["datapoints"][-1][0] >= 0
+        )
+
+    assert wait_for(series_ready, timeout_seconds=30, step_seconds=1.0), last_series
 
 
 def test_inmemory_metrics_render_accepts_labeled_graphite_target(ydb_cluster):
@@ -254,7 +297,16 @@ def test_inmemory_metrics_prometheus_label_discovery(ydb_cluster):
 
         last_metric_names = data
         logger.info("prometheus metric names: %s", last_metric_names)
-        return TARGET in last_metric_names and AWAKENING_TARGET in last_metric_names
+        return (
+            TARGET in last_metric_names
+            and AWAKENING_TARGET in last_metric_names
+            and MEMORY_USED_TARGET in last_metric_names
+            and COMMITTED_BYTES_TARGET in last_metric_names
+            and FREE_CHUNKS_TARGET in last_metric_names
+            and USED_CHUNKS_TARGET in last_metric_names
+            and SEALED_CHUNKS_TARGET in last_metric_names
+            and LINES_TARGET in last_metric_names
+        )
 
     assert wait_for(metric_names_ready, timeout_seconds=30, step_seconds=1.0), last_metric_names
 

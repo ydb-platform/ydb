@@ -4,6 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <atomic>
+#include <algorithm>
 #include <random>
 #include <thread>
 
@@ -16,6 +17,26 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     std::span<const TLabel> NoLabels() {
         return {};
+    }
+
+    bool IsSystemLine(const TLineSnapshot& line) {
+        return line.Name.StartsWith("inmemory_metrics.");
+    }
+
+    TVector<TLineSnapshot> FilterUserLines(TVector<TLineSnapshot> lines) {
+        lines.erase(std::remove_if(lines.begin(), lines.end(), [](const TLineSnapshot& line) {
+            return IsSystemLine(line);
+        }), lines.end());
+        return lines;
+    }
+
+    const TLineSnapshot* FindLineByName(const TVector<TLineSnapshot>& lines, TStringBuf name) {
+        for (const auto& line : lines) {
+            if (line.Name == name) {
+                return &line;
+            }
+        }
+        return nullptr;
     }
 
     Y_UNIT_TEST(SubsystemAccessor) {
@@ -46,7 +67,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(20));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(lines[0].Name, "line");
         UNIT_ASSERT(!lines[0].Closed);
@@ -81,7 +102,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
@@ -113,7 +134,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         registry.SetCommonLabels(updatedLabels);
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
@@ -126,6 +147,79 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         auto duplicate = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
         UNIT_ASSERT(!duplicate);
+    }
+
+    Y_UNIT_TEST(SnapshotIncludesRegistryMetaLines) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 128,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        auto first = registry.CreateLine("first", NoLabels());
+        auto second = registry.CreateLine("second", NoLabels());
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(second);
+        UNIT_ASSERT(first.Append(1));
+        UNIT_ASSERT(second.Append(2));
+
+        const auto lines = registry.Snapshot().Lines();
+
+        const TLineSnapshot* memoryUsed = FindLineByName(lines, "inmemory_metrics.memory_used_bytes");
+        const TLineSnapshot* committedBytes = FindLineByName(lines, "inmemory_metrics.committed_bytes");
+        const TLineSnapshot* freeChunks = FindLineByName(lines, "inmemory_metrics.free_chunks");
+        const TLineSnapshot* usedChunks = FindLineByName(lines, "inmemory_metrics.used_chunks");
+        const TLineSnapshot* sealedChunks = FindLineByName(lines, "inmemory_metrics.sealed_chunks");
+        const TLineSnapshot* lineCount = FindLineByName(lines, "inmemory_metrics.lines");
+
+        UNIT_ASSERT(memoryUsed);
+        UNIT_ASSERT(committedBytes);
+        UNIT_ASSERT(freeChunks);
+        UNIT_ASSERT(usedChunks);
+        UNIT_ASSERT(sealedChunks);
+        UNIT_ASSERT(lineCount);
+
+        TVector<ui64> values;
+        memoryUsed->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 128);
+
+        values.clear();
+        committedBytes->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 32);
+
+        values.clear();
+        freeChunks->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+
+        values.clear();
+        usedChunks->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
+
+        values.clear();
+        sealedChunks->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+
+        values.clear();
+        lineCount->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {
@@ -141,7 +235,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!writer.Append(43));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT(lines[0].Closed);
 
@@ -181,7 +275,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         }
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(lines[0].Chunks.size(), 2);
 
@@ -212,7 +306,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(first.Append(10));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT(!lines[0].Closed);
 
@@ -234,7 +328,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        UNIT_ASSERT_VALUES_EQUAL(registry.Snapshot().Lines().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(FilterUserLines(registry.Snapshot().Lines()).size(), 0);
     }
 
     Y_UNIT_TEST(TooSmallChunkAlwaysDrops) {
@@ -247,7 +341,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        UNIT_ASSERT_VALUES_EQUAL(registry.Snapshot().Lines().size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(FilterUserLines(registry.Snapshot().Lines()).size(), 0);
     }
 
     Y_UNIT_TEST(StealOldestSealedChunk) {
@@ -267,7 +361,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
 
         TVector<ui64> firstValues;
@@ -307,7 +401,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second.Append(2));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
-        auto lines = registry.Snapshot().Lines();
+        auto lines = FilterUserLines(registry.Snapshot().Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(lines[0].Name, "second");
 
@@ -336,7 +430,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::thread snapshotter([&] {
             while (!stop.load(std::memory_order_acquire)) {
                 auto snapshot = registry.Snapshot();
-                for (const auto& line : snapshot.Lines()) {
+                for (const auto& line : FilterUserLines(snapshot.Lines())) {
                     line.ForEachRecord([&](const TRecordView& record) {
                         if (record.Value >= writes) {
                             ok.store(false, std::memory_order_release);
@@ -359,7 +453,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
 
         TVector<ui64> values;
@@ -395,7 +489,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             std::mt19937_64 rng(42);
             while (!stop.load(std::memory_order_acquire)) {
                 auto snapshot = registry.Snapshot();
-                for (const auto& line : snapshot.Lines()) {
+                for (const auto& line : FilterUserLines(snapshot.Lines())) {
                     line.ForEachRecord([&](const TRecordView& record) {
                         const ui64 lineIndex = record.Value >> 32;
                         const ui64 seq = record.Value & 0xffffffffull;
@@ -436,7 +530,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
         auto snapshot = registry.Snapshot();
-        auto lines = snapshot.Lines();
+        auto lines = FilterUserLines(snapshot.Lines());
         UNIT_ASSERT_VALUES_EQUAL(lines.size(), writersCount);
 
         TVector<ui64> counts(writersCount, 0);

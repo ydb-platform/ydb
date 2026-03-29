@@ -69,7 +69,6 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build();
     TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(ev->Get()->GetPortionId());
     auto constructor = std::make_shared<TFilterAccumulator>(ev, Counters);
     if (BordersFlowController.IsExclusiveInterval(mainPortion->GetPortionId())) {

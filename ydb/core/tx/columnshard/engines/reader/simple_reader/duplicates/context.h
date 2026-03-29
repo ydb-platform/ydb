@@ -37,44 +37,6 @@ public:
     TFilterBuildingGuard();
 };
 
-class TJobStatus {
-public:
-    class TResultInFlightGuard: public TMoveOnly {
-    private:
-        std::shared_ptr<TJobStatus> Owner;
-
-    public:
-        TResultInFlightGuard(const std::shared_ptr<TJobStatus>& owner)
-            : Owner(owner)
-        {
-            AFL_VERIFY(Owner);
-            Owner->ResultsInFlight.Inc();
-        }
-
-        TResultInFlightGuard(TResultInFlightGuard&& other) = default;
-        TResultInFlightGuard& operator=(TResultInFlightGuard&& other) = default;
-
-        ~TResultInFlightGuard() {
-            if (Owner) {
-                Owner->ResultsInFlight.Dec();
-            }
-        }
-    };
-
-private:
-    std::atomic_bool IsDoneFlag = false;
-    TAtomicCounter ResultsInFlight;
-
-public:
-    bool IsDone() const {
-        return IsDoneFlag.load() && !ResultsInFlight.Val();
-    }
-
-    void OnDone() {
-        AFL_VERIFY(!IsDoneFlag.exchange(true));
-    }
-};
-
 class TBuildFilterContext: public NColumnShard::TMonitoringObjectsCounter<TBuildFilterContext>, public TMoveOnly {
 private:
     using TFieldByColumn = std::map<ui32, std::shared_ptr<arrow::Field>>;
@@ -90,7 +52,6 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
-    YDB_READONLY_DEF(std::shared_ptr<TJobStatus>, Status);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 
 public:
@@ -111,7 +72,6 @@ public:
         , DataAccessorsManager(dataAccessorsManager)
         , Counters(counters)
         , RequestGuard(std::move(requestGuard))
-        , Status(std::make_shared<TJobStatus>())
         , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);
@@ -126,10 +86,6 @@ public:
 
     TBuildFilterContext(TBuildFilterContext&& other) = default;
     TBuildFilterContext& operator=(TBuildFilterContext&& other) = default;
-
-    TJobStatus::TResultInFlightGuard MakeResultInFlightGuard() const {
-        return TJobStatus::TResultInFlightGuard(Status);
-    }
 
     std::set<ui32> GetFetchingColumnIds() const {
         std::set<ui32> columnsToFetch;
@@ -163,12 +119,6 @@ public:
 
     const TSnapshot& GetMaxVersion() const {
         return MaxVersion;
-    }
-
-    ~TBuildFilterContext() {
-        if (Status) {
-            Status->OnDone();
-        }
     }
 };
 

@@ -110,7 +110,6 @@ public:
     TBuildFilterTaskContext Context;
     TConclusion<TDuplicateSourceCacheResult> Result;
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
-    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
 
 public:
     TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
@@ -122,11 +121,9 @@ public:
     {}
 
     TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
-        TConclusion<TDuplicateSourceCacheResult>&& error,
-        std::optional<TJobStatus::TResultInFlightGuard>&& resultGuard)
+        TConclusion<TDuplicateSourceCacheResult>&& error)
         : Context(std::move(context))
         , Result(std::move(error))
-        , ResultGuard(std::move(resultGuard))
     {}
 };
 

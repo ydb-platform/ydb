@@ -19,7 +19,7 @@ private:
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 std::make_unique<TEvBordersConstructionResult>(std::move(Request),
-                    TConclusionStatus::Fail(errorAddresses.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+                    TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
             return;
         }
 
@@ -42,8 +42,7 @@ public:
     void OnError(const TString& errorMessage) {
         AFL_VERIFY(Request.GetGlobalContext().GetOwner());
         TActorContext::AsActorContext().Send(
-            Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage),
-                                                       Request.GetGlobalContext().MakeResultInFlightGuard()));
+            Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorMessage)));
     }
 };
 
@@ -54,8 +53,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
-                Request.GetGlobalContext().MakeResultInFlightGuard()));
+            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
@@ -92,14 +90,14 @@ private:
         if (result.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 std::make_unique<TEvBordersConstructionResult>(std::move(Request),
-                    TConclusionStatus::Fail(result.GetErrorMessage()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+                    TConclusionStatus::Fail(result.GetErrorMessage())));
             return;
         }
 
         if (result.HasRemovedData()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 std::make_unique<TEvBordersConstructionResult>(std::move(Request),
-                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size())));
             return;
         }
 
@@ -141,8 +139,7 @@ private:
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
         TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
-            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage),
-                Request.GetGlobalContext().MakeResultInFlightGuard()));
+            std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
     }
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {

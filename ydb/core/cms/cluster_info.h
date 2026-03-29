@@ -799,8 +799,14 @@ public:
     }
 
     bool HostHasSysTablet(const TString &hostName) const {
-        for (const auto *node : HostNodes(hostName)) {
-            if (NodeToTabletTypes.contains(node->NodeId)) {
+        ui32 nodeId;
+        if (TryFromString(hostName, nodeId)) {
+            return HasNode(nodeId) && NodeToTabletTypes.contains(nodeId);
+        }
+
+        auto pr = HostNameToNodeId.equal_range(hostName);
+        for (auto it = pr.first; it != pr.second; ++it) {
+            if (NodeToTabletTypes.contains(it->second)) {
                 return true;
             }
         }

@@ -22,6 +22,7 @@ class TestViewer(object):
             'enable_topic_transfer': True,
             'enable_script_execution_operations': True,
             'enable_local_bloom_filter_index': True,
+            'enable_local_index_as_scheme_object': True,
             },
             enable_static_auth=True)
         config.yaml_config['domains_config']['security_config']['enforce_user_token_requirement'] = False

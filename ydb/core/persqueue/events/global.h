@@ -67,6 +67,7 @@ namespace NKikimr::TEvPersQueue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
+    static_assert(EvInternalEvents == InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL));
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {

@@ -178,6 +178,55 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     return true;
 }
 
+// For DataShard LocalBloomFilter: converts ADD INDEX ... LOCAL USING bloom_filter into
+// ESchemeOpAlterTable that sets ByKeyFilterPrefixes in the partition config.
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    std::pair<TString, TString> pathPair;
+    try {
+        pathPair = SplitPathIntoWorkingDirAndName(path);
+    } catch (const std::exception&) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid table path";
+        return false;
+    }
+
+    modifyScheme->SetWorkingDir(pathPair.first);
+    modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+
+    auto* tableDesc = modifyScheme->MutableAlterTable();
+    tableDesc->SetName(pathPair.second);
+
+    // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
+    TSet<ui32> bloomPrefixes;
+    for (const auto& index : req->add_indexes()) {
+        if (index.type_case() != Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
+            continue;
+        }
+        if (index.index_columns().empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Bloom filter index must specify at least one column";
+            return false;
+        }
+        bloomPrefixes.insert(static_cast<ui32>(index.index_columns_size()));
+    }
+
+    for (ui32 prefix : bloomPrefixes) {
+        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
+    }
+
+    return true;
+}
+
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
+}
+
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {

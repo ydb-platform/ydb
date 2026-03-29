@@ -1064,10 +1064,19 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasEnableFilterByKey()) {
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
+        if (!changes.GetEnableFilterByKey()) {
+            // Disabling KEY_BLOOM_FILTER clears all bloom filter state including prefixed filters
+            result.ClearByKeyFilterPrefixes();
+        }
     }
 
     if (changes.ByKeyFilterPrefixesSize() > 0) {
         TVector<ui32> prefixes;
+        for (auto p : result.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
         for (auto p : changes.GetByKeyFilterPrefixes()) {
             if (p > 0) {
                 prefixes.push_back(p);

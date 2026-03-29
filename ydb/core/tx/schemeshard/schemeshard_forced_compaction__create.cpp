@@ -97,14 +97,14 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
 
         info->TablesToCompact.insert(info->TablePathId);
         if (info->Cascade) {
-            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+            for (const auto& [_, childPathId] : tablePath.Base()->GetChildren()) {
                 auto childPath = Self->PathsById.at(childPathId);
                 if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex || childPath->Dropped()) {
                     continue;
                 }
 
                 auto indexPath = TPath::Init(childPathId, Self);
-                for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
+                for (const auto& [_, implTablePathId]: indexPath.Base()->GetChildren()) {
                     auto indexImplPath = TPath::Init(implTablePathId, Self);
                     if (Self->InProgressForcedCompactionsByTable.contains(implTablePathId)) {
                         return Reply(

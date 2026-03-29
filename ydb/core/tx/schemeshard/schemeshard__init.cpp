@@ -5705,6 +5705,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
                         }
                     }
+                    Y_ENSURE(!info->TablesToCompact.empty());
                 } else {
                     info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
                 }
@@ -5819,8 +5820,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         });
 
         Self->ProcessForcedCompactionQueues();
-        if (Self->ForcedCompactionsDoneShardsToPersist) {
-            // for cleanup
+        if (Self->ForcedCompactionsDoneShardsToPersist || Self->CancellingForcedCompactions) {
+            // for cleanup and to progress cancelling forced compactions after restart
             Self->Execute(Self->CreateTxProgressForcedCompaction(), ctx);
         }
     }

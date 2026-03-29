@@ -1,0 +1,216 @@
+#pragma once
+
+#include <util/datetime/base.h>
+#include <util/generic/function.h>
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/hp_timer.h>
+
+#include <cstring>
+#include <memory>
+#include <span>
+#include <type_traits>
+
+namespace NActors {
+    template<class TFrontend>
+    class TLine;
+    template<class TValue>
+    struct TGenericRecordView {
+        TInstant Timestamp;
+        TValue Value;
+    };
+    class TInMemoryMetricsRegistry;
+    class TLineWriterState;
+    class TLineSnapshot;
+    class TSnapshot;
+    struct TSnapshotData;
+
+    struct TLabel {
+        TString Name;
+        TString Value;
+
+        bool operator==(const TLabel& rhs) const noexcept;
+    };
+
+    struct TInMemoryMetricsConfig {
+        ui64 MemoryBytes = 0;
+        ui32 ChunkSizeBytes = 4096;
+        ui32 MaxLines = 0;
+        TVector<TLabel> CommonLabels;
+    };
+
+    struct TLineKey {
+        TString Name;
+        TVector<TLabel> Labels;
+
+        bool operator==(const TLineKey& rhs) const noexcept;
+    };
+
+    struct TLineKeyHash {
+        size_t operator()(const TLineKey& key) const noexcept;
+    };
+
+    struct TRecordView {
+        TInstant Timestamp;
+        ui64 Value = 0;
+    };
+
+    struct TChunkView {
+        ui32 ChunkId = 0;
+        TInstant FirstTs;
+        TInstant LastTs;
+        ui32 CommittedBytes = 0;
+    };
+
+    struct TStoredRecord {
+        NHPTimer::STime TimestampTs = 0;
+        ui64 Value = 0;
+    };
+
+    struct TLinePublishState {
+        bool HasLastPublished = false;
+        ui64 LastPublishedValue = 0;
+        NHPTimer::STime LastPublishedTs = 0;
+        NHPTimer::STime LastObservedTs = 0;
+        TDuration Heartbeat;
+    };
+
+    namespace NInMemoryMetricsPrivate {
+        template<class TValue>
+        ui64 EncodeLineValue(const TValue& value) noexcept {
+            static_assert(std::is_trivially_copyable_v<TValue>);
+            static_assert(sizeof(TValue) <= sizeof(ui64));
+
+            ui64 encoded = 0;
+            std::memcpy(&encoded, &value, sizeof(TValue));
+            return encoded;
+        }
+
+        template<class TValue>
+        TValue DecodeLineValue(ui64 value) noexcept {
+            static_assert(std::is_trivially_copyable_v<TValue>);
+            static_assert(sizeof(TValue) <= sizeof(ui64));
+
+            TValue decoded{};
+            std::memcpy(&decoded, &value, sizeof(TValue));
+            return decoded;
+        }
+    } // namespace NInMemoryMetricsPrivate
+
+    struct TLineFrontendOps {
+        using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, const std::function<void(const TRecordView&)>&);
+
+        TStringBuf Name;
+        TReadRange ReadRange = nullptr;
+    };
+
+    struct TLineMeta {
+        const TLineFrontendOps* Frontend = nullptr;
+        TDuration Heartbeat;
+
+        TLineMeta() noexcept;
+        TLineMeta(const TLineFrontendOps* frontend, TDuration heartbeat = TDuration::Zero()) noexcept;
+
+        TStringBuf FrontendName() const noexcept;
+    };
+
+    class TLineSnapshot {
+    public:
+        TLineSnapshot();
+        TLineSnapshot(const TLineSnapshot&);
+        TLineSnapshot(TLineSnapshot&&) noexcept;
+        TLineSnapshot& operator=(const TLineSnapshot&);
+        TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
+        ~TLineSnapshot();
+
+        void ForEachRecord(const std::function<void(const TRecordView&)>& cb) const;
+        void ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const;
+        void ForEachMaterializedRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const;
+        bool TryGetLastMaterializedRecord(TRecordView& record) const;
+        template<class TValueType, class TCallback>
+        void ForEachRecordAs(TCallback&& cb) const {
+            ForEachRecord([&](const TRecordView& record) {
+                cb(TGenericRecordView<TValueType>{
+                    .Timestamp = record.Timestamp,
+                    .Value = NInMemoryMetricsPrivate::DecodeLineValue<TValueType>(record.Value),
+                });
+            });
+        }
+        template<class TValueType, class TCallback>
+        void ForEachRecordAsInRange(TInstant beginTs, TInstant endTs, TCallback&& cb) const {
+            ForEachRecordInRange(beginTs, endTs, [&](const TRecordView& record) {
+                cb(TGenericRecordView<TValueType>{
+                    .Timestamp = record.Timestamp,
+                    .Value = NInMemoryMetricsPrivate::DecodeLineValue<TValueType>(record.Value),
+                });
+            });
+        }
+
+        TInstant GetLastPublishedTimestamp() const noexcept {
+            return LastPublishedTimestamp;
+        }
+
+        TInstant GetLastObservedTimestamp() const noexcept {
+            return LastObservedTimestamp;
+        }
+
+    public:
+        ui32 LineId = 0;
+        TString Name;
+        TVector<TLabel> Labels;
+        TLineMeta Meta;
+        bool Closed = false;
+        TVector<TChunkView> Chunks;
+
+    private:
+        template<class TFrontend>
+        friend class TLine;
+        friend class TInMemoryMetricsRegistry;
+        std::shared_ptr<TSnapshotData> Data;
+        TVector<size_t> ChunkIndexes;
+        TInstant LastPublishedTimestamp;
+        TInstant LastObservedTimestamp;
+    };
+
+    class TSnapshot {
+    public:
+        TSnapshot();
+        TSnapshot(const TSnapshot&);
+        TSnapshot(TSnapshot&&) noexcept;
+        TSnapshot& operator=(const TSnapshot&);
+        TSnapshot& operator=(TSnapshot&&) noexcept;
+        ~TSnapshot();
+
+        TVector<TLineSnapshot> Lines() const;
+
+    public:
+        TVector<TLabel> CommonLabels;
+
+    private:
+        friend class TInMemoryMetricsRegistry;
+        TVector<TLineSnapshot> SnapshotLines;
+    };
+
+    struct TInMemoryMetricsStats {
+        ui64 MemoryUsedBytes = 0;
+        ui64 CommittedBytes = 0;
+        ui64 FreeChunks = 0;
+        ui64 UsedChunks = 0;
+        ui64 SealedChunks = 0;
+        ui64 WritableChunks = 0;
+        ui64 RetiringChunks = 0;
+        ui64 Lines = 0;
+        ui64 ClosedLines = 0;
+        ui64 ReuseWatermark = 0;
+        ui64 AppendFailuresTotal = 0;
+    };
+
+    TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels);
+    TVector<TLabel> NormalizeCommonLabels(std::span<const TLabel> labels);
+
+} // namespace NActors
+
+#include "lines/raw_line_frontend.h"
+#include "lines/on_change_line_frontend.h"
+#include "lines/on_change_with_heartbeat_line_frontend.h"

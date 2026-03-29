@@ -10,6 +10,7 @@
 #include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/probes.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 
 #include <ydb/library/actors/core/activity_guard.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -25,6 +26,9 @@
 #include <util/system/spinlock.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
 
 namespace NActors {
 
@@ -32,6 +36,48 @@ LWTRACE_USING(ACTORLIB_PROVIDER);
 
 
 class THarmonizer: public IHarmonizer {
+public:
+    enum class EGlobalMetric : size_t {
+        AvgAwakeningTimeUs,
+        AvgWakingUpTimeUs,
+        BudgetX1e6,
+        SharedFreeCpuX1e6,
+        Count,
+    };
+
+    enum class EPoolMetric : size_t {
+        AvgUsedCpuX1e6,
+        AvgElapsedCpuX1e6,
+        PotentialMaxThreadCountX1e6,
+        SharedCpuQuotaX1e6,
+        IsNeedy,
+        IsStarved,
+        IsHoggish,
+        Count,
+    };
+
+    struct TInMemoryMetricWriters {
+        using TRawMetricLine = TLine<TRawLineFrontend<>>;
+        using THeartbeatMetricLine = TLine<TOnChangeWithHeartbeatLineFrontend<>>;
+
+        struct TPoolMetricWriters {
+            TRawMetricLine AvgUsedCpuX1e6;
+            TRawMetricLine AvgElapsedCpuX1e6;
+            TRawMetricLine PotentialMaxThreadCountX1e6;
+            THeartbeatMetricLine SharedCpuQuotaX1e6;
+            THeartbeatMetricLine IsNeedy;
+            THeartbeatMetricLine IsStarved;
+            THeartbeatMetricLine IsHoggish;
+        };
+
+        bool Initialized = false;
+        bool Enabled = false;
+        bool PreStopRegistered = false;
+        TActorSystem* ActorSystem = nullptr;
+        std::array<TRawMetricLine, static_cast<size_t>(EGlobalMetric::Count)> Global;
+        TVector<TPoolMetricWriters> Pools;
+    };
+
 private:
     std::atomic<ui64> Iteration = 0;
     std::atomic<bool> IsDisabled = false;
@@ -58,6 +104,7 @@ private:
     float ProcessingBudget = 0.0;
     std::atomic<float> SharedFreeCpu = 0.0;
     std::atomic<float> Budget = 0.0;
+    TInMemoryMetricWriters InMemoryMetrics;
 
     void PullStats(ui64 ts);
     void PullSharedInfo();
@@ -68,6 +115,9 @@ private:
     void ProcessNeedyState();
     void ProcessExchange();
     void ProcessHoggishState();
+    void EnsureInMemoryMetricsInitialized();
+    void ReportInMemoryMetrics();
+    void ClearInMemoryMetrics();
 
     void SetForeignThreadSlotsForCurrentFullThreadCount(ui16 poolIdx);
 public:
@@ -81,13 +131,140 @@ public:
     TPoolHarmonizerStats GetPoolStats(i16 poolId) const override;
     void GetStats(THarmonizerStats &stats) const override;
     void SetSharedPool(ISharedPool* pool) override;
+    void SetActorSystem(TActorSystem* actorSystem) override;
 };
+
+namespace {
+
+    constexpr std::array<TStringBuf, static_cast<size_t>(THarmonizer::EGlobalMetric::Count)> GlobalMetricNames = {{
+        "harmonizer.avg_awakening_time_us",
+        "harmonizer.avg_waking_up_time_us",
+        "harmonizer.budget_x1e6",
+        "harmonizer.shared_free_cpu_x1e6",
+    }};
+
+    constexpr std::array<TStringBuf, static_cast<size_t>(THarmonizer::EPoolMetric::Count)> PoolMetricNames = {{
+        "harmonizer.pool.avg_used_cpu_x1e6",
+        "harmonizer.pool.avg_elapsed_cpu_x1e6",
+        "harmonizer.pool.potential_max_thread_count_x1e6",
+        "harmonizer.pool.shared_cpu_quota_x1e6",
+        "harmonizer.pool.is_needy",
+        "harmonizer.pool.is_starved",
+        "harmonizer.pool.is_hoggish",
+    }};
+
+    ui64 EncodeFloatMetric(float value) {
+        if (!std::isfinite(value) || value <= 0.0f) {
+            return 0;
+        }
+        const double scaled = static_cast<double>(value) * 1'000'000.0;
+        return scaled >= static_cast<double>(std::numeric_limits<ui64>::max())
+            ? std::numeric_limits<ui64>::max()
+            : static_cast<ui64>(std::llround(scaled));
+    }
+
+} // namespace
 
 THarmonizer::THarmonizer(ui64 ts) {
     NextHarmonizeTs = ts;
 }
 
 THarmonizer::~THarmonizer() {
+}
+
+void THarmonizer::EnsureInMemoryMetricsInitialized() {
+    if (InMemoryMetrics.Initialized || !InMemoryMetrics.ActorSystem) {
+        return;
+    }
+
+    InMemoryMetrics.Initialized = true;
+
+    auto* registry = InMemoryMetrics.ActorSystem->GetSubSystem<TInMemoryMetricsRegistry>();
+    if (!registry) {
+        return;
+    }
+
+    const std::span<const TLabel> noLabels;
+    for (size_t idx = 0; idx < GlobalMetricNames.size(); ++idx) {
+        InMemoryMetrics.Global[idx] = registry->CreateLine(GlobalMetricNames[idx], noLabels);
+    }
+
+    InMemoryMetrics.Pools.clear();
+    InMemoryMetrics.Pools.resize(Pools.size());
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        const auto& pool = *Pools[poolIdx];
+        std::array<TLabel, 2> labels{{
+            TLabel{.Name = "pool", .Value = pool.Pool->GetName()},
+            TLabel{.Name = "pool_id", .Value = ToString(pool.Pool->PoolId)},
+        }};
+        auto& writers = InMemoryMetrics.Pools[poolIdx];
+        writers.AvgUsedCpuX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::AvgUsedCpuX1e6)], labels);
+        writers.AvgElapsedCpuX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::AvgElapsedCpuX1e6)], labels);
+        writers.PotentialMaxThreadCountX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::PotentialMaxThreadCountX1e6)], labels);
+        writers.SharedCpuQuotaX1e6 = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            PoolMetricNames[static_cast<size_t>(EPoolMetric::SharedCpuQuotaX1e6)],
+            labels,
+            {.Heartbeat = TDuration::Seconds(5)});
+        writers.IsNeedy = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            PoolMetricNames[static_cast<size_t>(EPoolMetric::IsNeedy)],
+            labels,
+            {.Heartbeat = TDuration::Seconds(5)});
+        writers.IsStarved = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            PoolMetricNames[static_cast<size_t>(EPoolMetric::IsStarved)],
+            labels,
+            {.Heartbeat = TDuration::Seconds(5)});
+        writers.IsHoggish = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            PoolMetricNames[static_cast<size_t>(EPoolMetric::IsHoggish)],
+            labels,
+            {.Heartbeat = TDuration::Seconds(5)});
+    }
+
+    InMemoryMetrics.Enabled = true;
+}
+
+void THarmonizer::ReportInMemoryMetrics() {
+    EnsureInMemoryMetricsInitialized();
+    if (!InMemoryMetrics.Enabled) {
+        return;
+    }
+
+    THarmonizerStats stats;
+    GetStats(stats);
+
+    InMemoryMetrics.Global[static_cast<size_t>(EGlobalMetric::AvgAwakeningTimeUs)].Append(static_cast<ui64>(std::llround(std::max(0.0f, stats.AvgAwakeningTimeUs))));
+    InMemoryMetrics.Global[static_cast<size_t>(EGlobalMetric::AvgWakingUpTimeUs)].Append(static_cast<ui64>(std::llround(std::max(0.0f, stats.AvgWakingUpTimeUs))));
+    InMemoryMetrics.Global[static_cast<size_t>(EGlobalMetric::BudgetX1e6)].Append(EncodeFloatMetric(stats.Budget));
+    InMemoryMetrics.Global[static_cast<size_t>(EGlobalMetric::SharedFreeCpuX1e6)].Append(EncodeFloatMetric(stats.SharedFreeCpu));
+
+    for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
+        const auto poolStats = GetPoolStats(poolIdx);
+        auto& writers = InMemoryMetrics.Pools[poolIdx];
+
+        writers.AvgUsedCpuX1e6.Append(EncodeFloatMetric(poolStats.AvgUsedCpu));
+        writers.AvgElapsedCpuX1e6.Append(EncodeFloatMetric(poolStats.AvgElapsedCpu));
+        writers.PotentialMaxThreadCountX1e6.Append(EncodeFloatMetric(poolStats.PotentialMaxThreadCount));
+        writers.SharedCpuQuotaX1e6.Append(EncodeFloatMetric(poolStats.SharedCpuQuota));
+        writers.IsNeedy.Append(poolStats.IsNeedy);
+        writers.IsStarved.Append(poolStats.IsStarved);
+        writers.IsHoggish.Append(poolStats.IsHoggish);
+    }
+}
+
+void THarmonizer::ClearInMemoryMetrics() {
+    for (auto& writer : InMemoryMetrics.Global) {
+        writer.Close();
+    }
+    for (auto& poolWriters : InMemoryMetrics.Pools) {
+        poolWriters.AvgUsedCpuX1e6.Close();
+        poolWriters.AvgElapsedCpuX1e6.Close();
+        poolWriters.PotentialMaxThreadCountX1e6.Close();
+        poolWriters.SharedCpuQuotaX1e6.Close();
+        poolWriters.IsNeedy.Close();
+        poolWriters.IsStarved.Close();
+        poolWriters.IsHoggish.Close();
+    }
+    InMemoryMetrics.Pools.clear();
+    InMemoryMetrics.Enabled = false;
 }
 
 void THarmonizer::PullStats(ui64 ts) {
@@ -445,6 +622,7 @@ void THarmonizer::Harmonize(ui64 ts) {
 
         PullStats(ts);
         HarmonizeImpl(ts);
+        ReportInMemoryMetrics();
     }
 
     Lock.Release();
@@ -546,6 +724,18 @@ void THarmonizer::SetSharedPool(ISharedPool* pool) {
     Shared = pool;
     if (pool) {
         United = Shared->IsUnited();
+    }
+}
+
+void THarmonizer::SetActorSystem(TActorSystem* actorSystem) {
+    TGuard<TSpinLock> guard(Lock);
+    InMemoryMetrics.ActorSystem = actorSystem;
+    if (actorSystem && !InMemoryMetrics.PreStopRegistered) {
+        actorSystem->DeferPreStop([this] {
+            TGuard<TSpinLock> preStopGuard(Lock);
+            ClearInMemoryMetrics();
+        });
+        InMemoryMetrics.PreStopRegistered = true;
     }
 }
 

@@ -63,9 +63,14 @@ class MetricsPublisher:
     Events sent to the server are buffered and flushed periodically
     (every flush_interval seconds) using the timeseries field to avoid
     overwriting values with identical timestamps.
+
+    Timestamps are rounded down to the nearest _TS_GRID_SECONDS boundary
+    so that all events within the same server aggregation window are summed
+    into a single timeseries point.
     """
 
     _FLUSH_INTERVAL = 360  # seconds
+    _TS_GRID_SECONDS = 15  # timestamp rounding grid (matches server aggregation window)
 
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",
@@ -174,11 +179,15 @@ class MetricsPublisher:
         Adds an event to the internal buffer.
 
         Events are grouped by their labels. Each event records its
-        timestamp so that the timeseries field can be used when flushing.
+        timestamp (rounded down to the nearest _TS_GRID_SECONDS boundary)
+        so that the timeseries field can be used when flushing.
+        Rounding aligns with the server's aggregation window to ensure
+        all events within the same window are summed into one point.
         """
         labels = self._make_labels(event)
         key = self._labels_key(labels)
         ts = int(time.time())
+        ts = ts - (ts % self._TS_GRID_SECONDS)
 
         with self._buffer_lock:
             if key not in self._buffer:

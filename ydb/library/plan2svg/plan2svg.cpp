@@ -265,6 +265,22 @@ void TMetricHistory::Load(const NJson::TJsonValue& node, ui64 explicitMinTime, u
     Load(times, values, explicitMinTime, explicitMaxTime);
 }
 
+void TMetricHistory::Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime) {
+    std::vector<ui64> values;
+
+    for (const auto& subNode : node.GetArray()) {
+        values.push_back(subNode.GetIntegerSafe());
+    }
+
+    if (values.size() > times.size()) {
+        values.resize(times.size());
+    } else while (values.size() && values.size() < times.size()) {
+        values.push_back(values.back());
+    }
+
+    Load(times, values, explicitMinTime, explicitMaxTime);
+}
+
 void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime) {
     if (times.size() < 2) {
         return;
@@ -569,93 +585,56 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
             clusterNode->CpuTime->MinMaxDistribution = false;
         }
         if (auto* globNode = node.GetValueByPath("GlobalMemoryUsageMB")) {
-            bool even = true;
-            bool first_item = true;
-            ui64 last_time = 0;
-
-            for (const auto& subNode : globNode->GetArray()) {
-                if (even) {
-                    ui64 i = subNode.GetIntegerSafe();
-                    if (first_item) {
-                        first_item = false;
-                    } else {
-                        // time should increase monotonously
-                        if (i <= last_time) {
-                            // just ignore tail otherwise
-                            break;
-                        }
+            if (auto* timeNode = globNode->GetValueByPath("TimeMs")) {
+                if (timeNode->GetType() == NJson::JSON_ARRAY) {
+                    std::vector<ui64> times;
+                    for (const auto& subNode : timeNode->GetArray()) {
+                        times.push_back(subNode.GetIntegerSafe());
                     }
-                    last_time = i;
-                } else {
-                    if (subNode.GetType() != NJson::JSON_ARRAY) {
-                        break;
+                    // arrow + mkqlAllocated
+                    if (auto* physical = globNode->GetValueByPath("MemPhysicalUsage")) {
+                        clusterNode->MemPhysicalUsage.Load(times, *physical, 0, 0);
                     }
-                    auto& valueArray = subNode.GetArray();
-                    auto size = valueArray.size();
-
-                    ui64 mkqlAllocated = 0;
-                    if (size >= 5) {
-                        ui64 mkqlAllocated = valueArray[4].GetIntegerSafe();
-                        if (clusterNode->MemMkqlAllocated.Values.empty()) {
-                            clusterNode->MemMkqlAllocated.MinTime = last_time;
-                        }
-                        clusterNode->MemMkqlAllocated.MaxTime = last_time;
-                        clusterNode->MemMkqlAllocated.MaxValue = std::max(clusterNode->MemMkqlAllocated.MaxValue, mkqlAllocated);
-                        clusterNode->MemMkqlAllocated.Values.push_back(std::make_pair(last_time, mkqlAllocated));
+                    if (auto* sysAlloc = globNode->GetValueByPath("MemSysAllocated")) {
+                        clusterNode->MemSysAllocated.Load(times, *sysAlloc, 0, 0);
                     }
-                    if (size >= 6) {
-                        ui64 value = valueArray[5].GetIntegerSafe();
-                        if (clusterNode->MemMkqlFreeList.Values.empty()) {
-                            clusterNode->MemMkqlFreeList.MinTime = last_time;
-                        }
-                        clusterNode->MemMkqlFreeList.MaxTime = last_time;
-                        clusterNode->MemMkqlFreeList.MaxValue = std::max(clusterNode->MemMkqlFreeList.MaxValue, value);
-                        clusterNode->MemMkqlFreeList.Values.push_back(std::make_pair(last_time, value));
+                    if (auto* sysFragm = globNode->GetValueByPath("MemSysFragmented")) {
+                        clusterNode->MemSysFragmented.Load(times, *sysFragm, 0, 0);
                     }
-                    if (size >= 1) {
-                        ui64 value = valueArray[0].GetIntegerSafe();
-                        if (clusterNode->MemPhysicalUsage.Values.empty()) {
-                            clusterNode->MemPhysicalUsage.MinTime = last_time;
-                        }
-                        clusterNode->MemPhysicalUsage.MaxTime = last_time;
-                        clusterNode->MemPhysicalUsage.MaxValue = std::max(clusterNode->MemPhysicalUsage.MaxValue, value);
-                        clusterNode->MemPhysicalUsage.Values.push_back(std::make_pair(last_time, value));
+                    if (auto* arrow = globNode->GetValueByPath("MemArrowDefault")) {
+                        clusterNode->MemArrowDefault.Load(times, *arrow, 0, 0);
                     }
-                    if (size >= 2) {
-                        ui64 value = valueArray[1].GetIntegerSafe();
-                        clusterNode->MaxMemSysAllocated = std::max(clusterNode->MaxMemSysAllocated, value);
-                        value += mkqlAllocated;
-                        if (clusterNode->MemSysAllocated.Values.empty()) {
-                            clusterNode->MemSysAllocated.MinTime = last_time;
-                        }
-                        clusterNode->MemSysAllocated.MaxTime = last_time;
-                        clusterNode->MemSysAllocated.MaxValue = std::max(clusterNode->MemSysAllocated.MaxValue, value);
-                        clusterNode->MemSysAllocated.Values.push_back(std::make_pair(last_time, value));
+                    if (auto* mkqlAlloc = globNode->GetValueByPath("MemMkqlAllocated")) {
+                        clusterNode->MemMkqlAllocated.Load(times, *mkqlAlloc, 0, 0);
                     }
-                    if (size >= 3) {
-                        ui64 value = valueArray[2].GetIntegerSafe();
-                        clusterNode->MaxMemSysFragmented = std::max(clusterNode->MaxMemSysFragmented, value);
-                        value += mkqlAllocated;
-                        if (clusterNode->MemSysFragmented.Values.empty()) {
-                            clusterNode->MemSysFragmented.MinTime = last_time;
-                        }
-                        clusterNode->MemSysFragmented.MaxTime = last_time;
-                        clusterNode->MemSysFragmented.MaxValue = std::max(clusterNode->MemSysFragmented.MaxValue, value);
-                        clusterNode->MemSysFragmented.Values.push_back(std::make_pair(last_time, value));
+                    if (auto* mkqlFree = globNode->GetValueByPath("MemMkqlFreeList")) {
+                        clusterNode->MemMkqlFreeList.Load(times, *mkqlFree, 0, 0);
                     }
-                    if (size >= 4) {
-                        ui64 value = valueArray[3].GetIntegerSafe();
-                        clusterNode->MaxMemArrowDefault = std::max(clusterNode->MaxMemArrowDefault, value);
-                        value += mkqlAllocated;
-                        if (clusterNode->MemArrowDefault.Values.empty()) {
-                            clusterNode->MemArrowDefault.MinTime = last_time;
-                        }
-                        clusterNode->MemArrowDefault.MaxTime = last_time;
-                        clusterNode->MemArrowDefault.MaxValue = std::max(clusterNode->MemArrowDefault.MaxValue, value);
-                        clusterNode->MemArrowDefault.Values.push_back(std::make_pair(last_time, value));
+                    if (auto* outputBytes = globNode->GetValueByPath("OutputInflightBytes")) {
+                        clusterNode->OutputInflightBytes.Load(times, *outputBytes, 0, 0);
+                    }
+                    if (auto* localBytes = globNode->GetValueByPath("LocalInflightBytes")) {
+                        clusterNode->LocalInflightBytes.Load(times, *localBytes, 0, 0);
+                    }
+                    if (auto* inputBytes = globNode->GetValueByPath("InputInflightBytes")) {
+                        clusterNode->InputInflightBytes.Load(times, *inputBytes, 0, 0);
+                    }
+                    clusterNode->MaxMemArrowDefault = clusterNode->MemArrowDefault.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->MemArrowDefault.Values.size(), clusterNode->MemMkqlAllocated.Values.size()); i++) {
+                        clusterNode->MemArrowDefault.Values[i].second += clusterNode->MemMkqlAllocated.Values[i].second;
+                        clusterNode->MemArrowDefault.MaxValue = std::max(clusterNode->MemArrowDefault.MaxValue, clusterNode->MemArrowDefault.Values[i].second);
+                    }
+                    clusterNode->MaxLocalInflightBytes = clusterNode->LocalInflightBytes.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->LocalInflightBytes.Values.size(), clusterNode->InputInflightBytes.Values.size()); i++) {
+                        clusterNode->LocalInflightBytes.Values[i].second += clusterNode->InputInflightBytes.Values[i].second;
+                        clusterNode->LocalInflightBytes.MaxValue = std::max(clusterNode->LocalInflightBytes.MaxValue, clusterNode->LocalInflightBytes.Values[i].second);
+                    }
+                    clusterNode->MaxOutputInflightBytes = clusterNode->OutputInflightBytes.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->OutputInflightBytes.Values.size(), clusterNode->LocalInflightBytes.Values.size()); i++) {
+                        clusterNode->OutputInflightBytes.Values[i].second += clusterNode->LocalInflightBytes.Values[i].second;
+                        clusterNode->OutputInflightBytes.MaxValue = std::max(clusterNode->OutputInflightBytes.MaxValue, clusterNode->OutputInflightBytes.Values[i].second);
                     }
                 }
-                even = !even;
             }
 
         }
@@ -1736,7 +1715,7 @@ void TPlan::MarkLayout() {
             node->OffsetY = nodeOffsetY;
             node->Height =
                 (   // (node->OutputBytes != nullptr)
-                    + 2 /* MEM, CPU */
+                    + 4 /* 3xMEM, CPU */
                     // + (node->InputBytes != nullptr)
                     // + (node->IngressBytes != nullptr)
                 ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
@@ -1811,6 +1790,9 @@ void TPlan::PrintWaitTime(TStringBuilder& background, std::shared_ptr<TSingleMet
 }
 
 void TPlan::PrintSeries(TStringBuilder& canvas, std::vector<std::pair<ui64, ui64>> series, ui64 maxValue, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor, bool closed) {
+    if (MaxTime == 0 || maxValue == 0 || series.empty()) {
+        return;
+    }
     if (title) {
         canvas << "<g><title>" << title << "</title>" << Endl;
     }
@@ -2795,39 +2777,64 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, 0, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
         }
-/*
-        if (node->MemoryUsage && !node->MemoryUsage->History.Values.empty()) {
-            auto px = Config.TimelineLeft + (TimeOffset + node->MemoryUsage->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
-            auto pw = (node->MemoryUsage->History.MaxTime - node->MemoryUsage->History.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
-            PrintValues(builder, node->MemoryUsage->History, px, y0, pw, INTERNAL_HEIGHT, "Max MEM " + FormatBytes(node->MemoryUsage->History.MaxValue), Config.Palette.MemMedium, Config.Palette.MemMedium);
-        }
-*/
+
+        ui32 px = Config.TimelineLeft;
+        ui32 pw = Config.TimelineWidth - timelineDelta;
+
         if (node->MemPhysicalUsage.Values.size()) {
-            auto px = Config.TimelineLeft + (TimeOffset + node->MemPhysicalUsage.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
-            auto pw = (node->MemPhysicalUsage.MaxTime - node->MemPhysicalUsage.MinTime) * (Config.TimelineWidth - timelineDelta) / maxTime;
+            px += (TimeOffset + node->MemPhysicalUsage.MinTime) * pw / maxTime;
+            pw = (node->MemPhysicalUsage.MaxTime - node->MemPhysicalUsage.MinTime) * pw / maxTime;
+
             auto maxValue = std::max(node->MemPhysicalUsage.MaxValue, node->MemSysAllocated.MaxValue);
             builder
                 << "<g><title>"
                 << "Max RSS " + FormatBytes(node->MemPhysicalUsage.MaxValue * 1_MB)
-                << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.MaxValue * 1_MB)
-                << ", Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.MaxValue * 1_MB)
-                << ", Max Allocated " << FormatBytes(node->MaxMemSysAllocated * 1_MB)
-                << ", Max Arrow " << FormatBytes(node->MaxMemArrowDefault * 1_MB)
-                << ", Max Fragmented " << FormatBytes(node->MaxMemSysFragmented * 1_MB)
+                << ", Max Allocated " << FormatBytes(node->MemSysAllocated.MaxValue * 1_MB)
+                << ", Max Fragmented " << FormatBytes(node->MemSysFragmented.MaxValue * 1_MB)
                 << "</title>" << Endl;
-            PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputLight, Config.Palette.InputLight);
-            PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputMedium);
-            PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputDark, Config.Palette.InputDark);
-            PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
-            PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
             PrintSeries(builder, node->MemPhysicalUsage.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", "red", "none", false);
             builder << "</g>" << Endl;
         }
+
 /*
             if (s->SpillingComputeBytes && !s->SpillingComputeBytes->History.Deriv.empty()) {
                 PrintDeriv(s->_Builder, s->SpillingComputeBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Spilling Compute", Config.Palette.SpillingBytesMedium, Config.Palette.SpillingBytesLight);
             }
 */
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
+            auto maxValue = std::max(node->MemArrowDefault.MaxValue, node->MemMkqlAllocated.MaxValue);
+            builder
+                << "<g><title>"
+                << "Max Arrow " << FormatBytes(node->MaxMemArrowDefault * 1_MB)
+                << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.MaxValue * 1_MB)
+                << ", Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.MaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            builder << "</g>" << Endl;
+        }
+
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->OutputInflightBytes.Values.size() || node->LocalInflightBytes.Values.size() || node->InputInflightBytes.Values.size()) {
+            auto maxValue = node->OutputInflightBytes.MaxValue;
+            builder
+                << "<g><title>"
+                << "Max Output " << FormatBytes(node->MaxOutputInflightBytes * 1_MB)
+                << ", Max Local " <<  FormatBytes(node->MaxLocalInflightBytes * 1_MB)
+                << ", Max Input " <<  FormatBytes(node->InputInflightBytes.MaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
+            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            builder << "</g>" << Endl;
+        }
+
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->CpuTime) {

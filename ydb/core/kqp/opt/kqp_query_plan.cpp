@@ -3533,20 +3533,56 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     FillAggrStat(nodeInfo, node.GetSpillingComputeTimeUs(), "SpillingComputeTimeUs");
                     FillAggrStat(nodeInfo, node.GetSpillingChannelTimeUs(), "SpillingChannelTimeUs");
                     if (node.GetGlobalMemoryUsageMB().size()) {
-                        auto& history = nodeInfo.InsertValue("GlobalMemoryUsageMB", NJson::JSON_ARRAY);
+                        auto& history = nodeInfo.InsertValue("GlobalMemoryUsageMB", NJson::JSON_MAP);
+
+                        auto& time = history.InsertValue("TimeMs", NJson::JSON_ARRAY);
                         for (auto& u : node.GetGlobalMemoryUsageMB()) {
-                            history.AppendValue(u.GetTimeMs());
-                            NJson::TJsonValue value(NJson::JSON_ARRAY);
-                            value.AppendValue(u.GetMemPhysicalUsage());
-                            value.AppendValue(u.GetMemSysAllocated());
-                            value.AppendValue(u.GetMemSysFragmented());
-                            value.AppendValue(u.GetMemArrowDefault());
-                            value.AppendValue(u.GetMemMkqlAllocated());
-                            value.AppendValue(u.GetMemMkqlFreeList());
-                            value.AppendValue(u.GetInputInflightBytes());
-                            value.AppendValue(u.GetOutputInflightBytes());
-                            value.AppendValue(u.GetLocalInflightBytes());
-                            history.AppendValue(std::move(value));
+                            time.AppendValue(u.GetTimeMs());
+                        }
+
+                        auto& physical = history.InsertValue("MemPhysicalUsage", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            physical.AppendValue(u.GetMemPhysicalUsage());
+                        }
+
+                        auto& sysAlloc = history.InsertValue("MemSysAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            sysAlloc.AppendValue(u.GetMemSysAllocated());
+                        }
+
+                        auto& sysFragm = history.InsertValue("MemSysFragmented", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            sysFragm.AppendValue(u.GetMemSysFragmented());
+                        }
+
+                        auto& arrow = history.InsertValue("MemArrowDefault", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            arrow.AppendValue(u.GetMemArrowDefault());
+                        }
+
+                        auto& mkqlAlloc = history.InsertValue("MemMkqlAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            mkqlAlloc.AppendValue(u.GetMemMkqlAllocated());
+                        }
+
+                        auto& mkqlFree = history.InsertValue("MemMkqlFreeList", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            mkqlFree.AppendValue(u.GetMemMkqlFreeList());
+                        }
+
+                        auto& outputBytes = history.InsertValue("OutputInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            outputBytes.AppendValue(u.GetOutputInflightBytes());
+                        }
+
+                        auto& localBytes = history.InsertValue("LocalInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            localBytes.AppendValue(u.GetLocalInflightBytes());
+                        }
+
+                        auto& inputBytes = history.InsertValue("InputInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            inputBytes.AppendValue(u.GetInputInflightBytes());
                         }
                     }
                 }

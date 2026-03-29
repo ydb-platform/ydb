@@ -58,8 +58,9 @@ struct TMetricHistory {
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
 
-    void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime);
-    void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime);
+    void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // time + value
+    void Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // value only
+    void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime); // explicit
 };
 
 class TSingleMetric {
@@ -236,9 +237,13 @@ public:
     TMetricHistory MemArrowDefault;
     TMetricHistory MemMkqlAllocated;
     TMetricHistory MemMkqlFreeList;
-    ui64 MaxMemSysAllocated = 0;
-    ui64 MaxMemSysFragmented = 0;
+    TMetricHistory OutputInflightBytes;
+    TMetricHistory LocalInflightBytes;
+    TMetricHistory InputInflightBytes;
+
     ui64 MaxMemArrowDefault = 0;
+    ui64 MaxLocalInflightBytes = 0;
+    ui64 MaxOutputInflightBytes = 0;
 };
 
 struct TColorPalette {

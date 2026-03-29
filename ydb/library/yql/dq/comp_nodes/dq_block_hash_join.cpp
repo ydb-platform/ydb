@@ -32,6 +32,7 @@ struct TDqBlockJoinContext {
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
+    TVector<ui32> BuildColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -44,6 +45,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
+        , ColumnPermutation_(side == ESide::Build ? meta->BuildColumnPermutation : TVector<ui32>{})
     {}
 
     bool Finished() const {
@@ -68,6 +70,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         const size_t cols = UserDataCols();
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        if (!ColumnPermutation_.empty()) {
+            TVector<arrow::Datum> permuted(cols);
+            for (size_t j = 0; j < cols; ++j) {
+                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
+            }
+            columns = std::move(permuted);
+        }
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -88,6 +97,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
+    TVector<ui32> ColumnPermutation_;
 };
 
 template<EJoinKind Kind>
@@ -417,6 +427,62 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
         for (auto& rename : meta.Renames) {
             rename.Side = (rename.Side == ESide::Build) ? ESide::Probe : ESide::Build;
+        }
+    }
+
+    {
+        const auto& probeKeys = meta.KeyColumns.Probe;
+        const auto& buildKeys = meta.KeyColumns.Build;
+        const ui32 numDataCols = meta.InputTypes.Build.size() - 1;
+
+        bool needsReorder = false;
+        for (size_t i = 0; i < probeKeys.size(); ++i) {
+            if (probeKeys[i] != buildKeys[i]) {
+                needsReorder = true;
+                break;
+            }
+        }
+
+        if (needsReorder) {
+            TVector<ui32> buildPerm(numDataCols);
+            TVector<bool> usedOld(numDataCols, false);
+            TVector<bool> usedNew(numDataCols, false);
+
+            for (size_t i = 0; i < probeKeys.size(); ++i) {
+                buildPerm[probeKeys[i]] = buildKeys[i];
+                usedOld[buildKeys[i]] = true;
+                usedNew[probeKeys[i]] = true;
+            }
+
+            ui32 nextOld = 0;
+            for (ui32 j = 0; j < numDataCols; ++j) {
+                if (!usedNew[j]) {
+                    while (usedOld[nextOld]) nextOld++;
+                    buildPerm[j] = nextOld;
+                    usedOld[nextOld] = true;
+                }
+            }
+
+            meta.BuildColumnPermutation = buildPerm;
+
+            TVector<ui32> inversePerm(numDataCols);
+            for (ui32 j = 0; j < numDataCols; ++j) {
+                inversePerm[buildPerm[j]] = j;
+            }
+
+            TVector<TBlockType*> origTypes(meta.InputTypes.Build.begin(),
+                                           meta.InputTypes.Build.begin() + numDataCols);
+            for (ui32 j = 0; j < numDataCols; ++j) {
+                meta.InputTypes.Build[j] = origTypes[buildPerm[j]];
+            }
+
+            meta.KeyColumns.Build = TVector<int>(probeKeys.begin(), probeKeys.end());
+
+            for (auto& rename : meta.Renames) {
+                if (rename.Side == ESide::Build) {
+                    rename.Index = inversePerm[rename.Index];
+                }
+            }
         }
     }
 

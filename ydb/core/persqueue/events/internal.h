@@ -25,7 +25,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
-#include <ydb/core/persqueue//events/internal/protos/events.pb.h>
+#include <ydb/core/persqueue/events/internal/protos/events.pb.h>
 
 #include <util/generic/maybe.h>
 #include <expected>

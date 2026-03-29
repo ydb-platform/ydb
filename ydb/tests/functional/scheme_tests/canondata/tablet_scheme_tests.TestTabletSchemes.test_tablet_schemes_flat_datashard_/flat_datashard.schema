@@ -1151,7 +1151,7 @@
             {
                 "ColumnId": 6,
                 "ColumnName": "UserTraceId",
-                "ColumnType": "Utf8"
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -2348,7 +2348,7 @@
             {
                 "ColumnId": 7,
                 "ColumnName": "UserTraceId",
-                "ColumnType": "Utf8"
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 1,

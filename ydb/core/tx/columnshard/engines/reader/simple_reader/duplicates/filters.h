@@ -53,6 +53,8 @@ public:
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;
     bool IsBufferExhausted() const;
     void AddSource(const ui64 portionId, ui64 rowsCount);
+    TString DebugString() const;
+    ui64 CountSources() const;
 
     THashMap<ui64, NArrow::TColumnFilter>&& ExtractReadyFilters();
 };

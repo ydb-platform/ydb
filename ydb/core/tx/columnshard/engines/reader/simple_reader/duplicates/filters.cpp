@@ -64,6 +64,17 @@ void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     Filters.erase(filterIt);
 }
 
+TString TFiltersBuilder::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "ReadyFilters=" << ReadyFilters.size() << ";";
+    sb << "Filters=" << Filters.size() << ";";
+    sb << "RowsAdded=" << RowsAdded << ";";
+    sb << "RowsSkipped=" << RowsSkipped << ";";
+    sb << "}";
+    return sb;
+}
+
 void TFiltersBuilder::AddRecord(const NArrow::NMerger::TBatchIterator& cursor) {
     AddImpl(cursor.GetSourceId(), true);
     ++RowsAdded;
@@ -83,6 +94,10 @@ bool TFiltersBuilder::IsBufferExhausted() const {
 
 void TFiltersBuilder::AddSource(const ui64 portionId, ui64 rowsCount) {
     AFL_VERIFY(Filters.emplace(portionId, TFilterInfo{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
+}
+
+ui64 TFiltersBuilder::CountSources() const {
+    return Filters.size();
 }
 
 THashMap<ui64, NArrow::TColumnFilter>&& TFiltersBuilder::ExtractReadyFilters() {

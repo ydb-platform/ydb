@@ -64,7 +64,16 @@ TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPorti
 }
 
 TString TBordersFlowController::DebugString() {
-    return TString{};
+    TStringBuilder sb;
+    sb << "{";
+    sb << "Borders=" << Borders.size() << ";";
+    sb << "WaitingBorders=" << WaitingBorders.size() << ";";
+    sb << "ReadyBorders=" << ReadyBorders.size() << ";";
+    sb << "BordersQueue=" << BordersQueue.size() << ";";
+    sb << "Reverse=" << IsReversed() << ";";
+    sb << "InFlight=" << IsInflight << ";";
+    sb << "}";
+    return sb;
 }
 
 void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
@@ -82,7 +91,7 @@ std::optional<NArrow::TSimpleRow> TBordersFlowController::NextReadyBorder() {
         return std::nullopt;
     }
 
-    if (auto it = ReadyBorders.begin(); WaitingBorders.empty() || *WaitingBorders.begin() <= *it) {
+    if (auto it = ReadyBorders.begin(); WaitingBorders.empty() || *it < *WaitingBorders.begin()) {
         auto result = *it;
         ReadyBorders.erase(it);
         Counters->OnReadyBorders(-1);
@@ -115,6 +124,7 @@ void TBordersFlowController::DrainQueue() {
     }
     const std::shared_ptr<TMergeBorders> task = std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, ev, readyBorders);
     NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
+    IsInflight = true;
 }
 
 void TBordersFlowController::OnReadyMergeBorders() {

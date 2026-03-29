@@ -137,8 +137,12 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
+    LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")
+        ("type", "finish")
+        ("portions", ev->Get()->Context.GetBatch().GetPortionIds().size())
+        ("borders", ev->Get()->Context.GetBatch().GetBorders().size());
+        
     BordersFlowController.Enqueue(ev);
-    LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")("type", "finish");
 }
 
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {

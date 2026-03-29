@@ -223,8 +223,11 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             ("event", "TMergeBorders::DoExecute")
             ("type", "add_source")
             ("portion_id", portionId)
-            ("records_count", data->GetRecordsCount());
+            ("records_count", data->GetRecordsCount())
+            ("builder", Context->FiltersBuilder.DebugString());
     }
+
+    AFL_VERIFY(Context->FiltersBuilder.CountSources() > 0 || ReadyBorders.empty());
 
     for (const auto& readyBorder: ReadyBorders) {
         Context->Merger->PutControlPoint(readyBorder.BuildSortablePosition(Context->IsReversed), false);
@@ -233,7 +236,8 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             ("component", "duplicates_manager")
             ("event", "TMergeBorders::DoExecute")
             ("type", "drain")
-            ("border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString());
+            ("border", readyBorder.BuildSortablePosition(Context->IsReversed).DebugString())
+            ("builder", Context->FiltersBuilder.DebugString());
     }
 
     Context->Counters->OnRowsMerged(Context->FiltersBuilder.GetRowsAdded() - Context->PrevRowsAdded, Context->FiltersBuilder.GetRowsSkipped() - Context->PrevRowsSkipped, 0);

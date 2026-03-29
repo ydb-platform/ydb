@@ -65,7 +65,7 @@ class MetricsPublisher:
     overwriting values with identical timestamps.
     """
 
-    _FLUSH_INTERVAL = 40  # seconds
+    _FLUSH_INTERVAL = 120  # seconds
 
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",

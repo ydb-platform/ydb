@@ -124,6 +124,8 @@ namespace NActors {
         friend class TInMemoryMetricsRegistry;
         std::shared_ptr<TSnapshotData> Data;
         TVector<size_t> ChunkIndexes;
+        bool HasObservedTail = false;
+        TInstant ObservedTailTimestamp;
     };
 
     class TSnapshot {

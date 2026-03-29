@@ -91,7 +91,6 @@ namespace NActors {
         ~TSnapshotData();
 
         TTimeAnchor Anchor;
-        TInstant SnapshotTime;
         TVector<TSnapshotPinnedChunk> Chunks;
     };
 
@@ -356,9 +355,10 @@ namespace NActors {
         if (Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat
             && !Closed
             && hasLastRecord
-            && lastRecord.Timestamp < Data->SnapshotTime) {
+            && HasObservedTail
+            && lastRecord.Timestamp < ObservedTailTimestamp) {
             cb(TRecordView{
-                .Timestamp = Data->SnapshotTime,
+                .Timestamp = ObservedTailTimestamp,
                 .Value = lastRecord.Value,
             });
         }
@@ -884,7 +884,6 @@ namespace NActors {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
-        data->SnapshotTime = TInstant::Now();
         snapshot.CommonLabels = GetCommonLabels();
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
@@ -901,6 +900,12 @@ namespace NActors {
 
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
+            if (line->Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat
+                && line->HasLastPublished
+                && line->LastObservedTs > line->LastPublishedTs) {
+                lineSnapshot.HasObservedTail = true;
+                lineSnapshot.ObservedTailTimestamp = DecodeTs(data->Anchor, line->LastObservedTs);
+            }
             lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
             lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
 

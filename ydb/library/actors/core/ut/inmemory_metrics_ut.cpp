@@ -49,10 +49,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
     }
 
     TVector<ui64> ExpectedHeartbeatRead(ui64 first, ui64 second) {
-        if (first == second) {
-            return {first, second};
-        }
-        return {first, second, second};
+        return {first, second};
     }
 
     Y_UNIT_TEST(SubsystemAccessor) {
@@ -276,7 +273,41 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto lines = FilterUserLines(registry.Snapshot().Lines());
         const TLineSnapshot* line = FindLineByName(lines, "line");
         UNIT_ASSERT(line);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10, 10}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10}));
+    }
+
+    Y_UNIT_TEST(OnChangeWithHeartbeatReadsRepeatedValueAsTwoPoints) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .Heartbeat = TDuration::Hours(1),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+
+        TVector<ui64> values;
+        TVector<TInstant> timestamps;
+        line->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+            timestamps.push_back(record.Timestamp);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10}));
+        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 2);
+        UNIT_ASSERT(timestamps[0] < timestamps[1]);
     }
 
     Y_UNIT_TEST(OnChangeWithHeartbeatBackfillsPreviousValueOnChange) {
@@ -310,11 +341,10 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             timestamps.push_back(record.Timestamp);
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20, 20}));
-        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20}));
+        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 3);
         UNIT_ASSERT(timestamps[0] < timestamps[1]);
         UNIT_ASSERT(timestamps[1] < timestamps[2]);
-        UNIT_ASSERT(timestamps[2] < timestamps[3]);
     }
 
     Y_UNIT_TEST(SelfMetricsAreStoredAsRegularLinesWithHistory) {
@@ -395,7 +425,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto lines = registry.Snapshot().Lines();
         const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
         UNIT_ASSERT(appendFailures);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal, stats.AppendFailuresTotal}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {

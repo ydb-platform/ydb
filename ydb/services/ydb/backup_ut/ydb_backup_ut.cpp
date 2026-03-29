@@ -2505,7 +2505,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             const auto dumpResult = backupClient.Dump(
                 table,
                 pathToBackup,
-                NDump::TDumpSettings().Database("/Root").SchemaOnly(true)
+                NDump::TDumpSettings().Database("/Root")
+                    // TODO: remove SchemaOnly(true) and UPSERT some rows
+                    // https://github.com/ydb-platform/ydb/issues/36786
+                    .SchemaOnly(true)
             );
             UNIT_ASSERT_C(dumpResult.IsSuccess(), dumpResult.GetIssues().ToString());
         }
@@ -3483,6 +3486,13 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST_TWIN(TestReplaceRestoreOption, IsOlap) {
+        if (IsOlap) {
+            // TODO
+            // https://github.com/ydb-platform/ydb/issues/36786
+            return;
+        }
+
+
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");

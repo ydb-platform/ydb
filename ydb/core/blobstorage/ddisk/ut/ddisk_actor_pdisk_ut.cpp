@@ -24,7 +24,6 @@ namespace {
 
 using NKikimrBlobStorage::NDDisk::TReplyStatus;
 
-constexpr ui32 NodeId = 1;
 constexpr ui32 MinBlockSize = 4096;
 constexpr ui32 PDiskId = 1;
 constexpr ui32 SlotId = 1;
@@ -86,14 +85,16 @@ public:
         pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
 
+        const ui32 nodeId = Runtime->GetNodeId(0);
+
         NPDisk::TMainKey mainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
         IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), mainKey, Counters);
         TActorId pdiskActorId = Runtime->Register(pdiskActor);
-        TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, PDiskId);
+        TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, PDiskId);
         Runtime->RegisterService(pdiskServiceId, pdiskActorId);
 
         TVector<TActorId> actorIds = {
-            MakeBlobStorageDDiskId(NodeId, PDiskId, SlotId),
+            MakeBlobStorageDDiskId(nodeId, PDiskId, SlotId),
         };
         auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone, ui32(1), ui32(1),
             ui32(1), &actorIds);
@@ -115,7 +116,7 @@ public:
             std::move(pbFormat), std::move(ddiskConfig), Counters);
 
         TActorId ddiskActorId = Runtime->Register(ddiskActor);
-        DDiskServiceId = MakeBlobStorageDDiskId(NodeId, PDiskId, SlotId);
+        DDiskServiceId = MakeBlobStorageDDiskId(nodeId, PDiskId, SlotId);
         Runtime->RegisterService(DDiskServiceId, ddiskActorId);
     }
 

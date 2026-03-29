@@ -171,13 +171,13 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     if (BordersIterator.IsDone()) {
         return false;
     }
-    
+
     auto bordersBatch = BordersIterator.Next();
     const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(bordersBatch.GetPortionIds(), context);
     const ui64 processId = context.GetRequestGuard()->GetMemoryProcessId();
     const ui64 scopeId = context.GetRequestGuard()->GetMemoryScopeId();
     const ui64 groupId = context.GetRequestGuard()->GetMemoryGroupId();
-    
+
     ui64 portionsCount = bordersBatch.GetPortionIds().size();
 
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
@@ -188,7 +188,7 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     TBuildFilterTaskContext request(std::move(context), shared_from_this(), std::move(bordersBatch));
     if (portionsCount == 0) {
         AFL_VERIFY(BordersIterator.IsDone());
-        TActorContext::AsActorContext().Send(context.GetOwner(), 
+        TActorContext::AsActorContext().Send(context.GetOwner(),
             std::make_unique<TEvBordersConstructionResult>(std::move(request), THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, nullptr));
         return true;
     }

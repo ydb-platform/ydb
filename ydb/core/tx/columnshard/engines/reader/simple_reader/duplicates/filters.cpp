@@ -1,8 +1,8 @@
 #include "filters.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
-    
+
+
 TFilterAccumulator::TFilterAccumulator(const TEvRequestFilter::TPtr& request, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters)
     : OriginalRequest(request)
     , Counters(counters)
@@ -92,7 +92,7 @@ bool TFiltersBuilder::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& con
     if (filterIt == Filters.end()) {
         return false;
     }
-    
+
     auto& filterInfo = filterIt->second;
     if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
         return false;

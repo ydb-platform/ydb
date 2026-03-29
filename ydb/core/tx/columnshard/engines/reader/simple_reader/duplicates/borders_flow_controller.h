@@ -24,19 +24,19 @@ private:
 
 public:
     TBordersFlowController(const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
-    
+
     bool IsExclusiveInterval(const ui64 portionId) const;
 
     TBordersIterator Next(const std::shared_ptr<const TPortionInfo>& portion);
-    
+
     TString DebugString();
-    
+
     std::optional<NArrow::TSimpleRow> NextReadyBorder();
-    
+
     void AddBatch(const TBordersBatch& batch);
-    
+
     bool IsReversed() const;
-    
+
     ~TBordersFlowController();
 
 private:

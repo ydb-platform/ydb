@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
+
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {

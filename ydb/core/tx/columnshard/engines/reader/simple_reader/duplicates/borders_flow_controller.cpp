@@ -15,11 +15,11 @@ TBordersFlowController::TBordersFlowController(const std::deque<std::shared_ptr<
 
 void TBordersFlowController::BuildExclusivePortions() {
     size_t openIntervals = 0;
-    
+
     for (auto it = Borders.begin(); it != Borders.end();) {
         auto currentIt = it;
         ++it;
-        
+
         if (openIntervals == 0 && ((currentIt->second.Start.size() == 1 && currentIt->second.Finish.size() == 1) || (it == Borders.end() || (it->second.Finish.size() == 1 && it->second.Start.empty())))) {
             if (currentIt->second.Start.size() == 1) {
                 ExclusivePortions.insert(currentIt->second.Start.front());
@@ -29,18 +29,18 @@ void TBordersFlowController::BuildExclusivePortions() {
         openIntervals += currentIt->second.Start.size();
         openIntervals -= currentIt->second.Finish.size();
     }
-    
+
     for (auto it = Borders.begin(); it != Borders.end();) {
         if (it->second.Start.size() == 1 && it->second.Finish.size() == 0 && ExclusivePortions.count(it->second.Start.front())) {
             it = Borders.erase(it);
             continue;
         }
-        
+
         if (it->second.Start.size() == 0 && it->second.Finish.size() == 1 && ExclusivePortions.count(it->second.Finish.front())) {
             it = Borders.erase(it);
             continue;
         }
-        
+
         ++it;
     }
 }
@@ -70,7 +70,7 @@ void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
         auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{border.GetKey()->MakeRecordBatch(), 0}, IsReversed());
         AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
         AFL_VERIFY(ReadyBorders.insert(borderKey).second);
-        
+
     }
     Counters->OnWaitingBorders(-1 * static_cast<i64>(batch.GetBorders().size()));
     Counters->OnReadyBorders(static_cast<i64>(batch.GetBorders().size()));
@@ -87,7 +87,7 @@ std::optional<NArrow::TSimpleRow> TBordersFlowController::NextReadyBorder() {
         Counters->OnReadyBorders(-1);
         return result.GetValue();
     }
-    
+
     return std::nullopt;
 }
 

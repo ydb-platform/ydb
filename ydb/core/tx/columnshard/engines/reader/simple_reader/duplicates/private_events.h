@@ -38,7 +38,7 @@ public:
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering::NPrivate
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
+
 class TBuildFilterTaskExecutor;
 class TBuildFilterTaskContext {
 private:
@@ -120,7 +120,7 @@ public:
         , Result(std::move(columns))
         , AllocationGuard(allocationGuard)
     {}
-    
+
     TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
         TConclusion<TDuplicateSourceCacheResult>&& error,
         std::optional<TJobStatus::TResultInFlightGuard>&& resultGuard)

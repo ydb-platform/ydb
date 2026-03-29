@@ -81,7 +81,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     auto& filterGuard = task->GetRequestGuard();
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(
         filterGuard->GetMemoryProcessId(),
-        filterGuard->GetMemoryScopeId(), 
+        filterGuard->GetMemoryScopeId(),
         filterGuard->GetMemoryGroupId(), { task },
         (ui64)TFilterAccumulator::EFetchingStage::FILTERS);
     LOCAL_LOG_TRACE("event", "TEvRequestFilter")
@@ -132,7 +132,7 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
-    
+
     auto columnData = ev->Get()->Result->ExtractDataByPortion(GetFetchingColumns());
     for (const auto& [portionId, data] : columnData) {
         Merger.AddSource(data, nullptr, BordersFlowController.IsReversed() ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
@@ -156,7 +156,7 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
     PrevRowsAdded = FiltersBuilder.GetRowsAdded();
     PrevRowsSkipped = FiltersBuilder.GetRowsSkipped();
     ev->Get()->Context.GetExecutor()->ScheduleNext(ev->Get()->Context.ExtractGlobalContext());
-    
+
     LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")("type", "finish");
 }
 

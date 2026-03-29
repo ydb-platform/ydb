@@ -52,7 +52,7 @@ class TBordersBatch {
 private:
     YDB_READONLY_DEF(std::vector<TBorder>, Borders);
     YDB_READONLY_DEF(THashSet<ui64>, PortionIds);
-    
+
 public:
     void AddBorder(const TBorder& border) {
         Borders.push_back(border);

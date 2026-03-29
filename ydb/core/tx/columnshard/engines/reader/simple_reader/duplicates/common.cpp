@@ -1,7 +1,7 @@
 #include "common.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
+
 TBordersIterator::TBordersIterator(
     std::vector<TBorder>&& borders, const ui64 portionsCountSoftLimit)
     : Borders(std::move(borders))

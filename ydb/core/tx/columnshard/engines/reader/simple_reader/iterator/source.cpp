@@ -711,12 +711,35 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
         }
     };
 
+    // In streaming mode, only account for chunks that intersect the current page.
+    // Without this restriction the memory reservation covers the entire portion
+    // (all N pages), which defeats the purpose of streaming and causes the memory
+    // limiter to over-account by a factor of N.
+    std::optional<ui32> pageStartRow;
+    std::optional<ui32> pageEndRow;
+    if (IsStreamingMode() && HasEarlyPages()) {
+        const auto& page = GetEarlyPages()[GetCurrentEarlyPageIndex()];
+        pageStartRow = page.GetIndexStart();
+        pageEndRow = page.GetIndexStart() + page.GetRecordsCount();
+    }
+
     THashMap<ui32, TEntitySize> sizeByColumn;
     for (auto&& [_, info] : columns) {
         auto chunks = GetPortionAccessor().GetColumnChunksPointers(info.GetColumnId());
         auto& sizes = sizeByColumn[info.GetColumnId()];
+        ui32 currentRowOffset = 0;
         for (auto&& i : chunks) {
-            sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+            const ui32 chunkStart = currentRowOffset;
+            const ui32 chunkEnd = currentRowOffset + i->GetMeta().GetRecordsCount();
+            // In streaming mode, only include chunks that intersect [pageStartRow, pageEndRow).
+            if (pageStartRow && pageEndRow) {
+                if ((chunkEnd > *pageStartRow) && (chunkStart < *pageEndRow)) {
+                    sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+                }
+            } else {
+                sizes.Add(i->GetBlobRange().GetSize(), i->GetMeta().GetRawBytes());
+            }
+            currentRowOffset = chunkEnd;
         }
     }
     TEntitySize result;

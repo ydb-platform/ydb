@@ -318,6 +318,14 @@ public:
 
     virtual void OnPageSent(const ui64 /*pagesInFlight*/) {
     }
+
+    // Called when a streaming page result is about to be emitted.
+    // resourceGuardsCount is the number of allocation guards held by the source
+    // at the time the page result is created.  In a correct implementation this
+    // should be bounded (roughly constant per page); a monotonically growing
+    // count indicates guards are leaking across pages.
+    virtual void OnStreamingPageResult(const ui64 /*resourceGuardsCount*/, const ui64 /*resourceGuardsMemory*/) {
+    }
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);

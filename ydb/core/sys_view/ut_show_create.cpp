@@ -217,7 +217,18 @@ private:
     }
 
     template <typename TProtobufDescription>
-    void CompareDescriptions(const TProtobufDescription& describeResultOrig, const TProtobufDescription& describeResultNew, const std::string& showCreateTableQuery) {
+    void CompareDescriptions(TProtobufDescription describeResultOrig, TProtobufDescription describeResultNew, const std::string& showCreateTableQuery) {
+        if constexpr (std::is_same_v<TProtobufDescription, Ydb::Table::DescribeTableResult>) {
+            auto sortIndexes = [](TProtobufDescription& desc) {
+                if (desc.indexes_size() > 1) {
+                    std::sort(desc.mutable_indexes()->begin(), desc.mutable_indexes()->end(),
+                        [](const auto& a, const auto& b) { return a.name() < b.name(); });
+                }
+            };
+            sortIndexes(describeResultOrig);
+            sortIndexes(describeResultNew);
+        }
+
         TString first;
         ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;

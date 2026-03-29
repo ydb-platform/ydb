@@ -268,7 +268,7 @@ public:
             const NKikimrCms::TAction &action)
     {
         AddLockByRequest(notification.NotificationId);
-    
+
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
@@ -950,7 +950,7 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
-    
+
     TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);

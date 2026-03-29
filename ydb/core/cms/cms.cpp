@@ -769,7 +769,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS, "Ring: " << ringInfo->RingId
                                                                  << "; State: " << TStateStorageRingInfo::RingStateToString(state));
-        
+
         if (state == TStateStorageRingInfo::RestartByThisRequest) {
             hasRestartRingsByThisRequest = true;
             state = TStateStorageRingInfo::Restart;
@@ -850,7 +850,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
             if (maxAvailabilityOk) {
                 break;
             }
-            
+
             if (!hasRestartRingsByThisRequest) {
                 limit = keepAvailableLimit;
                 if (keepAvailableOk) {
@@ -907,11 +907,9 @@ void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
     auto *actions = request.MutableActions();
-    std::stable_sort(actions->begin(), actions->end(),
-        [this](const TAction &a, const TAction &b) {
-            bool aHasSys = ClusterInfo->HostHasSysTablet(a.GetHost());
-            bool bHasSys = ClusterInfo->HostHasSysTablet(b.GetHost());
-            return !aHasSys && bHasSys;
+    std::partition(actions->begin(), actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasSysTablet(action.GetHost());
         });
 }
 

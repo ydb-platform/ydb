@@ -2,8 +2,8 @@
 
 #include "borders_flow_controller.h"
 #include "common.h"
-#include "context.h"
 #include "events.h"
+#include "executor.h"
 #include "filters.h"
 #include "private_events.h"
 
@@ -37,13 +37,11 @@ private:
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
-    NArrow::NMerger::TMergePartialStream Merger;
-    TFiltersBuilder FiltersBuilder;
+    
+    std::shared_ptr<TMergeContext> MergeContext;
     TBordersFlowController BordersFlowController;
-
+    TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
-    ui64 PrevRowsAdded = 0;
-    ui64 PrevRowsSkipped = 0;
 
 private:
     static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
@@ -69,6 +67,7 @@ private:
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvBordersConstructionResult, Handle);
+            hFunc(TEvMergeBordersResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -77,13 +76,14 @@ private:
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const TEvBordersConstructionResult::TPtr&);
+    void Handle(const TEvMergeBordersResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
         AbortAndPassAway("aborted by actor system");
     }
 
     void AbortAndPassAway(const TString& error) {
         AbortionFlag->Inc();
-        FiltersBuilder.Abort(error);
+        FiltersStore.Abort(error);
         PassAway();
     }
 

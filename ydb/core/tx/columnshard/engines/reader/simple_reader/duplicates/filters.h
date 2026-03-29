@@ -38,25 +38,37 @@ private:
         NArrow::TColumnFilter Filter;
     };
 
-    const bool IsReverse;
     THashMap<ui64, TFilterInfo> Filters;
-    THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
+    THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
     YDB_READONLY(ui64, RowsAdded, 0);
     YDB_READONLY(ui64, RowsSkipped, 0);
 
     void AddImpl(const ui64 portionId, const bool value);
 
 public:
-    TFiltersBuilder(const bool reverse);
-
-    NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
+    TFiltersBuilder() = default;
 
     void AddRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;
     bool IsBufferExhausted() const;
-    bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
     void AddSource(const ui64 portionId, ui64 rowsCount);
+
+    THashMap<ui64, NArrow::TColumnFilter>&& ExtractReadyFilters();
+};
+
+class TFiltersStore {
+private:
+    const bool IsReverse;
+    THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
+    THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
+private:
+     NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
+
+public:
+    TFiltersStore(const bool reverse);
+    bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
+    void AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     void Abort(const TString& error);
 };

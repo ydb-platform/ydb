@@ -60,12 +60,8 @@ void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
         return;
     }
-    auto waitingIt = WaitingPortions.find(portionId);
-    if (waitingIt != WaitingPortions.end()) {
-        waitingIt->second->AddFilter(MakeOrderedFilter(std::move(filterInfo.Filter)));
-        WaitingPortions.erase(waitingIt);
-        Filters.erase(filterIt);
-    }
+    ReadyFilters.emplace(portionId, std::move(filterInfo.Filter));
+    Filters.erase(filterIt);
 }
 
 void TFiltersBuilder::AddRecord(const NArrow::NMerger::TBatchIterator& cursor) {
@@ -85,49 +81,56 @@ bool TFiltersBuilder::IsBufferExhausted() const {
     return false;
 }
 
-bool TFiltersBuilder::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor) {
-    const ui64 portionId = constructor->GetRequest()->Get()->GetPortionId();
-    auto filterIt = Filters.find(portionId);
-
-    if (filterIt == Filters.end()) {
-        return false;
-    }
-
-    auto& filterInfo = filterIt->second;
-    if (filterInfo.RowsCount != filterInfo.Filter.GetRecordsCount().value_or(0)) {
-        return false;
-    }
-
-    constructor->AddFilter(MakeOrderedFilter(std::move(filterInfo.Filter)));
-    Filters.erase(filterIt);
-    return true;
-}
-
 void TFiltersBuilder::AddSource(const ui64 portionId, ui64 rowsCount) {
     AFL_VERIFY(Filters.emplace(portionId, TFilterInfo{rowsCount, NArrow::TColumnFilter::BuildAllowFilter()}).second);
 }
 
-void TFiltersBuilder::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor) {
-    AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
+THashMap<ui64, NArrow::TColumnFilter>&& TFiltersBuilder::ExtractReadyFilters() {
+    return std::move(ReadyFilters);
 }
 
-void TFiltersBuilder::Abort(const TString& error) {
-    for (const auto& [_, constructor] : WaitingPortions) {
-        constructor->Abort(error);
-    }
-}
-
-TFiltersBuilder::TFiltersBuilder(const bool reverse)
+TFiltersStore::TFiltersStore(const bool reverse)
     : IsReverse(reverse) {
 }
 
-NArrow::TColumnFilter TFiltersBuilder::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
+NArrow::TColumnFilter TFiltersStore::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
     if (IsReverse) {
         return filter.Cut(filter.GetRecordsCountVerified(), filter.GetRecordsCountVerified(), IsReverse);
     }
     return std::move(filter);
 }
 
+bool TFiltersStore::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor) {
+    const ui64 portionId = constructor->GetRequest()->Get()->GetPortionId();
+    auto filterIt = ReadyFilters.find(portionId);
 
+    if (filterIt == ReadyFilters.end()) {
+        return false;
+    }
 
+    auto& filter = filterIt->second;
+    constructor->AddFilter(MakeOrderedFilter(std::move(filter)));
+    ReadyFilters.erase(filterIt);
+    return true;
+}
+
+void TFiltersStore::AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter) {
+    auto waitingIt = WaitingPortions.find(portionId);
+    if (waitingIt != WaitingPortions.end()) {
+        waitingIt->second->AddFilter(MakeOrderedFilter(std::move(filter)));
+        WaitingPortions.erase(waitingIt);
+        return;
+    }
+    AFL_VERIFY(ReadyFilters.emplace(portionId, std::move(filter)).second);
+}
+
+void TFiltersStore::AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor) {
+    AFL_VERIFY(WaitingPortions.emplace(portionId, constructor).second);
+}
+
+void TFiltersStore::Abort(const TString& error) {
+    for (const auto& [_, constructor] : WaitingPortions) {
+        constructor->Abort(error);
+    }
+}
 }

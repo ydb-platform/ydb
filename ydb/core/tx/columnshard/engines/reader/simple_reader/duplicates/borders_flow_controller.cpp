@@ -1,9 +1,11 @@
 #include "borders_flow_controller.h"
+#include "executor.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
-TBordersFlowController::TBordersFlowController(const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
-    : Counters(counters)
+TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
+    : MergeContext(mergeContext)
+    , Counters(counters)
     , ReadMetadata(readMetadata) {
     for (const auto& portion : portions) {
         Borders[NCommon::TReplaceKeyAdapter::BuildStart(*portion, *ReadMetadata)].Start.push_back(portion->GetPortionId());
@@ -70,7 +72,6 @@ void TBordersFlowController::AddBatch(const TBordersBatch& batch) {
         auto borderKey = NCommon::TReplaceKeyAdapter(NArrow::TSimpleRow{border.GetKey()->MakeRecordBatch(), 0}, IsReversed());
         AFL_VERIFY(WaitingBorders.erase(borderKey) == 1);
         AFL_VERIFY(ReadyBorders.insert(borderKey).second);
-
     }
     Counters->OnWaitingBorders(-1 * static_cast<i64>(batch.GetBorders().size()));
     Counters->OnReadyBorders(static_cast<i64>(batch.GetBorders().size()));
@@ -99,6 +100,31 @@ TBordersFlowController::~TBordersFlowController() {
 
 bool TBordersFlowController::IsReversed() const {
     return ReadMetadata->IsDescSorted();
+}
+
+void TBordersFlowController::DrainQueue() {
+    if (IsInflight || BordersQueue.empty()) {
+        return;
+    }
+    auto ev = BordersQueue.front();
+    BordersQueue.pop_front();
+    AddBatch(ev->Get()->Context.GetBatch());
+    std::vector<NArrow::TSimpleRow> readyBorders;
+    while (auto readyBorder = NextReadyBorder()) {
+        readyBorders.push_back(*readyBorder);
+    }
+    const std::shared_ptr<TMergeBorders> task = std::make_shared<TMergeBorders>(ev.Get()->Recipient, MergeContext, ev, readyBorders);
+    NConveyorComposite::TDeduplicationServiceOperator::SendTaskToExecute(task);
+}
+
+void TBordersFlowController::OnReadyMergeBorders() {
+    IsInflight = false;
+    DrainQueue();
+}
+
+void TBordersFlowController::Enqueue(const TEvBordersConstructionResult::TPtr& event) {
+    BordersQueue.push_back(event);
+    DrainQueue();
 }
 
 }

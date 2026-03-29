@@ -130,4 +130,19 @@ public:
     {}
 };
 
+class TEvMergeBordersResult
+    : public NActors::TEventLocal<TEvMergeBordersResult, NColumnShard::TEvPrivate::EvMergeBordersResult> {
+public:
+    TBuildFilterTaskContext Context;
+    THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
+    TConclusionStatus Result;
+
+public:
+    TEvMergeBordersResult(TBuildFilterTaskContext&& context, THashMap<ui64, NArrow::TColumnFilter>&& readyFilters, TConclusionStatus&& conclusion)
+        : Context(std::move(context))
+        , ReadyFilters(std::move(readyFilters))
+        , Result(std::move(conclusion)) {
+    }
+};
+
 }

@@ -54,9 +54,15 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , Merger(PKSchema, nullptr, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(), GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()), GetVersionBatch(TSnapshot::Max(), 0))
-    , FiltersBuilder(context.GetCommonContext()->GetReadMetadata()->IsDescSorted())
-    , BordersFlowController(portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+    , MergeContext()
+    , BordersFlowController(std::make_shared<TMergeContext>(
+        std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(), GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()), GetVersionBatch(TSnapshot::Max(), 0)),
+        Counters,
+        context.GetCommonContext()->GetReadMetadata()->IsDescSorted(),
+        Portions,
+        GetFetchingColumns()
+      ), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
+    , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted())
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
 {
 }
@@ -91,15 +97,14 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
-    if (FiltersBuilder.NotifyReadyFilter(constructor)) {
+    if (FiltersStore.NotifyReadyFilter(constructor)) {
         LOCAL_LOG_TRACE("event", "TEvFilterRequestResourcesAllocated")
             ("type", "cached")
             ("info", constructor->DebugString());
         return;
     }
 
-    FiltersBuilder.AddWaitingPortion(constructor->GetRequest()->Get()->GetPortionId(), constructor);
-
+    FiltersStore.AddWaitingPortion(constructor->GetRequest()->Get()->GetPortionId(), constructor);
     const std::shared_ptr<const TPortionInfo>& mainPortion = Portions->GetPortionVerified(constructor->GetRequest()->Get()->GetPortionId());
 
     TBordersIterator bordersIterator = BordersFlowController.Next(mainPortion);
@@ -132,32 +137,22 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
-
-    auto columnData = ev->Get()->Result->ExtractDataByPortion(GetFetchingColumns());
-    for (const auto& [portionId, data] : columnData) {
-        Merger.AddSource(data, nullptr, BordersFlowController.IsReversed() ? NArrow::NMerger::TIterationOrder::Reversed(0) : NArrow::NMerger::TIterationOrder::Forward(0), portionId);
-        FiltersBuilder.AddSource(portionId, Portions->GetPortionVerified(portionId)->GetRecordsCount());
-        LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")
-            ("type", "add_source")
-            ("portion_id", portionId)
-            ("records_count", data->GetRecordsCount());
-    }
-
-    BordersFlowController.AddBatch(ev->Get()->Context.GetBatch());
-    while (auto readyBorder = BordersFlowController.NextReadyBorder()) {
-        Merger.PutControlPoint(readyBorder->BuildSortablePosition(BordersFlowController.IsReversed()), false);
-        Merger.DrainToControlPoint(FiltersBuilder, true);
-        LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")
-            ("type", "drain")
-            ("border", readyBorder->BuildSortablePosition(BordersFlowController.IsReversed()).DebugString());
-    }
-
-    Counters->OnRowsMerged(FiltersBuilder.GetRowsAdded() - PrevRowsAdded, FiltersBuilder.GetRowsSkipped() - PrevRowsSkipped, 0);
-    PrevRowsAdded = FiltersBuilder.GetRowsAdded();
-    PrevRowsSkipped = FiltersBuilder.GetRowsSkipped();
-    ev->Get()->Context.GetExecutor()->ScheduleNext(ev->Get()->Context.ExtractGlobalContext());
-
+    BordersFlowController.Enqueue(ev);
     LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")("type", "finish");
+}
+
+void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
+    auto& event = *ev->Get();
+    if (event.Result.IsFail()) {
+        LOCAL_LOG_TRACE("event", "TEvMergeBordersResult")("error", event.Result.GetErrorMessage());
+        AbortAndPassAway(event.Result.GetErrorMessage());
+        return;
+    }
+    event.Context.GetExecutor()->ScheduleNext(event.Context.ExtractGlobalContext());
+    for (auto&& [portionId, filter] : event.ReadyFilters) {
+        FiltersStore.AddReadyFilter(portionId, std::move(filter));
+    }
+    BordersFlowController.OnReadyMergeBorders();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

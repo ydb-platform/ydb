@@ -709,7 +709,7 @@ flowchart LR
 
   TAC -->|"FromYqlColumnStatMap()\nin kqp_statistics_transformer.cpp"| KqpStats
   TEN -->|"UniqueId as key"| KqpStats
-  YqlJoinAlgo -.->|"using declaration\n(same type, no cast)"| KqpJoinAlgo
+  YqlJoinAlgo -->|"JoinAlgoFromYql/JoinAlgoToYql\nswitch/case in dq_opt_join.cpp"| KqpJoinAlgo
 </pre>
 </div>
 
@@ -748,25 +748,25 @@ flowchart LR
 </div>
 
 <div class="rationale-card">
-  <h4>cbo_optimizer_new.h (+45/-37)</h4>
+  <h4>cbo_optimizer_new.h (+73/-61)</h4>
   <p><strong>Root cause:</strong> The original defines <code>NYql::EJoinAlgoType</code> (which lives in <code>yql/essentials/core/yql_cost_function.h</code>, not even in this file). The fork defines its own independent <code>NKikimr::NKqp::EJoinAlgoType</code> with matching enumerator <strong>names</strong> (for <code>FromString</code>/<code>ToString</code> compatibility) but independent integer values. Boundary conversion uses switch/case functions in <code>dq_opt_join.cpp</code> (see <a href="#sec-decisions">Decision 5</a>).</p>
   <div class="chain"><span class="arrow">&rarr;</span> Defined independent <code>enum class EJoinAlgoType</code> and <code>static constexpr auto AllJoinAlgos</code>. Changed all <code>NDq::TJoinColumn</code> references to the fork's <code>TJoinColumn</code>. Forward-declared <code>NYql::TExprContext</code> (needed by <code>IOptimizerFactory</code>). No <code>#include &lt;yql_cost_function.h&gt;</code> in this header &mdash; the CBO library has zero includes from <code>yql/essentials/core</code>.</div>
 </div>
 
 <div class="rationale-card">
-  <h4>cbo_interesting_orderings.h (+38/-6)</h4>
+  <h4>cbo_interesting_orderings.h (+42/-5)</h4>
   <p><strong>Root cause:</strong> The original <code>#include &lt;yql_cost_function.h&gt;</code> pulls in <code>NYql::NDq::TJoinColumn</code>. But the fork needs its own <code>TJoinColumn</code> in <code>NKikimr::NKqp</code> to avoid using YQL types.</p>
-  <div class="chain"><span class="arrow">&rarr;</span> Inlined the entire <code>TJoinColumn</code> struct (with <code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code> implementations in the .cpp). Removed <code>TShuffling::SetNatural()</code> and <code>IsNatural</code> field (unused after orderings rework). Added <code>GetColumns()</code> accessor.</div>
+  <div class="chain"><span class="arrow">&rarr;</span> Inlined the entire <code>TJoinColumn</code> struct (with <code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code> implementations in the .cpp). Added <code>GetColumns()</code> accessor.</div>
 </div>
 
 <div class="rationale-card">
-  <h4>dq_opt_stat.h (+27/-23) and dq_opt_stat.cpp (+235/-237)</h4>
+  <h4>dq_opt_stat.h (+55/-51) and dq_opt_stat.cpp (+312/-314)</h4>
   <p><strong>Root cause:</strong> Every <code>InferStatisticsFor*()</code> function takes <code>TTypeAnnotationContext*</code> and calls <code>typeCtx-&gt;GetStats()</code> / <code>typeCtx-&gt;SetStats()</code>. But <code>TTypeAnnotationContext</code> is shared YQL state. The fork needs its own stats store.</p>
   <div class="chain"><span class="arrow">&rarr;</span> Replaced <code>TTypeAnnotationContext*</code> with <code>TKqpStatsStore*</code> in all 20+ function signatures. Changed all <code>typeCtx-&gt;GetStats/SetStats</code> to <code>kqpStats-&gt;GetStats/SetStats</code>. For functions that also need <code>typeCtx</code> for non-stats purposes (e.g., <code>InferStatisticsForExtendBase</code> accesses <code>OrderingsFSM</code>), added both parameters. Functions like <code>NeedCalc</code>, <code>IsConstantExpr</code>, <code>IsLiteralDataExpr</code> were moved into an anonymous namespace and reordered due to forward-declaration requirements.</div>
 </div>
 
 <div class="rationale-card">
-  <h4>dq_opt_stat_transformer_base.h (+5/-2) and .cpp (+33/-27)</h4>
+  <h4>dq_opt_stat_transformer_base.h (+16/-13) and .cpp (+41/-35)</h4>
   <p><strong>Root cause:</strong> <code>TDqStatisticsTransformerBase</code> stores <code>TypeCtx</code> and passes it to all <code>InferStatisticsFor*()</code> calls. After the stat function signatures changed, the transformer also needs <code>TKqpStatsStore*</code>.</p>
   <div class="chain"><span class="arrow">&rarr;</span> Added <code>TKqpStatsStore* KqpStats</code> member. Constructor takes it as a new parameter. All <code>InferStatisticsFor*(input, TypeCtx)</code> calls changed to <code>InferStatisticsFor*(input, KqpStats)</code> (or <code>InferStatisticsFor*(input, KqpStats, TypeCtx)</code> for the few that need both).</div>
 </div>
@@ -1034,15 +1034,15 @@ flowchart TD
 <tr><td><code>dq_opt_join_tree_node.cpp</code></td><td><code>dq_opt_join_tree_node.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace</td></tr>
 <tr><td><code>dq_opt_make_join_hypergraph.h</code></td><td><code>dq_opt_make_join_hypergraph.h</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+3/-3</span></td><td>namespace; local includes</td></tr>
 <tr><td><code>dq_opt_join.h</code></td><td><code>dq_opt_join.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +6/-11</span></td><td><code>TKqpStatsStore&amp;</code> added to <code>DqRewriteEquiJoin</code> signatures; <code>DqCollectJoinRelationsWithStats</code> moved to <code>dq_opt_join_cost_based.h</code></td></tr>
-<tr><td><code>dq_opt_join.cpp</code></td><td><code>dq_opt_join.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-9</span></td><td><code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code>; <code>EJoinAlgoType</code> forked with switch/case conversion (<code>JoinAlgoFromYql</code>/<code>JoinAlgoToYql</code>); stats store calls</td></tr>
+<tr><td><code>dq_opt_join.cpp</code></td><td><code>dq_opt_join.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +44/-11</span></td><td><code>namespace NKikimr::NKqp</code> + <code>using namespace NYql::NDq</code>; <code>EJoinAlgoType</code> forked with switch/case conversion (<code>JoinAlgoFromYql</code>/<code>JoinAlgoToYql</code>, grows with each new <code>EJoinAlgoType</code> value); stats store calls; extra <code>using namespace NYql</code></td></tr>
 <tr><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><code>dq_opt_join_cbo_factory.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +2/-3</span></td><td>PG optimizer path replaced with <code>Y_ABORT</code>; <code>pg_wrapper</code> include removed</td></tr>
 <tr><td><code>dq_opt_join_cost_based.h</code></td><td><code>dq_opt_join_cost_based.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +12/-1</span></td><td><code>TKqpStatsStore&amp;</code> added; <code>DqCollectJoinRelationsWithStats</code> moved here from <code>dq_opt_join.h</code></td></tr>
 <tr><td><code>dq_opt_join_cost_based.cpp</code></td><td><code>dq_opt_join_cost_based.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +17/-7</span></td><td>All <code>typesCtx.GetStats/SetStats</code> → <code>kqpStats.GetStats/SetStats</code></td></tr>
 <tr><td><code>dq_opt_predicate_selectivity.cpp</code></td><td><code>dq_opt_predicate_selectivity.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +3/-1</span></td><td>Method definitions wrapped in <code>namespace NKikimr::NKqp</code></td></tr>
-<tr><td><code>dq_opt_stat.h</code></td><td><code>dq_opt_stat.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +29/-25</span></td><td>All function signatures: <code>TTypeAnnotationContext*</code> → <code>TKqpStatsStore*</code> (or both); <code>RemoveSorting/Shuffling/Orderings</code> added</td></tr>
-<tr><td><code>dq_opt_stat.cpp</code></td><td><code>dq_opt_stat.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +302/-304</span></td><td>All ~20 <code>InferStatisticsFor*</code> bodies: stats store parameter; using-declaration for <code>TOptimizerStatistics</code></td></tr>
+<tr><td><code>dq_opt_stat.h</code></td><td><code>dq_opt_stat.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +30/-26</span></td><td>All function signatures: <code>TTypeAnnotationContext*</code> → <code>TKqpStatsStore*</code> (or both); <code>RemoveSorting/Shuffling/Orderings</code> added</td></tr>
+<tr><td><code>dq_opt_stat.cpp</code></td><td><code>dq_opt_stat.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +306/-308</span></td><td>All ~20 <code>InferStatisticsFor*</code> bodies: stats store parameter; using-declaration for <code>TOptimizerStatistics</code></td></tr>
 <tr><td><code>dq_opt_stat_transformer_base.h</code></td><td><code>dq_opt_stat_transformer_base.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +5/-2</span></td><td><code>TKqpStatsStore* KqpStats</code> member added; constructor updated</td></tr>
-<tr><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +37/-31</span></td><td>All <code>InferStatisticsFor*(input, TypeCtx)</code> → <code>InferStatisticsFor*(input, KqpStats)</code> or <code>(input, KqpStats, TypeCtx)</code></td></tr>
+<tr><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><code>dq_opt_stat_transformer_base.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +38/-32</span></td><td>All <code>InferStatisticsFor*(input, TypeCtx)</code> → <code>InferStatisticsFor*(input, KqpStats)</code> or <code>(input, KqpStats, TypeCtx)</code></td></tr>
 <tr><td><code>dq_opt_stat_kqp.cpp</code></td><td><em>(no original — new file)</em></td><td><span class="diff-new">NEW</span></td><td><code>NKikimr::NKqp::IProviderContext</code> overloads of <code>InferStatisticsForMapJoin</code>, <code>InferStatisticsForGraceJoin</code>, <code>InferStatisticsForDqJoinBase</code></td></tr>
 </tbody>
 </table>
@@ -1051,9 +1051,9 @@ flowchart TD
 <table class="corr-table">
 <thead><tr><th>KQP Fork (cbo/)</th><th>YQL Original</th><th>Status</th><th>Reason for diff</th></tr></thead>
 <tbody>
-<tr><td><code>cbo_interesting_orderings.h</code></td><td><code>cbo/cbo_interesting_orderings.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +38/-1</span></td><td><code>TJoinColumn</code> struct inlined (was in <code>yql_cost_function.h</code>); <code>#include &lt;yql_cost_function.h&gt;</code> removed; <code>IsNatural</code>/<code>SetNatural()</code> removed; <code>GetColumns()</code> added</td></tr>
+<tr><td><code>cbo_interesting_orderings.h</code></td><td><code>cbo/cbo_interesting_orderings.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +38/-1</span></td><td><code>TJoinColumn</code> struct inlined (was in <code>yql_cost_function.h</code>); <code>#include &lt;yql_cost_function.h&gt;</code> removed; <code>GetColumns()</code> added</td></tr>
 <tr><td><code>cbo_interesting_orderings.cpp</code></td><td><code>cbo/cbo_interesting_orderings.cpp</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +14/-0</span></td><td><code>TJoinColumn</code> method implementations added (<code>operator==</code>, <code>operator&lt;</code>, <code>THashFunction</code>)</td></tr>
-<tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +45/-37</span></td><td><code>EJoinAlgoType</code> and <code>AllJoinAlgos</code> forked as independent enum/constexpr (names match for serialization, values independent; boundary uses switch/case); all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
+<tr><td><code>cbo_optimizer_new.h</code></td><td><code>cbo/cbo_optimizer_new.h</code></td><td><span class="diff-subst">SUBSTANTIVE</span> <span class="diff-stat">norm +49/-37</span></td><td><code>EJoinAlgoType</code> and <code>AllJoinAlgos</code> forked as independent enum/constexpr (names match for serialization, values independent; boundary uses switch/case); all <code>NDq::TJoinColumn</code> → fork's <code>TJoinColumn</code></td></tr>
 <tr><td><code>cbo_optimizer_new.cpp</code></td><td><code>cbo/cbo_optimizer_new.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+10/-10</span></td><td>namespace only</td></tr>
 <tr><td><code>cbo_hints.cpp</code></td><td><code>cbo/cbo_hints.cpp</code></td><td><span class="diff-mech">MECHANICAL</span> <span class="diff-stat">+2/-2</span></td><td>namespace only</td></tr>
 <tr>
@@ -1572,7 +1572,7 @@ sequenceDiagram
 <ul>
   <li><strong>Stats service → KqpStats</strong>: Statistics arrive as <code>NKikimr::NKqp::TOptimizerStatistics</code> (independent struct). <code>InferStatisticsForReadTable</code> copies them into <code>TypeCtx.StatisticsMap</code> as <code>NYql::TOptimizerStatistics</code> (shallow copy; <code>TColumnStatMap</code> is shared via alias).</li>
   <li><strong>Column statistics boundary</strong>: <code>FromYqlColumnStatMap()</code> in <code>kqp_statistics_transformer.cpp</code> converts a <code>NYql::TColumnStatMap</code> to <code>NKqp::TColumnStatMap</code> (same alias; no actual conversion needed). Lives in <code>kqp_statistics_transformer.cpp</code> to avoid a forbidden include chain if placed in <code>kqp/opt/cbo</code>.</li>
-  <li><strong><code>EJoinAlgoType</code> at join settings</strong>: <code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code>. The fork re-exports this type via <code>using NYql::EJoinAlgoType</code> in <code>cbo_optimizer_new.h</code>, so <code>TOptimizerHints::TJoinAlgoHint::Algo</code> is the same type. No <code>static_cast</code> or conversion is needed &mdash; both sides use <code>NYql::EJoinAlgoType</code> directly.</li>
+  <li><strong><code>EJoinAlgoType</code> at join settings</strong>: <code>TEquiJoinLinkSettings::JoinAlgo</code> is <code>NYql::EJoinAlgoType</code>. <code>TOptimizerHints::TJoinAlgoHint::Algo</code> is <code>NKikimr::NKqp::EJoinAlgoType</code> (the fork's independent enum). <code>dq_opt_join.cpp</code> bridges the two with exhaustive <code>switch/case</code> functions <code>JoinAlgoFromYql()</code> and <code>JoinAlgoToYql()</code> (with <code>Y_ABORT</code> on unknown values). Internal CBO logic uses the KQP type exclusively; <code>linkSettings.JoinAlgo</code> is only read/written at the boundary via these converters.</li>
 </ul>
 
 <div class="sep"></div>

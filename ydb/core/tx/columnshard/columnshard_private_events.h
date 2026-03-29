@@ -80,6 +80,7 @@ struct TEvPrivate {
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
         EvBordersConstructionResult,
+        EvMergeBordersResult,
 
         EvReportScanDiagnostics,
         EvReportScanIteratorDiagnostics,

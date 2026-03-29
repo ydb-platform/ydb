@@ -26,4 +26,8 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
   }
   ```
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

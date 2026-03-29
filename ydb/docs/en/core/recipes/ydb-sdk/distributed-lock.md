@@ -39,4 +39,40 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
    }
    ```
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def coordination_service_workflow(driver: ydb.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+
+        client.create_node(node_path)
+
+        with client.session(node_path) as session:
+            with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    async def coordination_service_workflow(driver: ydb.aio.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+        await client.create_node(node_path)
+        async with client.session(node_path) as session:
+            async with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+    ```
+
+  {% endlist %}
+
 {% endlist %}

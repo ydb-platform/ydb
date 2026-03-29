@@ -433,6 +433,41 @@ def test_inmemory_metrics_prometheus_query_supports_count_by_aggregation(ydb_clu
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
 
 
+def test_inmemory_metrics_prometheus_query_supports_last_over_time(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+
+    last_query = None
+
+    def query_ready():
+        nonlocal last_query
+        data = get_prometheus_json(
+            base_url,
+            "/query",
+            params={
+                "query": f"last_over_time({target}[5m])",
+                "time": int(time.time()),
+            },
+        )
+        if not data:
+            return False
+
+        last_query = data
+        logger.info("prometheus last_over_time query result: %s", last_query)
+        result = last_query.get("result", [])
+        return last_query.get("resultType") == "vector" and any(
+            item.get("metric", {}).get("__name__") == TARGET
+            and item.get("metric", {}).get("node_id")
+            for item in result
+        )
+
+    assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
 def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"
@@ -462,6 +497,46 @@ def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
 
         last_query_range = data
         logger.info("prometheus query_range result: %s", last_query_range)
+        result = last_query_range.get("result", [])
+        return last_query_range.get("resultType") == "matrix" and any(
+            item.get("metric", {}).get("__name__") == TARGET
+            and item.get("metric", {}).get("node_id")
+            and item.get("values")
+            for item in result
+        )
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
+
+
+def test_inmemory_metrics_prometheus_query_range_supports_last_over_time(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{TARGET}{{node_id="'),
+    )
+
+    last_query_range = None
+    end = int(time.time())
+    start = end - 300
+
+    def query_range_ready():
+        nonlocal last_query_range
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": f"last_over_time({target}[5m])",
+                "start": start,
+                "end": end,
+                "step": "30s",
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus last_over_time query_range result: %s", last_query_range)
         result = last_query_range.get("result", [])
         return last_query_range.get("resultType") == "matrix" and any(
             item.get("metric", {}).get("__name__") == TARGET
@@ -584,6 +659,26 @@ def test_inmemory_metrics_prometheus_query_supports_fanout_aggregation(ydb_clust
         return last_query.get("resultType") == "vector" and len(node_ids) >= 2
 
     assert wait_for(query_ready, timeout_seconds=30, step_seconds=1.0), last_query
+
+
+def test_inmemory_metrics_prometheus_query_rejects_fanout_last_over_time(ydb_cluster):
+    if len(ydb_cluster.nodes) < 2:
+        pytest.skip("requires at least two nodes")
+
+    base_url = f"http://localhost:{ydb_cluster.nodes[1].mon_port}"
+    response = requests.get(
+        f"{base_url}{PROMETHEUS_API_PREFIX}/query",
+        params={
+            "query": f"last_over_time({TARGET}[5m])",
+            "time": int(time.time()),
+        },
+        timeout=10,
+    )
+
+    assert_that(response.status_code, equal_to(400))
+    payload = response.json()
+    assert_that(payload.get("status"), equal_to("error"))
+    assert_that(payload.get("errorType"), equal_to("not_implemented"))
 
 
 def test_inmemory_metrics_prometheus_node_id_values_fanout(ydb_cluster):

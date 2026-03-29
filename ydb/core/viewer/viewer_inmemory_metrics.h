@@ -16,6 +16,7 @@
 #include <util/string/strip.h>
 #include <util/string/builder.h>
 #include <util/string/split.h>
+#include <util/datetime/base.h>
 
 #include <cmath>
 #include <cctype>
@@ -333,6 +334,7 @@ namespace {
     struct TPrometheusQueryExpression {
         TPrometheusVectorSelector Selector;
         std::optional<TPrometheusAggregation> Aggregation;
+        std::optional<TDuration> LastOverTimeWindow;
     };
 
     inline void SplitPrometheusMatchers(TStringBuf raw, TVector<TString>& items) {
@@ -546,6 +548,39 @@ namespace {
         return {};
     }
 
+    inline bool TryParsePrometheusRangeSelector(TStringBuf expression, TPrometheusVectorSelector& selector, TDuration& window, TString& error) {
+        selector = {};
+        window = TDuration::Zero();
+        error.clear();
+
+        const TStringBuf stripped = StripString(expression);
+        if (stripped.empty() || !stripped.EndsWith("]")) {
+            error = "range selector must end with ']'";
+            return false;
+        }
+
+        const size_t bracketPos = stripped.rfind('[');
+        if (bracketPos == TStringBuf::npos || bracketPos == 0) {
+            error = "invalid range selector";
+            return false;
+        }
+
+        if (!TryParsePrometheusVectorSelector(stripped.SubString(0, bracketPos), selector, error)) {
+            return false;
+        }
+
+        const TStringBuf rawWindow = StripString(stripped.SubString(bracketPos + 1, stripped.size() - bracketPos - 2));
+        if (rawWindow.empty()) {
+            error = "range selector window is required";
+            return false;
+        }
+        if (!TDuration::TryParse(rawWindow, window) || window <= TDuration::Zero()) {
+            error = TStringBuilder() << "invalid range selector window: " << rawWindow;
+            return false;
+        }
+        return true;
+    }
+
     inline bool TryParsePrometheusQueryExpression(TStringBuf expression, TPrometheusQueryExpression& query, TString& error) {
         query = {};
         error.clear();
@@ -554,6 +589,24 @@ namespace {
         if (stripped.empty()) {
             error = "empty query";
             return false;
+        }
+
+        if (stripped.EndsWith(")")) {
+            const size_t openPos = stripped.find('(');
+            if (openPos != TStringBuf::npos) {
+                size_t closePos = TStringBuf::npos;
+                if (FindMatchingParen(stripped, openPos, closePos) && closePos + 1 == stripped.size()) {
+                    const TStringBuf functionName = StripString(stripped.SubString(0, openPos));
+                    if (functionName == "last_over_time") {
+                        TDuration window;
+                        if (!TryParsePrometheusRangeSelector(stripped.SubString(openPos + 1, closePos - openPos - 1), query.Selector, window, error)) {
+                            return false;
+                        }
+                        query.LastOverTimeWindow = window;
+                        return true;
+                    }
+                }
+            }
         }
 
         size_t pos = 0;
@@ -1316,6 +1369,26 @@ public:
         return expression.Aggregation.has_value();
     }
 
+    bool UsesLastOverTime(TString& error) const {
+        error.clear();
+        if (Path != "/viewer/inmemory_metrics/prometheus/api/v1/query"
+                && Path != "/viewer/inmemory_metrics/prometheus/api/v1/query_range")
+        {
+            return false;
+        }
+
+        const TString query = Params.Get("query");
+        if (query.empty()) {
+            return false;
+        }
+
+        TPrometheusQueryExpression expression;
+        if (!ParseQueryParam(query, expression, error)) {
+            return false;
+        }
+        return expression.LastOverTimeWindow.has_value();
+    }
+
     bool ParseQueryExpression(TPrometheusQueryExpression& expression, TString& error) const {
         error.clear();
         if (Path != "/viewer/inmemory_metrics/prometheus/api/v1/query"
@@ -1342,7 +1415,7 @@ public:
             return {};
         }
 
-        if (!expression.Aggregation) {
+        if (!expression.Aggregation && !expression.LastOverTimeWindow) {
             return Params.Print();
         }
 
@@ -1385,11 +1458,15 @@ public:
         if (!ParseQueryExpression(expression, error)) {
             return false;
         }
-        if (!expression.Aggregation) {
+        if (!expression.Aggregation && !expression.LastOverTimeWindow) {
             return true;
         }
 
         if (Path == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            if (expression.LastOverTimeWindow) {
+                error = "last_over_time fanout merge is only supported for query_range";
+                return false;
+            }
             TVector<TInstantSample> input;
             for (const auto& item : json["data"]["result"].GetArray()) {
                 const auto& metric = item["metric"];
@@ -1423,6 +1500,36 @@ public:
                         FromStringWithDefault<double>(sourceValue[1].GetStringRobust(), 0));
                 }
                 input.push_back(std::move(sample));
+            }
+
+            if (expression.LastOverTimeWindow) {
+                const auto start = GetFloatParam("start");
+                const auto end = GetFloatParam("end");
+                if (!start || !end) {
+                    error = "start and end are required";
+                    return false;
+                }
+                const auto step = GetStepParam(error);
+                if (!error.empty()) {
+                    return false;
+                }
+                if (!step) {
+                    error = "step is required";
+                    return false;
+                }
+
+                const auto evaluated = EvaluateLastOverTimeRange(
+                    input,
+                    static_cast<ui64>(*start),
+                    static_cast<ui64>(*end),
+                    *step,
+                    *expression.LastOverTimeWindow);
+                NJson::TJsonValue result(NJson::JSON_ARRAY);
+                for (const auto& sample : evaluated) {
+                    AppendRangeResult(result, sample);
+                }
+                json["data"]["result"] = std::move(result);
+                return true;
             }
 
             const auto aggregated = AggregateRangeSamples(input, *expression.Aggregation);
@@ -1464,6 +1571,30 @@ private:
             return {};
         }
         return FromStringWithDefault<double>(Params.Get(name), 0);
+    }
+
+    std::optional<TDuration> GetStepParam(TString& error) const {
+        error.clear();
+        if (!Params.Has("step")) {
+            return {};
+        }
+
+        const TString raw = Params.Get("step");
+        TDuration step;
+        if (TDuration::TryParse(raw, step)) {
+            if (step <= TDuration::Zero()) {
+                error = "step must be greater than zero";
+                return {};
+            }
+            return step;
+        }
+
+        const double seconds = FromStringWithDefault<double>(raw, 0);
+        if (seconds <= 0) {
+            error = TStringBuilder() << "invalid step: " << raw;
+            return {};
+        }
+        return TDuration::MilliSeconds(static_cast<ui64>(seconds * 1000.0));
     }
 
     struct TInstantSample {
@@ -1727,6 +1858,78 @@ private:
         return samples;
     }
 
+    TVector<TInstantSample> EvaluateLastOverTimeInstant(const TVector<TRangeSample>& input, ui64 evalTimestamp, TDuration window) const {
+        const i64 windowSeconds = Max<i64>(1, window.Seconds());
+        TVector<TInstantSample> output;
+        for (const auto& sample : input) {
+            std::optional<std::pair<ui64, double>> lastValue;
+            const i64 windowStart = static_cast<i64>(evalTimestamp) - windowSeconds;
+            for (const auto& [timestamp, value] : sample.Values) {
+                if (timestamp > evalTimestamp) {
+                    break;
+                }
+                if (static_cast<i64>(timestamp) < windowStart) {
+                    continue;
+                }
+                lastValue = std::pair<ui64, double>{timestamp, value};
+            }
+            if (!lastValue) {
+                continue;
+            }
+            output.push_back(TInstantSample{
+                .MetricName = sample.MetricName,
+                .Labels = sample.Labels,
+                .Timestamp = evalTimestamp,
+                .Value = lastValue->second,
+            });
+        }
+        return output;
+    }
+
+    TVector<TRangeSample> EvaluateLastOverTimeRange(const TVector<TRangeSample>& input,
+            ui64 startTs,
+            ui64 endTs,
+            TDuration step,
+            TDuration window) const
+    {
+        const ui64 stepSeconds = Max<ui64>(1, step.Seconds());
+        const i64 windowSeconds = Max<i64>(1, window.Seconds());
+
+        TVector<TRangeSample> output;
+        for (const auto& source : input) {
+            TRangeSample sample;
+            sample.MetricName = source.MetricName;
+            sample.Labels = source.Labels;
+
+            size_t firstInWindow = 0;
+            size_t nextCandidate = 0;
+            std::optional<std::pair<ui64, double>> lastValue;
+
+            for (ui64 evalTs = startTs; evalTs <= endTs; evalTs += stepSeconds) {
+                while (nextCandidate < source.Values.size() && source.Values[nextCandidate].first <= evalTs) {
+                    lastValue = source.Values[nextCandidate];
+                    ++nextCandidate;
+                }
+                const i64 windowStart = static_cast<i64>(evalTs) - windowSeconds;
+                while (firstInWindow < nextCandidate && static_cast<i64>(source.Values[firstInWindow].first) < windowStart) {
+                    ++firstInWindow;
+                }
+                if (lastValue && firstInWindow < nextCandidate) {
+                    sample.Values.emplace_back(evalTs, lastValue->second);
+                }
+                if (endTs - evalTs < stepSeconds) {
+                    break;
+                }
+            }
+
+            if (!sample.Values.empty()) {
+                output.push_back(std::move(sample));
+            }
+        }
+
+        return output;
+    }
+
     void AppendInstantResult(NJson::TJsonValue& output, const TInstantSample& sample) const {
         NJson::TJsonValue& item = output.AppendValue({});
         item["metric"] = BuildMetricObject(sample.MetricName, sample.Labels);
@@ -1960,6 +2163,28 @@ private:
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
+        if (expression.LastOverTimeWindow) {
+            const i64 windowSeconds = Max<i64>(1, expression.LastOverTimeWindow->Seconds());
+            const ui64 windowStart = evalTimestamp > static_cast<ui64>(windowSeconds)
+                ? evalTimestamp - static_cast<ui64>(windowSeconds)
+                : 0;
+            const auto rangeSamples = CollectRangeSamples(snapshot.CommonLabels, lines, expression.Selector, windowStart, evalTimestamp, error);
+            if (!error.empty()) {
+                return MakeError("bad_data", error);
+            }
+
+            TResult result;
+            result.Json["status"] = "success";
+            result.Json["data"]["resultType"] = "vector";
+            NJson::TJsonValue& output = result.Json["data"]["result"];
+            output.SetType(NJson::JSON_ARRAY);
+
+            for (const auto& sample : EvaluateLastOverTimeInstant(rangeSamples, evalTimestamp, *expression.LastOverTimeWindow)) {
+                AppendInstantResult(output, sample);
+            }
+            return result;
+        }
+
         const auto samples = CollectInstantSamples(snapshot.CommonLabels, lines, expression.Selector, evalTimestamp, error);
         if (!error.empty()) {
             return MakeError("bad_data", error);
@@ -2003,6 +2228,10 @@ private:
 
         const ui64 startTs = static_cast<ui64>(*start);
         const ui64 endTs = static_cast<ui64>(*end);
+        const auto step = GetStepParam(error);
+        if (!error.empty()) {
+            return MakeError("bad_data", error);
+        }
 
         const auto snapshot = inMemoryMetrics.Snapshot();
         const auto lines = snapshot.Lines();
@@ -2016,6 +2245,16 @@ private:
         result.Json["data"]["resultType"] = "matrix";
         NJson::TJsonValue& output = result.Json["data"]["result"];
         output.SetType(NJson::JSON_ARRAY);
+
+        if (expression.LastOverTimeWindow) {
+            if (!step) {
+                return MakeError("bad_data", "step is required");
+            }
+            for (const auto& sample : EvaluateLastOverTimeRange(samples, startTs, endTs, *step, *expression.LastOverTimeWindow)) {
+                AppendRangeResult(output, sample);
+            }
+            return result;
+        }
 
         const auto rendered = expression.Aggregation
             ? AggregateRangeSamples(samples, *expression.Aggregation)
@@ -2058,7 +2297,11 @@ public:
         if (!error.empty()) {
             return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
         }
-        FanoutQueryString = usesAggregation ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
+        const bool usesLastOverTime = processor.UsesLastOverTime(error);
+        if (!error.empty()) {
+            return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
+        }
+        FanoutQueryString = (usesAggregation || usesLastOverTime) ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
         if (!error.empty()) {
             return ReplyAndPassAway(BuildErrorResponse("bad_data", error));
         }
@@ -2067,6 +2310,8 @@ public:
             if (*exactNodeId != TActivationContext::ActorSystem()->NodeId) {
                 return ReplyAndPassAway(MakeForward({*exactNodeId}));
             }
+        } else if (usesLastOverTime && GetRequestPath() == "/viewer/inmemory_metrics/prometheus/api/v1/query") {
+            return ReplyAndPassAway(BuildErrorResponse("not_implemented", "last_over_time fanout is only supported for query_range"));
         } else if (processor.SupportsFanout()) {
             NodesInfo = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
             return Become(&TThis::StateFanout, Timeout, new TEvents::TEvWakeup());
@@ -2405,7 +2650,11 @@ private:
         if (!error.empty()) {
             return BuildErrorResponse("bad_data", error);
         }
-        const TString queryString = usesAggregation ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
+        const bool usesLastOverTime = processor.UsesLastOverTime(error);
+        if (!error.empty()) {
+            return BuildErrorResponse("bad_data", error);
+        }
+        const TString queryString = (usesAggregation || usesLastOverTime) ? processor.BuildSelectorOnlyQueryString(error) : Params.Print();
         if (!error.empty()) {
             return BuildErrorResponse("bad_data", error);
         }
@@ -2457,7 +2706,7 @@ private:
             MergeResponseData(merged, json);
         }
 
-        if (usesAggregation) {
+        if (usesAggregation || usesLastOverTime) {
             if (!processor.ApplyAggregationToResult(merged, error)) {
                 return BuildErrorResponse("bad_data", error);
             }

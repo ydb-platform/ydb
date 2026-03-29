@@ -3,6 +3,7 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <util/system/types.h>

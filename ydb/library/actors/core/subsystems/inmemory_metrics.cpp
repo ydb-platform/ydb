@@ -1,7 +1,9 @@
 #include "inmemory_metrics.h"
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -104,6 +106,19 @@ namespace NActors {
     };
 
     namespace {
+        constexpr TStringBuf RegistryMetricsPrefix = "inmemory_metrics.";
+        constexpr TStringBuf RegistryMemoryUsedBytesMetric = "inmemory_metrics.memory_used_bytes";
+        constexpr TStringBuf RegistryCommittedBytesMetric = "inmemory_metrics.committed_bytes";
+        constexpr TStringBuf RegistryFreeChunksMetric = "inmemory_metrics.free_chunks";
+        constexpr TStringBuf RegistryUsedChunksMetric = "inmemory_metrics.used_chunks";
+        constexpr TStringBuf RegistrySealedChunksMetric = "inmemory_metrics.sealed_chunks";
+        constexpr TStringBuf RegistryWritableChunksMetric = "inmemory_metrics.writable_chunks";
+        constexpr TStringBuf RegistryRetiringChunksMetric = "inmemory_metrics.retiring_chunks";
+        constexpr TStringBuf RegistryLinesMetric = "inmemory_metrics.lines";
+        constexpr TStringBuf RegistryClosedLinesMetric = "inmemory_metrics.closed_lines";
+        constexpr TStringBuf RegistryReuseWatermarkMetric = "inmemory_metrics.reuse_watermark";
+        constexpr TStringBuf RegistryAppendFailuresTotalMetric = "inmemory_metrics.append_failures_total";
+
         constexpr i32 RetiringBias = std::numeric_limits<i32>::min();
 
         TInstant DecodeTs(const TTimeAnchor& anchor, NHPTimer::STime ts) noexcept {
@@ -120,10 +135,28 @@ namespace NActors {
             return false;
         }
 
+        bool IsRegistryMetricName(TStringBuf name) noexcept {
+            return name.StartsWith(RegistryMetricsPrefix);
+        }
+
     } // namespace
 
     class TInMemoryMetricsRegistry::TImpl {
     public:
+        struct TSelfMetricsLines {
+            ui32 MemoryUsedBytes = 0;
+            ui32 CommittedBytes = 0;
+            ui32 FreeChunks = 0;
+            ui32 UsedChunks = 0;
+            ui32 SealedChunks = 0;
+            ui32 WritableChunks = 0;
+            ui32 RetiringChunks = 0;
+            ui32 Lines = 0;
+            ui32 ClosedLines = 0;
+            ui32 ReuseWatermark = 0;
+            ui32 AppendFailuresTotal = 0;
+        };
+
         explicit TImpl(TInMemoryMetricsConfig cfg)
             : Config(std::move(cfg))
             , ChunkCount(Config.ChunkSizeBytes ? Config.MemoryBytes / Config.ChunkSizeBytes : 0)
@@ -163,6 +196,9 @@ namespace NActors {
         TVector<std::unique_ptr<TChunk>> Storage;
         TVector<TChunk*> FreeList;
         std::priority_queue<TVictimKey, TVector<TVictimKey>, TVictimCompare> VictimHeap;
+        mutable TMutex SelfMetricsLock;
+        bool SelfMetricsInitialized = false;
+        TSelfMetricsLines SelfMetrics;
     };
 
     TSnapshotData::~TSnapshotData() {
@@ -239,6 +275,13 @@ namespace NActors {
         return Line ? Line->LineId : 0;
     }
 
+    ui32 TLineWriter::ReleaseLineId() noexcept {
+        const ui32 lineId = GetLineId();
+        Registry = nullptr;
+        Line = nullptr;
+        return lineId;
+    }
+
     TLineSnapshot::TLineSnapshot() = default;
     TLineSnapshot::TLineSnapshot(const TLineSnapshot&) = default;
     TLineSnapshot::TLineSnapshot(TLineSnapshot&&) noexcept = default;
@@ -248,9 +291,6 @@ namespace NActors {
 
     void TLineSnapshot::ForEachRecord(const std::function<void(const TRecordView&)>& cb) const {
         if (!Data) {
-            for (const auto& record : InlineRecords) {
-                cb(record);
-            }
             return;
         }
         for (size_t chunkIndex : ChunkIndexes) {
@@ -263,9 +303,6 @@ namespace NActors {
                     .Value = records[i].Value,
                 });
             }
-        }
-        for (const auto& record : InlineRecords) {
-            cb(record);
         }
     }
 
@@ -292,18 +329,6 @@ namespace NActors {
     TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
     namespace {
-        constexpr TStringBuf RegistryMemoryUsedBytesMetric = "inmemory_metrics.memory_used_bytes";
-        constexpr TStringBuf RegistryCommittedBytesMetric = "inmemory_metrics.committed_bytes";
-        constexpr TStringBuf RegistryFreeChunksMetric = "inmemory_metrics.free_chunks";
-        constexpr TStringBuf RegistryUsedChunksMetric = "inmemory_metrics.used_chunks";
-        constexpr TStringBuf RegistrySealedChunksMetric = "inmemory_metrics.sealed_chunks";
-        constexpr TStringBuf RegistryWritableChunksMetric = "inmemory_metrics.writable_chunks";
-        constexpr TStringBuf RegistryRetiringChunksMetric = "inmemory_metrics.retiring_chunks";
-        constexpr TStringBuf RegistryLinesMetric = "inmemory_metrics.lines";
-        constexpr TStringBuf RegistryClosedLinesMetric = "inmemory_metrics.closed_lines";
-        constexpr TStringBuf RegistryReuseWatermarkMetric = "inmemory_metrics.reuse_watermark";
-        constexpr TStringBuf RegistryAppendFailuresTotalMetric = "inmemory_metrics.append_failures_total";
-
         TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
             TLineKey key;
             key.Name = TString(name);
@@ -383,6 +408,102 @@ namespace NActors {
     TVector<TLabel> TInMemoryMetricsRegistry::GetCommonLabels() const {
         TReadGuard guard(Impl->CommonLabelsLock);
         return Impl->CommonLabels;
+    }
+
+    TInMemoryMetricsStats TInMemoryMetricsRegistry::GetStats() const {
+        TInMemoryMetricsStats stats;
+
+        for (const auto& chunk : Impl->Storage) {
+            const EChunkState state = chunk->State.load(std::memory_order_acquire);
+            if (state == EChunkState::Free) {
+                ++stats.FreeChunks;
+                continue;
+            }
+
+            ++stats.UsedChunks;
+            stats.CommittedBytes += chunk->CommittedBytes.load(std::memory_order_acquire);
+            switch (state) {
+                case EChunkState::Writable:
+                    ++stats.WritableChunks;
+                    break;
+                case EChunkState::Sealed:
+                    ++stats.SealedChunks;
+                    break;
+                case EChunkState::Retiring:
+                    ++stats.RetiringChunks;
+                    break;
+                case EChunkState::Free:
+                    break;
+            }
+        }
+
+        stats.MemoryUsedBytes = stats.UsedChunks * Impl->Config.ChunkSizeBytes;
+        stats.ReuseWatermark = Impl->ReuseWatermark.load(std::memory_order_acquire);
+        stats.AppendFailuresTotal = Impl->AppendFailures.load(std::memory_order_acquire);
+
+        TGuard<TMutex> registryGuard(Impl->RegistryLock);
+        for (const auto& [_, line] : Impl->LinesById) {
+            if (IsRegistryMetricName(line->Key.Name)) {
+                continue;
+            }
+
+            ++stats.Lines;
+            if (line->State.load(std::memory_order_acquire) == ELineState::Closed) {
+                ++stats.ClosedLines;
+            }
+        }
+
+        return stats;
+    }
+
+    void TInMemoryMetricsRegistry::UpdateSelfMetrics() {
+        const TInMemoryMetricsStats stats = GetStats();
+
+        TGuard<TMutex> guard(Impl->SelfMetricsLock);
+        if (!Impl->SelfMetricsInitialized) {
+            const std::span<const TLabel> noLabels;
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLine(RegistryMemoryUsedBytesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.CommittedBytes = CreateLine(RegistryCommittedBytesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.FreeChunks = CreateLine(RegistryFreeChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.UsedChunks = CreateLine(RegistryUsedChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.SealedChunks = CreateLine(RegistrySealedChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.WritableChunks = CreateLine(RegistryWritableChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.RetiringChunks = CreateLine(RegistryRetiringChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.Lines = CreateLine(RegistryLinesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.ClosedLines = CreateLine(RegistryClosedLinesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.ReuseWatermark = CreateLine(RegistryReuseWatermarkMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLine(RegistryAppendFailuresTotalMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetricsInitialized = true;
+        }
+
+        auto appendIfPresent = [&](ui32 lineId, ui64 value) {
+            if (!lineId) {
+                return;
+            }
+
+            TLine* line = nullptr;
+            {
+                TGuard<TMutex> registryGuard(Impl->RegistryLock);
+                if (const auto it = Impl->LinesById.find(lineId); it != Impl->LinesById.end()) {
+                    line = it->second;
+                }
+            }
+            if (line) {
+                Append(line, value);
+            }
+        };
+
+        appendIfPresent(Impl->SelfMetrics.MemoryUsedBytes, stats.MemoryUsedBytes);
+        appendIfPresent(Impl->SelfMetrics.CommittedBytes, stats.CommittedBytes);
+        appendIfPresent(Impl->SelfMetrics.FreeChunks, stats.FreeChunks);
+        appendIfPresent(Impl->SelfMetrics.UsedChunks, stats.UsedChunks);
+        appendIfPresent(Impl->SelfMetrics.SealedChunks, stats.SealedChunks);
+        appendIfPresent(Impl->SelfMetrics.WritableChunks, stats.WritableChunks);
+        appendIfPresent(Impl->SelfMetrics.RetiringChunks, stats.RetiringChunks);
+        appendIfPresent(Impl->SelfMetrics.Lines, stats.Lines);
+        appendIfPresent(Impl->SelfMetrics.ClosedLines, stats.ClosedLines);
+        appendIfPresent(Impl->SelfMetrics.ReuseWatermark, stats.ReuseWatermark);
+        appendIfPresent(Impl->SelfMetrics.AppendFailuresTotal, stats.AppendFailuresTotal);
     }
 
     namespace {
@@ -671,40 +792,9 @@ namespace NActors {
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
         snapshot.CommonLabels = GetCommonLabels();
-        const TInstant snapshotTime = TInstant::Now();
-
-        ui32 freeChunks = 0;
-        ui32 usedChunks = 0;
-        ui32 sealedChunks = 0;
-        ui32 writableChunks = 0;
-        ui32 retiringChunks = 0;
-        ui64 committedBytes = 0;
-        for (const auto& chunk : Impl->Storage) {
-            const EChunkState state = chunk->State.load(std::memory_order_acquire);
-            if (state == EChunkState::Free) {
-                ++freeChunks;
-            } else {
-                ++usedChunks;
-                committedBytes += chunk->CommittedBytes.load(std::memory_order_acquire);
-                if (state == EChunkState::Sealed) {
-                    ++sealedChunks;
-                } else if (state == EChunkState::Writable) {
-                    ++writableChunks;
-                } else if (state == EChunkState::Retiring) {
-                    ++retiringChunks;
-                }
-            }
-        }
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
-        const ui64 userLines = Impl->LinesById.size();
-        ui64 closedLines = 0;
-        for (const auto& [_, line] : Impl->LinesById) {
-            if (line->State.load(std::memory_order_acquire) == ELineState::Closed) {
-                ++closedLines;
-            }
-        }
-        snapshot.SnapshotLines.reserve(userLines + 11);
+        snapshot.SnapshotLines.reserve(Impl->LinesById.size());
 
         for (const auto& [lineId, line] : Impl->LinesById) {
             Y_UNUSED(lineId);
@@ -743,29 +833,6 @@ namespace NActors {
             }
         }
 
-        auto addInlineMetricLine = [&](TStringBuf name, ui64 value) {
-            TLineSnapshot line;
-            line.Name = TString(name);
-            line.Closed = true;
-            line.InlineRecords.push_back(TRecordView{
-                .Timestamp = snapshotTime,
-                .Value = value,
-            });
-            snapshot.SnapshotLines.push_back(std::move(line));
-        };
-
-        addInlineMetricLine(RegistryMemoryUsedBytesMetric, static_cast<ui64>(usedChunks) * Impl->Config.ChunkSizeBytes);
-        addInlineMetricLine(RegistryCommittedBytesMetric, committedBytes);
-        addInlineMetricLine(RegistryFreeChunksMetric, freeChunks);
-        addInlineMetricLine(RegistryUsedChunksMetric, usedChunks);
-        addInlineMetricLine(RegistrySealedChunksMetric, sealedChunks);
-        addInlineMetricLine(RegistryWritableChunksMetric, writableChunks);
-        addInlineMetricLine(RegistryRetiringChunksMetric, retiringChunks);
-        addInlineMetricLine(RegistryLinesMetric, userLines);
-        addInlineMetricLine(RegistryClosedLinesMetric, closedLines);
-        addInlineMetricLine(RegistryReuseWatermarkMetric, Impl->ReuseWatermark.load(std::memory_order_acquire));
-        addInlineMetricLine(RegistryAppendFailuresTotalMetric, Impl->AppendFailures.load(std::memory_order_acquire));
-
         return snapshot;
     }
 
@@ -798,6 +865,45 @@ namespace NActors {
         auto* subSystem = actorSystem->GetSubSystem<TInMemoryMetricsRegistry>();
         Y_ABORT_UNLESS(subSystem, "actor system in-memory metrics subsystem is not registered");
         return *subSystem;
+    }
+
+    namespace {
+        class TInMemoryMetricsStatsActor final
+            : public TActorBootstrapped<TInMemoryMetricsStatsActor>
+        {
+        public:
+            explicit TInMemoryMetricsStatsActor(TDuration interval)
+                : Interval(interval)
+            {
+            }
+
+            void Bootstrap(const TActorContext& ctx) {
+                Publish(ctx);
+                Become(&TThis::StateWork);
+            }
+
+            STRICT_STFUNC(StateWork,
+                cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+
+        private:
+            void HandleWakeup() {
+                Publish(TActivationContext::AsActorContext());
+            }
+
+            void Publish(const TActorContext& ctx) {
+                GetInMemoryMetrics(*ctx.ActorSystem()).UpdateSelfMetrics();
+                ctx.Schedule(Interval, new TEvents::TEvWakeup());
+            }
+
+        private:
+            const TDuration Interval;
+        };
+    } // namespace
+
+    IActor* CreateInMemoryMetricsStatsActor(TDuration interval) {
+        return new TInMemoryMetricsStatsActor(interval);
     }
 
 } // namespace NActors

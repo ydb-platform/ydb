@@ -178,6 +178,9 @@ namespace NActors {
                 .MemoryBytes = DefaultInMemoryMetricsMemoryBytes,
             }));
         }
+        SystemSetup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(CreateInMemoryMetricsStatsActor(), TMailboxType::ReadAsFilled, 0));
     }
 
     TActorSystem::~TActorSystem() {

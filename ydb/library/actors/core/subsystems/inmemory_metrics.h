@@ -15,6 +15,7 @@
 namespace NActors {
     class TActorSystem;
     class TInMemoryMetricsRegistry;
+    class IActor;
     class TLine;
     struct TChunk;
     struct TSnapshotData;
@@ -70,6 +71,7 @@ namespace NActors {
         bool Append(ui64 value) noexcept;
         void Close() noexcept;
         ui32 GetLineId() const noexcept;
+        ui32 ReleaseLineId() noexcept;
 
     private:
         TInMemoryMetricsRegistry* Registry = nullptr;
@@ -93,7 +95,6 @@ namespace NActors {
         TVector<TLabel> Labels;
         bool Closed = false;
         TVector<TChunkView> Chunks;
-        TVector<TRecordView> InlineRecords;
 
     private:
         friend class TInMemoryMetricsRegistry;
@@ -125,7 +126,22 @@ namespace NActors {
         ui64 Value = 0;
     };
 
+    struct TInMemoryMetricsStats {
+        ui64 MemoryUsedBytes = 0;
+        ui64 CommittedBytes = 0;
+        ui64 FreeChunks = 0;
+        ui64 UsedChunks = 0;
+        ui64 SealedChunks = 0;
+        ui64 WritableChunks = 0;
+        ui64 RetiringChunks = 0;
+        ui64 Lines = 0;
+        ui64 ClosedLines = 0;
+        ui64 ReuseWatermark = 0;
+        ui64 AppendFailuresTotal = 0;
+    };
+
     std::unique_ptr<TInMemoryMetricsRegistry> MakeInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
+    IActor* CreateInMemoryMetricsStatsActor(TDuration interval = TDuration::Seconds(1));
 
     class TInMemoryMetricsRegistry : public ISubSystem {
     public:
@@ -138,6 +154,8 @@ namespace NActors {
         TLineWriter CreateLine(TStringBuf name, std::span<const TLabel> labels);
         void SetCommonLabels(std::span<const TLabel> labels);
         TVector<TLabel> GetCommonLabels() const;
+        TInMemoryMetricsStats GetStats() const;
+        void UpdateSelfMetrics();
         TSnapshot Snapshot() const;
 
         ui64 GetReuseWatermark() const noexcept;

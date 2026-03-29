@@ -39,6 +39,14 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         return nullptr;
     }
 
+    TVector<ui64> ReadValues(const TLineSnapshot& line) {
+        TVector<ui64> values;
+        line.ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        return values;
+    }
+
     Y_UNIT_TEST(SubsystemAccessor) {
         auto setup = TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, false, false);
@@ -149,11 +157,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate);
     }
 
-    Y_UNIT_TEST(SnapshotIncludesRegistryMetaLines) {
+    Y_UNIT_TEST(SelfMetricsAreStoredAsRegularLinesWithHistory) {
         TInMemoryMetricsRegistry registry({
-            .MemoryBytes = 128,
+            .MemoryBytes = 4096,
             .ChunkSizeBytes = 64,
-            .MaxLines = 4,
+            .MaxLines = 32,
         });
 
         auto first = registry.CreateLine("first", NoLabels());
@@ -162,6 +170,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second);
         UNIT_ASSERT(first.Append(1));
         UNIT_ASSERT(second.Append(2));
+        const auto beforeFirstUpdate = registry.GetStats();
+        registry.UpdateSelfMetrics();
+        second.Close();
+        const auto beforeSecondUpdate = registry.GetStats();
+        registry.UpdateSelfMetrics();
 
         const auto lines = registry.Snapshot().Lines();
 
@@ -189,105 +202,38 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(reuseWatermark);
         UNIT_ASSERT(appendFailures);
 
-        TVector<ui64> values;
-        memoryUsed->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 128);
-
-        values.clear();
-        committedBytes->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 32);
-
-        values.clear();
-        freeChunks->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
-
-        values.clear();
-        usedChunks->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
-
-        values.clear();
-        sealedChunks->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
-
-        values.clear();
-        writableChunks->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
-
-        values.clear();
-        retiringChunks->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
-
-        values.clear();
-        lineCount->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
-
-        values.clear();
-        closedLines->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
-
-        values.clear();
-        reuseWatermark->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
-
-        values.clear();
-        appendFailures->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Labels.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*memoryUsed), TVector<ui64>({beforeFirstUpdate.MemoryUsedBytes, beforeSecondUpdate.MemoryUsedBytes}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*committedBytes), TVector<ui64>({beforeFirstUpdate.CommittedBytes, beforeSecondUpdate.CommittedBytes}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*freeChunks), TVector<ui64>({beforeFirstUpdate.FreeChunks, beforeSecondUpdate.FreeChunks}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*usedChunks), TVector<ui64>({beforeFirstUpdate.UsedChunks, beforeSecondUpdate.UsedChunks}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*sealedChunks), TVector<ui64>({beforeFirstUpdate.SealedChunks, beforeSecondUpdate.SealedChunks}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*writableChunks), TVector<ui64>({beforeFirstUpdate.WritableChunks, beforeSecondUpdate.WritableChunks}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*retiringChunks), TVector<ui64>({beforeFirstUpdate.RetiringChunks, beforeSecondUpdate.RetiringChunks}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*lineCount), TVector<ui64>({beforeFirstUpdate.Lines, beforeSecondUpdate.Lines}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), TVector<ui64>({beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), TVector<ui64>({beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal}));
     }
 
-    Y_UNIT_TEST(AppendFailuresAreReportedInMetaLines) {
+    Y_UNIT_TEST(AppendFailuresAreReportedInSelfMetricLine) {
         TInMemoryMetricsRegistry registry({
-            .MemoryBytes = 0,
+            .MemoryBytes = 4096,
             .ChunkSizeBytes = 64,
-            .MaxLines = 1,
+            .MaxLines = 32,
         });
 
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
+        writer.Close();
         UNIT_ASSERT(!writer.Append(1));
+        const auto stats = registry.GetStats();
+        registry.UpdateSelfMetrics();
 
         const auto lines = registry.Snapshot().Lines();
         const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
         UNIT_ASSERT(appendFailures);
-
-        TVector<ui64> values;
-        appendFailures->ForEachRecord([&](const TRecordView& record) {
-            values.push_back(record.Value);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {

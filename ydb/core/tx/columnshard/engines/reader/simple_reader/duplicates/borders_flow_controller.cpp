@@ -1,5 +1,4 @@
 #include "borders_flow_controller.h"
-#include "executor.h"
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
@@ -63,7 +62,7 @@ TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPorti
     return builder.Build();
 }
 
-TString TBordersFlowController::DebugString() {
+TString TBordersFlowController::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "Borders=" << Borders.size() << ";";

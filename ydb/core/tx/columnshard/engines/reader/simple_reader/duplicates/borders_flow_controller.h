@@ -1,9 +1,8 @@
 #pragma once
 
 #include "common.h"
-#include "context.h"
 #include "private_events.h"
-#include "executor.h"
+#include "merge.h"
 
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
@@ -27,7 +26,6 @@ private:
     std::deque<TEvBordersConstructionResult::TPtr> BordersQueue;
     bool IsInflight = false;
 
-
 public:
     TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
 
@@ -35,17 +33,17 @@ public:
 
     TBordersIterator Next(const std::shared_ptr<const TPortionInfo>& portion);
 
-    TString DebugString();
+    TString DebugString() const;
 
     std::optional<NArrow::TSimpleRow> NextReadyBorder();
 
     bool IsReversed() const;
 
-    ~TBordersFlowController();
-
     void OnReadyMergeBorders();
 
     void Enqueue(const TEvBordersConstructionResult::TPtr& event);
+    
+    ~TBordersFlowController();
 
 private:
     void AddBatch(const TBordersBatch& batch);

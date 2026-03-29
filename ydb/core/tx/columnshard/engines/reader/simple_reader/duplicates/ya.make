@@ -8,6 +8,7 @@ SRCS(
     executor.cpp
     filters.cpp
     manager.cpp
+    merge.cpp
     private_events.cpp
 )
 

@@ -4,6 +4,7 @@
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/local_index_helpers.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -5777,11 +5778,122 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        MigrateLocalIndexesToSchemeObjects(NIceDb::TNiceDb(txc.DB));
+
         CollectObjectsToClean();
 
         OnComplete.ApplyOnExecute(Self, txc, ctx);
         DbChanges.Apply(Self, txc, ctx);
         return true;
+    }
+
+    // Migrate existing column table local indexes (bloom filter, ngram filter) to scheme objects
+    // (EPathTypeTableIndex children) when EnableLocalIndexAsSchemeObject is enabled.
+    // Idempotent: skips indexes that already have a scheme object child.
+    void MigrateLocalIndexesToSchemeObjects(NIceDb::TNiceDb db) {
+        if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+            return;
+        }
+
+        THashSet<TPathId> pathsUnderOperation;
+        for (const auto& [opId, txState] : Self->TxInFlight) {
+            pathsUnderOperation.insert(txState.TargetPathId);
+        }
+
+        bool anyCreated = false;
+
+        for (const TPathId& tablePathId : Self->ColumnTables.GetAllPathIds()) {
+            const TColumnTableInfo& tableInfo = *Self->ColumnTables.at(tablePathId);
+
+            if (!tableInfo.IsStandalone()) {
+                continue;
+            }
+            if (pathsUnderOperation.contains(tablePathId)) {
+                continue;
+            }
+
+            const auto& tableDesc = tableInfo.Description;
+            if (!tableDesc.HasSchema() || tableDesc.GetSchema().IndexesSize() == 0) {
+                continue;
+            }
+
+            auto tablePathIt = Self->PathsById.find(tablePathId);
+            if (tablePathIt == Self->PathsById.end()) {
+                continue;
+            }
+            TPathElement::TPtr tablePath = tablePathIt->second;
+            if (!tablePath->IsColumnTable() || tablePath->Dropped()) {
+                continue;
+            }
+
+            const auto& schema = tableDesc.GetSchema();
+            auto columnIdToName = NOlap::BuildColumnIdToNameMap(schema);
+
+            for (const auto& indexProto : schema.GetIndexes()) {
+                const TString& indexName = indexProto.GetName();
+
+                // Idempotency: skip if a non-dropped EPathTypeTableIndex child already exists
+                if (const TPathId* childId = tablePath->FindChild(indexName)) {
+                    auto childIt = Self->PathsById.find(*childId);
+                    if (childIt != Self->PathsById.end()
+                        && childIt->second->IsTableIndex()
+                        && !childIt->second->Dropped())
+                    {
+                        continue;
+                    }
+                }
+
+                NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+                if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
+                    continue;
+                }
+                if (indexConfig.GetKeyColumnNames().empty()) {
+                    continue;
+                }
+
+                TString errStr;
+                TTableIndexInfo::TPtr indexInfo = TTableIndexInfo::Create(indexConfig, errStr);
+                if (!indexInfo) {
+                    continue;
+                }
+
+                TPathId indexPathId = Self->AllocatePathId();
+
+                TPathElement::TPtr indexPath = MakeIntrusive<TPathElement>(
+                    indexPathId,
+                    tablePathId,
+                    tablePath->DomainPathId,
+                    indexName,
+                    tablePath->Owner);
+                indexPath->PathType = TPathElement::EPathType::EPathTypeTableIndex;
+                indexPath->PathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges;
+                indexPath->StepCreated = TStepId(1);
+                indexPath->CreateTxId = TTxId(1);
+                indexPath->LastTxId = TTxId(1);
+
+                Self->PathsById[indexPathId] = indexPath;
+
+                tablePath->DbRefCount++;
+                tablePath->AllChildrenCount++;
+                tablePath->AddChild(indexName, indexPathId, false);
+
+                Self->Indexes[indexPathId] = indexInfo;
+                Self->IncrementPathDbRefCount(indexPathId);
+
+                Self->PersistPath(db, indexPathId);
+                Self->PersistTableIndex(db, indexPathId);
+                Self->Indexes[indexPathId] = indexInfo->AlterData;
+
+                ++tablePath->DirAlterVersion;
+                Self->PersistPathDirAlterVersion(db, tablePath);
+
+                anyCreated = true;
+            }
+        }
+
+        if (anyCreated) {
+            Self->PersistUpdateNextPathId(db);
+        }
     }
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }

@@ -11,6 +11,9 @@
 
 #include <arrow/scalar.h>
 
+#include <algorithm>
+#include <numeric>
+
 #include "dq_join_common.h"
 
 namespace NKikimr::NMiniKQL {
@@ -32,7 +35,9 @@ struct TDqBlockJoinContext {
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
-    TVector<ui32> BuildColumnPermutation;
+    // Per-side column permutation that puts key pair i at position i.
+    // perm[newPos] = oldPos.  Empty when no reorder is needed.
+    TSides<TVector<ui32>> ColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -45,7 +50,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
-        , ColumnPermutation_(side == ESide::Build ? meta->BuildColumnPermutation : TVector<ui32>{})
+        , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
     {}
 
     bool Finished() const {
@@ -430,59 +435,49 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }
     }
 
-    {
-        const auto& probeKeys = meta.KeyColumns.Probe;
-        const auto& buildKeys = meta.KeyColumns.Build;
-        const ui32 numDataCols = meta.InputTypes.Build.size() - 1;
+    for (ESide side : EachSide) {
+        auto& keyColumns = meta.KeyColumns.SelectSide(side);
+        const ui32 numDataCols = meta.InputTypes.SelectSide(side).size() - 1;
+        const ui32 numKeys = keyColumns.size();
 
         bool needsReorder = false;
-        for (size_t i = 0; i < probeKeys.size(); ++i) {
-            if (probeKeys[i] != buildKeys[i]) {
+        for (ui32 i = 0; i < numKeys; ++i) {
+            if (keyColumns[i] != static_cast<int>(i)) {
                 needsReorder = true;
                 break;
             }
         }
+        if (!needsReorder) {
+            continue;
+        }
 
-        if (needsReorder) {
-            TVector<ui32> buildPerm(numDataCols);
-            TVector<bool> usedOld(numDataCols, false);
-            TVector<bool> usedNew(numDataCols, false);
+        TVector<ui32> perm(numDataCols);
+        std::iota(perm.begin(), perm.end(), 0);
+        for (ui32 i = 0; i < numKeys; ++i) {
+            auto it = std::find(perm.begin(), perm.end(), static_cast<ui32>(keyColumns[i]));
+            std::swap(perm[i], *it);
+        }
 
-            for (size_t i = 0; i < probeKeys.size(); ++i) {
-                buildPerm[probeKeys[i]] = buildKeys[i];
-                usedOld[buildKeys[i]] = true;
-                usedNew[probeKeys[i]] = true;
+        meta.ColumnPermutation.SelectSide(side) = perm;
+
+        auto origTypes = TVector<TBlockType*>(meta.InputTypes.SelectSide(side).begin(),
+                                              meta.InputTypes.SelectSide(side).begin() + numDataCols);
+        for (ui32 j = 0; j < numDataCols; ++j) {
+            meta.InputTypes.SelectSide(side)[j] = origTypes[perm[j]];
+        }
+
+        TVector<ui32> inv(numDataCols);
+        for (ui32 j = 0; j < numDataCols; ++j) {
+            inv[perm[j]] = j;
+        }
+        for (auto& rename : meta.Renames) {
+            if (rename.Side == side) {
+                rename.Index = inv[rename.Index];
             }
+        }
 
-            ui32 nextOld = 0;
-            for (ui32 j = 0; j < numDataCols; ++j) {
-                if (!usedNew[j]) {
-                    while (usedOld[nextOld]) nextOld++;
-                    buildPerm[j] = nextOld;
-                    usedOld[nextOld] = true;
-                }
-            }
-
-            meta.BuildColumnPermutation = buildPerm;
-
-            TVector<ui32> inversePerm(numDataCols);
-            for (ui32 j = 0; j < numDataCols; ++j) {
-                inversePerm[buildPerm[j]] = j;
-            }
-
-            TVector<TBlockType*> origTypes(meta.InputTypes.Build.begin(),
-                                           meta.InputTypes.Build.begin() + numDataCols);
-            for (ui32 j = 0; j < numDataCols; ++j) {
-                meta.InputTypes.Build[j] = origTypes[buildPerm[j]];
-            }
-
-            meta.KeyColumns.Build = TVector<int>(probeKeys.begin(), probeKeys.end());
-
-            for (auto& rename : meta.Renames) {
-                if (rename.Side == ESide::Build) {
-                    rename.Index = inversePerm[rename.Index];
-                }
-            }
+        for (ui32 i = 0; i < numKeys; ++i) {
+            keyColumns[i] = i;
         }
     }
 

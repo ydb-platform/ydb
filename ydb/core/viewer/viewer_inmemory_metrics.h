@@ -1607,6 +1607,8 @@ private:
     struct TRangeSample {
         TString MetricName;
         TVector<TLabel> Labels;
+        TLineMeta Meta;
+        std::optional<std::pair<ui64, double>> PreviousValue;
         TVector<std::pair<ui64, double>> Values;
     };
 
@@ -1844,18 +1846,73 @@ private:
             TRangeSample sample;
             sample.MetricName = line.Name;
             sample.Labels = BuildEffectiveMetricLabels(commonLabels, line);
+            sample.Meta = line.Meta;
             line.ForEachRecord([&](const TRecordView& record) {
                 const ui64 ts = record.Timestamp.Seconds();
-                if (ts < startTs || ts > endTs) {
+                if (ts < startTs) {
+                    sample.PreviousValue = std::pair<ui64, double>{ts, static_cast<double>(record.Value)};
+                    return;
+                }
+                if (ts > endTs) {
                     return;
                 }
                 sample.Values.emplace_back(ts, static_cast<double>(record.Value));
             });
-            if (!sample.Values.empty()) {
+            if (!sample.Values.empty()
+                || (sample.Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat && sample.PreviousValue)) {
                 samples.push_back(std::move(sample));
             }
         }
         return samples;
+    }
+
+    TVector<TRangeSample> FillOnChangeWithHeartbeatRangeGaps(const TVector<TRangeSample>& input,
+            ui64 startTs,
+            ui64 endTs,
+            TDuration step) const
+    {
+        const ui64 stepSeconds = Max<ui64>(1, step.Seconds());
+
+        TVector<TRangeSample> output;
+        output.reserve(input.size());
+        for (const auto& source : input) {
+            if (source.Meta.PublishPolicy != EPublishPolicy::OnChangeWithHeartbeat
+                || source.Meta.Heartbeat <= TDuration::Zero()) {
+                output.push_back(source);
+                continue;
+            }
+
+            const ui64 heartbeatSeconds = Max<ui64>(1, source.Meta.Heartbeat.Seconds());
+
+            TRangeSample sample;
+            sample.MetricName = source.MetricName;
+            sample.Labels = source.Labels;
+            sample.Meta = source.Meta;
+
+            std::optional<std::pair<ui64, double>> lastValue = source.PreviousValue;
+            size_t nextCandidate = 0;
+
+            for (ui64 evalTs = startTs; evalTs <= endTs; evalTs += stepSeconds) {
+                while (nextCandidate < source.Values.size() && source.Values[nextCandidate].first <= evalTs) {
+                    lastValue = source.Values[nextCandidate];
+                    ++nextCandidate;
+                }
+                if (lastValue
+                    && evalTs >= lastValue->first
+                    && evalTs - lastValue->first <= heartbeatSeconds) {
+                    sample.Values.emplace_back(evalTs, lastValue->second);
+                }
+                if (endTs - evalTs < stepSeconds) {
+                    break;
+                }
+            }
+
+            if (!sample.Values.empty()) {
+                output.push_back(std::move(sample));
+            }
+        }
+
+        return output;
     }
 
     TVector<TInstantSample> EvaluateLastOverTimeInstant(const TVector<TRangeSample>& input, ui64 evalTimestamp, TDuration window) const {
@@ -2256,9 +2313,12 @@ private:
             return result;
         }
 
-        const auto rendered = expression.Aggregation
-            ? AggregateRangeSamples(samples, *expression.Aggregation)
+        const auto filled = step
+            ? FillOnChangeWithHeartbeatRangeGaps(samples, startTs, endTs, *step)
             : samples;
+        const auto rendered = expression.Aggregation
+            ? AggregateRangeSamples(filled, *expression.Aggregation)
+            : filled;
         for (const auto& sample : rendered) {
             AppendRangeResult(output, sample);
         }

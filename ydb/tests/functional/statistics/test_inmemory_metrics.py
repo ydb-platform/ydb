@@ -630,6 +630,59 @@ def test_inmemory_metrics_prometheus_query_range_self_metric_tail_reaches_range_
     }
 
 
+def test_inmemory_metrics_prometheus_query_range_self_metric_fills_heartbeat_gaps(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{USED_CHUNKS_TARGET}{{node_id="'),
+        prefix="inmemory_metrics",
+    )
+
+    last_query_range = None
+
+    def query_range_ready():
+        nonlocal last_query_range
+        end = int(time.time())
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": target,
+                "start": end - 60,
+                "end": end,
+                "step": 10,
+            },
+        )
+        if not data:
+            return False
+
+        last_query_range = data
+        logger.info("prometheus self metric gap-filled query_range result: %s", last_query_range)
+        if last_query_range.get("resultType") != "matrix":
+            return False
+
+        for item in last_query_range.get("result", []):
+            metric = item.get("metric", {})
+            if metric.get("__name__") != USED_CHUNKS_TARGET or metric.get("node_id") is None:
+                continue
+
+            values = item.get("values", [])
+            if len(values) < 5:
+                continue
+
+            timestamps = [value[0] for value in values]
+            if timestamps[-1] < end - 10:
+                continue
+
+            step_diffs = [rhs - lhs for lhs, rhs in zip(timestamps, timestamps[1:])]
+            return all(diff == 10 for diff in step_diffs[-4:])
+
+        return False
+
+    assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
+
+
 def test_inmemory_metrics_prometheus_query_range_supports_last_over_time(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"

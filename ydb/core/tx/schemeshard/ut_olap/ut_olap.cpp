@@ -1450,6 +1450,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
@@ -1656,6 +1657,137 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexKeys({"data"}),
             });
+        }
+    }
+
+    Y_UNIT_TEST(LocalIndexesWithoutSchemeObjects) {
+        // Verify that bloom filter indexes work correctly without EnableLocalIndexAsSchemeObject.
+        // Column table bloom filters should be created in the column shard schema,
+        // but no scheme objects (EPathTypeTableIndex) should appear as table children.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(false);
+        ui64 txId = 100;
+
+        // Part 1: CREATE TABLE with inline bloom filter index (flag=false)
+        // Bloom filter is stored in column shard schema; no scheme object children created.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableCreate"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableCreate");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableCreate");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_key" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_key index must exist in column table schema");
+        }
+
+        // Part 2: ALTER TABLE to add bloom filter indexes (flag=false)
+        // Bloom filters are stored in column shard schema; no scheme object children created.
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableAlter"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableAlter"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["data"]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloom = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_data" && idx.HasBloomFilter()) {
+                    foundBloom = true;
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(foundBloom, "bloom_data index must exist in column table schema");
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTableAlter"
+            AlterSchema {
+                UpsertIndexes {
+                    Name: "bloom_data_v2"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["data"]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTableAlter");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(0)});
+        }
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableAlter");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            bool foundBloomData = false;
+            bool foundBloomDataV2 = false;
+            for (const auto& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "bloom_data") foundBloomData = true;
+                if (idx.GetName() == "bloom_data_v2") foundBloomDataV2 = true;
+            }
+            UNIT_ASSERT_C(foundBloomData, "bloom_data index must exist in column table schema");
+            UNIT_ASSERT_C(foundBloomDataV2, "bloom_data_v2 index must exist in column table schema");
         }
     }
 }

@@ -24,6 +24,10 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithIndexes(TOperationId nextId, c
         return result;
     }
 
+    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+        return result;
+    }
+
     const auto& schema = createDescription.GetSchema();
     if (!schema.IndexesSize()) {
         return result;
@@ -112,7 +116,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithIndexes(TOperationId nextId, co
 
     bool hasIndexChanges = !newIndexNames.empty() || !droppedIndexNames.empty();
 
-    if (!hasIndexChanges) {
+    if (!hasIndexChanges || !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
         result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
         return result;
     }

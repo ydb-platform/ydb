@@ -296,4 +296,5 @@ message TFeatureFlags {
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
     optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
     optional bool EnableStreamingQueryDisposition = 260 [default = false];
+    optional bool EnableLocalIndexAsSchemeObject = 261 [default = true];
 }

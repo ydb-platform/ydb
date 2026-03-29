@@ -23,7 +23,12 @@ COMMITTED_BYTES_TARGET = "inmemory_metrics.committed_bytes"
 FREE_CHUNKS_TARGET = "inmemory_metrics.free_chunks"
 USED_CHUNKS_TARGET = "inmemory_metrics.used_chunks"
 SEALED_CHUNKS_TARGET = "inmemory_metrics.sealed_chunks"
+WRITABLE_CHUNKS_TARGET = "inmemory_metrics.writable_chunks"
+RETIRING_CHUNKS_TARGET = "inmemory_metrics.retiring_chunks"
 LINES_TARGET = "inmemory_metrics.lines"
+CLOSED_LINES_TARGET = "inmemory_metrics.closed_lines"
+REUSE_WATERMARK_TARGET = "inmemory_metrics.reuse_watermark"
+APPEND_FAILURES_TOTAL_TARGET = "inmemory_metrics.append_failures_total"
 
 
 def wait_for_target(base_url, predicate, prefix="harmonizer"):
@@ -305,7 +310,12 @@ def test_inmemory_metrics_prometheus_label_discovery(ydb_cluster):
             and FREE_CHUNKS_TARGET in last_metric_names
             and USED_CHUNKS_TARGET in last_metric_names
             and SEALED_CHUNKS_TARGET in last_metric_names
+            and WRITABLE_CHUNKS_TARGET in last_metric_names
+            and RETIRING_CHUNKS_TARGET in last_metric_names
             and LINES_TARGET in last_metric_names
+            and CLOSED_LINES_TARGET in last_metric_names
+            and REUSE_WATERMARK_TARGET in last_metric_names
+            and APPEND_FAILURES_TOTAL_TARGET in last_metric_names
         )
 
     assert wait_for(metric_names_ready, timeout_seconds=30, step_seconds=1.0), last_metric_names

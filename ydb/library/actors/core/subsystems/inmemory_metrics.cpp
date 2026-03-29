@@ -148,6 +148,7 @@ namespace NActors {
 
         std::atomic<ui32> NextLineId = 1;
         std::atomic<ui64> ReuseWatermark = 0;
+        std::atomic<ui64> AppendFailures = 0;
         std::atomic<bool> ShuttingDown = false;
 
         TTimeAnchor TimeAnchor;
@@ -296,7 +297,12 @@ namespace NActors {
         constexpr TStringBuf RegistryFreeChunksMetric = "inmemory_metrics.free_chunks";
         constexpr TStringBuf RegistryUsedChunksMetric = "inmemory_metrics.used_chunks";
         constexpr TStringBuf RegistrySealedChunksMetric = "inmemory_metrics.sealed_chunks";
+        constexpr TStringBuf RegistryWritableChunksMetric = "inmemory_metrics.writable_chunks";
+        constexpr TStringBuf RegistryRetiringChunksMetric = "inmemory_metrics.retiring_chunks";
         constexpr TStringBuf RegistryLinesMetric = "inmemory_metrics.lines";
+        constexpr TStringBuf RegistryClosedLinesMetric = "inmemory_metrics.closed_lines";
+        constexpr TStringBuf RegistryReuseWatermarkMetric = "inmemory_metrics.reuse_watermark";
+        constexpr TStringBuf RegistryAppendFailuresTotalMetric = "inmemory_metrics.append_failures_total";
 
         TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {
             TLineKey key;
@@ -548,11 +554,16 @@ namespace NActors {
     }
 
     bool TInMemoryMetricsRegistry::Append(TLine* line, ui64 value) noexcept {
-        if (!line || Impl->ShuttingDown.load(std::memory_order_acquire)) {
+        const auto fail = [&]() noexcept {
+            Impl->AppendFailures.fetch_add(1, std::memory_order_relaxed);
             return false;
+        };
+
+        if (!line || Impl->ShuttingDown.load(std::memory_order_acquire)) {
+            return fail();
         }
         if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
-            return false;
+            return fail();
         }
 
         const TStoredRecord record{
@@ -570,7 +581,7 @@ namespace NActors {
             {
                 TGuard<TMutex> lineGuard(line->Lock);
                 if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
-                    return false;
+                    return fail();
                 }
 
                 chunk = line->Writable.load(std::memory_order_acquire);
@@ -579,7 +590,7 @@ namespace NActors {
                 }
 
                 if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitRecord(chunk)) {
-                    return false;
+                    return fail();
                 }
 
                 if (chunk) {
@@ -598,17 +609,17 @@ namespace NActors {
                 newChunk = TryStealOldestChunk();
             }
             if (!newChunk) {
-                return false;
+                return fail();
             }
             if (!CanFitRecord(newChunk)) {
                 ReturnChunkToFree(newChunk);
-                return false;
+                return fail();
             }
 
             TGuard<TMutex> lineGuard(line->Lock);
             if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
                 ReturnChunkToFree(newChunk);
-                return false;
+                return fail();
             }
             if (line->Writable.load(std::memory_order_acquire)) {
                 ReturnChunkToFree(newChunk);
@@ -665,6 +676,8 @@ namespace NActors {
         ui32 freeChunks = 0;
         ui32 usedChunks = 0;
         ui32 sealedChunks = 0;
+        ui32 writableChunks = 0;
+        ui32 retiringChunks = 0;
         ui64 committedBytes = 0;
         for (const auto& chunk : Impl->Storage) {
             const EChunkState state = chunk->State.load(std::memory_order_acquire);
@@ -675,13 +688,23 @@ namespace NActors {
                 committedBytes += chunk->CommittedBytes.load(std::memory_order_acquire);
                 if (state == EChunkState::Sealed) {
                     ++sealedChunks;
+                } else if (state == EChunkState::Writable) {
+                    ++writableChunks;
+                } else if (state == EChunkState::Retiring) {
+                    ++retiringChunks;
                 }
             }
         }
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
         const ui64 userLines = Impl->LinesById.size();
-        snapshot.SnapshotLines.reserve(userLines + 6);
+        ui64 closedLines = 0;
+        for (const auto& [_, line] : Impl->LinesById) {
+            if (line->State.load(std::memory_order_acquire) == ELineState::Closed) {
+                ++closedLines;
+            }
+        }
+        snapshot.SnapshotLines.reserve(userLines + 11);
 
         for (const auto& [lineId, line] : Impl->LinesById) {
             Y_UNUSED(lineId);
@@ -736,7 +759,12 @@ namespace NActors {
         addInlineMetricLine(RegistryFreeChunksMetric, freeChunks);
         addInlineMetricLine(RegistryUsedChunksMetric, usedChunks);
         addInlineMetricLine(RegistrySealedChunksMetric, sealedChunks);
+        addInlineMetricLine(RegistryWritableChunksMetric, writableChunks);
+        addInlineMetricLine(RegistryRetiringChunksMetric, retiringChunks);
         addInlineMetricLine(RegistryLinesMetric, userLines);
+        addInlineMetricLine(RegistryClosedLinesMetric, closedLines);
+        addInlineMetricLine(RegistryReuseWatermarkMetric, Impl->ReuseWatermark.load(std::memory_order_acquire));
+        addInlineMetricLine(RegistryAppendFailuresTotalMetric, Impl->AppendFailures.load(std::memory_order_acquire));
 
         return snapshot;
     }

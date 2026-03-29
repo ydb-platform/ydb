@@ -170,14 +170,24 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const TLineSnapshot* freeChunks = FindLineByName(lines, "inmemory_metrics.free_chunks");
         const TLineSnapshot* usedChunks = FindLineByName(lines, "inmemory_metrics.used_chunks");
         const TLineSnapshot* sealedChunks = FindLineByName(lines, "inmemory_metrics.sealed_chunks");
+        const TLineSnapshot* writableChunks = FindLineByName(lines, "inmemory_metrics.writable_chunks");
+        const TLineSnapshot* retiringChunks = FindLineByName(lines, "inmemory_metrics.retiring_chunks");
         const TLineSnapshot* lineCount = FindLineByName(lines, "inmemory_metrics.lines");
+        const TLineSnapshot* closedLines = FindLineByName(lines, "inmemory_metrics.closed_lines");
+        const TLineSnapshot* reuseWatermark = FindLineByName(lines, "inmemory_metrics.reuse_watermark");
+        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
 
         UNIT_ASSERT(memoryUsed);
         UNIT_ASSERT(committedBytes);
         UNIT_ASSERT(freeChunks);
         UNIT_ASSERT(usedChunks);
         UNIT_ASSERT(sealedChunks);
+        UNIT_ASSERT(writableChunks);
+        UNIT_ASSERT(retiringChunks);
         UNIT_ASSERT(lineCount);
+        UNIT_ASSERT(closedLines);
+        UNIT_ASSERT(reuseWatermark);
+        UNIT_ASSERT(appendFailures);
 
         TVector<ui64> values;
         memoryUsed->ForEachRecord([&](const TRecordView& record) {
@@ -215,11 +225,69 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
 
         values.clear();
+        writableChunks->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
+
+        values.clear();
+        retiringChunks->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+
+        values.clear();
         lineCount->ForEachRecord([&](const TRecordView& record) {
             values.push_back(record.Value);
         });
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
+
+        values.clear();
+        closedLines->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+
+        values.clear();
+        reuseWatermark->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+
+        values.clear();
+        appendFailures->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 0);
+    }
+
+    Y_UNIT_TEST(AppendFailuresAreReportedInMetaLines) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 0,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 1,
+        });
+
+        auto writer = registry.CreateLine("line", NoLabels());
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(!writer.Append(1));
+
+        const auto lines = registry.Snapshot().Lines();
+        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+        UNIT_ASSERT(appendFailures);
+
+        TVector<ui64> values;
+        appendFailures->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {

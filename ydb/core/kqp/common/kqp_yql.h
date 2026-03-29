@@ -84,8 +84,8 @@ struct TKqpStreamLookupSettings {
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
-    static bool HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node);
-    static bool HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopColumn(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {

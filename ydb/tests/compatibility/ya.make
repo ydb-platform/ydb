@@ -55,4 +55,5 @@ RECURSE(
     s3_backups
     olap
     streaming
+    distconf
 )

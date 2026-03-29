@@ -79,4 +79,65 @@
   }
   ```
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+        credentials=ydb.credentials_from_env_variables(),
+        use_all_nodes=True,  # равномерный случайный выбор
+    )
+
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=5)
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        driver_config = ydb.DriverConfig(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+            use_all_nodes=True,  # равномерный случайный выбор
+        )
+        async with ydb.aio.Driver(driver_config) as driver:
+            await driver.wait()
+            # ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        os.environ["YDB_SQLALCHEMY_URL"],
+        connect_args={
+            "driver_config_kwargs": {
+                "use_all_nodes": True,  # равномерный случайный выбор
+            }
+        },
+    )
+    ```
+
+  {% endlist %}
+
 {% endlist %}

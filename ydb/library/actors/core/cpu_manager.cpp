@@ -62,7 +62,8 @@ namespace NActors {
                 .ForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount,
                 .InPriorityOrder = true,
                 .PoolName = Config.Basic[poolIds[i]].PoolName,
-                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0,
+                .ForcedForeignSlots = Config.Basic[poolIds[i]].ForcedForeignSlotCount > 0 || !Config.Basic[poolIds[i]].MaxThreadCount && !Config.Basic[poolIds[i]].Threads,
+                .AdjacentPools = Config.Basic[poolIds[i]].AdjacentPools,
             });
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {

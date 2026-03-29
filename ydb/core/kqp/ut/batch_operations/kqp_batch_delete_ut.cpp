@@ -603,6 +603,186 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             }
         }
     }
+
+    Y_UNIT_TEST(TableWithSyncIndex) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_sync_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_sync_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "789"),
+                    (2, "123", "456", "789"),
+                    (3, "123", "456", "789"),
+                    (4, "123", "456", "789"),
+                    (5, "123", "456", "789");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_sync_idx
+                    WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_sync_idx
+                WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_sync_idx/idx/indexImplTable`
+                WHERE v1 = "123";
+        )");
+    }
+
+    Y_UNIT_TEST(TableWithUniqueSyncIndex) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_unique_sync_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL UNIQUE SYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_unique_sync_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "787"),
+                    (2, "124", "456", "789"),
+                    (3, "125", "457", "787"),
+                    (4, "126", "457", "789"),
+                    (5, "127", "458", "787");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_unique_sync_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync unique secondary indexes (index: `idx`)", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(TableWithAsyncIndex) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE global_async_idx (
+                    k Int32 NOT NULL,
+                    v1 String,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL ASYNC ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                UPSERT INTO global_async_idx (k, v1, v2, v3) VALUES
+                    (1, "123", "456", "789"),
+                    (2, "123", "456", "789"),
+                    (3, "123", "456", "789"),
+                    (4, "123", "456", "789"),
+                    (5, "123", "456", "789");
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM global_async_idx WHERE v1 = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM global_async_idx WHERE v1 = "123";
+        )");
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM `/Root/global_async_idx/idx/indexImplTable` WHERE v1 = "123";
+        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx());
+    }
+
+    Y_UNIT_TEST(TableWithVectorIndex) {
+        TKikimrRunner kikimr(GetAppConfig());
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE vector_idx (
+                    k Int32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL SYNC USING vector_kmeans_tree ON (v) WITH (
+                        distance="cosine",
+                        vector_type="uint8",
+                        vector_dimension=3,
+                        clusters=2,
+                        levels=3
+                    )
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM vector_idx WHERE v = "123";
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync vector_kmeans_tree indexes (index: `idx`)");
+        }
+    }
 }
 
 } // namespace NKqp

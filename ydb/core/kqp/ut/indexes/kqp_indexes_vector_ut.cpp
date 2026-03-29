@@ -419,6 +419,44 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0));
     }
 
+    Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableForVectorIndex(db, (Nullable ? F_NULLABLE : 0));
+        {
+            const TString createIndex(Q_(Sprintf(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb) COVER (emb)
+                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2%s);
+                )", (Overlap ? ", overlap_clusters=2" : ""))));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
+            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), std::vector<std::string>{"emb"});
+            UNIT_ASSERT_EQUAL(indexes[0].GetDataColumns(), std::vector<std::string>{"emb"});
+        }
+
+        // Check without F_COVERING here because data column is not covered and query still accesses the main table
+        DoPositiveQueriesVectorIndexOrderByCosine(session, 0);
+    }
+
     Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel3) {
         DoTestOrderByCosine(3, 0);
     }
@@ -427,7 +465,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         DoTestOrderByCosine(3, F_OVERLAP);
     }
 
-    Y_UNIT_TEST(BadFormat) {
+    Y_UNIT_TEST_TWIN(BadFormat, OnBuild) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
@@ -445,27 +483,40 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString createTableSql(R"(
                 --!syntax_v1
-                CREATE TABLE TestVector2 (id Uint64, embedding String, embedding_bit String, PRIMARY KEY (id));
+                CREATE TABLE TestVector2 (id Uint64, embedding String, PRIMARY KEY (id))
+                WITH (PARTITION_AT_KEYS = (9));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        {
+        auto create = [&]() {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestVector2` ADD INDEX idx_vector_3_200 GLOBAL USING vector_kmeans_tree
-                ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=200, levels=3, clusters=2);
+                ON (embedding) WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=3, clusters=2);
             )"));
             auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
+        };
 
-        {
-            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES (1, "00"), (2, "01"), (3, "10"), (4, "11"),
-                (5, "00"), (6, "01"), (7, "10"), (8, "11");)"));
+        auto insert = [&]() {
+            const TString query1(Q_(R"(UPSERT INTO TestVector2 (id, embedding) VALUES
+                (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
+                (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
+                (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
+                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02"),
+                (17, null);)"));
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        if (OnBuild) {
+            insert();
+            create();
+        } else {
+            create();
+            insert();
         }
     }
 

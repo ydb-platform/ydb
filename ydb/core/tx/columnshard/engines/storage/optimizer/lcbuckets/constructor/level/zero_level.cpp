@@ -56,6 +56,22 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
         }
         Concurrency = jsonValue.GetUInteger();
     }
+    
+    if (json.Has("compaction_task_memory_limit")) {
+        const auto& jsonValue = json["compaction_task_memory_limit"];
+        if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
+            return TConclusionStatus::Fail("incorrect compaction_task_memory_limit value (have to be positive unsigned int)");
+        }
+        CompactionTaskMemoryLimit = jsonValue.GetUInteger();
+    }
+    
+    if (json.Has("compaction_task_portions_count_limit")) {
+        const auto& jsonValue = json["compaction_task_portions_count_limit"];
+        if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
+            return TConclusionStatus::Fail("incorrect compaction_task_portions_count_limit value (have to be positive unsigned int)");
+        }
+        CompactionTaskPortionsCountLimit = jsonValue.GetUInteger();
+    }
     return TConclusionStatus::Success();
 }
 
@@ -82,6 +98,12 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (pLevel.HasConcurrency()) {
         Concurrency = pLevel.GetConcurrency();
     }
+    if (pLevel.HasCompactionTaskMemoryLimit()) {
+        CompactionTaskMemoryLimit = pLevel.GetCompactionTaskMemoryLimit();
+    }
+    if (pLevel.HasCompactionTaskPortionsCountLimit()) {
+        CompactionTaskPortionsCountLimit = pLevel.GetCompactionTaskPortionsCountLimit();
+    }
     return true;
 }
 
@@ -105,6 +127,12 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (Concurrency) {
         mLevel.SetConcurrency(*Concurrency);
     }
+    if (CompactionTaskMemoryLimit) {
+        mLevel.SetCompactionTaskMemoryLimit(*CompactionTaskMemoryLimit);
+    }
+    if (CompactionTaskPortionsCountLimit) {
+        mLevel.SetCompactionTaskPortionsCountLimit(*CompactionTaskPortionsCountLimit);
+    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
@@ -113,7 +141,7 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
         std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit.value_or(1000000), PortionsSizeLimit),
         PortionsLiveDuration.value_or(TDuration::Max()), ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10),
-        selectors, GetDefaultSelectorName(), Concurrency.value_or(1));
+        selectors, GetDefaultSelectorName(), Concurrency.value_or(1), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

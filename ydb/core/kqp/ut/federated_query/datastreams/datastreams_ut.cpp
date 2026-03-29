@@ -7,6 +7,8 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
@@ -130,6 +132,7 @@ public:
                 .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_INFO);
 
             Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
+                .NodeCount = NodeCount,
                 .CredentialsFactory = CreateCredentialsFactory(),
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
@@ -197,6 +200,7 @@ public:
     std::shared_ptr<TDriver> GetExternalDriver() {
         if (!ExternalDriver) {
             ExternalDriver = std::make_shared<TDriver>(TDriverConfig()
+                .SetDiscoveryMode(EDiscoveryMode::Async)
                 .SetEndpoint(YDB_ENDPOINT)
                 .SetDatabase(YDB_DATABASE));
         }
@@ -738,6 +742,7 @@ private:
     }
 
 protected:
+    ui32 NodeCount = 1;
     TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
     TTestLogSettings LogSettings;
     TClientSettings QueryClientSettings = TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
@@ -966,6 +971,32 @@ private:
     const NThreading::TFuture<void> Feature;
     const TString Message;
     const TInstant Timeout = TInstant::Now() + TDuration::Seconds(60);
+};
+
+class TTabletKiller : public TActorBootstrapped<TTabletKiller> {
+public:
+    TTabletKiller(ui64 tabletId, TDuration killerInterval)
+        : TabletId(tabletId)
+        , KillerInterval(killerInterval)
+    {}
+
+    STRICT_STFUNC(StateFunc,
+        sFunc(TEvents::TEvWakeup, KillTablet)
+    )
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Schedule(KillerInterval, new TEvents::TEvWakeup());
+    }
+
+private:
+    void KillTablet() const {
+        RestartTablet(*ActorContext().ActorSystem(), TabletId);
+        Schedule(KillerInterval, new TEvents::TEvWakeup());
+    }
+
+    const ui64 TabletId;
+    const TDuration KillerInterval;
 };
 
 } // anonymous namespace
@@ -2536,8 +2567,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }, /* sort  */ true);
     }
 
-    Y_UNIT_TEST_F(StreamingQueryWithStreamLookupJoin, TStreamingTestFixture) {
-        SetupAppConfig().MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+#define TCurrentTestCase TStreamingTestFixture // BACKPORT SPECIFIC ONLY workaround for missing Y_UNIT_TEST_TWIN_F
+    Y_UNIT_TEST_TWIN(StreamingQueryWithStreamLookupJoin, WithFeatureFlag) {
+#undef TCurrentTestCase // BACKPORT SPECIFIC ONLY
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            if (WithFeatureFlag) {
+                setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            }
+        }
 
         const auto connectorClient = SetupMockConnectorClient();
         const auto pqGateway = SetupMockPqGateway();
@@ -2573,29 +2612,31 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .DescribeCount = 2,
                 // Now List Split is done after type annotation, that is the
                 // reason why this value equal to 4 not 5
-                .ListSplitsCount = 4,
+                .ListSplitsCount = WithFeatureFlag ? 4 : 0,
                 .ValidateListSplitsArgs = false
             });
 
-            ui64 readSplitsCount = 0;
-            const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
-            SetupMockConnectorTableData(connectorClient, {
-                .TableName = ydbTable,
-                .Columns = columns,
-                .NumberReadSplits = 3,
-                .ValidateReadSplitsArgs = false,
-                .ResultFactory = [&]() {
-                    readSplitsCount += 1;
-                    const auto payloadColumn = readSplitsCount < 3
-                        ? std::vector<std::string>{"P1", "P2", "P3"}
-                        : std::vector<std::string>{"P4", "P5", "P6"};
+            if (WithFeatureFlag) {
+                ui64 readSplitsCount = 0;
+                const std::vector<std::string> fqdnColumn = {"host1.example.com", "host2.example.com", "host3.example.com"};
+                SetupMockConnectorTableData(connectorClient, {
+                    .TableName = ydbTable,
+                    .Columns = columns,
+                    .NumberReadSplits = 3,
+                    .ValidateReadSplitsArgs = false,
+                    .ResultFactory = [&]() {
+                        readSplitsCount += 1;
+                        const auto payloadColumn = readSplitsCount < 3
+                            ? std::vector<std::string>{"P1", "P2", "P3"}
+                            : std::vector<std::string>{"P4", "P5", "P6"};
 
-                    return MakeRecordBatch(
-                        MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
-                        MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
-                    );
-                }
-            });
+                        return MakeRecordBatch(
+                            MakeArray<arrow::BinaryBuilder>("fqdn", fqdnColumn, arrow::binary()),
+                            MakeArray<arrow::BinaryBuilder>("payload", payloadColumn, arrow::binary())
+                        );
+                    }
+                });
+            }
         }
 
         constexpr char queryName[] = "streamingQuery";
@@ -2626,7 +2667,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "ydb_table"_a = ydbTable,
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
-        ));
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
+        if (!WithFeatureFlag) {
+            return;
+        }
 
         CheckScriptExecutionsCount(1, 1);
 
@@ -2662,6 +2708,72 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
         });
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
+        constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        constexpr char sourceBucket[] = "test_streaming_query_with_precompute";
+        constexpr char s3SourceName[] = "s3Source";
+        CreateBucketWithObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-1"})");
+        CreateS3Source(sourceBucket, s3SourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $r = SELECT Value FROM `{s3_source}`.`path/` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        Key Int32,
+                        Value String
+                    )
+                );
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    Unwrap(Data || "-" || $r)
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName,
+            "s3_source"_a = s3SourceName
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "message-1");
+        ReadTopicMessage(outputTopicName, "message-1-value-1");
+        Sleep(TDuration::Seconds(1));
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        UploadObject(sourceBucket, "path/test_object.json", R"({"Key": 1, "Value": "value-2"})");
+        WriteTopicMessage(inputTopicName, "message-2");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        ReadTopicMessage(outputTopicName, "message-2-value-2", disposition);
     }
 
     Y_UNIT_TEST_F(StreamingQueryUnderSecureScriptExecutions, TStreamingTestFixture) {
@@ -3285,6 +3397,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(CheckpointPropagationWithStreamLookupJoinHanging, TStreamingTestFixture) {
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+        }
         const auto connectorClient = SetupMockConnectorClient();
 
         constexpr char inputTopicName[] = "sljInputTopicName";
@@ -3758,6 +3874,130 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
 
         CheckScriptExecutionsCount(0, 0);
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryDdlRetriesUnderSchemeShardRestarts, TStreamingWithSchemaSecretsTestFixture) {
+        NodeCount = 5;
+        LogSettings.Freeze = true;
+
+        constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
+        constexpr char pqSourceName[] = "sourceName";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+        CreatePqSource(pqSourceName);
+
+        GetRuntime().Register(new TTabletKiller(Tests::SchemeRoot, TDuration::MilliSeconds(500)));
+
+        constexpr ui64 queriesCount = 1000;
+        constexpr ui64 inflightLimit = 250;
+
+        std::vector<TAsyncExecuteQueryResult> results;
+        std::vector<NThreading::TFuture<void>> futures;
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            results.emplace_back(GetQueryClient()->ExecuteQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `query_{i}` WITH (RUN = FALSE) AS
+                DO BEGIN
+                    INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
+                END DO;
+
+                ALTER STREAMING QUERY IF EXISTS `query_{i}` SET (RUN = FALSE);
+
+                DROP STREAMING QUERY IF EXISTS `query_{i}`;)",
+                "i"_a = i,
+                "source"_a = pqSourceName,
+                "output_topic"_a = outputTopicName,
+                "input_topic"_a = inputTopicName
+            ), TTxControl::NoTx()));
+
+            futures.emplace_back(results.back().IgnoreResult());
+
+            if (futures.size() >= inflightLimit) {
+                NThreading::WaitAny(futures).Wait(TDuration::Seconds(10));
+
+                // O(queriesCount * inflightLimit) but ok for test
+                std::vector<NThreading::TFuture<void>> newFutures;
+                newFutures.reserve(futures.size());
+                for (const auto& future : futures) {
+                    if (!future.HasValue()) {
+                        newFutures.emplace_back(future);
+                    }
+                }
+                futures = std::move(newFutures);
+            }
+        }
+
+        for (ui64 i = 0; i < queriesCount; ++i) {
+            const auto result = results[i].ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryRestartAfterShutdown, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "streamingQueryRestartAfterShutdownInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryRestartAfterShutdownOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "key1value1");
+        ReadTopicMessage(outputTopicName, "key1value1");
+
+        // Finish query like shutdown
+        {
+            const auto& edgeActor = GetRuntime().AllocateEdgeActor();
+            const auto& proxyId = MakeKqpProxyID(GetRuntime().GetFirstNodeId());
+
+            auto listRequest = std::make_unique<TEvKqp::TEvListSessionsRequest>();
+            auto& listRequestProto = listRequest->Record;
+            listRequestProto.AddColumns(NSysView::Schema::QuerySessions::SessionId::ColumnId);
+            listRequestProto.SetFreeSpace(std::numeric_limits<i64>::max());
+            listRequestProto.SetTenantName(GetRuntime().GetAppData().TenantName);
+            GetRuntime().Send(proxyId, edgeActor, listRequest.release());
+            auto sessionsEv = GetRuntime().GrabEdgeEvent<TEvKqp::TEvListSessionsResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT(sessionsEv);
+
+            const auto& sessionsProto = sessionsEv->Get()->Record.GetSessions();
+            UNIT_ASSERT_GE(sessionsProto.size(), 1);
+
+            for (const auto& session : sessionsProto) {
+                auto closeRequest = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+                closeRequest->Record.MutableRequest()->SetSessionId(session.GetSessionId());
+                GetRuntime().Send(proxyId, edgeActor, closeRequest.release());
+            }
+
+            Sleep(TDuration::Seconds(2));
+        }
+
+        const auto& result = ExecQuery("SELECT RetryCount FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
+        });
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopicName, "key2value2");
+        ReadTopicMessage(outputTopicName, "key2value2", disposition);
     }
 }
 

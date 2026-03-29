@@ -75,7 +75,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "./files/config.yaml"
           ydb_version: "25.1.4.7"
 
           # Хранилище
@@ -138,7 +138,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "./files/config.yaml"
           ydb_version: "25.1.4.7"
 
           # Хранилище
@@ -196,7 +196,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "./files/config.yaml"
           ydb_version: "25.1.4.7"
 
           # Хранилище
@@ -863,7 +863,7 @@ all:
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment.md).
+Вскоре после начала будет необходимо подтвердить полную очистку настроенных дисков. Затем завершение развёртывания может занять десятки минут в зависимости от окружения и настроек. Этот плейбук выполняет примерно те же шаги, которые описаны в инструкциях для [ручного развёртывания кластера {{ ydb-short-name }}](../../manual/initial-deployment/index.md).
 
 ### Проверьте состояние кластера {#cluster-state}
 

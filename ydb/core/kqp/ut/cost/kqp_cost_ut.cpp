@@ -2,6 +2,8 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
@@ -1862,6 +1864,298 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_EQUAL(messages, isOlap ? 4 : 1);
     }
 
+    Y_UNIT_TEST(BatchOperation_Update) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE: " << Endl << stats.DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+    }
+
+    Y_UNIT_TEST(BatchOperation_Delete) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        const auto query = R"(
+            BATCH DELETE FROM `/Root/TestTable`;
+        )";
+
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH DELETE: " << Endl << stats.DebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().bytes(), 0);
+    }
+
+    Y_UNIT_TEST(BatchOperation_RetryIsFree) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, false);
+        });
+
+        // Number of retries to force before success
+        constexpr size_t maxRetries = 3;
+        size_t retryCount = 0;
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // Change status of TEvTxResponse to set retriable error status for first maxRetries responses
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                if (executerIds.find(ev->Sender) == executerIds.end()) {
+                    return;
+                }
+
+                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    if (retryCount < maxRetries) {
+                        // Set retriable error status to trigger retry
+                        ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::OVERLOADED);
+                        ++retryCount;
+                    }
+                }
+            }
+        });
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Ensure retries happened
+        UNIT_ASSERT_VALUES_EQUAL_C(retryCount, maxRetries, "Expected " << maxRetries << " retries, got " << retryCount);
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE with retries: " << Endl << stats.DebugString() << Endl;
+
+        // Verify stats are the same as in BatchOperation_Update (retries should not affect final stats)
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+    }
+
+    Y_UNIT_TEST(BatchOperation_PartialErrorStats) {
+        auto appConfig = GetAppConfig(false, false, true);
+        // Set MaxBatchSize to 1 so each row is processed in a separate batch
+        appConfig.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(1);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetUseRealThreads(false)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        kikimr.RunCall([&] {
+            CreateTestTable(session, false);
+        });
+
+        // Number of successful responses before injecting error
+        const size_t successBeforeErrorCount = 2;
+        size_t responseCount = 0;
+
+        std::optional<TActorId> partitionedId;
+        std::set<TActorId> executerIds;
+
+        // Get id of the PartitionedExecuterActor
+        using TEvTestGetPartitioned = TEvTxProxySchemeCache::TEvResolveKeySetResult;
+        const auto partitionedObserver = runtime.AddObserver<TEvTestGetPartitioned>([&](TEvTestGetPartitioned::TPtr& ev) {
+            if (runtime.FindActorName(ev->GetRecipientRewrite()) == "KQP_PARTITIONED_EXECUTER" && !partitionedId.has_value()) {
+                partitionedId = ev->Recipient;
+            }
+        });
+
+        // Get id of the Executers
+        using TEvTestGetExecuter = TEvTxUserProxy::TEvProposeKqpTransaction;
+        const auto executerObserver = runtime.AddObserver<TEvTestGetExecuter>([&](TEvTestGetExecuter::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Sender == *partitionedId) {
+                executerIds.insert(ev->Get()->ExecuterId);
+            }
+        });
+
+        // On the third successful response, inject INTERNAL_ERROR
+        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
+            if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
+                if (executerIds.find(ev->Sender) == executerIds.end()) {
+                    return;
+                }
+
+                if (ev->Get()->Record.GetResponse().GetStatus() == Ydb::StatusIds::SUCCESS) {
+                    if (responseCount == successBeforeErrorCount) {
+                        // Inject INTERNAL_ERROR on the third successful response
+                        ev->Get()->Record.MutableResponse()->SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
+                    }
+
+                    ++responseCount;
+                }
+            }
+        });
+
+        const auto query = R"(
+            BATCH UPDATE `/Root/TestTable`
+                SET Amount = 1000;
+        )";
+
+        auto result = kikimr.RunCall([&] {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        });
+
+        // The query should fail due to the injected error
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(responseCount, successBeforeErrorCount + 1);
+
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        Cerr << "BATCH UPDATE with partial error: " << Endl << stats.DebugString() << Endl;
+
+        // Verify stats only count the successfully processed rows (2 out of 4)
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 32);
+    }
+
+    Y_UNIT_TEST(BatchOperation_SecondaryIndex) {
+        auto appConfig = GetAppConfig(false, false, true);
+        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
+
+        auto settings = TKikimrSettings(appConfig)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session, false);
+
+        {
+            const auto query = R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX `TestIndex` GLOBAL SYNC ON (Amount);
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = R"(
+                BATCH UPDATE `/Root/TestTable`
+                    SET Amount = 1000;
+            )";
+
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            Cerr << "BATCH UPDATE secondary index: " << Endl << stats.DebugString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access_size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 64);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).updates().bytes(), 64);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().rows(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).deletes().bytes(), 0);
+        }
+    }
 }
 
 }

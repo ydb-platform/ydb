@@ -29,6 +29,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -942,18 +943,13 @@ public:
         InFlightCondErase.erase(shardIdx);
     }
 
-    void ScheduleNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        Y_ENSURE(InFlightCondErase.contains(shardIdx));
-
+    void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
         auto it = FindPartition(shardIdx);
         Y_ENSURE(it != Partitions.end());
 
         it->LastCondErase = now;
         it->NextCondErase = now + next;
         it->LastCondEraseLag = TDuration::Zero();
-
-        CondEraseSchedule.push(it);
-        InFlightCondErase.erase(shardIdx);
     }
 
     bool IsUsingSequence(const TString& name) {

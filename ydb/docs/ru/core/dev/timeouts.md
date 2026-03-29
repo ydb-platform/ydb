@@ -41,7 +41,7 @@
 
 {% list tabs %}
 
-- Python
+* Python
 
   ```python
   import ydb
@@ -60,7 +60,7 @@
 
 {% if oss == true %}
 
-- C++
+* C++
 
   ```cpp
   #include <ydb/public/sdk/cpp/client/ydb.h>
@@ -84,7 +84,7 @@
 
 {% endif %}
 
-- Go
+* Go
 
   ```go
   import (

@@ -10,6 +10,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

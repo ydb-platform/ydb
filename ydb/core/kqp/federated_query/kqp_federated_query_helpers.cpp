@@ -16,7 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -141,12 +141,28 @@ namespace {
         return NYql::IHTTPGateway::Make(&httpGatewayConfig, httpGatewayGroup);
     }
 
-    std::shared_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
+    std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver) {
+        if (!driver) {
+            return nullptr;
+        }
+
+        return std::shared_ptr<NYdb::TDriver>(driver.release(), [](NYdb::TDriver* d) {
+            if (!d) {
+                return;
+            }
+
+            // Stop requests and wait for their completion
+            d->Stop(true);
+            delete d;
+        });
+    }
+
+    std::unique_ptr<NYdb::TDriver> MakeYdbDriver(NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr actorSystemPtr, const NKikimrConfig::TStreamingQueriesConfig::TExternalTopicsSettings& config) {
         NYdb::TDriverConfig cfg;
         cfg.SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
 
-        auto driver = std::make_shared<NYdb::TDriver>(cfg);
+        auto driver = std::make_unique<NYdb::TDriver>(cfg);
 
         if (const auto& patchPrefix = config.GetDiscoveryCommonHostnamePrefixPatch()) {
             driver->AddExtension<NDiscoveryMutator::TDiscoveryMutator>(NDiscoveryMutator::TDiscoveryMutator::TParams([patchPrefix](Ydb::Discovery::ListEndpointsResult* proto, NYdb::TStatus status, const NYdb::IDiscoveryMutatorApi::TAuxInfo& aux) {
@@ -183,10 +199,10 @@ namespace {
         return settings;
     }
 
-    NYql::IPqGateway::TPtr MakePqGateway(const std::shared_ptr<NYdb::TDriver>& driver) {
+    NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver) {
         auto settings = MakeCommonTopicClientSettings(1, 2);
 
-        return CreatePqNativeGateway(NYql::TPqGatewayServices(
+        return CreatePqNativeGatewayFactory(NYql::TPqGatewayServices(
             *driver,
             nullptr,
             nullptr,
@@ -240,7 +256,6 @@ namespace {
         S3GatewayConfig = queryServiceConfig.GetS3();
 
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
-        SolomonGateway = NYql::CreateSolomonGateway(SolomonGatewayConfig);
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
 
@@ -250,7 +265,6 @@ namespace {
 
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
-        PqGateway = MakePqGateway(Driver);
 
         // Initialize Token Accessor
         if (appConfig.GetAuthConfig().HasTokenAccessorConfig()) {
@@ -300,6 +314,7 @@ namespace {
         }
 
         auto result = TKqpFederatedQuerySetup{
+            Driver,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,
@@ -309,14 +324,13 @@ namespace {
             YtGatewayConfig,
             YtGateway,
             SolomonGatewayConfig,
-            SolomonGateway,
             nullptr,
             S3ReadActorFactoryConfig,
             DqTaskTransformFactory,
             PqGatewayConfig,
-            PqGateway,
+            MakePqGatewayFactory(Driver),
             ActorSystemPtr,
-            Driver};
+        };
 
         // Init DatabaseAsyncResolver only if all requirements are met
         if (DatabaseResolverActorId && MdbEndpointGenerator &&
@@ -334,7 +348,6 @@ namespace {
 
     void TKqpFederatedQuerySetupFactoryDefault::Cleanup() {
         HttpGateway.reset();
-        PqGateway.Reset();
     }
 
     IKqpFederatedQuerySetupFactory::TPtr MakeKqpFederatedQuerySetupFactory(

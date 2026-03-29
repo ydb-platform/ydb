@@ -84,6 +84,9 @@ namespace NSchemeShardUT_Private {
         OPTION(ui32, NStoragePools, 2);
         OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
         OPTION(bool, EnableAlterDatabase, false);
+        OPTION(bool, EnableConditionalEraseResponseBatching, false);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
+        OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
 
         #undef OPTION
     };
@@ -221,6 +224,7 @@ namespace NSchemeShardUT_Private {
         void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone);
         void EnableTabletResolverScheduling(ui32 nodeIdx = 0);
         void Finalize();
+
     private:
         virtual TTestEnv* CreateTestEnv();
         // Make sure that user requests are not dropped

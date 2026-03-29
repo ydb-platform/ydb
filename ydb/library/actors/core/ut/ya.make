@@ -7,9 +7,11 @@ IF (SANITIZER_TYPE)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
         ram:32
+        cpu:4
     )
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 PEERDIR(

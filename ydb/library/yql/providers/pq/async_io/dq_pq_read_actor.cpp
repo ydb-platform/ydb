@@ -5,7 +5,6 @@
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
 
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/core/actor.h>
@@ -138,30 +137,36 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
             ui64 taskId,
             const ::NMonitoring::TDynamicCounterPtr& counters,
             const NPq::NProto::TDqPqTopicSource& sourceParams,
-            bool enableStreamingQueriesCounters)
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
-            , Counters(counters) {
+            , Counters(counters)
+        {
             if (counters) {
                 SubGroup = Counters->GetSubgroup("source", "PqRead");
             } else {
                 SubGroup = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             }
 
-            auto source = SubGroup;
-            auto task = SubGroup;
+            Source = SubGroup;
+            Task = SubGroup;
             if (enableStreamingQueriesCounters) {
                 for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                     SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
                 }
-                source = source->GetSubgroup("tx_id", TxId);
-                task = source->GetSubgroup("task_id", ToString(taskId));
+                Source = SubGroup->GetSubgroup("tx_id", TxId);
+                if (enableCountersPerTask) {
+                    Task = Source->GetSubgroup("task_id", ToString(taskId));
+                } else {
+                    Task = Source;
+                }
             }
-            InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
-            InFlySubscribe = task->GetCounter("InFlySubscribe");
-            AsyncInputDataRate = task->GetCounter("AsyncInputDataRate", true);
-            ReconnectRate = task->GetCounter("ReconnectRate", true);
-            DataRate = task->GetCounter("DataRate", true);
-            WaitEventTimeMs = source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
+            InFlyAsyncInputData = Task->GetCounter("InFlyAsyncInputData");
+            InFlySubscribe = Task->GetCounter("InFlySubscribe");
+            AsyncInputDataRate = Task->GetCounter("AsyncInputDataRate", true);
+            ReconnectRate = Task->GetCounter("ReconnectRate", true);
+            DataRate = Task->GetCounter("DataRate", true);
+            WaitEventTimeMs = Source->GetHistogram("WaitEventTimeMs", NMonitoring::ExplicitHistogram({5, 20, 100, 500, 2000}));
         }
 
         ~TMetrics() {
@@ -173,6 +178,8 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         TString TxId;
         ::NMonitoring::TDynamicCounterPtr Counters;
         ::NMonitoring::TDynamicCounterPtr SubGroup;
+        ::NMonitoring::TDynamicCounterPtr Task;
+        ::NMonitoring::TDynamicCounterPtr Source;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
         ::NMonitoring::TDynamicCounters::TCounterPtr AsyncInputDataRate;
@@ -215,7 +222,7 @@ public:
         const NActors::TActorId& computeActorId,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
@@ -382,7 +389,11 @@ private:
     }
 
     void NotifyCA() {
-        Metrics.InFlyAsyncInputData->Set(1);
+        if (!CaNotified) {
+            Metrics.InFlyAsyncInputData->Inc();
+            CaNotified = true;
+        }
+
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
@@ -546,7 +557,10 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override {
         // called with bound allocator
-        Metrics.InFlyAsyncInputData->Set(0);
+        if (CaNotified) {
+            Metrics.InFlyAsyncInputData->Dec();
+            CaNotified = false;
+        }
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
@@ -640,7 +654,7 @@ private:
             SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
             SourceParams.GetWatermarks().GetIdleTimeoutUs() :
             lateArrivalDelayUs;
-        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs));
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleTimeoutUs), Metrics.Counters ? Metrics.Source : nullptr);
     }
 
     void SchedulePartitionIdlenessCheck(TInstant at) override {
@@ -907,10 +921,11 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;
     bool WithoutConsumer = false;
+    bool CaNotified = false;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -955,7 +970,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqGateway::TPtr pqGateway,
+    IPqStaticGateway::TPtr pqGateway,
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize
@@ -987,7 +1002,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, const TString& reconnectPeriod, bool enableStreamingQueriesCounters) {
     factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, reconnectPeriod, enableStreamingQueriesCounters](
             NPq::NProto::TDqPqTopicSource&& settings,

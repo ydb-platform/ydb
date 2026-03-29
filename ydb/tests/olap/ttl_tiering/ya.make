@@ -16,7 +16,9 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 PEERDIR(
     ydb/tests/library

@@ -76,6 +76,9 @@ private:
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
+        if (putResult->GetPutStatus() != NKikimrProto::OK) {
+            WriteResult.SetErrorMessage("cannot put blob (write controller): " + ::ToString(putResult->GetPutStatus()), true);
+        }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
         auto result =
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));

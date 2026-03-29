@@ -221,6 +221,24 @@ public:
     }
 };
 
+class TKqpPeepholeBlockPackUnpackTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeBlockPackUnpackTransformer(TTypeAnnotationContext& ctx)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeBlockPackUnpack-"#name, Hndl(&TKqpPeepholeBlockPackUnpackTransformer::name)
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
+#undef HNDL
+    }
+
+private:
+    TMaybeNode<TExprBase> EliminateWideMapPackUnpack(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapPackUnpack(node, ctx, *GetTypes());
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+};
+
 class TKqpPeepholeFinalTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeFinalTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
@@ -256,6 +274,7 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
         pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholeBlockPackUnpack");
     }
 private:
     const TKikimrConfiguration::TPtr Config;

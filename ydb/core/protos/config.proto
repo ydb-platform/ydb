@@ -13,8 +13,8 @@ import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/compaction.proto";
 import "ydb/core/protos/config_metrics.proto";
 import "ydb/core/protos/config_units.proto";
-import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/data_integrity_trails.proto";
+import "ydb/core/protos/schemeshard_config.proto";
 import "ydb/core/protos/datashard_config.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/feature_flags.proto";
@@ -28,6 +28,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/recoveryshard_config.proto";
 import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
@@ -2165,39 +2166,14 @@ message TColumnShardConfig {
         string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
 }
 
-message TSchemeShardConfig {
-    message TInFlightCounterConfig {
-        optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
-        // after this amount scheme shard begin to abort the operations
-        // to disable set to 0
-        optional uint32 InFlightLimit = 2 [default = 10000];
-    }
-    // after this amount of time we forcibly write full stats to local DB
-    // to disable set to 0
-    optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
-
-    // number of shards stats to batch together
-    // to disable set to 0
-    optional uint32 StatsMaxBatchSize = 2 [default = 100];
-
-    optional uint32 StatsMaxExecuteMs = 3 [default = 10];
-
-    repeated TInFlightCounterConfig InFlightCounterConfig = 4;
-
-    // number of shards per table
-    optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
-
-    // number of shards per table
-    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
-    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
-
-    // number of shards per table
-    // database level default for TTL mechanics
-    // 0 means no limit
-    optional uint32 MaxTTLShardsInFlight = 7 [default = 0];
-}
+// TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
 
 message TCompactionConfig {
     message TBackgroundCompactionConfig {
@@ -2549,6 +2525,9 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
+    optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+    optional uint64 MaxBackupsLimit = 4 [default = 3];
 }
 
 message TAppConfig {
@@ -2658,6 +2637,7 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+    optional TRecoveryShardConfig RecoveryShardConfig = 117;
 }
 
 message TYdbVersion {

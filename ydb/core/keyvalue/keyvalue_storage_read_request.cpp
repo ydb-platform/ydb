@@ -1,11 +1,13 @@
 #include "keyvalue_storage_read_request.h"
 #include "keyvalue_const.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <util/generic/overloaded.h>
+#include <library/cpp/time_provider/time_provider.h>
 
 
 namespace NKikimr {
@@ -253,8 +255,8 @@ public:
                     (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
                     (ErrorReason, result->ErrorReason));
             // kill the key value tablet due to it's obsolete generation
+            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_BLOCKED);
             Send(IntermediateResult->KeyValueActorId, new TKikimrEvents::TEvPoisonPill);
-            ReplyErrorAndPassAway(NKikimrKeyValue::Statuses::RSTATUS_ERROR);
             return;
         }
 
@@ -425,6 +427,8 @@ public:
             return NKikimrKeyValue::Statuses::RSTATUS_OK;
         } else if (status == NKikimrProto::OVERRUN) {
             return NKikimrKeyValue::Statuses::RSTATUS_OVERRUN;
+        } else if (status == NKikimrProto::BLOCKED) {
+            return NKikimrKeyValue::Statuses::RSTATUS_BLOCKED;
         } else {
             return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
         }
@@ -512,7 +516,9 @@ public:
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")
-    {}
+    {
+        IntermediateResult->Stat.KeyvalueStorageRequestSentAt = TAppData::TimeProvider->Now();
+    }
 };
 
 

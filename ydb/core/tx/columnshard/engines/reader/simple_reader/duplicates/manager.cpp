@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 namespace {
 
-class TPortionIntersectionsAllocation: public NGroupedMemoryManager::IAllocation {
+class TFilterSizeAllocation: public NGroupedMemoryManager::IAllocation {
 private:
     TActorId Owner;
     std::shared_ptr<TFilterAccumulator> Request;
@@ -21,7 +21,7 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
-        Request->Abort(TStringBuilder() << "cannot allocate memory: " << errorMessage);
+        Request->Abort(TStringBuilder() << "cannot allocate memory (filter size allocation): " << errorMessage);
     }
 
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
@@ -31,7 +31,7 @@ private:
     }
 
 public:
-    TPortionIntersectionsAllocation(const TActorId& owner, const std::shared_ptr<TFilterAccumulator>& request, const ui64 mem,
+    TFilterSizeAllocation(const TActorId& owner, const std::shared_ptr<TFilterAccumulator>& request, const ui64 mem,
         std::unique_ptr<TFilterBuildingGuard>&& requestGuard)
         : NGroupedMemoryManager::IAllocation(mem)
         , Owner(owner)
@@ -40,6 +40,7 @@ public:
     {
     }
 };
+
 }   // namespace
 
 #define LOCAL_LOG_TRACE \
@@ -83,7 +84,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         return;
     }
 
-    auto task = std::make_shared<TPortionIntersectionsAllocation>(SelfId(), constructor, mainPortion->GetRecordsCount(), std::make_unique<TFilterBuildingGuard>());
+    auto task = std::make_shared<TFilterSizeAllocation>(SelfId(), constructor, mainPortion->GetRecordsCount(), std::make_unique<TFilterBuildingGuard>());
     auto& filterGuard = task->GetRequestGuard();
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(
         filterGuard->GetMemoryProcessId(),

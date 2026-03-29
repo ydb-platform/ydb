@@ -13,6 +13,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsAccepted;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
+    NMonitoring::TDynamicCounters::TCounterPtr MergeQueue;
     
     NMonitoring::TDynamicCounters::TCounterPtr LeftBorders;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBorders;
@@ -25,6 +26,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr RequestInflight;
     
      NMonitoring::THistogramPtr RequestLatency;
+     
+    NMonitoring::TDynamicCounters::TCounterPtr ExclusiveFilters;
+    NMonitoring::TDynamicCounters::TCounterPtr ReadyFiltersCount;
+    NMonitoring::TDynamicCounters::TCounterPtr ReadyFiltersSize;
 
 public:
     TDuplicateFilteringCounters();
@@ -70,6 +75,19 @@ public:
     void OnRequestFinish(ui64 latencyMs) const {
         RequestLatency->Collect(latencyMs);
          RequestInflight->Add(-1);
+    }
+    
+    void OnReadyFilters(i64 count, i64 size) const {
+        ReadyFiltersCount->Add(count);
+        ReadyFiltersSize->Add(size);
+    }
+    
+    void OnExclusiveFilters(i64 count = 1) const {
+        ExclusiveFilters->Add(count);
+    }
+    
+    void OnMergeQueue(i64 count = 1) const {
+        MergeQueue->Add(count);
     }
 };
 }   // namespace NKikimr::NColumnShard

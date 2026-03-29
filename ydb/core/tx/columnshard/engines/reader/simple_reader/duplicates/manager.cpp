@@ -98,7 +98,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
         Portions,
         GetFetchingColumns()
       ), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
-    , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted())
+    , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
 {
 }
@@ -106,7 +106,7 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(ev->Get()->GetPortionId());
     auto constructor = std::make_shared<TFilterAccumulator>(ev, Counters);
-    if (BordersFlowController.IsExclusiveInterval(mainPortion->GetPortionId())) {
+    if (BordersFlowController.ExtractExclusiveInterval(mainPortion->GetPortionId())) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
         constructor->AddFilter(std::move(std::move(filter)));

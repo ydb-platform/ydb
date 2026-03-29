@@ -104,8 +104,9 @@ THashMap<ui64, NArrow::TColumnFilter>&& TFiltersBuilder::ExtractReadyFilters() {
     return std::move(ReadyFilters);
 }
 
-TFiltersStore::TFiltersStore(const bool reverse)
-    : IsReverse(reverse) {
+TFiltersStore::TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)
+    : IsReverse(reverse)
+    , Counters(counters) {
 }
 
 NArrow::TColumnFilter TFiltersStore::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
@@ -124,6 +125,7 @@ bool TFiltersStore::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& const
     }
 
     auto& filter = filterIt->second;
+    Counters->OnReadyFilters(-1, -1 * filter.GetDataSize());
     constructor->AddFilter(MakeOrderedFilter(std::move(filter)));
     ReadyFilters.erase(filterIt);
     return true;
@@ -136,6 +138,7 @@ void TFiltersStore::AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&&
         WaitingPortions.erase(waitingIt);
         return;
     }
+    Counters->OnReadyFilters(1, filter.GetDataSize());
     AFL_VERIFY(ReadyFilters.emplace(portionId, std::move(filter)).second);
 }
 
@@ -148,4 +151,11 @@ void TFiltersStore::Abort(const TString& error) {
         constructor->Abort(error);
     }
 }
+
+TFiltersStore::~TFiltersStore() {
+    for (const auto& [_, filter] : ReadyFilters) {
+        Counters->OnReadyFilters(-1, -1 * filter.GetDataSize());
+    }
+}
+
 }

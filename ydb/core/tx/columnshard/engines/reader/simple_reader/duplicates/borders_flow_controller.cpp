@@ -14,6 +14,7 @@ TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeConte
     }
     BuildExclusivePortions();
     Counters->OnLeftBorders(Borders.size());
+    Counters->OnExclusiveFilters(ExclusivePortions.size());
 }
 
 void TBordersFlowController::BuildExclusivePortions() {
@@ -48,8 +49,14 @@ void TBordersFlowController::BuildExclusivePortions() {
     }
 }
 
-bool TBordersFlowController::IsExclusiveInterval(const ui64 portionId) const {
-    return ExclusivePortions.find(portionId) != ExclusivePortions.end();
+bool TBordersFlowController::ExtractExclusiveInterval(const ui64 portionId) {
+    auto it = ExclusivePortions.find(portionId);
+    if (it != ExclusivePortions.end()) {
+        ExclusivePortions.erase(it);
+        Counters->OnExclusiveFilters(-1);
+        return true;
+    }
+    return false;
 }
 
 TBordersIterator TBordersFlowController::Next(const std::shared_ptr<const TPortionInfo>& portion) {
@@ -106,6 +113,8 @@ TBordersFlowController::~TBordersFlowController() {
     Counters->OnLeftBorders(-1 * static_cast<i64>(Borders.size()));
     Counters->OnWaitingBorders(-1 * static_cast<i64>(WaitingBorders.size()));
     Counters->OnReadyBorders(-1 * static_cast<i64>(ReadyBorders.size()));
+    Counters->OnExclusiveFilters(-1 * static_cast<i64>(ExclusivePortions.size()));
+    Counters->OnMergeQueue(-1 * static_cast<i64>(BordersQueue.size()));
 }
 
 bool TBordersFlowController::IsReversed() const {
@@ -116,6 +125,7 @@ void TBordersFlowController::DrainQueue() {
     if (IsInflight || BordersQueue.empty()) {
         return;
     }
+    Counters->OnMergeQueue(-1);
     auto ev = BordersQueue.front();
     BordersQueue.pop_front();
     AddBatch(ev->Get()->Context.GetBatch());
@@ -134,6 +144,7 @@ void TBordersFlowController::OnReadyMergeBorders() {
 }
 
 void TBordersFlowController::Enqueue(const TEvBordersConstructionResult::TPtr& event) {
+    Counters->OnMergeQueue(1);
     BordersQueue.push_back(event);
     DrainQueue();
 }

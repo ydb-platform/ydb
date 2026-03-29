@@ -64,15 +64,19 @@ private:
     const bool IsReverse;
     THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
     THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
+    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+
 private:
      NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
 
 public:
-    TFiltersStore(const bool reverse);
+    TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
     bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
     void AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     void Abort(const TString& error);
+    
+    ~TFiltersStore();
 };
 
 }

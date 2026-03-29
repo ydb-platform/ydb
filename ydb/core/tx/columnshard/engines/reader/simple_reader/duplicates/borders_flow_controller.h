@@ -29,7 +29,7 @@ private:
 public:
     TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
 
-    bool IsExclusiveInterval(const ui64 portionId) const;
+    bool ExtractExclusiveInterval(const ui64 portionId);
 
     TBordersIterator Next(const std::shared_ptr<const TPortionInfo>& portion);
 

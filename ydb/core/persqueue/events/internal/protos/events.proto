@@ -2,8 +2,7 @@ import "ydb/core/protos/pqconfig.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 
 package NKikimrPQ;
-option java_package = "ru.yandex.persqueue.events.global.proto";
-
+option java_package = "ru.yandex.kikimr.proto";
 
 message TEvSubDomainStatus {
     required bool SubDomainOutOfSpace = 1;

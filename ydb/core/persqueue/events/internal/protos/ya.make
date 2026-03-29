@@ -12,6 +12,6 @@ PEERDIR(
     ydb/public/api/protos
 )
 
-EXCLUDE_TAGS(GO_PROTO)
+EXCLUDE_TAGS(GO_PROTO JAVA_PROTO)
 
 END()

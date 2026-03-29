@@ -2375,6 +2375,8 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
         if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
             LoadPlans(*topNode);
+        } else if (auto* topNode = jsonNode.GetValueByPath(simplified ? "queries.[0].SimplifiedPlan" : "queries.[0].Plan")) {
+            LoadPlans(*topNode);
         }
     }
 }

@@ -42,7 +42,7 @@ public:
     void OnReadyMergeBorders();
 
     void Enqueue(const TEvBordersConstructionResult::TPtr& event);
-    
+
     ~TBordersFlowController();
 
 private:

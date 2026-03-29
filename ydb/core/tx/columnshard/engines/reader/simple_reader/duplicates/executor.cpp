@@ -164,6 +164,11 @@ public:
 
 }   // namespace
 
+TBuildFilterTaskExecutor::TBuildFilterTaskExecutor(TBordersIterator&& bordersIterator)
+    : BordersIterator(std::move(bordersIterator))
+{
+}
+
 bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     if (BordersIterator.IsDone()) {
         return false;

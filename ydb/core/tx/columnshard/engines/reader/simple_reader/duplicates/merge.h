@@ -32,9 +32,7 @@ private:
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
     virtual void DoOnCannotExecute(const TString& reason) override;
 
-    virtual TString GetTaskClassIdentifier() const override {
-        return "BUILD_DUPLICATE_FILTERS";
-    }
+    virtual TString GetTaskClassIdentifier() const override;
 public:
     TMergeBorders(const TActorId& owner, const std::shared_ptr<TMergeContext>& context, const TEvBordersConstructionResult::TPtr& event, const std::vector<NArrow::TSimpleRow>& readyBorders);
 };

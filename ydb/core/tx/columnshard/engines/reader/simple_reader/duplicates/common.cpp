@@ -2,6 +2,32 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
+TPortionStore::TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
+    : Portions(std::move(portions))
+{
+}
+
+TPortionInfo::TConstPtr TPortionStore::GetPortionVerified(const ui64 portionId) const {
+    auto* findPortion = Portions.FindPtr(portionId);
+    AFL_VERIFY(findPortion)("portion", portionId);
+    return *findPortion;
+}
+
+TBorder::TBorder(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const std::vector<ui64>& portionIds)
+    : Key(key)
+    , PortionIds(portionIds)
+{
+}
+
+TString TBorder::DebugString() const {
+    return TStringBuilder() << "{" << "PortionIds=" << JoinSeq(",", PortionIds) << ";Key=" << Key->GetSorting()->DebugJson(0) << "}";
+}
+
+void TBordersBatch::AddBorder(const TBorder& border) {
+    Borders.push_back(border);
+    PortionIds.insert(border.GetPortionIds().begin(), border.GetPortionIds().end());
+}
+
 TBordersIterator::TBordersIterator(
     std::vector<TBorder>&& borders, const ui64 portionsCountSoftLimit)
     : Borders(std::move(borders))

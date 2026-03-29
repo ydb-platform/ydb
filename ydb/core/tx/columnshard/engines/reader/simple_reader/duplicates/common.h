@@ -20,16 +20,9 @@ private:
     THashMap<ui64, TPortionInfo::TConstPtr> Portions;
 
 public:
-    TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)
-        : Portions(std::move(portions))
-    {
-    }
+    TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions);
 
-    TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const {
-        auto* findPortion = Portions.FindPtr(portionId);
-        AFL_VERIFY(findPortion)("portion", portionId);
-        return *findPortion;
-    }
+    TPortionInfo::TConstPtr GetPortionVerified(const ui64 portionId) const;
 };
 
 class TBorder {
@@ -38,14 +31,9 @@ private:
     YDB_READONLY_DEF(std::vector<ui64>, PortionIds);
 
 public:
-    TBorder(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const std::vector<ui64>& portionIds)
-        : Key(key)
-        , PortionIds(portionIds) {
-    }
+    TBorder(const std::shared_ptr<NArrow::NMerger::TSortableBatchPosition>& key, const std::vector<ui64>& portionIds);
 
-    TString DebugString() const {
-        return TStringBuilder() << "{" << "PortionIds=" << JoinSeq(",", PortionIds) << ";Key=" << Key->GetSorting()->DebugJson(0) << "}";
-    }
+    TString DebugString() const;
 };
 
 class TBordersBatch {
@@ -54,10 +42,7 @@ private:
     YDB_READONLY_DEF(THashSet<ui64>, PortionIds);
 
 public:
-    void AddBorder(const TBorder& border) {
-        Borders.push_back(border);
-        PortionIds.insert(border.GetPortionIds().begin(), border.GetPortionIds().end());
-    }
+    void AddBorder(const TBorder& border);
 };
 
 class TBordersIterator {

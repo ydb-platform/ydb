@@ -43,6 +43,41 @@ public:
 
 }   // namespace
 
+NArrow::NMerger::TCursor TDuplicateManager::GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
+    NArrow::TGeneralContainer batch(1);
+    IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
+    return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+}
+
+std::shared_ptr<TPortionStore> TDuplicateManager::MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
+    THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
+    for (const auto& portion: portions) {
+        AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
+    }
+    return std::make_shared<TPortionStore>(std::move(portionsStore));
+}
+
+void TDuplicateManager::Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+    AbortAndPassAway("aborted by actor system");
+}
+
+void TDuplicateManager::AbortAndPassAway(const TString& error) {
+    AbortionFlag->Inc();
+    FiltersStore.Abort(error);
+    PassAway();
+}
+
+std::map<ui32, std::shared_ptr<arrow::Field>> TDuplicateManager::GetFetchingColumns() const {
+    std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
+    for (const auto& columnId : PKColumns->GetColumnIds()) {
+        fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
+    }
+    for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
+        fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
+    }
+    return fieldsByColumn;
+}
+
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)("borders_flow_controller", BordersFlowController.DebugString())
 
@@ -141,7 +176,7 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
         ("type", "finish")
         ("portions", ev->Get()->Context.GetBatch().GetPortionIds().size())
         ("borders", ev->Get()->Context.GetBatch().GetBorders().size());
-        
+
     BordersFlowController.Enqueue(ev);
 }
 

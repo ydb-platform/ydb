@@ -13,10 +13,7 @@ private:
     TBordersIterator BordersIterator;
 
 public:
-    TBuildFilterTaskExecutor(TBordersIterator&& bordersIterator)
-        : BordersIterator(std::move(bordersIterator))
-    {
-    }
+    TBuildFilterTaskExecutor(TBordersIterator&& bordersIterator);
 
     bool ScheduleNext(TBuildFilterContext&& context);
 };

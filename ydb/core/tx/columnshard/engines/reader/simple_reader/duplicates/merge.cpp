@@ -58,4 +58,8 @@ void TMergeBorders::DoOnCannotExecute(const TString& reason) {
         std::make_unique<TEvMergeBordersResult>(std::move(Event.Get()->Get()->Context), THashMap<ui64, NArrow::TColumnFilter>{}, TConclusionStatus::Fail(reason)));
 }
 
+TString TMergeBorders::GetTaskClassIdentifier() const {
+    return "BUILD_DUPLICATE_FILTERS";
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

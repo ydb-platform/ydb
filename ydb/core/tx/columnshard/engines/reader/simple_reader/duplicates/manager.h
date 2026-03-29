@@ -37,27 +37,15 @@ private:
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
-    
+
     std::shared_ptr<TMergeContext> MergeContext;
     TBordersFlowController BordersFlowController;
     TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;
 
 private:
-    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
-        NArrow::TGeneralContainer batch(1);
-        IIndexInfo::AddSnapshotColumns(batch, snapshot, writeId);
-        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
-    };
-
-    static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions) {
-        THashMap<ui64, TPortionInfo::TConstPtr> portionsStore;
-        for (const auto& portion: portions) {
-            AFL_VERIFY(portionsStore.emplace(portion->GetPortionId(), portion).second);
-        }
-        return std::make_shared<TPortionStore>(std::move(portionsStore));
-    }
-
+    static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
+    static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);
     bool IsExclusiveInterval(const ui64 portionId) const;
 
 private:
@@ -77,26 +65,9 @@ private:
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
     void Handle(const TEvBordersConstructionResult::TPtr&);
     void Handle(const TEvMergeBordersResult::TPtr&);
-    void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-        AbortAndPassAway("aborted by actor system");
-    }
-
-    void AbortAndPassAway(const TString& error) {
-        AbortionFlag->Inc();
-        FiltersStore.Abort(error);
-        PassAway();
-    }
-
-    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const {
-        std::map<ui32, std::shared_ptr<arrow::Field>> fieldsByColumn;
-        for (const auto& columnId : PKColumns->GetColumnIds()) {
-            fieldsByColumn.emplace(columnId, PKColumns->GetFilteredSchemaVerified().GetFieldByColumnIdVerified(columnId));
-        }
-        for (const auto& columnId : TIndexInfo::GetSnapshotColumnIds()) {
-            fieldsByColumn.emplace(columnId, IIndexInfo::GetColumnFieldVerified(columnId));
-        }
-        return fieldsByColumn;
-    }
+    void Handle(const NActors::TEvents::TEvPoison::TPtr&);
+    void AbortAndPassAway(const TString& error);
+    std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const;
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

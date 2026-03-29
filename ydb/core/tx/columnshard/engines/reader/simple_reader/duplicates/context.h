@@ -14,25 +14,12 @@ private:
     const std::shared_ptr<NGroupedMemoryManager::TScopeGuard> ScopeGuard;
     const std::shared_ptr<NGroupedMemoryManager::TGroupGuard> GroupGuard;
 
-    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures() {
-        static const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> StageFeatures = {
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("FILTERS", 2000000000),   // 2 GiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("ACCESSORS", 100000000),   // 100 MiB
-            NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures("COLUMN_DATA", 1000000000),   // 1 GiB
-        };
-        return StageFeatures;
-    }
+    static std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> GetStageFeatures();
 
 public:
-    ui64 GetMemoryProcessId() const {
-        return ProcessGuard->GetProcessId();
-    }
-    ui64 GetMemoryScopeId() const {
-        return ScopeGuard->GetScopeId();
-    }
-    ui64 GetMemoryGroupId() const {
-        return GroupGuard->GetGroupId();
-    }
+    ui64 GetMemoryProcessId() const;
+    ui64 GetMemoryScopeId() const;
+    ui64 GetMemoryGroupId() const;
 
     TFilterBuildingGuard();
 };
@@ -60,66 +47,16 @@ public:
         const std::shared_ptr<ISnapshotSchema>& snapshotSchema, const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters, std::unique_ptr<TFilterBuildingGuard>&& requestGuard,
-        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory)
-        : Owner(owner)
-        , AbortionFlag(abortionFlag)
-        , MaxVersion(maxVersion)
-        , RequiredPortions(std::move(portions))
-        , Columns(columns)
-        , PKSchema(pkSchema)
-        , SnapshotSchema(snapshotSchema)
-        , ColumnDataManager(columnDataManager)
-        , DataAccessorsManager(dataAccessorsManager)
-        , Counters(counters)
-        , RequestGuard(std::move(requestGuard))
-        , SelfMemory(contextMemory)
-    {
-        AFL_VERIFY(Owner);
-        AFL_VERIFY(Columns.size());
-        AFL_VERIFY(PKSchema);
-        AFL_VERIFY(SnapshotSchema);
-        AFL_VERIFY(ColumnDataManager);
-        AFL_VERIFY(DataAccessorsManager);
-        AFL_VERIFY(Counters);
-        AFL_VERIFY(SelfMemory);
-    }
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory);
 
     TBuildFilterContext(TBuildFilterContext&& other) = default;
     TBuildFilterContext& operator=(TBuildFilterContext&& other) = default;
 
-    std::set<ui32> GetFetchingColumnIds() const {
-        std::set<ui32> columnsToFetch;
-        for (const auto& [columnId, _] : Columns) {
-            columnsToFetch.emplace(columnId);
-        }
-        return columnsToFetch;
-    }
-
-    TString DebugString() const {
-        TStringBuilder sb;
-        sb << "{";
-        sb << "portions=[";
-        for (const auto& [id, _] : RequiredPortions) {
-            sb << id << ";";
-        }
-        sb << "]";
-        sb << "}";
-        return sb;
-    }
-
-    ui64 GetDataSize() const {
-        return RequiredPortions.size() * (sizeof(ui64) + sizeof(TPortionInfo::TConstPtr));
-    }
-
-    TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const {
-        auto* findPortion = RequiredPortions.FindPtr(portionId);
-        AFL_VERIFY(findPortion)("id", portionId)("context", DebugString());
-        return *findPortion;
-    }
-
-    const TSnapshot& GetMaxVersion() const {
-        return MaxVersion;
-    }
+    std::set<ui32> GetFetchingColumnIds() const;
+    TString DebugString() const;
+    ui64 GetDataSize() const;
+    TPortionInfo::TConstPtr GetPortion(const ui64 portionId) const;
+    const TSnapshot& GetMaxVersion() const;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

@@ -7,20 +7,21 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
-    support_links_env.py
-    test_support_links.py
+    oidc_proxy_env.py
+    oidc_proxy_testlib.py
+    test_auth_failures.py
+    test_basic_scenarios.py
+    test_streaming.py
 )
 
 DEPENDS(
-    ydb/mvp/meta/bin
+    ydb/mvp/oidc_proxy/bin
 )
 
 PEERDIR(
     contrib/python/requests
     ydb/tests/functional/mvp/common
     ydb/tests/library
-    ydb/tests/library/fixtures
-    ydb/tests/oss/ydb_sdk_import
 )
 
 END()

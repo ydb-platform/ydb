@@ -1,15 +1,9 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
-#include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/formats/arrow/rows/view.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
-#include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 

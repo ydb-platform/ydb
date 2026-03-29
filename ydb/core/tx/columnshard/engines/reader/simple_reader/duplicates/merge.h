@@ -1,10 +1,11 @@
 #pragma once
 
 #include "common.h"
-#include "context.h"
 #include "private_events.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
+#include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 

@@ -3,7 +3,6 @@
 #include "borders_flow_controller.h"
 #include "common.h"
 #include "events.h"
-#include "executor.h"
 #include "filters.h"
 #include "private_events.h"
 

@@ -4,8 +4,6 @@
 #include "context.h"
 #include "private_events.h"
 
-#include <ydb/core/formats/arrow/reader/merger.h>
-
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 class TBuildFilterTaskExecutor: public std::enable_shared_from_this<TBuildFilterTaskExecutor>, TNonCopyable {

@@ -1,5 +1,11 @@
 #include "common.h"
 
+#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 TPortionStore::TPortionStore(THashMap<ui64, TPortionInfo::TConstPtr>&& portions)

@@ -1,9 +1,8 @@
 #pragma once
 
-#include "events.h"
-
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
-#include <ydb/core/tx/conveyor_composite/usage/service.h>
+#include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
+#include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {

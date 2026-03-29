@@ -1,6 +1,8 @@
 #include "merge.h"
 #include "private_events.h"
 
+#include <ydb/core/formats/arrow/reader/merger.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 TMergeContext::TMergeContext(std::unique_ptr<NArrow::NMerger::TMergePartialStream>&& merger, std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> counters, const bool reversed, const std::shared_ptr<TPortionStore>& portions, const std::map<ui32, std::shared_ptr<arrow::Field>>& fetchingColumns)

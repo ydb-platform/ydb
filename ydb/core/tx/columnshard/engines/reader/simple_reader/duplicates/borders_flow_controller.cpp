@@ -1,5 +1,7 @@
 #include "borders_flow_controller.h"
 
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
+
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
 
 TBordersFlowController::TBordersFlowController(const std::shared_ptr<TMergeContext>& mergeContext, const std::deque<std::shared_ptr<TPortionInfo>>& portions, const TReadMetadataBase::TConstPtr& readMetadata, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters)

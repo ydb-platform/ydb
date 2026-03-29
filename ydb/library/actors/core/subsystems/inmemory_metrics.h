@@ -57,6 +57,29 @@ namespace NActors {
         ui32 CommittedBytes = 0;
     };
 
+    enum class EMetricKind : ui8 {
+        Gauge,
+        Counter,
+    };
+
+    enum class EPublishPolicy : ui8 {
+        Raw,
+        OnChange,
+        OnChangeWithHeartbeat,
+    };
+
+    enum class EStorageEncoding : ui8 {
+        RawPoints,
+        RunLengthEncoded,
+    };
+
+    struct TLineMeta {
+        EMetricKind MetricKind = EMetricKind::Gauge;
+        EPublishPolicy PublishPolicy = EPublishPolicy::Raw;
+        EStorageEncoding StorageEncoding = EStorageEncoding::RawPoints;
+        TDuration Heartbeat;
+    };
+
     class TLineWriter {
     public:
         TLineWriter() noexcept = default;
@@ -93,6 +116,7 @@ namespace NActors {
         ui32 LineId = 0;
         TString Name;
         TVector<TLabel> Labels;
+        TLineMeta Meta;
         bool Closed = false;
         TVector<TChunkView> Chunks;
 
@@ -152,6 +176,7 @@ namespace NActors {
         // Duplicate CreateLine() calls return a noop writer.
         // Common labels are registry-wide mutable state and are not part of line identity.
         TLineWriter CreateLine(TStringBuf name, std::span<const TLabel> labels);
+        TLineWriter CreateLine(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta);
         void SetCommonLabels(std::span<const TLabel> labels);
         TVector<TLabel> GetCommonLabels() const;
         TInMemoryMetricsStats GetStats() const;

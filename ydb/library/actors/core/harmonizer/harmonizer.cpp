@@ -176,6 +176,21 @@ namespace {
             : static_cast<ui64>(std::llround(scaled));
     }
 
+    TLineMeta GetPoolMetricMeta(THarmonizer::EPoolMetric metric) {
+        switch (metric) {
+            case THarmonizer::EPoolMetric::SharedCpuQuotaX1e6:
+            case THarmonizer::EPoolMetric::IsNeedy:
+            case THarmonizer::EPoolMetric::IsStarved:
+            case THarmonizer::EPoolMetric::IsHoggish:
+                return TLineMeta{
+                    .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+                    .Heartbeat = TDuration::Seconds(5),
+                };
+            default:
+                return {};
+        }
+    }
+
 } // namespace
 
 THarmonizer::THarmonizer(ui64 ts) {
@@ -212,7 +227,10 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
         }};
         auto& writers = InMemoryMetrics.Pools[poolIdx];
         for (size_t idx = 0; idx < PoolMetricNames.size(); ++idx) {
-            writers[idx] = registry->CreateLine(PoolMetricNames[idx], labels);
+            writers[idx] = registry->CreateLine(
+                PoolMetricNames[idx],
+                labels,
+                GetPoolMetricMeta(static_cast<EPoolMetric>(idx)));
         }
     }
 

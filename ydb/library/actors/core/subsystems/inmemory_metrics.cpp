@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/util/datetime.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -61,15 +62,23 @@ namespace NActors {
         TVector<char> Payload;
     };
 
+    struct TLineStorage {
+        mutable TMutex Lock;
+        std::atomic<TChunk*> Writable = nullptr;
+        TVector<TChunk*> Chunks;
+    };
+
     class TLine {
     public:
         ui32 LineId = 0;
         TLineKey Key;
+        TLineMeta Meta;
         std::atomic<ELineState> State = ELineState::Open;
-
-        mutable TMutex Lock;
-        std::atomic<TChunk*> Writable = nullptr;
-        TVector<TChunk*> Chunks;
+        bool HasLastPublished = false;
+        ui64 LastPublishedValue = 0;
+        NHPTimer::STime LastPublishedTs = 0;
+        NHPTimer::STime LastObservedTs = 0;
+        TLineStorage Storage;
     };
 
     struct TSnapshotPinnedChunk {
@@ -82,6 +91,7 @@ namespace NActors {
         ~TSnapshotData();
 
         TTimeAnchor Anchor;
+        TInstant SnapshotTime;
         TVector<TSnapshotPinnedChunk> Chunks;
     };
 
@@ -137,6 +147,41 @@ namespace NActors {
 
         bool IsRegistryMetricName(TStringBuf name) noexcept {
             return name.StartsWith(RegistryMetricsPrefix);
+        }
+
+        bool ShouldPublishRecord(TLine* line, ui64 value, NHPTimer::STime nowTs) noexcept {
+            switch (line->Meta.PublishPolicy) {
+                case EPublishPolicy::Raw:
+                    return true;
+                case EPublishPolicy::OnChange:
+                    return !line->HasLastPublished || line->LastPublishedValue != value;
+                case EPublishPolicy::OnChangeWithHeartbeat:
+                    if (!line->HasLastPublished || line->LastPublishedValue != value) {
+                        return true;
+                    }
+                    if (line->Meta.Heartbeat <= TDuration::Zero()) {
+                        return false;
+                    }
+                    return nowTs - line->LastPublishedTs >= static_cast<NHPTimer::STime>(Us2Ts(line->Meta.Heartbeat.MicroSeconds()));
+            }
+        }
+
+        bool ShouldPublishPreviousObservedValue(const TLine* line, ui64 newValue) noexcept {
+            return line->Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat
+                && line->HasLastPublished
+                && line->LastPublishedValue != newValue
+                && line->LastObservedTs > line->LastPublishedTs;
+        }
+
+        void MarkRecordObserved(TLine* line, NHPTimer::STime nowTs) noexcept {
+            line->LastObservedTs = nowTs;
+        }
+
+        void MarkRecordPublished(TLine* line, ui64 value, NHPTimer::STime nowTs) noexcept {
+            line->HasLastPublished = true;
+            line->LastPublishedValue = value;
+            line->LastPublishedTs = nowTs;
+            line->LastObservedTs = nowTs;
         }
 
     } // namespace
@@ -293,16 +338,29 @@ namespace NActors {
         if (!Data) {
             return;
         }
+        bool hasLastRecord = false;
+        TRecordView lastRecord;
         for (size_t chunkIndex : ChunkIndexes) {
             const auto& pinned = Data->Chunks[chunkIndex];
             const auto* records = reinterpret_cast<const TStoredRecord*>(pinned.Chunk->Payload.data());
             const ui32 recordsCount = pinned.View.CommittedBytes / sizeof(TStoredRecord);
             for (ui32 i = 0; i < recordsCount; ++i) {
-                cb(TRecordView{
+                lastRecord = TRecordView{
                     .Timestamp = DecodeTs(Data->Anchor, records[i].TimestampTs),
                     .Value = records[i].Value,
-                });
+                };
+                hasLastRecord = true;
+                cb(lastRecord);
             }
+        }
+        if (Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat
+            && !Closed
+            && hasLastRecord
+            && lastRecord.Timestamp < Data->SnapshotTime) {
+            cb(TRecordView{
+                .Timestamp = Data->SnapshotTime,
+                .Value = lastRecord.Value,
+            });
         }
     }
 
@@ -379,6 +437,10 @@ namespace NActors {
     }
 
     TLineWriter TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
+        return CreateLine(name, labels, {});
+    }
+
+    TLineWriter TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
         auto key = MakeLineKey(name, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
@@ -393,6 +455,7 @@ namespace NActors {
         auto line = std::make_unique<TLine>();
         line->LineId = Impl->NextLineId.fetch_add(1, std::memory_order_relaxed);
         line->Key = std::move(key);
+        line->Meta = meta;
 
         TLine* linePtr = line.get();
         Impl->LinesById.emplace(linePtr->LineId, linePtr);
@@ -462,17 +525,21 @@ namespace NActors {
         TGuard<TMutex> guard(Impl->SelfMetricsLock);
         if (!Impl->SelfMetricsInitialized) {
             const std::span<const TLabel> noLabels;
-            Impl->SelfMetrics.MemoryUsedBytes = CreateLine(RegistryMemoryUsedBytesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.CommittedBytes = CreateLine(RegistryCommittedBytesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.FreeChunks = CreateLine(RegistryFreeChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.UsedChunks = CreateLine(RegistryUsedChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.SealedChunks = CreateLine(RegistrySealedChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.WritableChunks = CreateLine(RegistryWritableChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.RetiringChunks = CreateLine(RegistryRetiringChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.Lines = CreateLine(RegistryLinesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.ClosedLines = CreateLine(RegistryClosedLinesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.ReuseWatermark = CreateLine(RegistryReuseWatermarkMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.AppendFailuresTotal = CreateLine(RegistryAppendFailuresTotalMetric, noLabels).ReleaseLineId();
+            const TLineMeta selfMetricMeta{
+                .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+                .Heartbeat = TDuration::Hours(1),
+            };
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLine(RegistryMemoryUsedBytesMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.CommittedBytes = CreateLine(RegistryCommittedBytesMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.FreeChunks = CreateLine(RegistryFreeChunksMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.UsedChunks = CreateLine(RegistryUsedChunksMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.SealedChunks = CreateLine(RegistrySealedChunksMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.WritableChunks = CreateLine(RegistryWritableChunksMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.RetiringChunks = CreateLine(RegistryRetiringChunksMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.Lines = CreateLine(RegistryLinesMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.ClosedLines = CreateLine(RegistryClosedLinesMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.ReuseWatermark = CreateLine(RegistryReuseWatermarkMetric, noLabels, selfMetricMeta).ReleaseLineId();
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLine(RegistryAppendFailuresTotalMetric, noLabels, selfMetricMeta).ReleaseLineId();
             Impl->SelfMetricsInitialized = true;
         }
 
@@ -508,14 +575,14 @@ namespace NActors {
 
     namespace {
         bool RemoveChunkFromLineLocked(TLine* line, TChunk* chunk) {
-            if (line->Writable.load(std::memory_order_acquire) == chunk) {
-                line->Writable.store(nullptr, std::memory_order_release);
+            if (line->Storage.Writable.load(std::memory_order_acquire) == chunk) {
+                line->Storage.Writable.store(nullptr, std::memory_order_release);
             }
-            auto it = Find(line->Chunks, chunk);
-            if (it != line->Chunks.end()) {
-                line->Chunks.erase(it);
+            auto it = Find(line->Storage.Chunks, chunk);
+            if (it != line->Storage.Chunks.end()) {
+                line->Storage.Chunks.erase(it);
             }
-            return line->State.load(std::memory_order_acquire) == ELineState::Closed && line->Chunks.empty();
+            return line->State.load(std::memory_order_acquire) == ELineState::Closed && line->Storage.Chunks.empty();
         }
     }
 
@@ -527,8 +594,8 @@ namespace NActors {
         }
 
         TLineKey key;
-        TGuard<TMutex> lineGuard(line->Lock);
-        if (line->State.load(std::memory_order_acquire) != ELineState::Closed || !line->Chunks.empty()) {
+        TGuard<TMutex> lineGuard(line->Storage.Lock);
+        if (line->State.load(std::memory_order_acquire) != ELineState::Closed || !line->Storage.Chunks.empty()) {
             return;
         }
         key = line->Key;
@@ -617,7 +684,7 @@ namespace NActors {
             TLine* owner = victim->Owner.load(std::memory_order_acquire);
             NHPTimer::STime lastTs = 0;
             {
-                TGuard<TMutex> lineGuard(owner->Lock);
+                TGuard<TMutex> lineGuard(owner->Storage.Lock);
                 if (victim->State.load(std::memory_order_acquire) != EChunkState::Sealed
                     || victim->Generation.load(std::memory_order_acquire) != generation) {
                     continue;
@@ -687,70 +754,96 @@ namespace NActors {
             return fail();
         }
 
-        const TStoredRecord record{
-            .TimestampTs = static_cast<NHPTimer::STime>(GetCycleCountFast()),
-            .Value = value,
-        };
+        const NHPTimer::STime nowTs = static_cast<NHPTimer::STime>(GetCycleCountFast());
+        if (line->HasLastPublished && line->LastPublishedValue == value) {
+            MarkRecordObserved(line, nowTs);
+        }
+        if (!ShouldPublishRecord(line, value, nowTs)) {
+            return true;
+        }
 
-        while (true) {
-            TChunk* chunk = line->Writable.load(std::memory_order_acquire);
-            if (chunk && TryAppendToChunk(chunk, record)) {
-                return true;
-            }
-
-            TChunk* sealedChunk = nullptr;
-            {
-                TGuard<TMutex> lineGuard(line->Lock);
-                if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
-                    return fail();
-                }
-
-                chunk = line->Writable.load(std::memory_order_acquire);
+        auto appendRecord = [&](const TStoredRecord& record) noexcept {
+            while (true) {
+                TChunk* chunk = line->Storage.Writable.load(std::memory_order_acquire);
                 if (chunk && TryAppendToChunk(chunk, record)) {
                     return true;
                 }
 
-                if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitRecord(chunk)) {
+                TChunk* sealedChunk = nullptr;
+                {
+                    TGuard<TMutex> lineGuard(line->Storage.Lock);
+                    if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
+                        return fail();
+                    }
+
+                    chunk = line->Storage.Writable.load(std::memory_order_acquire);
+                    if (chunk && TryAppendToChunk(chunk, record)) {
+                        return true;
+                    }
+
+                    if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitRecord(chunk)) {
+                        return fail();
+                    }
+
+                    if (chunk) {
+                        chunk->State.store(EChunkState::Sealed, std::memory_order_release);
+                        line->Storage.Writable.store(nullptr, std::memory_order_release);
+                        sealedChunk = chunk;
+                    }
+                }
+
+                if (sealedChunk) {
+                    PublishSealedChunk(sealedChunk);
+                }
+
+                TChunk* newChunk = TryAcquireFreeChunk();
+                if (!newChunk) {
+                    newChunk = TryStealOldestChunk();
+                }
+                if (!newChunk) {
+                    return fail();
+                }
+                if (!CanFitRecord(newChunk)) {
+                    ReturnChunkToFree(newChunk);
                     return fail();
                 }
 
-                if (chunk) {
-                    chunk->State.store(EChunkState::Sealed, std::memory_order_release);
-                    line->Writable.store(nullptr, std::memory_order_release);
-                    sealedChunk = chunk;
+                TGuard<TMutex> lineGuard(line->Storage.Lock);
+                if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
+                    ReturnChunkToFree(newChunk);
+                    return fail();
                 }
-            }
+                if (line->Storage.Writable.load(std::memory_order_acquire)) {
+                    ReturnChunkToFree(newChunk);
+                    continue;
+                }
 
-            if (sealedChunk) {
-                PublishSealedChunk(sealedChunk);
+                ResetChunkForWrite(newChunk, line);
+                line->Storage.Writable.store(newChunk, std::memory_order_release);
+                line->Storage.Chunks.push_back(newChunk);
             }
+        };
 
-            TChunk* newChunk = TryAcquireFreeChunk();
-            if (!newChunk) {
-                newChunk = TryStealOldestChunk();
+        if (ShouldPublishPreviousObservedValue(line, value)) {
+            const TStoredRecord previousRecord{
+                .TimestampTs = line->LastObservedTs,
+                .Value = line->LastPublishedValue,
+            };
+            if (!appendRecord(previousRecord)) {
+                return false;
             }
-            if (!newChunk) {
-                return fail();
-            }
-            if (!CanFitRecord(newChunk)) {
-                ReturnChunkToFree(newChunk);
-                return fail();
-            }
-
-            TGuard<TMutex> lineGuard(line->Lock);
-            if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
-                ReturnChunkToFree(newChunk);
-                return fail();
-            }
-            if (line->Writable.load(std::memory_order_acquire)) {
-                ReturnChunkToFree(newChunk);
-                continue;
-            }
-
-            ResetChunkForWrite(newChunk, line);
-            line->Writable.store(newChunk, std::memory_order_release);
-            line->Chunks.push_back(newChunk);
+            MarkRecordPublished(line, previousRecord.Value, previousRecord.TimestampTs);
         }
+
+        const TStoredRecord record{
+            .TimestampTs = nowTs,
+            .Value = value,
+        };
+        if (!appendRecord(record)) {
+            return false;
+        }
+        MarkRecordPublished(line, value, nowTs);
+        return true;
     }
 
     void TInMemoryMetricsRegistry::CloseLine(TLine* line) noexcept {
@@ -762,9 +855,9 @@ namespace NActors {
         TChunk* sealedChunk = nullptr;
         TChunk* freeChunk = nullptr;
         {
-            TGuard<TMutex> guard(line->Lock);
+            TGuard<TMutex> guard(line->Storage.Lock);
             line->State.store(ELineState::Closed, std::memory_order_release);
-            if (TChunk* writable = line->Writable.exchange(nullptr, std::memory_order_acq_rel)) {
+            if (TChunk* writable = line->Storage.Writable.exchange(nullptr, std::memory_order_acq_rel)) {
                 if (writable->CommittedBytes.load(std::memory_order_acquire)) {
                     writable->State.store(EChunkState::Sealed, std::memory_order_release);
                     sealedChunk = writable;
@@ -773,7 +866,7 @@ namespace NActors {
                     freeChunk = writable;
                 }
             }
-            shouldDrop = line->Chunks.empty();
+            shouldDrop = line->Storage.Chunks.empty();
         }
 
         if (sealedChunk) {
@@ -791,6 +884,7 @@ namespace NActors {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
+        data->SnapshotTime = TInstant::Now();
         snapshot.CommonLabels = GetCommonLabels();
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
@@ -803,13 +897,14 @@ namespace NActors {
             lineSnapshot.LineId = line->LineId;
             lineSnapshot.Name = line->Key.Name;
             lineSnapshot.Labels = line->Key.Labels;
+            lineSnapshot.Meta = line->Meta;
 
-            TGuard<TMutex> lineGuard(line->Lock);
+            TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
-            lineSnapshot.Chunks.reserve(line->Chunks.size());
-            lineSnapshot.ChunkIndexes.reserve(line->Chunks.size());
+            lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
+            lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
 
-            for (TChunk* chunk : line->Chunks) {
+            for (TChunk* chunk : line->Storage.Chunks) {
                 if (!TryPinChunk(chunk)) {
                     continue;
                 }

@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <chrono>
 #include <random>
 #include <thread>
 
@@ -45,6 +46,13 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             values.push_back(record.Value);
         });
         return values;
+    }
+
+    TVector<ui64> ExpectedHeartbeatRead(ui64 first, ui64 second) {
+        if (first == second) {
+            return {first, second};
+        }
+        return {first, second, second};
     }
 
     Y_UNIT_TEST(SubsystemAccessor) {
@@ -157,6 +165,158 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate);
     }
 
+    Y_UNIT_TEST(CreateLineStoresExplicitMetaInSnapshot) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .MetricKind = EMetricKind::Counter,
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .StorageEncoding = EStorageEncoding::RunLengthEncoded,
+            .Heartbeat = TDuration::Seconds(15),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+
+        auto snapshot = registry.Snapshot();
+        auto lines = FilterUserLines(snapshot.Lines());
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        UNIT_ASSERT(lines[0].Meta.MetricKind == EMetricKind::Counter);
+        UNIT_ASSERT(lines[0].Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat);
+        UNIT_ASSERT(lines[0].Meta.StorageEncoding == EStorageEncoding::RunLengthEncoded);
+        UNIT_ASSERT_VALUES_EQUAL(lines[0].Meta.Heartbeat, TDuration::Seconds(15));
+    }
+
+    Y_UNIT_TEST(DifferentLinesCanUseDifferentMeta) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta rawMeta{
+            .MetricKind = EMetricKind::Gauge,
+            .PublishPolicy = EPublishPolicy::Raw,
+            .StorageEncoding = EStorageEncoding::RawPoints,
+        };
+        const TLineMeta encodedMeta{
+            .MetricKind = EMetricKind::Counter,
+            .PublishPolicy = EPublishPolicy::OnChange,
+            .StorageEncoding = EStorageEncoding::RunLengthEncoded,
+            .Heartbeat = TDuration::Seconds(5),
+        };
+
+        auto rawWriter = registry.CreateLine("raw", NoLabels(), rawMeta);
+        auto encodedWriter = registry.CreateLine("encoded", NoLabels(), encodedMeta);
+        UNIT_ASSERT(rawWriter);
+        UNIT_ASSERT(encodedWriter);
+        UNIT_ASSERT(rawWriter.Append(1));
+        UNIT_ASSERT(encodedWriter.Append(2));
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* rawLine = FindLineByName(lines, "raw");
+        const TLineSnapshot* encodedLine = FindLineByName(lines, "encoded");
+        UNIT_ASSERT(rawLine);
+        UNIT_ASSERT(encodedLine);
+        UNIT_ASSERT(rawLine->Meta.StorageEncoding == EStorageEncoding::RawPoints);
+        UNIT_ASSERT(encodedLine->Meta.StorageEncoding == EStorageEncoding::RunLengthEncoded);
+        UNIT_ASSERT(rawLine->Meta.PublishPolicy == EPublishPolicy::Raw);
+        UNIT_ASSERT(encodedLine->Meta.PublishPolicy == EPublishPolicy::OnChange);
+    }
+
+    Y_UNIT_TEST(OnChangePolicySkipsRepeatedValues) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChange,
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        UNIT_ASSERT(writer.Append(10));
+        UNIT_ASSERT(writer.Append(10));
+        UNIT_ASSERT(writer.Append(20));
+        UNIT_ASSERT(writer.Append(20));
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 20}));
+    }
+
+    Y_UNIT_TEST(OnChangeWithHeartbeatRepublishesAfterInterval) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .Heartbeat = TDuration::MilliSeconds(1),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10, 10}));
+    }
+
+    Y_UNIT_TEST(OnChangeWithHeartbeatBackfillsPreviousValueOnChange) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .Heartbeat = TDuration::Seconds(1),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(20));
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+
+        TVector<ui64> values;
+        TVector<TInstant> timestamps;
+        line->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+            timestamps.push_back(record.Timestamp);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20, 20}));
+        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 4);
+        UNIT_ASSERT(timestamps[0] < timestamps[1]);
+        UNIT_ASSERT(timestamps[1] < timestamps[2]);
+        UNIT_ASSERT(timestamps[2] < timestamps[3]);
+    }
+
     Y_UNIT_TEST(SelfMetricsAreStoredAsRegularLinesWithHistory) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 4096,
@@ -203,17 +363,19 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(appendFailures);
 
         UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Labels.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*memoryUsed), TVector<ui64>({beforeFirstUpdate.MemoryUsedBytes, beforeSecondUpdate.MemoryUsedBytes}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*committedBytes), TVector<ui64>({beforeFirstUpdate.CommittedBytes, beforeSecondUpdate.CommittedBytes}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*freeChunks), TVector<ui64>({beforeFirstUpdate.FreeChunks, beforeSecondUpdate.FreeChunks}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*usedChunks), TVector<ui64>({beforeFirstUpdate.UsedChunks, beforeSecondUpdate.UsedChunks}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*sealedChunks), TVector<ui64>({beforeFirstUpdate.SealedChunks, beforeSecondUpdate.SealedChunks}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*writableChunks), TVector<ui64>({beforeFirstUpdate.WritableChunks, beforeSecondUpdate.WritableChunks}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*retiringChunks), TVector<ui64>({beforeFirstUpdate.RetiringChunks, beforeSecondUpdate.RetiringChunks}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*lineCount), TVector<ui64>({beforeFirstUpdate.Lines, beforeSecondUpdate.Lines}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), TVector<ui64>({beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), TVector<ui64>({beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark}));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal}));
+        UNIT_ASSERT(memoryUsed->Meta.PublishPolicy == EPublishPolicy::OnChangeWithHeartbeat);
+        UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Meta.Heartbeat, TDuration::Hours(1));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*memoryUsed), ExpectedHeartbeatRead(beforeFirstUpdate.MemoryUsedBytes, beforeSecondUpdate.MemoryUsedBytes));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*committedBytes), ExpectedHeartbeatRead(beforeFirstUpdate.CommittedBytes, beforeSecondUpdate.CommittedBytes));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*freeChunks), ExpectedHeartbeatRead(beforeFirstUpdate.FreeChunks, beforeSecondUpdate.FreeChunks));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*usedChunks), ExpectedHeartbeatRead(beforeFirstUpdate.UsedChunks, beforeSecondUpdate.UsedChunks));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*sealedChunks), ExpectedHeartbeatRead(beforeFirstUpdate.SealedChunks, beforeSecondUpdate.SealedChunks));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*writableChunks), ExpectedHeartbeatRead(beforeFirstUpdate.WritableChunks, beforeSecondUpdate.WritableChunks));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*retiringChunks), ExpectedHeartbeatRead(beforeFirstUpdate.RetiringChunks, beforeSecondUpdate.RetiringChunks));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*lineCount), ExpectedHeartbeatRead(beforeFirstUpdate.Lines, beforeSecondUpdate.Lines));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), ExpectedHeartbeatRead(beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), ExpectedHeartbeatRead(beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), ExpectedHeartbeatRead(beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal));
     }
 
     Y_UNIT_TEST(AppendFailuresAreReportedInSelfMetricLine) {
@@ -233,7 +395,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto lines = registry.Snapshot().Lines();
         const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
         UNIT_ASSERT(appendFailures);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal, stats.AppendFailuresTotal}));
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {

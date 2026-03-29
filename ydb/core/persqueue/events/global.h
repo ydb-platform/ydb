@@ -14,6 +14,7 @@
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 
 namespace NKikimr::TEvPersQueue {
     enum EEv {

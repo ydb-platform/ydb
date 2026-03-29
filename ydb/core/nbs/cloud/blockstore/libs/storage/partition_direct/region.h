@@ -1,7 +1,6 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>

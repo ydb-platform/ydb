@@ -96,22 +96,11 @@ TFastPathService::TFastPathService(
     Y_UNUSED(ActorSystem);
 }
 
-NWilson::TTraceId TFastPathService::SpanTrace()
-{
-    return NWilson::TTraceId::NewTraceIdThrottled(
-        15,                           // verbosity
-        4095,                         // timeToLive
-        LastTraceTs,                  // atomic counter for throttling
-        NActors::TMonotonic::Now(),   // current monotonic time
-        TraceSamplePeriod             // 100ms between samples
-    );
-}
-
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request)
 {
-    auto traceId = SpanTrace();
+    auto traceId = callContext->RootTraceId.Span(NKikimr::TWilsonNbs::NbsBasic);
 
     Counters.RequestStarted(
         EBlockStoreRequest::ReadBlocks,
@@ -143,7 +132,7 @@ TFastPathService::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request)
 {
-    auto traceId = SpanTrace();
+    auto traceId = callContext->RootTraceId.Span(NKikimr::TWilsonNbs::NbsBasic);
 
     Counters.RequestStarted(
         EBlockStoreRequest::WriteBlocks,
@@ -190,6 +179,24 @@ void TFastPathService::ReportIOError()
 TVolumeConfigPtr TFastPathService::GetVolumeConfig() const
 {
     return VolumeConfig;
+}
+
+NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
+{
+    auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
+        NKikimr::TWilsonNbs::NbsBasic,   // verbosity
+        4095,                            // timeToLive
+        LastTraceTs,                     // atomic counter for throttling
+        NActors::TMonotonic::Now(),      // current monotonic time
+        TraceSamplePeriod                // 100ms between samples
+    );
+
+    return NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        name.data(),
+        NWilson::EFlags::AUTO_END,
+        ActorSystem);
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

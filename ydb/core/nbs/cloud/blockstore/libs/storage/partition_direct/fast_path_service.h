@@ -1,10 +1,10 @@
 #pragma once
 
-#include "partition_direct_service.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 
@@ -60,10 +60,10 @@ public:
 
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
 
 private:
     ui64 GenerateSequenceNumber();
-    NWilson::TTraceId SpanTrace();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

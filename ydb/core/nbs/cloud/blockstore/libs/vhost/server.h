@@ -41,6 +41,7 @@ struct IServer: public IStartable
 {
     virtual NThreading::TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
+        IPartitionDirectServicePtr partitionDirectService,
         IStoragePtr storage,
         const TStorageOptions& options) = 0;
 

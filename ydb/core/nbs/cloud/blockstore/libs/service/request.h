@@ -101,6 +101,8 @@ enum class EBlockStoreRequest
     MAX
 };
 
+TStringBuf ToStringBuf(EBlockStoreRequest requestType);
+
 ui64 CreateRequestId();
 
 }   // namespace NYdb::NBS::NBlockStore

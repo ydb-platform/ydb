@@ -1,10 +1,12 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
+#include "public.h"
+
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/system/types.h>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -13,8 +15,10 @@ struct IPartitionDirectService
     virtual ~IPartitionDirectService() = default;
 
     [[nodiscard]] virtual TVolumeConfigPtr GetVolumeConfig() const = 0;
+
+    [[nodiscard]] virtual NWilson::TSpan CreteRootSpan(TStringBuf name) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS::NBlockStore

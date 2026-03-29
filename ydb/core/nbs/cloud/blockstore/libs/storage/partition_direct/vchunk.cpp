@@ -6,6 +6,7 @@
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
@@ -166,17 +167,6 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-NWilson::TTraceId TVChunk::SpanTrace()
-{
-    return NWilson::TTraceId::NewTraceIdThrottled(
-        15,                           // verbosity
-        4095,                         // timeToLive
-        LastTraceTs,                  // atomic counter for throttling
-        NActors::TMonotonic::Now(),   // current monotonic time
-        TraceSamplePeriod             // 100ms between samples
-    );
-}
 
 void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 {
@@ -352,7 +342,7 @@ void TVChunk::DoFlush()
             DirectBlockGroup,
             route,
             std::move(hint),
-            SpanTrace());
+            PartitionDirectService->CreteRootSpan("Flush"));
 
         auto future = flushExecutor->GetFuture();
         future.Subscribe(
@@ -396,7 +386,7 @@ void TVChunk::DoErase()
             DirectBlockGroup,
             location,
             std::move(hint),
-            SpanTrace());
+            PartitionDirectService->CreteRootSpan("Erase"));
 
         auto future = eraseExecutor->GetFuture();
         future.Subscribe(

@@ -44,16 +44,14 @@ class TBuildFilterTaskContext {
 private:
     TBuildFilterContext Context;
     YDB_READONLY_DEF(std::shared_ptr<TBuildFilterTaskExecutor>, Executor);
-    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
-    YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
+    YDB_READONLY_DEF(TBordersBatch, Batch);
 
 public:
     TBuildFilterTaskContext(
-        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, TBordersBatch&& batch)
         : Context(std::move(context))
         , Executor(executor)
-        , Intervals(std::move(intervals))
-        , RequiredPortions(std::move(portions))
+        , Batch(std::move(batch))
     {
     }
 
@@ -106,8 +104,8 @@ public:
     }
 };
 
-class TEvIntervalConstructionResult
-    : public NActors::TEventLocal<TEvIntervalConstructionResult, NColumnShard::TEvPrivate::EvIntervalConstructionResult> {
+class TEvBordersConstructionResult
+    : public NActors::TEventLocal<TEvBordersConstructionResult, NColumnShard::TEvPrivate::EvBordersConstructionResult> {
 public:
     TBuildFilterTaskContext Context;
     TConclusion<TDuplicateSourceCacheResult> Result;
@@ -115,7 +113,7 @@ public:
     std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
 
 public:
-    TEvIntervalConstructionResult(TBuildFilterTaskContext&& context,
+    TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
         THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
         : Context(std::move(context))
@@ -123,7 +121,7 @@ public:
         , AllocationGuard(allocationGuard)
     {}
     
-    TEvIntervalConstructionResult(TBuildFilterTaskContext&& context,
+    TEvBordersConstructionResult(TBuildFilterTaskContext&& context,
         TConclusion<TDuplicateSourceCacheResult>&& error,
         std::optional<TJobStatus::TResultInFlightGuard>&& resultGuard)
         : Context(std::move(context))

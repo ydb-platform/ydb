@@ -666,12 +666,12 @@ TString TColumnFilter::DebugString() const {
 
 TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit, const bool reverse) const {
     if (IsTotalDenyFilter()) {
-        return TColumnFilter::BuildDenyFilter();
+        return *this;
     }
     TColumnFilter result = TColumnFilter::BuildAllowFilter();
     if (IsTotalAllowFilter()) {
         if (totalRecordsCount <= limit) {
-            return result;
+            return *this;
         }
         if (reverse) {
             result.Add(false, totalRecordsCount - limit);
@@ -713,8 +713,7 @@ TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit,
             scan(Filter.begin(), Filter.end());
         }
         if (reverse) {
-            std::reverse(result.Filter.begin(), result.Filter.end());
-            result.LastValue = result.GetStartValue();
+            result.LastValue = GetStartValue();
         }
     }
     return result;

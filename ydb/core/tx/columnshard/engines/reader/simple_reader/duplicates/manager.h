@@ -1,5 +1,6 @@
 #pragma once
 
+#include "borders_flow_controller.h"
 #include "common.h"
 #include "context.h"
 #include "events.h"
@@ -38,24 +39,11 @@ private:
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
     NArrow::NMerger::TMergePartialStream Merger;
     TFiltersBuilder FiltersBuilder;
-    
-    struct TBorderInfo {
-        std::vector<ui64> Start;
-        std::vector<ui64> Finish;
-    };
-    std::map<NArrow::TSimpleRow, TBorderInfo> Borders;
-    THashSet<ui64> CurrentPortions;
-    THashSet<ui64> ProcessedPortions;
-    std::map<NArrow::TSimpleRow, ui32> WaitingBorders;
-    std::optional<NArrow::TSimpleRow> PreviousBorder;
-    
-    std::optional<NArrow::TSimpleRow> LastBorder;
+    TBordersFlowController BordersFlowController;
 
-    std::unordered_map<ui64, NArrow::TColumnFilter> ReadyFilters; // PortionId -> TColumnFilter
     std::shared_ptr<TAtomicCounter> AbortionFlag;
     ui64 PrevRowsAdded = 0;
     ui64 PrevRowsSkipped = 0;
-    std::unordered_set<ui64> ExclusivePortions;
 
 private:
     static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId) {
@@ -80,7 +68,7 @@ private:
             hFunc(TEvRequestFilter, Handle);
             hFunc(NPrivate::TEvFilterRequestResourcesAllocated, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
-            hFunc(TEvIntervalConstructionResult, Handle);
+            hFunc(TEvBordersConstructionResult, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -88,10 +76,8 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr&);
-    void Handle(const TEvIntervalConstructionResult::TPtr&);
+    void Handle(const TEvBordersConstructionResult::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-        Counters->OnLeftBorders(-1 * static_cast<i64>(Borders.size()));
-        Counters->OnWaitingBorders(-1 * static_cast<i64>(WaitingBorders.size()));
         AbortAndPassAway("aborted by actor system");
     }
 
@@ -111,9 +97,6 @@ private:
         }
         return fieldsByColumn;
     }
-    
-private:
-    void BuildExclusivePortions();
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);

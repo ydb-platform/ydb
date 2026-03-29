@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    borders_flow_controller.cpp
     common.cpp
     context.cpp
     events.cpp

@@ -41,6 +41,11 @@ public:
     bool operator<(const TReplaceKeyAdapter& item) const {
         return Compare(item) == std::partial_ordering::less;
     }
+    
+    bool operator<=(const TReplaceKeyAdapter& item) const {
+        auto compareResult = Compare(item);
+        return compareResult == std::partial_ordering::less || compareResult == std::partial_ordering::equivalent;
+    }
 
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";

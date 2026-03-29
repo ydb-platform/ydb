@@ -17,7 +17,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr LeftBorders;
     NMonitoring::TDynamicCounters::TCounterPtr WaitingBorders;
     NMonitoring::TDynamicCounters::TCounterPtr ReadyBorders;
-    NMonitoring::THistogramPtr IntervalsPerRequest;
+    NMonitoring::THistogramPtr BordersPerRequest;
     
     NMonitoring::TDynamicCounters::TCounterPtr RequestCacheHits;
     NMonitoring::TDynamicCounters::TCounterPtr RequestCacheMisses;
@@ -47,8 +47,8 @@ public:
         ReadyBorders->Add(count);
     }
     
-    void OnIntervalsPerRequest(const i64 count = 1) const {
-        IntervalsPerRequest->Collect(count);
+    void OnBordersPerRequest(const i64 count = 1) const {
+        BordersPerRequest->Collect(count);
     }
     
     void OnRequestCacheHit(const ui64 count = 1) const {

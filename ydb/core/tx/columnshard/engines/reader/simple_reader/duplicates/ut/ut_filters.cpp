@@ -105,7 +105,7 @@ std::shared_ptr<TTestFilterSubscriber> BuildAndDeliverFilter(
     auto request = MakeTestRequest(portionId, rowsCount, subscriber);
     auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-    TFiltersBuilder builder;
+    TFiltersBuilder builder(false);
     builder.AddSource(portionId, rowsCount);
     builder.AddWaitingPortion(portionId, accumulator);
 
@@ -130,7 +130,7 @@ std::shared_ptr<TTestFilterSubscriber> BuildAndDeliverFilter(
 Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
     Y_UNIT_TEST(IsBufferExhaustedAlwaysFalse) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         UNIT_ASSERT(!builder.IsBufferExhausted());
 
         builder.AddSource(1, 10);
@@ -138,13 +138,13 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
     }
 
     Y_UNIT_TEST(ValidateDataSchemaDoesNothing) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         auto schema = arrow::schema({arrow::field("key", arrow::int32())});
         UNIT_ASSERT_NO_EXCEPTION(builder.ValidateDataSchema(schema));
     }
 
     Y_UNIT_TEST(AddRecordIncrementsRowsAdded) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 5);
 
         auto batch = MakeTestBatch({1, 2, 3, 4, 5}, {1, 1, 1, 1, 1});
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
     }
 
     Y_UNIT_TEST(SkipRecordIncrementsRowsSkipped) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 5);
 
         auto batch = MakeTestBatch({1, 2, 3, 4, 5}, {1, 1, 1, 1, 1});
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
     }
 
     Y_UNIT_TEST(MultiplePortionsIndependent) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 2);
         builder.AddSource(2, 2);
 
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
         auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 2);
 
         // Add all records for the filter to be complete
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
         auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 3);
 
         // Add only 1 of 3 records
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
         auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         // Don't add source for portionId=99
 
         bool result = builder.NotifyReadyFilter(accumulator);
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
 
         auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 2);
 
         // Register waiting portion
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
     }
 
     Y_UNIT_TEST(RowCountersAccumulate) {
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 100);
 
         auto batch = MakeTestBatch(std::vector<int32_t>(100, 1), std::vector<int32_t>(100, 1));
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
         auto request = MakeTestRequest(1, 5, subscriber);
         auto accumulator = std::make_shared<TFilterAccumulator>(request, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 5);
         builder.AddWaitingPortion(1, accumulator);
 
@@ -421,7 +421,7 @@ Y_UNIT_TEST_SUITE(TFiltersBuilderTests) {
         auto acc1 = std::make_shared<TFilterAccumulator>(request1, counters);
         auto acc2 = std::make_shared<TFilterAccumulator>(request2, counters);
 
-        TFiltersBuilder builder;
+        TFiltersBuilder builder(false);
         builder.AddSource(1, 2);
         builder.AddSource(2, 2);
         builder.AddWaitingPortion(1, acc1);

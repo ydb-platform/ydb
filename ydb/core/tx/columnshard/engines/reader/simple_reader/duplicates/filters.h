@@ -38,6 +38,7 @@ private:
         NArrow::TColumnFilter Filter;
     };
 
+    const bool IsReverse;
     THashMap<ui64, TFilterInfo> Filters;
     THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
     YDB_READONLY(ui64, RowsAdded, 0);
@@ -46,7 +47,9 @@ private:
     void AddImpl(const ui64 portionId, const bool value);
 
 public:
-    TFiltersBuilder() = default;
+    TFiltersBuilder(const bool reverse);
+
+    NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
 
     void AddRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor);

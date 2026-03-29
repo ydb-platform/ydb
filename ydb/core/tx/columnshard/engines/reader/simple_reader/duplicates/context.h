@@ -115,7 +115,6 @@ public:
         , SelfMemory(contextMemory)
     {
         AFL_VERIFY(Owner);
-        AFL_VERIFY(RequiredPortions.size());
         AFL_VERIFY(Columns.size());
         AFL_VERIFY(PKSchema);
         AFL_VERIFY(SnapshotSchema);

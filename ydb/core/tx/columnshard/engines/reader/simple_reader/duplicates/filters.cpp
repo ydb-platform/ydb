@@ -19,6 +19,12 @@ TFilterAccumulator::~TFilterAccumulator() {
 
 void TFilterAccumulator::AddFilter(NArrow::TColumnFilter&& filter) {
     AFL_VERIFY(!IsDone());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)
+        ("component", "duplicates_manager")
+        ("type", "filter_ready")
+        ("info", DebugString())
+        ("portion_id", OriginalRequest->Get()->GetPortionId())
+        ("filter", filter.DebugString());
     OriginalRequest->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
     Done = true;
     AFL_VERIFY(IsDone());
@@ -56,7 +62,7 @@ void TFiltersBuilder::AddImpl(const ui64 portionId, const bool value) {
     }
     auto waitingIt = WaitingPortions.find(portionId);
     if (waitingIt != WaitingPortions.end()) {
-        waitingIt->second->AddFilter(std::move(filterInfo.Filter));
+        waitingIt->second->AddFilter(MakeOrderedFilter(std::move(filterInfo.Filter)));
         WaitingPortions.erase(waitingIt);
         Filters.erase(filterIt);
     }
@@ -92,7 +98,7 @@ bool TFiltersBuilder::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& con
         return false;
     }
 
-    constructor->AddFilter(std::move(filterInfo.Filter));
+    constructor->AddFilter(MakeOrderedFilter(std::move(filterInfo.Filter)));
     Filters.erase(filterIt);
     return true;
 }
@@ -110,5 +116,18 @@ void TFiltersBuilder::Abort(const TString& error) {
         constructor->Abort(error);
     }
 }
+
+TFiltersBuilder::TFiltersBuilder(const bool reverse)
+    : IsReverse(reverse) {
+}
+
+NArrow::TColumnFilter TFiltersBuilder::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
+    if (IsReverse) {
+        return filter.Cut(filter.GetRecordsCountVerified(), filter.GetRecordsCountVerified(), IsReverse);
+    }
+    return std::move(filter);
+}
+
+
 
 }

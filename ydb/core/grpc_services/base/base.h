@@ -749,6 +749,7 @@ public:
     NWilson::TTraceId GetWilsonTraceId() const override {
         return {};
     }
+
     TMaybe<TString> GetSdkBuildInfo() const {
         return {};
     }

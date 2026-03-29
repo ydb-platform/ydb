@@ -8,6 +8,8 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    completion_generator.cpp
+    completion.cpp
     config.cpp
     log.cpp
     csv_parser.cpp

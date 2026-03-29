@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -51,6 +52,10 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 // with OnPageCreated()/OnPageSent().
                 partialSourceAddress = TPartialSourceAddress(source->GetSourceIdx(), GetPointIndex(), /*streamingPage=*/true);
                 Collection->OnPageCreated();
+                // Track resource guard counts per streaming page for diagnostics.
+                // A monotonically growing count indicates guards are leaking across pages.
+                NYDBTest::TControllers::GetColumnShardController()->OnStreamingPageResult(
+                    source->GetResourceGuards().size(), source->GetResourceGuardsMemory());
                 AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "page_created")
                     ("source_idx", source->GetSourceIdx())("pages_in_flight", Collection->GetPagesInFlightCount());
             } else if (!isFinished) {
@@ -58,7 +63,9 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
             }
             
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "has_result")("source_idx", source->GetSourceIdx())
-                ("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished)("streaming", isStreamingMode);
+                ("table", resultChunk->GetTable()->num_rows())("is_finished", isFinished)("streaming", isStreamingMode)
+                ("resource_guards_count", source->GetResourceGuards().size())
+                ("resource_guards_memory", source->GetResourceGuardsMemory());
             // resultChunk->GetStartIndex() is the absolute page.GetIndexStart() within
             // the portion (set by TBuildResultStep from the page stored in StageResult).
             // Adding GetRecordsCount() gives the absolute end position, which is what

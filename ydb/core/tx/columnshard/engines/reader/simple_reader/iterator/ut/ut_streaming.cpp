@@ -66,6 +66,70 @@ public:
     }
 };
 
+// Controller that tracks resource guard counts per streaming page.
+// Used by TestResourceGuardsAccumulation to detect the bug where
+// ResourceGuards are not cleared between streaming pages, causing
+// monotonically growing guard counts.
+class TResourceGuardTrackingController: public TDefaultTestsController {
+private:
+    mutable TAdaptiveLock Lock;
+    std::vector<ui64> GuardCountsPerPage;
+    std::vector<ui64> GuardMemoryPerPage;
+    ui64 MaxGuardCount = 0;
+    TAtomicCounter TotalPagesCreated;
+
+public:
+    virtual void OnPageCreated(const ui64 /*pagesInFlight*/) override {
+        TotalPagesCreated.Inc();
+    }
+
+    virtual void OnStreamingPageResult(const ui64 resourceGuardsCount, const ui64 resourceGuardsMemory) override {
+        TGuard<TAdaptiveLock> g(Lock);
+        GuardCountsPerPage.push_back(resourceGuardsCount);
+        GuardMemoryPerPage.push_back(resourceGuardsMemory);
+        if (resourceGuardsCount > MaxGuardCount) {
+            MaxGuardCount = resourceGuardsCount;
+        }
+    }
+
+    ui64 GetTotalPagesCreated() const {
+        return (ui64)TotalPagesCreated.Val();
+    }
+
+    std::vector<ui64> GetGuardCountsPerPage() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return GuardCountsPerPage;
+    }
+
+    std::vector<ui64> GetGuardMemoryPerPage() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return GuardMemoryPerPage;
+    }
+
+    ui64 GetMaxGuardCount() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return MaxGuardCount;
+    }
+
+    // Returns true if guard counts are monotonically increasing (indicating the bug).
+    // A correct implementation should have roughly constant guard counts per page.
+    bool IsGuardCountMonotonicallyIncreasing() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        if (GuardCountsPerPage.size() < 3) {
+            return false;
+        }
+        // Check if at least 3 consecutive pages show strictly increasing guard counts.
+        ui32 increasingRuns = 0;
+        for (size_t i = 1; i < GuardCountsPerPage.size(); ++i) {
+            if (GuardCountsPerPage[i] > GuardCountsPerPage[i - 1]) {
+                ++increasingRuns;
+            }
+        }
+        // If more than half the transitions are increasing, it's a leak.
+        return increasingRuns > GuardCountsPerPage.size() / 2;
+    }
+};
+
 void TestStreamingReadWithLargePortion() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1580,6 +1644,136 @@ void TestBlobReadErrorDuringStreaming() {
     UNIT_ASSERT_GT(batchesBeforeError, 0u);
 }
 
+// BUG DIAGNOSTIC TEST: Verifies that ResourceGuards accumulate across streaming pages.
+//
+// In the current implementation, ContinueCursor() resets stage data for the next page
+// but does NOT clear ResourceGuards. Each page's TAllocateMemoryStep appends new guards
+// via RegisterAllocationGuard(). Without clearing, guards accumulate across pages:
+//   - Page 0: N guards
+//   - Page 1: 2*N guards (N from page 0 + N from page 1)
+//   - Page 2: 3*N guards
+//   - ...
+//   - Page K: (K+1)*N guards
+//
+// This test detects the bug by tracking guard counts per page via the
+// OnStreamingPageResult hook. If the guard count is monotonically increasing,
+// the bug is confirmed.
+//
+// EXPECTED BEHAVIOR (after fix): Guard counts should be roughly constant per page.
+// ACTUAL BEHAVIOR (with bug): Guard counts grow monotonically with each page.
+void TestResourceGuardsAccumulation() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(2);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TResourceGuardTrackingController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so streaming pages are created.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write enough data to produce many streaming pages.
+    // With memoryLimit=1, each chunk boundary becomes a page boundary.
+    const ui32 numRecords = 10000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalPagesCreated = csControllerGuard->GetTotalPagesCreated();
+    const auto guardCounts = csControllerGuard->GetGuardCountsPerPage();
+    const auto guardMemory = csControllerGuard->GetGuardMemoryPerPage();
+    const ui64 maxGuardCount = csControllerGuard->GetMaxGuardCount();
+    const bool isMonotonicallyIncreasing = csControllerGuard->IsGuardCountMonotonicallyIncreasing();
+
+    Cerr << "ResourceGuardsAccumulation: totalPagesCreated=" << totalPagesCreated
+         << ", maxGuardCount=" << maxGuardCount
+         << ", isMonotonicallyIncreasing=" << isMonotonicallyIncreasing
+         << ", guardCountsPerPage=[";
+    for (size_t i = 0; i < guardCounts.size(); ++i) {
+        if (i > 0) Cerr << ",";
+        Cerr << guardCounts[i];
+        if (i >= 20) {
+            Cerr << "...(" << guardCounts.size() - i - 1 << " more)";
+            break;
+        }
+    }
+    Cerr << "]" << Endl;
+
+    Cerr << "ResourceGuardsAccumulation: guardMemoryPerPage=[";
+    for (size_t i = 0; i < guardMemory.size(); ++i) {
+        if (i > 0) Cerr << ",";
+        Cerr << guardMemory[i];
+        if (i >= 20) {
+            Cerr << "...(" << guardMemory.size() - i - 1 << " more)";
+            break;
+        }
+    }
+    Cerr << "]" << Endl;
+
+    // Streaming must have produced multiple pages for this test to be meaningful.
+    UNIT_ASSERT_GT(totalPagesCreated, 3u);
+
+    // BUG DETECTION: If guard counts are monotonically increasing, the bug is confirmed.
+    // This assertion will FAIL with the current code (confirming the bug).
+    // After the fix (adding ResourceGuards.clear() in ContinueCursor), this should pass.
+    //
+    // We use a soft check: the max guard count across all pages should not exceed
+    // 3x the guard count of the first page. With the bug, it would be N*firstPageGuards
+    // where N is the number of pages.
+    if (guardCounts.size() >= 2 && guardCounts[0] > 0) {
+        const ui64 firstPageGuards = guardCounts[0];
+        const ui64 threshold = firstPageGuards * 3;  // Allow some variance
+        Cerr << "ResourceGuardsAccumulation: firstPageGuards=" << firstPageGuards
+             << ", maxGuardCount=" << maxGuardCount
+             << ", threshold=" << threshold
+             << ", BUG_DETECTED=" << (maxGuardCount > threshold ? "YES" : "NO") << Endl;
+
+        // This assertion detects the bug: with accumulation, maxGuardCount >> threshold.
+        // EXPECTED TO FAIL until the fix is applied.
+        UNIT_ASSERT_C(maxGuardCount <= threshold,
+            "ResourceGuards are accumulating across streaming pages! "
+            "maxGuardCount=" << maxGuardCount << " > threshold=" << threshold <<
+            " (firstPageGuards=" << firstPageGuards << "). "
+            "This indicates ResourceGuards.clear() is missing in ContinueCursor().");
+    }
+
+    // Additional check: guard counts should NOT be monotonically increasing.
+    UNIT_ASSERT_C(!isMonotonicallyIncreasing,
+        "ResourceGuard counts are monotonically increasing across streaming pages, "
+        "confirming the accumulation bug in ContinueCursor().");
+}
+
 Y_UNIT_TEST_SUITE(StreamingRead) {
     Y_UNIT_TEST(StreamingWithLargePortion) {
         TestStreamingReadWithLargePortion();
@@ -1671,6 +1865,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(ReverseStreamingSmallBounded) {
         TestReverseStreamingSmallBounded();
+    }
+
+    Y_UNIT_TEST(ResourceGuardsAccumulation) {
+        TestResourceGuardsAccumulation();
     }
 }
 

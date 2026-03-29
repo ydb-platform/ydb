@@ -570,6 +570,66 @@ def test_inmemory_metrics_prometheus_query_range_selector_only(ydb_cluster):
     assert wait_for(query_range_ready, timeout_seconds=30, step_seconds=1.0), last_query_range
 
 
+def test_inmemory_metrics_prometheus_query_range_self_metric_tail_reaches_range_end(ydb_cluster):
+    mon_port = ydb_cluster.nodes[1].mon_port
+    base_url = f"http://localhost:{mon_port}"
+    target = wait_for_target(
+        base_url,
+        lambda metric: metric.startswith(f'{USED_CHUNKS_TARGET}{{node_id="'),
+        prefix="inmemory_metrics",
+    )
+
+    def get_last_timestamp(query_end):
+        data = get_prometheus_json(
+            base_url,
+            "/query_range",
+            params={
+                "query": target,
+                "start": query_end - 300,
+                "end": query_end,
+                "step": 30,
+            },
+        )
+        assert data is not None
+        logger.info("prometheus self metric query_range result: %s", data)
+        assert_that(data.get("resultType"), equal_to("matrix"))
+
+        for item in data.get("result", []):
+            metric = item.get("metric", {})
+            if metric.get("__name__") != USED_CHUNKS_TARGET or metric.get("node_id") is None:
+                continue
+            values = item.get("values", [])
+            if values:
+                return values[-1][0]
+
+        return None
+
+    first_end = int(time.time())
+    first_last = None
+
+    def first_query_ready():
+        nonlocal first_last
+        first_last = get_last_timestamp(first_end)
+        return first_last is not None and first_last >= first_end - 5
+
+    assert wait_for(first_query_ready, timeout_seconds=30, step_seconds=1.0), first_last
+
+    time.sleep(2)
+
+    second_end = int(time.time())
+    second_last = None
+
+    def second_query_ready():
+        nonlocal second_last
+        second_last = get_last_timestamp(second_end)
+        return second_last is not None and second_last >= second_end - 5 and second_last > first_last
+
+    assert wait_for(second_query_ready, timeout_seconds=30, step_seconds=1.0), {
+        "first_last": first_last,
+        "second_last": second_last,
+    }
+
+
 def test_inmemory_metrics_prometheus_query_range_supports_last_over_time(ydb_cluster):
     mon_port = ydb_cluster.nodes[1].mon_port
     base_url = f"http://localhost:{mon_port}"

@@ -310,6 +310,56 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(timestamps[0] < timestamps[1]);
     }
 
+    Y_UNIT_TEST(OnChangeWithHeartbeatKeepsTwoPointsWhileObservedTailAdvances) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .Heartbeat = TDuration::Hours(1),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+
+        auto snapshot = registry.Snapshot();
+        auto lines = FilterUserLines(snapshot.Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+
+        TVector<TInstant> firstReadTimestamps;
+        line->ForEachRecord([&](const TRecordView& record) {
+            firstReadTimestamps.push_back(record.Timestamp);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(firstReadTimestamps.size(), 2);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+
+        snapshot = registry.Snapshot();
+        lines = FilterUserLines(snapshot.Lines());
+        line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+
+        TVector<ui64> values;
+        TVector<TInstant> secondReadTimestamps;
+        line->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+            secondReadTimestamps.push_back(record.Timestamp);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10}));
+        UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps.size(), 2);
+        UNIT_ASSERT(secondReadTimestamps[0] == firstReadTimestamps[0]);
+        UNIT_ASSERT(secondReadTimestamps[1] > firstReadTimestamps[1]);
+    }
+
     Y_UNIT_TEST(OnChangeWithHeartbeatBackfillsPreviousValueOnChange) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,
@@ -343,8 +393,34 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20}));
         UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 3);
-        UNIT_ASSERT(timestamps[0] < timestamps[1]);
+        UNIT_ASSERT_VALUES_EQUAL(timestamps[0], timestamps[1]);
         UNIT_ASSERT(timestamps[1] < timestamps[2]);
+    }
+
+    Y_UNIT_TEST(OnChangeWithHeartbeatDoesNotEmitObservedTailAfterClose) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const TLineMeta meta{
+            .PublishPolicy = EPublishPolicy::OnChangeWithHeartbeat,
+            .Heartbeat = TDuration::Hours(1),
+        };
+
+        auto writer = registry.CreateLine("line", NoLabels(), meta);
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(10));
+        writer.Close();
+
+        const auto lines = FilterUserLines(registry.Snapshot().Lines());
+        const TLineSnapshot* line = FindLineByName(lines, "line");
+        UNIT_ASSERT(line);
+        UNIT_ASSERT(line->Closed);
+        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
     }
 
     Y_UNIT_TEST(SelfMetricsAreStoredAsRegularLinesWithHistory) {
@@ -406,6 +482,48 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), ExpectedHeartbeatRead(beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines));
         UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), ExpectedHeartbeatRead(beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark));
         UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), ExpectedHeartbeatRead(beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal));
+    }
+
+    Y_UNIT_TEST(SelfMetricsAdvanceObservedTailForRepeatedStableValues) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 4096,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 32,
+        });
+
+        auto writer = registry.CreateLine("line", NoLabels());
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(1));
+
+        registry.UpdateSelfMetrics();
+        auto lines = registry.Snapshot().Lines();
+        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+        UNIT_ASSERT(appendFailures);
+
+        TVector<TInstant> firstReadTimestamps;
+        appendFailures->ForEachRecord([&](const TRecordView& record) {
+            firstReadTimestamps.push_back(record.Timestamp);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(firstReadTimestamps.size(), 1);
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        registry.UpdateSelfMetrics();
+
+        lines = registry.Snapshot().Lines();
+        appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+        UNIT_ASSERT(appendFailures);
+
+        TVector<ui64> values;
+        TVector<TInstant> secondReadTimestamps;
+        appendFailures->ForEachRecord([&](const TRecordView& record) {
+            values.push_back(record.Value);
+            secondReadTimestamps.push_back(record.Timestamp);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], values[1]);
+        UNIT_ASSERT(secondReadTimestamps[0] < secondReadTimestamps[1]);
+        UNIT_ASSERT(secondReadTimestamps[0] == firstReadTimestamps[0]);
     }
 
     Y_UNIT_TEST(AppendFailuresAreReportedInSelfMetricLine) {

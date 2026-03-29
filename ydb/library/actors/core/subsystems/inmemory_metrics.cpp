@@ -826,7 +826,7 @@ namespace NActors {
 
         if (ShouldPublishPreviousObservedValue(line, value)) {
             const TStoredRecord previousRecord{
-                .TimestampTs = line->LastObservedTs,
+                .TimestampTs = line->LastPublishedTs,
                 .Value = line->LastPublishedValue,
             };
             if (!appendRecord(previousRecord)) {

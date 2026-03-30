@@ -1,39 +1,32 @@
-IF (NOT WITH_VALGRIND)
-    UNITTEST_FOR(ydb/core/tx/schemeshard)
+UNITTEST_FOR(ydb/core/tx/schemeshard)
 
-    FORK_SUBTESTS()
-
-<<<<<<< HEAD
-    SPLIT_FACTOR(60)
-=======
+FORK_SUBTESTS()
 
 SPLIT_FACTOR(120)
 
 REQUIREMENTS(cpu:2)
->>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
-        SIZE(LARGE)
-        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    ELSE()
-        SIZE(MEDIUM)
-    ENDIF()
-
-    PEERDIR(
-        library/cpp/getopt
-        library/cpp/regex/pcre
-        library/cpp/svnversion
-        ydb/core/testlib/default
-        ydb/core/tx
-        ydb/core/tx/schemeshard/ut_helpers
-        yql/essentials/public/udf/service/exception_policy
-    )
-
-    YQL_LAST_ABI_VERSION()
-
-    SRCS(
-        ut_base_reboots.cpp
-    )
-
-    END()
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
 ENDIF()
+
+PEERDIR(
+    library/cpp/getopt
+    library/cpp/regex/pcre
+    library/cpp/svnversion
+    ydb/core/testlib/default
+    ydb/core/tx
+    ydb/core/tx/schemeshard/ut_helpers
+    yql/essentials/public/udf/service/exception_policy
+)
+
+YQL_LAST_ABI_VERSION()
+
+SRCS(
+    ut_base_reboots.cpp
+)
+
+END()

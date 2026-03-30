@@ -151,4 +151,8 @@
 /ydb/core/viewer @ydb-platform/ui-backend
 /ydb/core/protos/node_whiteboard.proto @ydb-platform/ui-backend
 
+#NBS / Network Blockstore TEAM:@ydb-platform/nbs
+/ydb/core/nbs @ydb-platform/nbs
+/ydb/tests/functional/nbs @ydb-platform/nbs
+
 /ydb/tests/sql @slonn

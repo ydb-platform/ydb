@@ -19,6 +19,21 @@ using NLastGetoptFork::NEscaping::BB;
 
 namespace NLastGetoptFork {
 
+namespace {
+    constexpr size_t MaxCompletionDescriptionLength = 200;
+
+    TString TruncateForCompletion(TStringBuf desc) {
+        if (desc.size() <= MaxCompletionDescriptionLength) {
+            return TString(desc);
+        }
+        size_t pos = desc.rfind(' ', MaxCompletionDescriptionLength);
+        if (pos == TStringBuf::npos || pos == 0) {
+            pos = MaxCompletionDescriptionLength;
+        }
+        return TString(desc.SubStr(0, pos)) + "...";
+    }
+}
+
 #define L out.Line()
 #define I auto Y_GENERATE_UNIQUE_ID(indent) = out.Indent()
 
@@ -116,7 +131,7 @@ namespace NLastGetoptFork {
                     if (!mode->Name.empty()) {
                         I;
                         if (!mode->Description.empty()) {
-                            L << QQ(mode->Name) << ":" << QQ(mode->Description);
+                            L << QQ(mode->Name) << ":" << QQ(TruncateForCompletion(mode->Description));
                         } else {
                             L << QQ(mode->Name);
                         }
@@ -150,6 +165,7 @@ namespace NLastGetoptFork {
             {
                 I;
 
+                L << "curcontext=\"${curcontext%:*:*}:${line[1]}:\"";
                 L << "case $line[1] in";
                 {
                     I;
@@ -226,7 +242,7 @@ namespace NLastGetoptFork {
                     if (!mode->Name.empty()) {
                         I;
                         if (!mode->Description.empty()) {
-                            L << QQ(mode->Name) << ":" << QQ(mode->Description);
+                            L << QQ(mode->Name) << ":" << QQ(TruncateForCompletion(mode->Description));
                         } else {
                             L << QQ(mode->Name);
                         }
@@ -260,6 +276,7 @@ namespace NLastGetoptFork {
             {
                 I;
 
+                L << "curcontext=\"${curcontext%:*:*}:${line[1]}:\"";
                 L << "case $line[1] in";
                 {
                     I;
@@ -277,7 +294,7 @@ namespace NLastGetoptFork {
 
                         {
                             I;
-                            
+
                             auto mainArgs = dynamic_cast<TMainClassArgs*>(mode->Main);
                             auto mainModes = dynamic_cast<TMainClassModes*>(mode->Main);
                             if (mainArgs && mainModes) {

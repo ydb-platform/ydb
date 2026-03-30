@@ -33,11 +33,11 @@ void TYdbCommandTreeAutoCompletionWrapper::RegisterModes(TModChooser &chooser) {
     TClientCommand *cmd = dynamic_cast<TClientCommand *>(command.get());
     if (tree) {
       TMainClassModes* ptr = new TYdbCommandTreeAutoCompletionWrapper(tree, config);
-      chooser.AddMode(name, ptr, command->Description, command->Hidden, command->Hidden);
+      chooser.AddMode(name, ptr, command->GetCompletionDescription(), command->Hidden, command->Hidden);
       subCommands.push_back(std::unique_ptr<TMainClass>(ptr));
     } else if (cmd) {
         TMainClassArgs* ptr = new TYdbCommandAutoCompletionWrapper(cmd, config);
-        chooser.AddMode(name, ptr, command->Description, command->Hidden, command->Hidden);
+        chooser.AddMode(name, ptr, command->GetCompletionDescription(), command->Hidden, command->Hidden);
         subCommands.push_back(std::unique_ptr<TMainClass>(ptr));
     }
   }

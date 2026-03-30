@@ -3,7 +3,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_SUBTESTS()
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 TEST_SRCS(
     test_disabled.py

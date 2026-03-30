@@ -16,7 +16,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:16)
+REQUIREMENTS(ram:16 cpu:4)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

@@ -1301,9 +1301,9 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
 }
 
 void TWriteSessionImpl::OnCompressed(TBlock&& block, bool isSyncCompression) {
-    Y_ABORT_UNLESS(Lock.IsLocked());
     TMemoryUsageChange memoryUsage;
     if (!isSyncCompression) {
+        std::lock_guard guard(Lock);
         memoryUsage = OnCompressedImpl(std::move(block));
     } else {
         memoryUsage = OnCompressedImpl(std::move(block));

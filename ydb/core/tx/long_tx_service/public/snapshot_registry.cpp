@@ -5,11 +5,10 @@
 namespace NKikimr {
 
 namespace {
-    constexpr ui64 kKeyAllTables = 0;
 
     class TImmutableSnapshotRegistry : public IImmutableSnapshotRegistry {
     public:
-        using TSnapshotMap = THashMap<ui64, TVector<TRowVersion>>;
+        using TSnapshotMap = THashMap<NKikimr::TTableId, TVector<TRowVersion>>;
 
         TImmutableSnapshotRegistry() = default;
         
@@ -21,25 +20,23 @@ namespace {
         ~TImmutableSnapshotRegistry() override = default;
         
         bool QuerySnapshots(
-            ui64 tableId,
+            const NKikimr::TTableId& tableId,
             const TRowVersion& begin,
             const TRowVersion& end) const override
         {
-            AFL_ENSURE(tableId != kKeyAllTables);
-            return QuerySnapshotsImpl(tableId, begin, end) || QuerySnapshotsImpl(kKeyAllTables, begin, end);
+            return QuerySnapshotsImpl(tableId, begin, end) || QuerySnapshotsImpl(NKikimr::TTableId{}, begin, end);
         }
         
-        bool HasSnapshot(ui64 tableId, const TRowVersion& version) const override {
-            AFL_ENSURE(tableId != kKeyAllTables);
+        bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const override {
             if (version >= SnapshotBorder) {
                 return true;
             }
-            return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(kKeyAllTables, version);
+            return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
         }
         
     private:
         bool QuerySnapshotsImpl(
-            ui64 tableId,
+            const NKikimr::TTableId& tableId,
             const TRowVersion& begin,
             const TRowVersion& end) const
         {
@@ -60,7 +57,7 @@ namespace {
             return versionsIter != versions.end() && begin <= *versionsIter && *versionsIter < end;
         }
         
-        bool HasSnapshotImpl(ui64 tableId, const TRowVersion& version) const {
+        bool HasSnapshotImpl(const NKikimr::TTableId& tableId, const TRowVersion& version) const {
             auto snapshotsIter = Snapshots.find(tableId);
             if (snapshotsIter == Snapshots.end()) {
                 return false;
@@ -104,17 +101,17 @@ namespace {
             SnapshotBorder = version;
         }
         
-        void AddSnapshot(const TVector<ui64>& tableIds, const TRowVersion& version) override {
+        void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) override {
             if (version >= SnapshotBorder) {
                 return;
             }
 
             if (tableIds.empty()) {
-                Snapshots[kKeyAllTables].push_back(version);
-            } else {
-                for (ui64 tableId : tableIds) {
-                    Snapshots[tableId].push_back(version);
-                }
+                Snapshots[NKikimr::TTableId{}].push_back(version);
+            }
+
+            for (const NKikimr::TTableId& tableId : tableIds) {
+                Snapshots[tableId].push_back(version);
             }
         }
         
@@ -127,7 +124,7 @@ namespace {
 
     private:
         TRowVersion SnapshotBorder = TRowVersion::Max();
-        THashMap<ui64, TVector<TRowVersion>> Snapshots;
+        THashMap<NKikimr::TTableId, TVector<TRowVersion>> Snapshots;
     };
 }
 

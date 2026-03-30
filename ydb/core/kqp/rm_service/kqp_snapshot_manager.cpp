@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -62,7 +63,7 @@ private:
         if (MvccSnapshot) {
             AFL_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, ev->Get()->TableIds, std::move(Orbit)));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {

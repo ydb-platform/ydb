@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
@@ -13,7 +14,7 @@ struct TLocalSnapshotInfo {
     TRowVersion Snapshot;
     TInstant CreationTime;
     NActors::TActorId SessionActorId;
-    TVector<ui64> TableIds;
+    TVector<NKikimr::TTableId> TableIds;
     std::shared_ptr<std::atomic<bool>> AliveFlag = nullptr;
 
     TLocalSnapshotInfo() = delete;
@@ -21,7 +22,7 @@ struct TLocalSnapshotInfo {
     TLocalSnapshotInfo(
         const TRowVersion& snapshot,
         const NActors::TActorId& sessionActorId,
-        TVector<ui64> tableIds,
+        TVector<NKikimr::TTableId> tableIds,
         const TInstant creationTime)
         : Snapshot(snapshot)
         , CreationTime(creationTime)
@@ -40,12 +41,12 @@ struct TLocalSnapshotInfo {
 struct TRemoteSnapshotInfo {
     TRowVersion Snapshot;
     NActors::TActorId SessionActorId;
-    TVector<ui64> TableIds;
+    TVector<NKikimr::TTableId> TableIds;
 
     TRemoteSnapshotInfo(
         const TRowVersion& snapshot,
         const NActors::TActorId& sessionActorId,
-        TVector<ui64> tableIds)
+        TVector<NKikimr::TTableId> tableIds)
         : Snapshot(snapshot)
         , SessionActorId(sessionActorId)
         , TableIds(std::move(tableIds))

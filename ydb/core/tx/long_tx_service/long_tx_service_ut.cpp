@@ -374,8 +374,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get());
         }
 
-        const ui64 table = 1;
-        const ui64 otherTable = 2;
+        const ::NKikimr::TTableId table(0, 1);
+        const ::NKikimr::TTableId otherTable(0, 2);
 
         // Send an acquire read snapshot for node 1
         NKqp::TSnapshotHandle handle;
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         {
             runtime.Send(
                 new IEventHandle(service1, sender1,
-                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<ui64>{table} : TVector<ui64>{})),
+                    new TEvLongTxService::TEvAcquireReadSnapshot("/dc-1", hasTable ? TVector<::NKikimr::TTableId>{table} : TVector<::NKikimr::TTableId>{})),
                 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvAcquireReadSnapshotResult>(sender1);
             auto* msg = ev->Get();

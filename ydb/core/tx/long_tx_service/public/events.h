@@ -5,6 +5,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/long_tx_service.pb.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -179,7 +180,7 @@ namespace NLongTxService {
             TEvAcquireReadSnapshot() = default;
 
             template<class... TArgs>
-            explicit TEvAcquireReadSnapshot(const TString& databaseName, TVector<ui64> tableIds = {}, TArgs&&... args)
+            explicit TEvAcquireReadSnapshot(const TString& databaseName, TVector<NKikimr::TTableId> tableIds = {}, TArgs&&... args)
                 : DatabaseName(databaseName)
                 , TableIds(std::move(tableIds))
             {
@@ -191,7 +192,7 @@ namespace NLongTxService {
             }
 
             TString DatabaseName;
-            TVector<ui64> TableIds;
+            TVector<NKikimr::TTableId> TableIds;
             NLWTrace::TOrbit Orbit;
         };
 

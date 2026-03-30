@@ -415,13 +415,13 @@ public:
         return ::NKikimr::NKqp::NeedSnapshot(*TxCtx, config, /*rollback*/ false, Commit, PreparedQuery->GetPhysicalQuery());
     }
 
-    TVector<ui64> GetTableIdsForSnapshot() const {
+    TVector<NKikimr::TTableId> GetTableIdsForSnapshot() const {
         if (!Commit) {
             return {};
         }
-        TVector<ui64> tableIds;
+        TVector<NKikimr::TTableId> tableIds;
         for (const auto& [tableId, _] : TableVersions) {
-            tableIds.push_back(tableId.PathId.LocalPathId);
+            tableIds.push_back(tableId);
         }
         return tableIds;
     }

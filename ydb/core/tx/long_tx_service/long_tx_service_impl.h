@@ -130,7 +130,7 @@ namespace NLongTxService {
         struct TAcquireSnapshotUserRequest {
             TActorId Sender;
             ui64 Cookie;
-            TVector<ui64> TableIds;
+            TVector<::NKikimr::TTableId> TableIds;
             NLWTrace::TOrbit Orbit;
         };
 

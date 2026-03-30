@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
 #include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
@@ -14,11 +15,11 @@ public:
     virtual ~IImmutableSnapshotRegistry() = default;
 
     virtual bool QuerySnapshots(
-        ui64 tableId,
+        const NKikimr::TTableId& tableId,
         const TRowVersion& begin,
         const TRowVersion& end) const = 0;
 
-    virtual bool HasSnapshot(ui64 tableId, const TRowVersion& version) const = 0;
+    virtual bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const = 0;
 };
 
 class IImmutableSnapshotRegistryHolder : public TThrRefBase {
@@ -40,7 +41,7 @@ public:
 
     virtual void SetSnapshotBorder(const TRowVersion& version) = 0;
 
-    virtual void AddSnapshot(const TVector<ui64>& tableId, const TRowVersion& version) = 0;
+    virtual void AddSnapshot(const TVector<NKikimr::TTableId>& tableId, const TRowVersion& version) = 0;
 
     virtual std::unique_ptr<IImmutableSnapshotRegistry> Build() && = 0;
 };

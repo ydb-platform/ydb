@@ -1999,7 +1999,7 @@ public:
         }
         
         // Collect tableIds for snapshot acquisition
-        TVector<ui64> tableIdsForSnapshot;
+        TVector<NKikimr::TTableId> tableIdsForSnapshot;
         if (QueryState) {
             tableIdsForSnapshot = QueryState->GetTableIdsForSnapshot();
         }

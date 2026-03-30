@@ -6,6 +6,7 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/protos/data_events.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
@@ -258,8 +259,11 @@ namespace {
                 snapshotProto->SetSnapshotStep(snapshot.Snapshot.Step);
                 snapshotProto->SetSnapshotTxId(snapshot.Snapshot.TxId);
                 ActorIdToProto(snapshot.SessionActorId, snapshotProto->MutableSessionActorId());
-                for (const auto tableId : snapshot.TableIds) {
-                    snapshotProto->AddTableIds(tableId);
+                for (const auto& tableId : snapshot.TableIds) {
+                    auto* tableIdProto = snapshotProto->AddTableIds();
+                    tableIdProto->SetOwnerId(tableId.PathId.OwnerId);
+                    tableIdProto->SetTableId(tableId.PathId.LocalPathId);
+                    tableIdProto->SetSchemaVersion(tableId.SchemaVersion);
                 }
             }
 
@@ -283,10 +287,16 @@ namespace {
             for (const auto& snapshot : ev->Record.GetSnapshots().GetSnapshots()) {
                 NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
                 AFL_ENSURE(sessionActorId);
+                TVector<::NKikimr::TTableId> tableIds;
+                tableIds.reserve(snapshot.GetTableIds().size());
+                for (const auto& tableIdProto : snapshot.GetTableIds()) {
+                    tableIds.emplace_back(tableIdProto.GetOwnerId(), tableIdProto.GetTableId(), tableIdProto.GetSchemaVersion());
+                }
+                
                 TRemoteSnapshotInfo remoteSnapshot(
                     TRowVersion(snapshot.GetSnapshotStep(), snapshot.GetSnapshotTxId()),
                     sessionActorId,
-                    TVector<ui64>(snapshot.GetTableIds().begin(), snapshot.GetTableIds().end()));
+                    std::move(tableIds));
                 
                 AddToCollectedSnapshots(remoteSnapshot);
             }
@@ -603,10 +613,16 @@ private:
                 NActors::TActorId sessionActorId = ActorIdFromProto(snapshot.GetSessionActorId());
                 AFL_ENSURE(sessionActorId);
                 if (sessionActorId.NodeId() != SelfId().NodeId()) {
+                    TVector<::NKikimr::TTableId> tableIds;
+                    tableIds.reserve(snapshot.GetTableIds().size());
+                    for (const auto& tableIdProto : snapshot.GetTableIds()) {
+                        tableIds.emplace_back(tableIdProto.GetOwnerId(), tableIdProto.GetTableId(), tableIdProto.GetSchemaVersion());
+                    }
+                    
                     remoteSnapshots.emplace_back(TRemoteSnapshotInfo{
                         TRowVersion(snapshot.GetSnapshotStep(), snapshot.GetSnapshotTxId()),
                         sessionActorId,
-                        TVector<ui64>(snapshot.GetTableIds().begin(), snapshot.GetTableIds().end())});
+                        std::move(tableIds)});
                 }
             }
 

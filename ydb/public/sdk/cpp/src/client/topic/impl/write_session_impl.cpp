@@ -658,7 +658,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         );
 
         FlushWriteIfRequiredImpl();
-        readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
+        readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
     }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});

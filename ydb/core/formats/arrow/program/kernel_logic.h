@@ -282,8 +282,7 @@ private:
     public:
         TDescription(const std::shared_ptr<NAccessor::IChunkedArray>& inputAccessor, const std::string_view jsonPath)
             : InputAccessor(inputAccessor)
-            , JsonPath(jsonPath)
-        {
+            , JsonPath(jsonPath) {
         }
 
         const std::shared_ptr<NAccessor::IChunkedArray>& GetInputAccessor() const {

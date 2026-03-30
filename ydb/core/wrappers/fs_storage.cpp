@@ -544,7 +544,16 @@ public:
             auto& session = it->second;
             session.File.Flush();
 
-            NFs::Rename(incompleteKey, key);
+            if (!NFs::Rename(incompleteKey, key)) {
+                const TString errorMsg = TStringBuilder()
+                    << "Failed to rename " << incompleteKey << " to " << key
+                    << ": " << LastSystemErrorText();
+                FS_LOG_E("CompleteMultipartUpload: " << errorMsg);
+                ReplyError<TEvCompleteMultipartUploadResponse>(
+                    ev->Sender, key, errorMsg,
+                    Aws::S3::S3Errors::INTERNAL_FAILURE, true /* retryable */);
+                return;
+            }
             FsyncParentDir(key);
             session.File.Close();
 

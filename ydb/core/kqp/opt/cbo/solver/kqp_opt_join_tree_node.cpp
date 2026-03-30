@@ -1,4 +1,4 @@
-#include "dq_opt_join_tree_node.h"
+#include "kqp_opt_join_tree_node.h"
 
 namespace NKikimr::NKqp {
 

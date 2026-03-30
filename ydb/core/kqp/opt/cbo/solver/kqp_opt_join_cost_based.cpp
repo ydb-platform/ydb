@@ -1,6 +1,6 @@
-#include "dq_opt_join_cost_based.h"
-#include "dq_opt_dphyp_solver.h"
-#include "dq_opt_make_join_hypergraph.h"
+#include "kqp_opt_join_cost_based.h"
+#include "kqp_opt_dphyp_solver.h"
+#include "kqp_opt_make_join_hypergraph.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>

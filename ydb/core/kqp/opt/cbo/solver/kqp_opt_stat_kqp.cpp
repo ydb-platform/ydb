@@ -5,7 +5,7 @@
 // the independence refactoring NKikimr::NKqp::IProviderContext is a separate type
 // from NYql::IProviderContext, so the library overloads are not callable.
 
-#include "dq_opt_stat.h"
+#include "kqp_opt_stat.h"
 
 #include <yql/essentials/utils/log/log.h>
 

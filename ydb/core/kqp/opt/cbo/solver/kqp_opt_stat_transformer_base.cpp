@@ -1,6 +1,6 @@
-#include "dq_opt_stat_transformer_base.h"
+#include "kqp_opt_stat_transformer_base.h"
 
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -121,7 +121,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if (TCoParameter::Match(input.Get()) && InferStatisticsForListParam(input, KqpStats)) {
     }
 
-    // Join matchers (use NKikimr::NKqp::IProviderContext overloads from dq_opt_stat_kqp.cpp)
+    // Join matchers (use NKikimr::NKqp::IProviderContext overloads from kqp_opt_stat_kqp.cpp)
     else if(TCoMapJoinCore::Match(input.Get())) {
         InferStatisticsForMapJoin(input, KqpStats, Pctx, Hints);
     }

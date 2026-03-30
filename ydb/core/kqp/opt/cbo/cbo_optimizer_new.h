@@ -23,7 +23,7 @@ namespace NKikimr::NKqp {
 
 // Independent fork of NYql::EJoinAlgoType (yql/essentials/core/yql_cost_function.h).
 // Enumerator NAMES must match for FromString/ToString compatibility.
-// Integer values need NOT match — boundary conversions use switch/case (see dq_opt_join.cpp).
+// Integer values need NOT match — boundary conversions use switch/case (see kqp_opt_join.cpp).
 enum class EJoinAlgoType {
     Undefined,
     LookupJoin,

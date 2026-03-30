@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
 
 #include <util/string/split.h>
 
-#include "dq_opt_make_join_hypergraph.h"
-#include "dq_opt_join_cost_based.h"
+#include "kqp_opt_make_join_hypergraph.h"
+#include "kqp_opt_join_cost_based.h"
 
 #include <memory>
 

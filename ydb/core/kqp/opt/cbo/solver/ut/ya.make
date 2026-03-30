@@ -1,9 +1,9 @@
 UNITTEST_FOR(ydb/core/kqp/opt/cbo/solver)
 
 SRCS(
-    dq_cbo_ut.cpp
-    dq_opt_hypergraph_ut.cpp
-    dq_opt_interesting_orderings_ut.cpp
+    kqp_cbo_ut.cpp
+    kqp_opt_hypergraph_ut.cpp
+    kqp_opt_interesting_orderings_ut.cpp
 )
 
 PEERDIR(

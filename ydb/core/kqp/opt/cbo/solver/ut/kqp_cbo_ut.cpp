@@ -3,8 +3,8 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
-#include "dq_opt_join_cost_based.h"
-#include "dq_opt_join.h"
+#include "kqp_opt_join_cost_based.h"
+#include "kqp_opt_join.h"
 
 using namespace NKikimr::NKqp;
 using namespace NYql::NNodes;

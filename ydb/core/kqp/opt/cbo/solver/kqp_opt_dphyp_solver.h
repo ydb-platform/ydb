@@ -1,7 +1,7 @@
 #pragma once
 
-#include "dq_opt_join_hypergraph.h"
-#include "dq_opt_join_tree_node.h"
+#include "kqp_opt_join_hypergraph.h"
+#include "kqp_opt_join_tree_node.h"
 #include "bitset.h"
 
 namespace NKikimr::NKqp {

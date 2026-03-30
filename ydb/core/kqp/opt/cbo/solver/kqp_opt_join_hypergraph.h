@@ -7,7 +7,7 @@
 #include "bitset.h"
 
 
-#include "dq_opt_join_tree_node.h"
+#include "kqp_opt_join_tree_node.h"
 
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <library/cpp/iterator/zip.h>

@@ -1,6 +1,6 @@
-#include "dq_opt_join_cbo_factory.h"
+#include "kqp_opt_join_cbo_factory.h"
 
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 
 
 namespace NKikimr::NKqp {

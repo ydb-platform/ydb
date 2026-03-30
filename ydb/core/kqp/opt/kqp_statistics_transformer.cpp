@@ -1,12 +1,12 @@
 #include "kqp_statistics_transformer.h"
 #include <yql/essentials/utils/log/log.h>
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
 #include <yql/essentials/core/yql_join.h>
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>

@@ -8,10 +8,10 @@
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
-#include <ydb/core/kqp/opt/cbo/solver/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>

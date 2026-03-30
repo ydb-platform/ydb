@@ -1,4 +1,4 @@
-#include "dq_opt_conflict_rules_collector.h"
+#include "kqp_opt_conflict_rules_collector.h"
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NKqp {

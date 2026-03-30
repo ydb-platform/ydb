@@ -15,15 +15,15 @@ PEERDIR(
 )
 
 SRCS(
-    dq_opt_conflict_rules_collector.cpp
-    dq_opt_join.cpp
-    dq_opt_join_cbo_factory.cpp
-    dq_opt_join_cost_based.cpp
-    dq_opt_join_tree_node.cpp
-    dq_opt_predicate_selectivity.cpp
-    dq_opt_stat.cpp
-    dq_opt_stat_kqp.cpp
-    dq_opt_stat_transformer_base.cpp
+    kqp_opt_conflict_rules_collector.cpp
+    kqp_opt_join.cpp
+    kqp_opt_join_cbo_factory.cpp
+    kqp_opt_join_cost_based.cpp
+    kqp_opt_join_tree_node.cpp
+    kqp_opt_predicate_selectivity.cpp
+    kqp_opt_stat.cpp
+    kqp_opt_stat_kqp.cpp
+    kqp_opt_stat_transformer_base.cpp
 )
 
 YQL_LAST_ABI_VERSION()

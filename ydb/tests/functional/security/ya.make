@@ -10,6 +10,10 @@ TEST_SRCS(
     test_paths_lookup.py
 )
 
+RECURSE(
+    mon_endpoints
+)
+
 SPLIT_FACTOR(20)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)

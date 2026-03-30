@@ -3,14 +3,13 @@
 #include "direct_block_group.h"
 #include "erase_request.h"
 #include "flush_request.h"
-#include "partition_direct_service.h"
+#include "vchunk_config.h"
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk_config.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
@@ -44,8 +43,6 @@ public:
         NWilson::TTraceId traceId);
 
 private:
-    NWilson::TTraceId SpanTrace();
-
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
 
     void DoStart();
@@ -85,7 +82,6 @@ private:
     const TDuration TraceSamplePeriod;
 
     TBlocksDirtyMap BlocksDirtyMap;
-    std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     bool DirtyMapRestored = false;
 };
 

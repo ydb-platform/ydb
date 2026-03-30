@@ -28,7 +28,7 @@ public:
         IDirectBlockGroupPtr directBlockGroup,
         TRoute route,
         TFlushHint hint,
-        NWilson::TTraceId traceId);
+        NWilson::TSpan span);
 
     ~TFlushRequestExecutor();
 
@@ -44,7 +44,7 @@ private:
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const NWilson::TTraceId TraceId;
+    const NWilson::TSpan Span;
     const TRoute Route;
     const TFlushHint Hint;
 

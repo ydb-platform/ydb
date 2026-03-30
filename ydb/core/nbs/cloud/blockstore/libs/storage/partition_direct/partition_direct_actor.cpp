@@ -427,6 +427,7 @@ void TPartitionActor::Start(
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
             fastPathService,
+            fastPathService,
             options);
     }
 

@@ -688,6 +688,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
+                runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
             }
 
             TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(

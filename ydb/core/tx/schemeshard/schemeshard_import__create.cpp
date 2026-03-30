@@ -432,7 +432,7 @@ private:
             if (!importInfo.IsExcludedFromImport(dstPath)) {
                 auto& item = importInfo.Items.emplace_back(dstPath);
                 item.SrcPrefix = NBackup::NormalizeExportPrefix(GetItemSource(settings, itemIdx));
-                item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
+                item.SrcPath = NBackup::NormalizeItemPath(GetItemSourcePath(settings, itemIdx));
             }
         }
 

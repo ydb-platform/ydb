@@ -23,6 +23,7 @@
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/intrinsics.h>
 
+#include <util/string/cast.h>
 #include <util/system/spinlock.h>
 
 #include <algorithm>
@@ -166,8 +167,9 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
     InMemoryMetrics.Pools.resize(Pools.size());
     for (size_t poolIdx = 0; poolIdx < Pools.size(); ++poolIdx) {
         const auto& pool = *Pools[poolIdx];
-        std::array<TLabel, 1> labels{{
+        std::array<TLabel, 2> labels{{
             TLabel{.Name = "pool", .Value = pool.Pool->GetName()},
+            TLabel{.Name = "pool_id", .Value = ToString(pool.Pool->PoolId)},
         }};
         auto& writers = InMemoryMetrics.Pools[poolIdx];
         writers.AvgUsedCpu = registry->CreateLine<TRawLineFrontend<float>>(PoolAvgUsedCpuMetric, labels);

@@ -61,7 +61,7 @@ class MetricsPublisher:
     - 'both': both send and save
 
     Events sent to the server are buffered and flushed periodically
-    (every flush_interval seconds) using the timeseries field to avoid
+    (every _FLUSH_INTERVAL seconds) using the timeseries field to avoid
     overwriting values with identical timestamps.
 
     Timestamps are rounded down to the nearest _TS_GRID_SECONDS boundary
@@ -70,12 +70,11 @@ class MetricsPublisher:
     """
 
     _FLUSH_INTERVAL = 360  # seconds
-    _TS_GRID_SECONDS = 15  # timestamp rounding grid (matches server aggregation window)
+    _TS_GRID_SECONDS = 15  # timestamp rounding grid (matches monium aggregation window)
 
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",
-                 server_url: str = "http://localhost:3124/write",
-                 flush_interval: float = None):
+                 server_url: str = "http://localhost:3124/write"):
         """
         Initialize publisher.
 
@@ -83,7 +82,6 @@ class MetricsPublisher:
             mode: Operating mode ('send', 'save', 'both' or None)
             file_path: Path to file for saving metrics
             server_url: Server URL for sending metrics
-            flush_interval: Interval in seconds between flushes (default: 5)
         """
         self.mode = mode
         self.file_path = file_path
@@ -91,23 +89,24 @@ class MetricsPublisher:
         self.save_lock = threading.Lock()
 
         # Buffer for accumulating events before sending to server.
-        # Maps label-key -> {"labels": dict, "timeseries": [(ts, value), ...]}
+        # Maps label-key -> {"labels": dict, "timeseries": {ts: count, ...}}
+        # Events are aggregated at write time: each _buffer_event() call
+        # increments the counter for the corresponding (label-key, ts) pair.
         self._buffer_lock = threading.Lock()
         self._buffer: dict[tuple, dict] = {}
 
-        self._flush_interval = flush_interval if flush_interval is not None else self._FLUSH_INTERVAL
         self._flush_timer: threading.Timer | None = None
         self._stopped = False
 
         if self.mode in ['send', 'both']:
             self._schedule_flush()
-            atexit.register(self.flush)
+            atexit.register(self.stop)
 
     def _schedule_flush(self):
         """Schedules the next periodic flush."""
         if self._stopped:
             return
-        self._flush_timer = threading.Timer(self._flush_interval, self._periodic_flush)
+        self._flush_timer = threading.Timer(self._FLUSH_INTERVAL, self._periodic_flush)
         self._flush_timer.daemon = True
         self._flush_timer.start()
 
@@ -164,7 +163,7 @@ class MetricsPublisher:
             "kind": event.kind,
         }
 
-        if hasattr(event, 'operation') and event.operation:
+        if event.operation:
             labels['operation'] = event.operation
 
         return labels
@@ -176,13 +175,13 @@ class MetricsPublisher:
 
     def _buffer_event(self, event: ErrorEvent):
         """
-        Adds an event to the internal buffer.
+        Adds an event to the internal buffer with immediate aggregation.
 
-        Events are grouped by their labels. Each event records its
-        timestamp (rounded down to the nearest _TS_GRID_SECONDS boundary)
-        so that the timeseries field can be used when flushing.
-        Rounding aligns with the server's aggregation window to ensure
-        all events within the same window are summed into one point.
+        Events are grouped by their labels and aggregated by timestamp
+        at write time. The timestamp is rounded down to the nearest
+        _TS_GRID_SECONDS boundary to align with the server's aggregation
+        window, ensuring all events within the same window are summed
+        into one point.
         """
         labels = self._make_labels(event)
         key = self._labels_key(labels)
@@ -193,9 +192,10 @@ class MetricsPublisher:
             if key not in self._buffer:
                 self._buffer[key] = {
                     "labels": labels,
-                    "timeseries": [],
+                    "timeseries": {},
                 }
-            self._buffer[key]["timeseries"].append((ts, 1))
+            ts_map = self._buffer[key]["timeseries"]
+            ts_map[ts] = ts_map.get(ts, 0) + 1
 
     def publish(self, event: ErrorEvent):
         """
@@ -258,7 +258,7 @@ class MetricsPublisher:
             "stress_util_name": event.stress_util_name,
         }
 
-        if hasattr(event, 'operation') and event.operation:
+        if event.operation:
             event_data['operation'] = event.operation
 
         with self.save_lock:
@@ -266,58 +266,39 @@ class MetricsPublisher:
                 json.dump(event_data, f)
                 f.write('\n')
 
-    def _aggregate_timeseries(self, timeseries: list[tuple[int, int]]) -> list[dict]:
-        """
-        Aggregates timeseries entries by timestamp.
-
-        Multiple events with the same timestamp are summed into a single
-        timeseries point. The result is sorted by timestamp ascending.
-
-        Args:
-            timeseries: List of (ts, value) tuples
-
-        Returns:
-            List of {"ts": int, "value": int} dicts sorted by ts
-        """
-        by_ts: dict[int, int] = {}
-        for ts, value in timeseries:
-            by_ts[ts] = by_ts.get(ts, 0) + value
-
-        return [{"ts": ts, "value": count}
-                for ts, count in sorted(by_ts.items())]
-
     def _send_buffer_to_server(self, buffer: dict[tuple, dict]):
         """
         Sends buffered events to the metrics server using the timeseries field.
 
         Each metric group (unique label set) is sent with a timeseries array
-        containing all accumulated timestamp+value pairs, aggregated per second.
+        containing pre-aggregated timestamp+value pairs (already summed at
+        buffer time).
 
         Args:
             buffer: Snapshot of the internal buffer to send
         """
         metrics = []
         for metric_data in buffer.values():
-            aggregated = self._aggregate_timeseries(metric_data["timeseries"])
+            # timeseries is already a {ts: count} dict, aggregated at write time
+            ts_map = metric_data["timeseries"]
+            timeseries = [{"ts": ts, "value": count}
+                          for ts, count in sorted(ts_map.items())]
 
             # Always use timeseries format to avoid overwriting values
             # with identical timestamps across consecutive flushes.
             # The timeseries field is mutually exclusive with ts/value.
             metrics.append({
                 "labels": metric_data["labels"],
-                "timeseries": aggregated,
+                "timeseries": timeseries,
             })
 
         payload = {"metrics": metrics}
         headers = {'Content-Type': 'application/json'}
 
-        print(f"Sending metrics payload to {self.server_url}: {json.dumps(payload)}")
-
         try:
             response = requests.post(self.server_url, json=payload,
                                      headers=headers, timeout=5)
             response.raise_for_status()
-            print(f"Metrics payload sent successfully (status {response.status_code})")
         except requests.exceptions.ConnectionError:
             print(f"Error: Could not connect to {self.server_url}. "
                   f"Is the server running?", file=sys.stderr)
@@ -341,7 +322,7 @@ class MetricsPublisher:
                         "stress_util_name": event.stress_util_name,
                     }
 
-                    if hasattr(event, 'operation') and event.operation:
+                    if event.operation:
                         event_data['operation'] = event.operation
 
                     json.dump(event_data, f)

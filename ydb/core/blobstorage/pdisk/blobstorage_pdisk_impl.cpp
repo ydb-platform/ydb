@@ -161,7 +161,7 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                 (formatSector + FormatSectorSize - sizeof(TDataSectorFooter));
 
             cypher.StartMessage(footer->Nonce);
-            alignas(16) TDiskFormat diskFormat;
+            alignas(16) TDiskFormat diskFormat = {};
             diskFormat.SetEncryptFormat(Cfg->EnableFormatAndMetadataEncryption);
             cypher.Encrypt(&diskFormat, formatSector, sizeof(TDiskFormat));
 
@@ -1704,6 +1704,10 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         double pdiskUsage = Keeper.GetPDiskUsage();
         pDiskMetrics.SetPDiskUsage(pdiskUsage);
         pdiskState.SetPDiskUsage(pdiskUsage);
+
+        auto pdiskCapacityAlert = Keeper.GetPDiskCapacityAlert();
+        pDiskMetrics.SetPDiskCapacityAlert(pdiskCapacityAlert);
+        pdiskState.SetPDiskCapacityAlert(pdiskCapacityAlert);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);

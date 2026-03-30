@@ -85,9 +85,33 @@ ELocation TranslatePBufferToDDisk(ELocation location);
 class TLocationMask
 {
 public:
+    class TIterator
+    {
+        ELocation Location = ELocation::Unknown;
+        const TLocationMask* const Mask = nullptr;
+
+    public:
+        TIterator() = default;
+        explicit TIterator(const TLocationMask& mask);
+
+        bool operator==(const TIterator& other) const;
+        bool operator!=(const TIterator& other) const;
+
+        TIterator& operator++();
+        ELocation operator*() const;
+        ELocation operator->() const;
+    };
+
     TLocationMask() = default;
 
     static TLocationMask MakeEmpty();
+
+    static TLocationMask Make(
+        bool primary0,
+        bool primary1,
+        bool primary2,
+        bool handOff0,
+        bool handOff1);
 
     static TLocationMask MakePBuffer(
         bool pBuffer0,
@@ -103,9 +127,17 @@ public:
         bool handOff0,
         bool handOff1);
 
-    static TLocationMask MakePrimaryDDisk();
-
+    static TLocationMask MakePrimary();
+    static TLocationMask MakePrimaryDDisks();
     static TLocationMask MakePrimaryPBuffers();
+    static TLocationMask MakeAllDDisks();
+    static TLocationMask MakeAllPBuffers();
+
+    [[nodiscard]] TLocationMask Exclude(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask Include(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask LogicalAnd(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask PBuffers() const;
+    [[nodiscard]] TLocationMask DDisks() const;
 
     [[nodiscard]] bool Get(ELocation location) const;
 
@@ -121,6 +153,10 @@ public:
     [[nodiscard]] std::optional<ELocation> GetLocation(size_t tryNumber) const;
 
     bool operator==(const TLocationMask& other) const;
+
+    [[nodiscard]] ELocation FirstLocation() const;
+    [[nodiscard]] TIterator begin() const;
+    [[nodiscard]] TIterator end() const;
 
     [[nodiscard]] TString Print() const;
 

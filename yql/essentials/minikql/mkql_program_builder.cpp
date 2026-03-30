@@ -1646,12 +1646,19 @@ TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode stream, ui32 bitmapInde
 }
 
 TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode comp) {
-    if (comp.GetStaticType()->IsStream()) {
-        ValidateBlockStreamType(comp.GetStaticType());
+    const auto inputType = comp.GetStaticType();
+    if constexpr (RuntimeVersion < 74U) {
+        if (inputType->IsStream()) {
+            ValidateBlockStreamType(inputType);
+        } else {
+            ValidateBlockFlowType(inputType);
+        }
     } else {
-        ValidateBlockFlowType(comp.GetStaticType());
+        MKQL_ENSURE(inputType->IsStream(), "Expected stream as input type");
+        ValidateBlockStreamType(inputType);
     }
-    TCallableBuilder callableBuilder(Env_, __func__, comp.GetStaticType());
+
+    TCallableBuilder callableBuilder(Env_, __func__, inputType);
     callableBuilder.Add(comp);
     return TRuntimeNode(callableBuilder.Build(), false);
 }

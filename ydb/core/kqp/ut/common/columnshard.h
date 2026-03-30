@@ -22,6 +22,7 @@ class TColumnSchema {
         YDB_ACCESSOR_DEF(TString, Name);
         YDB_ACCESSOR_DEF(NScheme::TTypeInfo, TypeInfo);
         YDB_FLAG_ACCESSOR(Nullable, true);
+        YDB_FLAG_ACCESSOR(DictionaryEncoding, false);
 
         std::optional<std::map<TString, TString>> ColumnCompression;
 

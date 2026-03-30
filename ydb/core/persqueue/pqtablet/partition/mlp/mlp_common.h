@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NPQ::NMLP {

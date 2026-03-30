@@ -5,6 +5,8 @@
 #include "context.h"
 #include "storage.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+
 #include <library/cpp/threading/future/future.h>
 
 #include <functional>
@@ -12,6 +14,22 @@
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TTestPartitionDirectService final: public IPartitionDirectService
+{
+public:
+    // IPartitionDirectService implementation
+    TVolumeConfigPtr GetVolumeConfig() const override
+    {
+        return nullptr;
+    }
+
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override
+    {
+        Y_UNUSED(name);
+        return NWilson::TSpan();
+    }
+};
 
 struct TTestStorage: public IStorage
 {

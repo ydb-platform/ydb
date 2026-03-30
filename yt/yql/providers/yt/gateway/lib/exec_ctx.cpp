@@ -52,6 +52,7 @@ TExecContextBaseSimple::TExecContextBaseSimple(
     , Cluster_(cluster)
     , BaseSession_(session)
     , NeedToTransformTmpTablePaths_(services->NeedToTransformTmpTablePaths)
+    , CheckSpecDoesntUseNativeYtTypes_(services->CheckSpecDoesntUseNativeYtTypes)
 {
     if (Clusters_) {
         YtServer_ = Clusters_->GetServer(Cluster_);
@@ -296,15 +297,15 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
 }
 
 TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const {
-    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly, nativeTypeCompatibilityFlags, intermediateInput);
+    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, intermediateInput);
 }
 
 TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly, nativeTypeCompatibilityFlags, false);
+    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
 }
 
 TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly, nativeTypeCompatibilityFlags, false);
+    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
 }
 
 template <class TTableType>

@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 
@@ -13,31 +14,36 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TFastPathService
     : public IStorage
+    , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const TString DiskId;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
+    std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    TVolumeConfigPtr VolumeConfig;
 
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
-        ui32 generation,
+        const TString& diskId,
         ui64 blockCount,
-        ui64 blockSize,
+        ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         const NProto::TStorageServiceConfig& storageConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;
 
+    // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request) override;
@@ -52,11 +58,12 @@ public:
 
     void ReportIOError() override;
 
-private:
-    NWilson::TTraceId SpanTrace();
+    // IPartitionDirectService implementation
+    TVolumeConfigPtr GetVolumeConfig() const override;
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
 
-    static size_t GetRegionIndex(ui64 blockIndex);
-    static size_t GetRegionOffset(ui64 blockIndex);
+private:
+    ui64 GenerateSequenceNumber();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

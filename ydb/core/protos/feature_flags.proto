@@ -284,5 +284,6 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
-    optional bool EnableSnapshotsLocking = 249 [default = true];
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableSnapshotsLocking = 250 [default = true];
 }

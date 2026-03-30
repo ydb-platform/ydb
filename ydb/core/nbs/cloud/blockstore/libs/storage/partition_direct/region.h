@@ -15,6 +15,7 @@ class TRegion
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
@@ -33,10 +34,6 @@ public:
 private:
     NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
-    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

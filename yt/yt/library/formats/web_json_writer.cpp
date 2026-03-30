@@ -523,10 +523,10 @@ private:
     const TNameTablePtr NameTable_;
     const TNameTableReader NameTableReader_;
 
-    std::unique_ptr<IOutputStream> UnderlyingOutput_;
+    const std::unique_ptr<IOutputStream> UnderlyingOutput_;
     TCountingOutput Output_;
 
-    std::unique_ptr<IJsonWriter> ResponseBuilder_;
+    const std::unique_ptr<IJsonWriter> ResponseBuilder_;
 
     TWebJsonColumnFilter ColumnFilter_;
     THashMap<ui16, TString> AllColumnIdToName_;
@@ -560,6 +560,8 @@ TWriterForWebJson<TValueWriter>::TWriterForWebJson(
     : Config_(std::move(config))
     , NameTable_(std::move(nameTable))
     , NameTableReader_(NameTable_)
+    // XXX(babenko): this leads to unexpected context switches and must be
+    // completely reworked.
     , UnderlyingOutput_(CreateBufferedSyncAdapter(
         std::move(output),
         EWaitForStrategy::WaitFor,

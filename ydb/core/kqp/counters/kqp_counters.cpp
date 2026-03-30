@@ -796,6 +796,7 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WarmupQueriesFetched = KqpGroup->GetCounter("Warmup/QueriesFetched", false);
     WarmupQueriesCompiled = KqpGroup->GetCounter("Warmup/QueriesCompiled", false);
     WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
+    WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
 
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);

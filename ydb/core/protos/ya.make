@@ -125,6 +125,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqevents_global.proto
     profiler.proto
     query_stats.proto
     recoveryshard_config.proto

@@ -295,6 +295,16 @@ typedef void(aws_mqtt5_publish_completion_fn)(
     void *complete_ctx);
 
 /**
+ * Signature of callback invoked when a manual PUBACK operation completes.
+ *
+ * @param puback_result result of the PUBACK operation
+ * @param completion_user_data user data passed in with the completion options
+ */
+typedef void(aws_mqtt5_manual_puback_completion_fn)(
+    enum aws_mqtt5_manual_puback_result puback_result,
+    void *completion_user_data);
+
+/**
  * Signature of callback to invoke on Subscribe success/failure.
  */
 typedef void(aws_mqtt5_subscribe_completion_fn)(
@@ -343,6 +353,14 @@ struct aws_mqtt5_publish_completion_options {
 
     /** Overrides the client's ack timeout with this value, for this operation only */
     uint32_t ack_timeout_seconds_override;
+};
+
+/**
+ * Completion options for the manual puback operation
+ */
+struct aws_mqtt5_manual_puback_completion_options {
+    aws_mqtt5_manual_puback_completion_fn *completion_callback;
+    void *completion_user_data;
 };
 
 /**
@@ -737,6 +755,35 @@ int aws_mqtt5_client_publish(
     struct aws_mqtt5_client *client,
     const struct aws_mqtt5_packet_publish_view *publish_options,
     const struct aws_mqtt5_publish_completion_options *completion_options);
+
+/**
+ * Takes manual control of PUBACK for the given PUBLISH packet.
+ *
+ * This MUST only be called from within the publish received callback. A return value of 0 indicates an
+ * invalid control id.
+ *
+ * @param client mqtt5 client that received the PUBLISH packet to take manual PUBACK control from.
+ * @param publish_view the view of the PUBLISH packet that PUBACK control is taken from.
+ * @return puback_control_id of the PUBLISH packet. This can be used to schedule a PUBACK for the PUBLISH packet
+ * when used with the aws_mqtt5_client_invoke_puback function call.
+ */
+AWS_MQTT_API uint64_t aws_mqtt5_client_acquire_puback(
+    struct aws_mqtt5_client *client,
+    const struct aws_mqtt5_packet_publish_view *publish_view);
+
+/**
+ * Send PUBACK for provided control id. Callback in completion_options will be invoked with an
+ * aws_mqtt5_manual_puback_result once a PUBACK operation has been completed.
+ *
+ * @param client mqtt5 client to queue a puback for
+ * @param puback_control_id Control ID of aws_mqtt5_manual_puback_entry to send to broker/server
+ * @return success/failure of starting the manual PUBACK operation.
+ */
+AWS_MQTT_API
+int aws_mqtt5_client_invoke_puback(
+    struct aws_mqtt5_client *client,
+    uint64_t puback_control_id,
+    const struct aws_mqtt5_manual_puback_completion_options *completion_options);
 
 /**
  * Queues a Subscribe operation in an mqtt5 client

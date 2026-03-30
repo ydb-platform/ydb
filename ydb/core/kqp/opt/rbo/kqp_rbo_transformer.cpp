@@ -389,6 +389,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> physicalStageRules;
     physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
+    physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
 
     // CBO stages.

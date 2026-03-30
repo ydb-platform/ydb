@@ -4,6 +4,9 @@
 namespace NKikimr::NKqp {
 namespace {
 
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[Classifier] " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[Classifier] " << stream)
+
 bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
     // Check anonymous user
     if (!ctx.UserToken) {
@@ -136,7 +139,7 @@ void TWmQueryClassifier::PreCompileClassify() {
 
     // If no classification use default pool
     if (!Configs) {
-        ResolveToDefault();
+        TryResolve(DEFAULT_POOL_ID, PreClassifyResult, &MissedPoolIds);
         return;
     }
 
@@ -158,7 +161,7 @@ void TWmQueryClassifier::PreCompileClassify() {
     }
 
     // No suitable classification use default pool
-    ResolveToDefault();
+    TryResolve(DEFAULT_POOL_ID, PreClassifyResult, &MissedPoolIds);
 }
 
 IWmQueryClassifier::TPostClassifyResult TWmQueryClassifier::PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const {
@@ -196,7 +199,7 @@ void TWmQueryClassifier::Reject(const Ydb::StatusIds::StatusCode code, const TSt
 }
 
 void TWmQueryClassifier::Resolve(const TString& poolId) {
-    PreClassifyResult = TResolvedPoolId{poolId};
+    TryResolve(poolId, PreClassifyResult);
 }
 
 void TWmQueryClassifier::ResolveToDefault() {

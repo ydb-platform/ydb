@@ -752,6 +752,11 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     const ui64 sizeToReserve = policy->GetReserveMemorySize(
         result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
 
+    // Notify test hooks so tests can verify that per-page reservations are bounded.
+    if (IsStreamingMode() && HasEarlyPages()) {
+        NYDBTest::TControllers::GetColumnShardController()->OnStreamingMemoryReserved(sizeToReserve);
+    }
+
     auto allocation = std::make_shared<NCommon::TAllocateMemoryStep::TFetchingStepAllocation>(
         source, sizeToReserve, GetExecutionContext().GetCursorStep(), policy->GetStage(), false);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));

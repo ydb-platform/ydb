@@ -130,6 +130,173 @@ public:
     }
 };
 
+// Tracks per-page memory reservation sizes from DoStartReserveMemory (NSSA path).
+// Bug #2: without the page-range filter, each page reserves memory for the entire
+// portion (N × page_size), so reservations grow linearly with page number.
+class TMemoryReservationTrackingController: public TDefaultTestsController {
+private:
+    mutable TAdaptiveLock Lock;
+    std::vector<ui64> ReservationsPerPage;
+    TAtomicCounter TotalPagesCreated;
+
+public:
+    virtual void OnPageCreated(const ui64 /*pagesInFlight*/) override {
+        TotalPagesCreated.Inc();
+    }
+
+    virtual void OnStreamingMemoryReserved(const ui64 sizeToReserve) override {
+        TGuard<TAdaptiveLock> g(Lock);
+        ReservationsPerPage.push_back(sizeToReserve);
+    }
+
+    ui64 GetTotalPagesCreated() const {
+        return (ui64)TotalPagesCreated.Val();
+    }
+
+    std::vector<ui64> GetReservationsPerPage() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        return ReservationsPerPage;
+    }
+
+    ui64 GetMaxReservation() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        if (ReservationsPerPage.empty()) {
+            return 0;
+        }
+        return *std::max_element(ReservationsPerPage.begin(), ReservationsPerPage.end());
+    }
+
+    // Returns true if reservations are monotonically increasing (indicating the bug).
+    bool IsReservationMonotonicallyIncreasing() const {
+        TGuard<TAdaptiveLock> g(Lock);
+        if (ReservationsPerPage.size() < 3) {
+            return false;
+        }
+        ui32 increasingRuns = 0;
+        for (size_t i = 1; i < ReservationsPerPage.size(); ++i) {
+            if (ReservationsPerPage[i] > ReservationsPerPage[i - 1]) {
+                ++increasingRuns;
+            }
+        }
+        return increasingRuns > ReservationsPerPage.size() / 2;
+    }
+};
+
+void TestMemoryReservationPerPage() {
+    // This test verifies that DoStartReserveMemory (NSSA path) only reserves memory
+    // for the current streaming page's chunks, not for the entire portion.
+    //
+    // Bug #2: without the page-range filter in DoStartReserveMemory, each page's
+    // reservation covers all N pages worth of chunks, so the reservation grows
+    // linearly: page 1 → 1×size, page 2 → 2×size, ..., page N → N×size.
+    //
+    // After the fix, each page should reserve approximately the same amount
+    // (1 page worth of data), bounded by a small constant factor.
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName("SIMPLE");
+
+    auto* streamingConfig = runtime.GetAppData(0).ColumnShardConfig.MutableStreamingConfig();
+    streamingConfig->SetEnabled(true);
+    streamingConfig->SetMaxPagesInFlight(2);
+
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TMemoryReservationTrackingController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+    // Force non-in-memory reading so streaming pages are created.
+    csControllerGuard->SetOverrideMemoryLimitForPortionReading(1);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    // Write enough data to produce many streaming pages.
+    const ui32 numRecords = 10000;
+    std::pair<ui64, ui64> portion = {0, numRecords};
+
+    std::vector<ui64> writeIds;
+    TString data = MakeTestBlob(portion, table.Schema);
+    UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, table.Schema, true, &writeIds));
+
+    planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+    reader.SetReplyColumnIds(table.GetColumnIds({"timestamp", "message"}));
+
+    auto rb = reader.ReadAll();
+    UNIT_ASSERT(reader.IsCorrectlyFinished());
+    UNIT_ASSERT(rb);
+    UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), numRecords);
+
+    const ui64 totalPagesCreated = csControllerGuard->GetTotalPagesCreated();
+    const auto reservations = csControllerGuard->GetReservationsPerPage();
+    const ui64 maxReservation = csControllerGuard->GetMaxReservation();
+    const bool isMonotonicallyIncreasing = csControllerGuard->IsReservationMonotonicallyIncreasing();
+
+    Cerr << "MemoryReservationPerPage: totalPagesCreated=" << totalPagesCreated
+         << ", reservationsCount=" << reservations.size()
+         << ", maxReservation=" << maxReservation
+         << ", isMonotonicallyIncreasing=" << isMonotonicallyIncreasing
+         << ", reservationsPerPage=[";
+    for (size_t i = 0; i < reservations.size(); ++i) {
+        if (i > 0) Cerr << ",";
+        Cerr << reservations[i];
+        if (i >= 20) {
+            Cerr << "...(" << reservations.size() - i - 1 << " more)";
+            break;
+        }
+    }
+    Cerr << "]" << Endl;
+
+    // The NSSA path (DoStartReserveMemory) is only triggered when the program uses
+    // the NSSA graph. If no reservations were recorded, the old path was used instead
+    // and this test is a no-op (the old path is covered by TestResourceGuardsAccumulation).
+    if (reservations.size() < 2) {
+        Cerr << "MemoryReservationPerPage: NSSA path not triggered, skipping assertions." << Endl;
+        return;
+    }
+
+    // Streaming must have produced multiple pages for this test to be meaningful.
+    UNIT_ASSERT_GT(totalPagesCreated, 3u);
+
+    // BUG DETECTION: If reservations are monotonically increasing, Bug #2 is present.
+    // With the bug: page K reserves K × page_size bytes (entire portion up to page K).
+    // After the fix: each page reserves approximately 1 × page_size bytes.
+    //
+    // We use a soft check: the max reservation should not exceed 3× the first page's
+    // reservation. With the bug, it would be N × firstPageReservation.
+    if (reservations[0] > 0) {
+        const ui64 firstPageReservation = reservations[0];
+        const ui64 threshold = firstPageReservation * 3;
+        Cerr << "MemoryReservationPerPage: firstPageReservation=" << firstPageReservation
+             << ", maxReservation=" << maxReservation
+             << ", threshold=" << threshold
+             << ", BUG_DETECTED=" << (maxReservation > threshold ? "YES" : "NO") << Endl;
+
+        UNIT_ASSERT_C(maxReservation <= threshold,
+            "DoStartReserveMemory is reserving memory for the entire portion instead of the current page! "
+            "maxReservation=" << maxReservation << " > threshold=" << threshold <<
+            " (firstPageReservation=" << firstPageReservation << "). "
+            "This indicates the page-range filter is missing in DoStartReserveMemory().");
+    }
+
+    // Additional check: reservations should NOT be monotonically increasing.
+    UNIT_ASSERT_C(!isMonotonicallyIncreasing,
+        "Memory reservations are monotonically increasing across streaming pages, "
+        "confirming the whole-portion over-accounting bug in DoStartReserveMemory().");
+}
+
 void TestStreamingReadWithLargePortion() {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1869,6 +2036,10 @@ Y_UNIT_TEST_SUITE(StreamingRead) {
 
     Y_UNIT_TEST(ResourceGuardsAccumulation) {
         TestResourceGuardsAccumulation();
+    }
+
+    Y_UNIT_TEST(MemoryReservationPerPage) {
+        TestMemoryReservationPerPage();
     }
 }
 

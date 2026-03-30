@@ -840,17 +840,31 @@ namespace NKikimr {
                     const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
                     const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
 
-                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "myGeneration# " << myGeneration
+                    Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
+                        << " item.GroupId# " << item.GroupId
+                        << " myGeneration# " << myGeneration
                         << " RacingGeneration# " << msg->RacingGeneration
-                        << " Info.Generation# " << request->Info->GroupGeneration); // too often restarts do not make sense
+                        << " Info.Generation# " << request->Info->GroupGeneration
+                        << " Type# " << TypeName<TEvent>()
+                        << " RequestId# " << request->RequestId); // too often restarts do not make sense
 
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
-                        // our generation is higher than the recipient's; we have to route this message through node warden
-                        // to ensure proxy's configuration gets in place
-                        SendToBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(), handle->Cookie,
-                            std::move(handle->TraceId));
+                        std::unique_ptr<IEventHandle> h(CreateEventForBSProxy(handle->Sender, GroupId,
+                            handle->ReleaseBase().Release(), handle->Cookie, std::move(handle->TraceId)));
+                        if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
+                            // static group configuration is updated a bit differently, so we can't expect for instant update;
+                            // here we introduce a backoff timer
+                            constexpr ui32 maxCounter = 20;
+                            constexpr double maxFactor = 6.0 / maxCounter;
+                            auto timeout = TDuration::MicroSeconds(pow(10, Min(common->RestartCounter - 1, maxCounter) * maxFactor));
+                            TActivationContext::Schedule(timeout, h.release());
+                        } else {
+                            // our generation is higher than the recipient's; we have to route this message through node warden
+                            // to ensure proxy's configuration gets in place
+                            TActivationContext::Send(h.release());
+                        }
                     } else {
                         // we can retry this message (obviously, we HAD request executed at incorrect generation, but
                         // now generation is correct)

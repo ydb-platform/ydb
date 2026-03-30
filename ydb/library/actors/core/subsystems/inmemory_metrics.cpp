@@ -177,6 +177,7 @@ namespace NActors {
             , ChunkCount(Config.ChunkSizeBytes ? Config.MemoryBytes / Config.ChunkSizeBytes : 0)
             , MaxLines(Config.MaxLines ? Config.MaxLines : ChunkCount / 2)
             , CommonLabels(Config.CommonLabels)
+            , AllowedMetricPrefixes(Config.AllowedMetricPrefixes)
         {
             TimeAnchor.BaseCycles = GetCycleCountFast();
             TimeAnchor.BaseWallClock = TInstant::Now();
@@ -206,6 +207,7 @@ namespace NActors {
         THashMap<ui32, TLineReader*> LinesById;
         mutable TRWMutex CommonLabelsLock;
         TVector<TLabel> CommonLabels;
+        TVector<TString> AllowedMetricPrefixes;
 
         mutable TMutex VictimLock;
         TVector<std::unique_ptr<TChunk>> Storage;
@@ -342,6 +344,10 @@ namespace NActors {
     }
 
     TLineWriterState* TInMemoryMetricsRegistry::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
+        if (!IsMetricAllowed(name)) {
+            return nullptr;
+        }
+
         auto key = MakeLineKey(name, labels);
 
         TGuard<TMutex> guard(Impl->RegistryLock);
@@ -364,6 +370,19 @@ namespace NActors {
         linePtr->Writer = std::make_unique<TLineWriterState>();
         linePtr->Writer->Reader = linePtr;
         return linePtr->Writer.get();
+    }
+
+    bool TInMemoryMetricsRegistry::IsMetricAllowed(TStringBuf name) const noexcept {
+        if (Impl->AllowedMetricPrefixes.empty()) {
+            return true;
+        }
+
+        for (const auto& prefix : Impl->AllowedMetricPrefixes) {
+            if (name.StartsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void TInMemoryMetricsRegistry::SetCommonLabels(std::span<const TLabel> labels) {

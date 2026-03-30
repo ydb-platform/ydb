@@ -93,6 +93,7 @@ namespace NActors {
         void ReturnChunkToFree(TChunk* chunk);
         void ReleasePinnedChunk(TChunk* chunk);
         void MaybeDropClosedLine(TLineReader* line);
+        bool IsMetricAllowed(TStringBuf name) const noexcept;
 
     private:
         std::unique_ptr<TImpl> Impl;

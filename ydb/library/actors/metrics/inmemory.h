@@ -38,6 +38,7 @@ namespace NActors {
         ui32 ChunkSizeBytes = 4096;
         ui32 MaxLines = 0;
         TVector<TLabel> CommonLabels;
+        TVector<TString> AllowedMetricPrefixes;
     };
 
     struct TLineKey {

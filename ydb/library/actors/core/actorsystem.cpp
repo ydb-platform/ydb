@@ -30,7 +30,11 @@
 namespace NActors {
 
     namespace {
-        constexpr ui64 DefaultInMemoryMetricsMemoryBytes = 4_MB;
+        constexpr ui64 DefaultInMemoryMetricsMemoryBytes = 512_KB;
+        const TVector<TString> DefaultInMemoryMetricPrefixes = {
+            "harmonizer.",
+            "inmemory_metrics.",
+        };
 
         template<class TCallback>
         void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
@@ -176,6 +180,7 @@ namespace NActors {
         if (!GetSubSystem<TInMemoryMetricsRegistry>()) {
             RegisterSubSystem(MakeInMemoryMetricsRegistry({
                 .MemoryBytes = DefaultInMemoryMetricsMemoryBytes,
+                .AllowedMetricPrefixes = DefaultInMemoryMetricPrefixes,
             }));
         }
     }

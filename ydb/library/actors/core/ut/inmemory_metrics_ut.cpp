@@ -102,6 +102,29 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT_EQUAL(GetInMemoryMetrics(), nullptr);
     }
 
+    Y_UNIT_TEST(AllowedMetricPrefixesFilterLineCreation) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+            .AllowedMetricPrefixes = {
+                "harmonizer.",
+                "inmemory_metrics.",
+            },
+        });
+
+        auto blocked = registry.CreateLine("line", NoLabels());
+        auto allowed = registry.CreateLine("harmonizer.budget", NoLabels());
+
+        UNIT_ASSERT(!blocked);
+        UNIT_ASSERT(allowed);
+        UNIT_ASSERT(allowed.Append(1));
+
+        const auto lines = registry.Snapshot().Lines();
+        UNIT_ASSERT(!FindLineByName(lines, "line"));
+        UNIT_ASSERT(FindLineByName(lines, "harmonizer.budget"));
+    }
+
     Y_UNIT_TEST(AppendAndSnapshot) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,

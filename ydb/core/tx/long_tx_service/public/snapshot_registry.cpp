@@ -19,14 +19,6 @@ namespace {
 
         ~TImmutableSnapshotRegistry() override = default;
         
-        bool QuerySnapshots(
-            const NKikimr::TTableId& tableId,
-            const TRowVersion& begin,
-            const TRowVersion& end) const override
-        {
-            return QuerySnapshotsImpl(tableId, begin, end) || QuerySnapshotsImpl(NKikimr::TTableId{}, begin, end);
-        }
-        
         bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const override {
             if (version >= SnapshotBorder) {
                 return true;
@@ -34,29 +26,7 @@ namespace {
             return HasSnapshotImpl(tableId, version) || HasSnapshotImpl(NKikimr::TTableId{}, version);
         }
         
-    private:
-        bool QuerySnapshotsImpl(
-            const NKikimr::TTableId& tableId,
-            const TRowVersion& begin,
-            const TRowVersion& end) const
-        {
-            if (begin >= end) {
-                return false;
-            }
-            if (begin >= SnapshotBorder) {
-                return true;
-            }
-
-            auto snapshotsIter = Snapshots.find(tableId);
-            if (snapshotsIter == Snapshots.end()) {
-                return false;
-            }
-            
-            const auto& versions = snapshotsIter->second;        
-            const auto versionsIter = std::lower_bound(versions.begin(), versions.end(), begin);
-            return versionsIter != versions.end() && begin <= *versionsIter && *versionsIter < end;
-        }
-        
+    private:        
         bool HasSnapshotImpl(const NKikimr::TTableId& tableId, const TRowVersion& version) const {
             auto snapshotsIter = Snapshots.find(tableId);
             if (snapshotsIter == Snapshots.end()) {

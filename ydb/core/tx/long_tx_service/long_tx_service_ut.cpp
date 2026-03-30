@@ -412,18 +412,6 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->HasSnapshot(otherTable, snapshot) == !hasTable);
         }
 
-        for (size_t node = 0; node < nodesCount; ++node) {
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot, snapshot));
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev(), snapshot));
-
-            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot, snapshot.Next()));
-            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev(), snapshot.Next()));
-            UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev().Prev(), snapshot.Next().Next()));
-
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Next(), snapshot.Next().Next()));
-            UNIT_ASSERT(!runtime.GetAppData(node).SnapshotRegistryHolder->Get()->QuerySnapshots(table, snapshot.Prev().Prev(), snapshot.Prev()));
-        }
-
         handle.Reset();
 
         SimulateSleep(runtime, TDuration::Minutes(3));

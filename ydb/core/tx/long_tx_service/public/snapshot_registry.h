@@ -14,11 +14,6 @@ class IImmutableSnapshotRegistry {
 public:
     virtual ~IImmutableSnapshotRegistry() = default;
 
-    virtual bool QuerySnapshots(
-        const NKikimr::TTableId& tableId,
-        const TRowVersion& begin,
-        const TRowVersion& end) const = 0;
-
     virtual bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const = 0;
 };
 

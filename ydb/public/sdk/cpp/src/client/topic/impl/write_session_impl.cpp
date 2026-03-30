@@ -1183,7 +1183,7 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     uint64_t size = 0;
     uint64_t compressedSize = 0;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
-        auto memoryUsage = OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
+        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(SentPackedMessage.front().Data.size()));
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
         if (front.Compressed) {

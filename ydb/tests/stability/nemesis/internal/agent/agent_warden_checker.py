@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import AgentSafetyRun, build_agent_safety_runs
-from ydb.tests.stability.nemesis.internal.warden_catalog import AgentSafetyContext
+from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import AgentSafetyContext
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 

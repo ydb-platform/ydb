@@ -5,8 +5,8 @@ import sys
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
-from ydb.tests.stability.nemesis.internal.warden_catalog import ORCHESTRATOR_LIVENESS_CHECKS
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_runs import run_orchestrator_liveness_cli_batch
 
 
 def parse_args():
@@ -85,38 +85,18 @@ def run_liveness_checks(settings):
     # Create cluster object
     cluster = ExternalKiKiMRCluster(settings.yaml_config_location, None, None)
 
-    checks = []
+    checks: list = []
     try:
-        for spec in ORCHESTRATOR_LIVENESS_CHECKS:
-            name = spec.name
-            try:
-                warden = spec.build(cluster)
-                violations = warden.list_of_liveness_violations
-                status = 'violation' if violations else 'ok'
-                checks.append({
-                    "name": name,
-                    "category": "liveness",
-                    "status": status,
-                    "violations": violations if violations else []
-                })
-            except Exception as e:
-                checks.append({
-                    "name": name,
-                    "category": "liveness",
-                    "status": "error",
-                    "violations": [],
-                    "error_message": str(e)
-                })
-
+        checks = run_orchestrator_liveness_cli_batch(cluster)
         result = {
             "status": "completed",
-            "checks": checks
+            "checks": checks,
         }
     except Exception as e:
         result = {
             "status": "error",
             "checks": checks,
-            "error_message": str(e)
+            "error_message": str(e),
         }
 
     # Output JSON to stdout

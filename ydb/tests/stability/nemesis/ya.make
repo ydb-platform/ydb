@@ -3,6 +3,8 @@ PY3_PROGRAM()
 PY_SRCS(
     __main__.py
     internal/config.py
+    internal/agent/agent_warden_catalog.py
+    internal/orchestrator/orchestrator_warden_catalog.py
     internal/warden_catalog.py
     internal/models.py
     internal/event_loop.py
@@ -12,6 +14,8 @@ PY_SRCS(
     internal/agent/agent_safety_runs.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py
+    internal/orchestrator/orchestrator_warden_runs.py
+    internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py
     internal/orchestrator/nemesis/schedule_loop.py
     internal/orchestrator/nemesis/chaos_state.py

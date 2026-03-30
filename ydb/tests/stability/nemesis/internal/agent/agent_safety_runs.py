@@ -1,5 +1,5 @@
 """
-Run agent safety checks from warden_catalog.AGENT_SAFETY_CHECKS (same pattern as ORCHESTRATOR_LIVENESS_CHECKS).
+Run agent safety checks from agent_warden_catalog.AGENT_SAFETY_CHECKS.
 Each spec yields Callable[[], list[WardenCheckResult]]; runs execute in parallel via run_in_executor.
 """
 
@@ -9,7 +9,7 @@ import logging
 from typing import Any, Callable, List
 
 from ydb.tests.stability.nemesis.internal.models import WardenCheckResult
-from ydb.tests.stability.nemesis.internal.warden_catalog import (
+from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import (
     AGENT_SAFETY_CHECKS,
     AgentSafetyCheck,
     AgentSafetyContext,
@@ -36,7 +36,6 @@ def safety_warden_to_result(
             category="safety",
             violations=violations if violations else [],
             status=status,
-            check_id=spec.check_id,
         )
     except Exception as e:
         logger.error("%s%s: error - %s", log_prefix, warden_name, e)
@@ -46,7 +45,6 @@ def safety_warden_to_result(
             violations=[],
             status="error",
             error_message=str(e),
-            check_id=spec.check_id,
         )
 
 
@@ -59,7 +57,6 @@ def safety_build_error_result(spec: AgentSafetyCheck, exc: Exception) -> WardenC
         violations=[],
         status="error",
         error_message=str(exc),
-        check_id=spec.check_id,
     )
 
 

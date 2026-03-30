@@ -128,22 +128,22 @@
 
 ## Расширение: liveness и safety checks
 
-Каталог проверок: **`internal/warden_catalog.py`**. API списка проверок: **`GET /api/warden/checks`** (`get_all_warden_definitions()`).
+Каталоги: **`internal/agent/agent_warden_catalog.py`** (агент), **`internal/orchestrator/orchestrator_warden_catalog.py`** (оркестратор). Сводка для API — **`internal/warden_catalog.py`** (`SAFETY_CHECK_ROWS`, **`get_all_warden_definitions()`**). Список проверок: **`GET /api/warden/checks`**.
 
 ### Где что выполняется
 
 | Категория | Где исполняется | Как попадает в отчёт |
 |-----------|-----------------|----------------------|
-| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (тот же набор, что в `ORCHESTRATOR_LIVENESS_CHECKS` в `__main__.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
+| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (набор из `ORCHESTRATOR_LIVENESS_CHECKS`, исполнение `run_orchestrator_liveness_cli_batch` в `orchestrator_warden_runs.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
 | **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно) | По каждому хосту в том же JSON |
-| **Safety (orchestrator)** | **Оркестратор** (`OrchestratorWardenChecker`): PDisk по кластеру, aggregated VERIFY — опрос результатов агентов по HTTP | В `_orchestrator.safety_checks` |
+| **Safety (orchestrator)** | **Оркестратор** (`OrchestratorWardenChecker`): кортежи **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** и **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** (агрегация — `unified_agent_verify_failed_aggregated.py`) | В `_orchestrator.safety_checks` |
 
 Агенты **liveness не запускают** (в отчёте по хосту блок liveness пустой).
 
 ### Добавить liveness check
 
-1. В **`warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: `name`, `description`, **`build(cluster)`** — фабрика, возвращающая warden с **`list_of_liveness_violations`** (как у классов из `ydb.tests.library.wardens.*`).
-2. В **`__main__.py`** команда **`liveness`** уже итерирует **`ORCHESTRATOR_LIVENESS_CHECKS`** — отдельный список дублировать не нужно.
+1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: **`OrchestratorLivenessCheck`** с **`name`**, **`description`**, **`build=lambda c: ...`** (как у агента).
+2. Команда **`nemesis liveness`** вызывает **`run_orchestrator_liveness_cli_batch`** — дублировать список не нужно.
 
 Исполнение: бинарь на оркестраторе вызывает `nemesis liveness`, внутри — тот же каталог.
 
@@ -151,15 +151,15 @@
 
 Зависит от **location** (`agent` / `orchestrator`).
 
-**Общее для API:** строки **`SAFETY_CHECK_ROWS`** для **`"agent"`** и **`"orchestrator"`** строятся из **`AGENT_SAFETY_CHECKS`** и **`ORCHESTRATOR_SAFETY_CHECKS`** — **`SafetyCheckRow`** для safety вручную не дублировать.
+**Общее для API:** **`internal/warden_catalog.py`** строит **`SAFETY_CHECK_ROWS`** из **`AGENT_SAFETY_CHECKS`** и **`ORCHESTRATOR_SAFETY_CHECKS`**.
 
 **Agent (`location: "agent"`)** — проверка с доступом к **локальным** логам / dmesg и т.п.:
 
-1. В **`warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: стабильный короткий **`id`** (станет префиксом **`safety.agent.<id>`** в API), **`name`**, **`description`**, **`build(ctx: AgentSafetyContext)`** — как у **`ORCHESTRATOR_LIVENESS_CHECKS`**, но контекст — логи и hostname агента. Снаружи при необходимости используйте **`agent_safety_check_id("<id>")`**.
+1. В **`internal/agent/agent_warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: **`name`** (совпадает с классом/первым токеном **`str(warden)`** в JSON), **`description`**, **`build(ctx: AgentSafetyContext)`**. Отдельных wire-id нет.
 
-**Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер, агрегация по агентам):
+**Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер и/или агрегация по агентам):
 
-1. В **`warden_catalog.py`** добавьте элемент в **`ORCHESTRATOR_SAFETY_CHECKS`**: стабильный короткий **`id`** (в API будет **`safety.orchestrator.<id>`**), **`name`**, **`description`**. В коде оркестратора для поля **`check_id`** в результатах используйте **`orchestrator_safety_check_id("<id>")`**.
-2. В конце **`orchestrator_warden_checker.py`** добавьте шаг в кортеж **`ORCHESTRATOR_WARDEN_STEPS`**: **`OrchestratorWardenStep("liveness" | "safety", ваша_async_run)`**, где **`ваша_async_run(checker, cluster) -> list[WardenCheckResult]`**. Для блокирующего кода внутри шага используйте **`asyncio.get_running_loop().run_in_executor(...)`**.
+1. Локальная по кластеру: в **`orchestrator_warden_catalog.py`** — элемент в кортеже **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** с **`build=lambda c: ...`**. Запуск — **`run_orchestrator_cluster_safety_sync`** / **`OrchestratorWardenChecker`**.
+2. Агрегированная: элемент в **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** с **`agent_source_class_name`** и **`impl`** (**`aggregate(...)`**; ожидание — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**). Вызов — **`run_orchestrator_aggregated_safety`**.
 
-Для проверок, которые **собирают данные с агентов**, ориентир — **`_run_aggregated_verify_failed_check_async`**: опрос **`fetch_agent_warden_result`**, разбор **`safety_checks`** по **`check_id`**.
+Для новых агрегаторов: в **`safety_checks`** ищите строку по **`name`** (точное совпадение или первый токен — см. **`UnifiedAgentVerifyFailedAggregated._row_matches_class`**).

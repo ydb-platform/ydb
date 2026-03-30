@@ -1471,7 +1471,7 @@ TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
+TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsList() || type->IsOptional(), "Expected stream, list or optional.");
     TType* itemType;
@@ -1485,6 +1485,11 @@ TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(itemType));
     callableBuilder.Add(stream);
+    if constexpr (RuntimeVersion >= 75U) {
+        for (auto node : dependentNodes) {
+            callableBuilder.Add(node);
+        }
+    }
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

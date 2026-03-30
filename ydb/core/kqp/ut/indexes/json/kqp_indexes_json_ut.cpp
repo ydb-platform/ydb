@@ -243,6 +243,34 @@ void ValidateError(TQueryClient& db, const std::string& table, const std::string
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), errorMessage);
 }
 
+void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
+    const std::function<void(TQueryClient&, const std::function<std::string(const std::string&)>&)>& body)
+{
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+    kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+    const std::string jsonType = isJsonDocument ? "JsonDocument" : "Json";
+    const auto jsonExists = [&](const std::string& predicate) {
+        return std::format("JSON_EXISTS(Text, '{}')", (isStrict ? "strict " : "lax ") + predicate);
+    };
+
+    CreateTestTable(db, jsonType, /* withIndex */ false);
+    FillTestTable(db, "TestTable", jsonType);
+
+    {
+        auto query = R"(
+            ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
+        )";
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    body(db, jsonExists);
+}
+
 }  // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
@@ -432,36 +460,14 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(SelectJsonExists, IsJsonDocument, IsStrict) {
-        auto kikimr = Kikimr();
-        auto db = kikimr.GetQueryClient();
-
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-
-        const std::string jsonType = IsJsonDocument ? "JsonDocument" : "Json";
-        const auto jsonExists = [&](const std::string& predicate) {
-            return std::format("JSON_EXISTS(Text, '{}')", (IsStrict ? "strict " : "lax ") + predicate);
-        };
-
-        CreateTestTable(db, jsonType, /* withIndex */ false);
-        FillTestTable(db, "TestTable", jsonType);
-
-        {
-            auto query = R"(
-                ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        // Any json value existence
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_ContextObject, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$"));
-        }
+        });
+    }
 
-        // Keys existence (with empty keys)
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_MemberAccess, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k3"));
@@ -470,12 +476,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k6"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k7"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k8"));
-
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k3"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k4"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k5"));
 
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2"));
@@ -502,10 +502,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k1.*"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.k1"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.*"));
-        }
+        });
+    }
 
-        // Array elements existence
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_ArrayAccess, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3]"));
@@ -527,12 +528,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[0]"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*]"));
-        }
+        });
+    }
 
-        // Methods
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_Methods, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             auto validateMethod = [&](const std::string& method) {
-                Cerr << std::format("Validating method: {}", method) << Endl;
                 ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.{}", method)));
                 ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.k1.{}", method)));
                 ValidatePredicate(db, "TestTable", "json_idx", jsonExists(std::format("$.*.{}", method)));
@@ -556,10 +557,11 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             validateMethod("size().double()");
             validateMethod("abs().ceiling()");
             validateMethod("abs().floor().type()");
-        }
+        });
+    }
 
-        // Starts with predicate
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_StartsWithPredicate, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"1\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"text\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 starts with \"1\""));
@@ -600,35 +602,40 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\" starts with \"1\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\" starts with \"1\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0 to last].k1 starts with \"1\""));
-        }
+        });
+    }
 
-        // Like regex predicate
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_LikeRegexPredicate, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 like_regex \"1\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ like_regex \".*\""));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*].k1 like_regex \"1\""));
-        }
+        });
+    }
 
-        // Is unknown predicate
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_IsUnknownPredicate, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("($ starts with \"abc\") is unknown"));
-        }
+        });
+    }
 
-        // Exists predicate
-        {
+    Y_UNIT_TEST_QUAD(SelectJsonExists_ExistsPredicate, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key[1, 2, 3])"));
-        }
+        });
+    }
 
-        // Without context object ($)
-        {
-            ValidateError(db, "TestTable", "json_idx", jsonExists("null"), "No search terms were extracted from the query");
-            ValidateError(db, "TestTable", "json_idx", jsonExists("1"), "No search terms were extracted from the query");
-            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""), "No search terms were extracted from the query");
-            ValidateError(db, "TestTable", "json_idx", jsonExists("true"), "No search terms were extracted from the query");
-            ValidateError(db, "TestTable", "json_idx", jsonExists("false"), "No search terms were extracted from the query");
-        }
+    Y_UNIT_TEST_QUAD(SelectJsonExists_Literals, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            const auto errorMessage = "No search terms were extracted from the query";
+            ValidateError(db, "TestTable", "json_idx", jsonExists("null"), errorMessage);
+            ValidateError(db, "TestTable", "json_idx", jsonExists("1"), errorMessage);
+            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""), errorMessage);
+            ValidateError(db, "TestTable", "json_idx", jsonExists("true"), errorMessage);
+            ValidateError(db, "TestTable", "json_idx", jsonExists("false"), errorMessage);
+        });
     }
 }
 

@@ -25,7 +25,6 @@ using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
 namespace NJsonKeys = NKikimr::NOlap::NIndexes::NJsonKeys;
-namespace NDefaults = NKikimr::NOlap::NIndexes::NDefaults;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -720,21 +719,17 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
     if (isLocalBloomFilter) {
         const auto& settings = index.local_bloom_filter_index();
-        const double falsePositiveProbability = settings.has_false_positive_probability()
-            ? settings.false_positive_probability()
-            : NDefaults::FalsePositiveProbability;
         Stream << " WITH ("
-               << NJsonKeys::FalsePositiveProbability << "=" << falsePositiveProbability
+               << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
                << ")";
     }
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
-        const bool caseSensitive = settings.has_case_sensitive() ? settings.case_sensitive() : NDefaults::CaseSensitive;
         Stream << " WITH ("
                << NJsonKeys::NGrammSize << "=" << settings.ngram_size()
                << ", " << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
-               << ", " << NJsonKeys::CaseSensitive << "=" << (caseSensitive ? "true" : "false")
+               << ", " << NJsonKeys::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false")
                << ")";
     }
 }

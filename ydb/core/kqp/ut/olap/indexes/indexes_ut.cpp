@@ -6,6 +6,9 @@
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/tx/columnshard/engines/changes/compaction.h>
+#include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
@@ -1497,6 +1500,121 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);");
+    }
+
+    Y_UNIT_TEST(BloomNgramFilterSizeBasedOnUniqueNgrams) {
+        class TIndexSizeCapturingController : public NOlap::TWaitCompactionController {
+        private:
+            using TBase = NOlap::TWaitCompactionController;
+            mutable TMutex SizeMutex;
+            std::vector<ui32> CompactionIndexBlobSizes;
+
+            bool DoOnWriteIndexComplete(
+                const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) override
+            {
+                if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
+                    if (auto* compaction = dynamic_cast<const NOlap::TChangesWithAppend*>(&change)) {
+                        TGuard<TMutex> g(SizeMutex);
+                        for (auto&& portion : compaction->GetAppendedPortions()) {
+                            for (auto&& idx : portion.GetPortionResult().GetIndexesVerified()) {
+                                CompactionIndexBlobSizes.push_back(idx.GetRawBytes());
+                            }
+                        }
+                    }
+                }
+                return TBase::DoOnWriteIndexComplete(change, shard);
+            }
+
+        public:
+            std::vector<ui32> GetCompactionIndexBlobSizes() const {
+                TGuard<TMutex> g(SizeMutex);
+                return CompactionIndexBlobSizes;
+            }
+        };
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TIndexSizeCapturingController>();
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01,
+                               "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`
+                    {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s",
+                                  "expected_blobs_size" : 2048000, "portions_count_available" : 1},
+                                 {"class_name" : "Zero"}]}`);
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        constexpr ui32 UniqueResourceIds = 100;
+        for (ui32 batch = 0; batch < 10; ++batch) {
+            WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000 + batch * UniqueResourceIds, UniqueResourceIds);
+        }
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
+
+        constexpr ui64 MaxFilterSizeBytes = NOlap::NIndexes::NBloomNGramm::TConstants::MaxFilterSizeBytes;
+
+        auto sizes = csController->GetCompactionIndexBlobSizes();
+        UNIT_ASSERT_C(!sizes.empty(), "Compaction should produce at least one index blob");
+
+        for (auto&& blobSize : sizes) {
+            UNIT_ASSERT_C(blobSize > 0, "Index blob size must be positive");
+            UNIT_ASSERT_C((blobSize & (blobSize - 1)) == 0, "Index blob size must be a power of 2, got: " << blobSize);
+            UNIT_ASSERT_C(blobSize < MaxFilterSizeBytes / 4, "With only " << UniqueResourceIds << " unique resource_ids the filter should be much smaller than max (" << MaxFilterSizeBytes << "), got: " << blobSize);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapTable`
+                WHERE resource_id = '1000050'
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, "[[10u;]]");
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapTable`
+                WHERE resource_id = 'nonexistent_value'
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, "[[0u;]]");
+        }
+
+        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0, "Bloom ngram filter should skip at least some portions for a nonexistent value");
+        UNIT_ASSERT_C(csController->GetIndexesApprovedOnSelect().Val() == 0, "For a nonexistent value the bloom ngram filter should not approve any portion, approved: " << csController->GetIndexesApprovedOnSelect().Val());
     }
 }
 

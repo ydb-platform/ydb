@@ -205,65 +205,8 @@ public:
     }
 };
 
-template <ui64 BitsSize>
-class TVectorInserterPower2 {
-private:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> Values;
-    static constexpr ui32 SizeMask = BitsSize - 1;
-    static_assert(((BitsSize - 1) & BitsSize) == 0);
-
-public:
-    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> ExtractBits() {
-        return std::move(Values);
-    }
-
-    void operator()(const ui64 hash) {
-        Values.Set(hash & SizeMask);
-    }
-};
-
 namespace {
 
-template <ui64 Size>
-class TBitmapDetector {
-private:
-    const TSkipBitmapIndex* Meta;
-    const ui32 ExtSize;
-    static constexpr ui64 NextSize = Size >> 1;
-
-public:
-    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
-        : Meta(meta)
-        , ExtSize(size)
-    {
-        AFL_VERIFY(ExtSize <= Size);
-    }
-
-    template <class TFiller>
-    TString Detector(const TFiller& filler) const {
-        if (ExtSize == Size) {
-            TVectorInserterPower2<Size> inserter;
-            filler(inserter);
-            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
-        } else {
-            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
-        }
-    }
-};
-
-template <>
-class TBitmapDetector<0> {
-public:
-    TBitmapDetector(const TSkipBitmapIndex* /*meta*/, const ui32 /*size*/) {
-        AFL_VERIFY(false);
-    }
-
-    template <class TFiller>
-    static TString Detector(const TFiller& /*filler*/) {
-        AFL_VERIFY(false);
-        return "";
-    }
-};
 template <class TBuilder, class TFiller>
 void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor,
     const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
@@ -294,48 +237,48 @@ void VisitAllChunksWithBuilder(TChunkedBatchReader& reader, const TReadDataExtra
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    ui64 ngramCount = 0;
-    TNGrammBuilder countBuilder(1, CaseSensitive);
-    auto countNgram = [&](const ui64) -> decltype(auto) {
-        ++ngramCount;
-    };
 
-    VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, countBuilder, countNgram);
+    static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
+    static constexpr ui64 MaxChunkCount = MaxBitsSize / 64;
 
-    const ui64 maxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
-    const double itemsCount = static_cast<double>(std::max<ui64>(ngramCount, 10));
-    const double hashesCount = static_cast<double>(HashesCount);
-    const double requestedBitsSizeDouble =
-        std::ceil((-hashesCount * itemsCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / hashesCount)));
-    const ui64 requestedBitsSize = std::max<ui64>(16, static_cast<ui64>(requestedBitsSizeDouble));
-    const ui32 size = std::min<ui64>(maxBitsSize, std::bit_ceil(requestedBitsSize));
+    TVectorInserter maxInserter(MaxBitsSize);
     TNGrammBuilder builder(HashesCount, CaseSensitive);
-    const auto doFillFilter = [&](auto& inserter) {
-        VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, inserter);
-    };
-    TString indexData;
-    if ((size & (size - 1)) == 0) {
-        if (size == 1024) {
-            indexData = TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
-        } else if (size == 2048) {
-            indexData = TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
-        } else if (size == 4096) {
-            indexData = TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
-        } else if (size == 4096 * 2) {
-            indexData = TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
-        } else if (size == 4096 * 4) {
-            indexData = TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
-        } else if (size == 4096 * 8) {
-            indexData = TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
-        } else if (size == 4096 * 16) {
-            indexData = TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
+    VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxInserter);
+
+    auto maxBits = maxInserter.ExtractBits();
+    const ui64 setBitsCount = maxBits.Count();
+
+    const double m = static_cast<double>(MaxBitsSize);
+    const double k = static_cast<double>(HashesCount);
+    const double ratio = static_cast<double>(setBitsCount) / m;
+    const double estimatedUniqueCount = (ratio >= 1.0)
+        ? m / k
+        : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
+
+    const double requestedBitsSizeDouble =
+        std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / k)));
+    const ui64 requestedBitsSize = std::max<ui64>(64, static_cast<ui64>(requestedBitsSizeDouble));
+    const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
+    const size_t targetChunkCount = targetSize / 64;
+
+    const ui64* srcChunks = maxBits.GetChunks();
+    std::vector<ui64> folded(targetChunkCount, 0);
+    for (size_t i = 0; i < MaxChunkCount; ++i) {
+        folded[i % targetChunkCount] |= srcChunks[i];
+    }
+
+    TDynBitMap resultBits;
+    resultBits.Reserve(targetSize);
+    for (size_t i = 0; i < targetChunkCount; ++i) {
+        ui64 chunk = folded[i];
+        const size_t base = i * 64;
+        while (chunk) {
+            resultBits.Set(base + CountTrailingZeroBits(chunk));
+            chunk &= chunk - 1;
         }
     }
-    if (!indexData) {
-        TVectorInserter inserter(size);
-        doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
-    }
+
+    TString indexData = GetBitsStorageConstructor()->Build(std::move(resultBits))->SerializeToString();
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 

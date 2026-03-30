@@ -567,15 +567,22 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize);
                 ngram->SetCaseSensitive(settings.CaseSensitive);
-                // DEPRECATED: old syntax
-                double fpp = (settings.FilterSizeBytes && settings.RecordsCount)
-                    ? NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
-                        *settings.FilterSizeBytes, *settings.RecordsCount)
-                    : settings.FalsePositiveProbability;
-                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                ngram->SetFalsePositiveProbability(fpp);
+                if (settings.FilterSizeBytes && settings.RecordsCount) {
+                    // DEPRECATED: old syntax, pass original values directly
+                    double fpp = NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
+                        *settings.FilterSizeBytes, *settings.RecordsCount);
+                    ngram->SetFilterSizeBytes(*settings.FilterSizeBytes);
+                    ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                    ngram->SetRecordsCount(*settings.RecordsCount);
+                    ngram->SetFalsePositiveProbability(fpp);
+                } else {
+                    double fpp = settings.FalsePositiveProbability;
+                    ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                    ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                    ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                    ngram->SetFalsePositiveProbability(fpp);
+                }
+
                 break;
             }
             default:

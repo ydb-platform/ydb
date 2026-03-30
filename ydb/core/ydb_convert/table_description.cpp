@@ -1087,9 +1087,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 upsert->SetClassName("BLOOM_FILTER");
                 auto* bloom = upsert->MutableBloomFilter();
-                if (index.local_bloom_filter_index().has_false_positive_probability()) {
-                    bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
-                }
+                bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -1102,13 +1100,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
-                ngram->SetNGrammSize(index.local_bloom_ngram_filter_index().ngram_size());
-                ngram->SetCaseSensitive(index.local_bloom_ngram_filter_index().has_case_sensitive()
-                    ? index.local_bloom_ngram_filter_index().case_sensitive()
-                    : true);
-                const double fpp = index.local_bloom_ngram_filter_index().has_false_positive_probability()
-                    ? index.local_bloom_ngram_filter_index().false_positive_probability()
-                    : 0.1;
+                const auto& ngramSettings = index.local_bloom_ngram_filter_index();
+                const double fpp = ngramSettings.false_positive_probability();
+                ngram->SetNGrammSize(ngramSettings.ngram_size());
+                ngram->SetCaseSensitive(ngramSettings.case_sensitive());
                 ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
                 ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
                 ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));

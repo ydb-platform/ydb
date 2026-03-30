@@ -115,18 +115,20 @@ namespace NActors {
 
     class TInMemoryMetricsBackend::TImpl {
     public:
+        using TSelfMetricLine = TLine<TOnChangeLineFrontend<>>;
+
         struct TSelfMetricsLines {
-            ui32 MemoryUsedBytes = 0;
-            ui32 CommittedBytes = 0;
-            ui32 FreeChunks = 0;
-            ui32 UsedChunks = 0;
-            ui32 SealedChunks = 0;
-            ui32 WritableChunks = 0;
-            ui32 RetiringChunks = 0;
-            ui32 Lines = 0;
-            ui32 ClosedLines = 0;
-            ui32 ReuseWatermark = 0;
-            ui32 AppendFailuresTotal = 0;
+            TSelfMetricLine MemoryUsedBytes;
+            TSelfMetricLine CommittedBytes;
+            TSelfMetricLine FreeChunks;
+            TSelfMetricLine UsedChunks;
+            TSelfMetricLine SealedChunks;
+            TSelfMetricLine WritableChunks;
+            TSelfMetricLine RetiringChunks;
+            TSelfMetricLine Lines;
+            TSelfMetricLine ClosedLines;
+            TSelfMetricLine ReuseWatermark;
+            TSelfMetricLine AppendFailuresTotal;
         };
 
         explicit TImpl(TInMemoryMetricsConfig cfg)
@@ -290,37 +292,25 @@ namespace NActors {
         TGuard<TMutex> guard(Impl->SelfMetricsLock);
         if (!Impl->SelfMetricsInitialized) {
             const std::span<const TLabel> noLabels;
-            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryCommittedBytesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryFreeChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryUsedChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistrySealedChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryWritableChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryRetiringChunksMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.Lines = CreateLine<TOnChangeLineFrontend<>>(RegistryLinesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeLineFrontend<>>(RegistryClosedLinesMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels).ReleaseLineId();
-            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels);
+            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryCommittedBytesMetric, noLabels);
+            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryFreeChunksMetric, noLabels);
+            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryUsedChunksMetric, noLabels);
+            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistrySealedChunksMetric, noLabels);
+            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryWritableChunksMetric, noLabels);
+            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryRetiringChunksMetric, noLabels);
+            Impl->SelfMetrics.Lines = CreateLine<TOnChangeLineFrontend<>>(RegistryLinesMetric, noLabels);
+            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeLineFrontend<>>(RegistryClosedLinesMetric, noLabels);
+            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels);
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels);
             Impl->SelfMetricsInitialized = true;
         }
 
-        auto appendIfPresent = [&](ui32 lineId, ui64 value) {
-            if (!lineId) {
+        auto appendIfPresent = [&](TImpl::TSelfMetricLine& line, ui64 value) {
+            if (!line) {
                 return;
             }
-
-            TLineReader* line = nullptr;
-            {
-                TGuard<TMutex> registryGuard(Impl->RegistryLock);
-                if (const auto it = Impl->LinesById.find(lineId); it != Impl->LinesById.end()) {
-                    line = it->second;
-                }
-            }
-            if (line && line->WriteState) {
-                auto metricLine = TLine<TOnChangeLineFrontend<>>(this, line->WriteState.get());
-                metricLine.Append(value);
-                metricLine.ReleaseLineId();
-            }
+            line.Append(value);
         };
 
         appendIfPresent(Impl->SelfMetrics.MemoryUsedBytes, stats.MemoryUsedBytes);

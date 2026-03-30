@@ -76,7 +76,7 @@ public:
         const std::string& peerName);
 
 protected:
-    void ProcessAuthMsg(const TActorContext &ctx);
+    [[nodiscard]] bool ProcessAuthMsg(const TActorContext &ctx);
 
 protected:
     const std::string AuthMsg;

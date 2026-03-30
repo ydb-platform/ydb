@@ -53,7 +53,9 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
 
     if (CurrentStateFunc() == &TThis::StateWork) {
         if (Context->SaslMechanism == "PLAIN") {
-            StartPlainAuth(ctx);
+            if (!StartPlainAuth(ctx)) {
+                return;
+            }
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
         } else {
@@ -72,10 +74,25 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
+<<<<<<< HEAD
 void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
         return;
     }
+=======
+ void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
+    auto& mtlsRequest = *ev->Get();
+    ClientCert = mtlsRequest.ClientCertificate;
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        StartMtlsAuth();
+        SendDescribeRequest();
+        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
+    }
+ }
+
+bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
+    return TryParseAuthDataTo(ClientAuthData, ctx);
+>>>>>>> 8acb5a2402c (Fixed continue processing events after auth actor has died (#36783))
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
@@ -272,7 +289,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
 
     TVector<TString> tokens = StringSplitter(AuthRequest).Split('\0');
     if (tokens.size() != 3) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), "", ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN request: expected 3 tokens, got " << tokens.size(), "", ctx);
         return false;
     }
 

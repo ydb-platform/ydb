@@ -253,6 +253,16 @@ private:
         }
 
         const auto scramInitParams = NLogin::ParseScramHashInitParams(itHashesInitParams->second);
+        if (scramInitParams.IterationsCount.empty() || scramInitParams.Salt.empty()) {
+            LOG_ERROR_S(ctx, NKikimrServices::SASL_AUTH,
+                ActorName << "# " << ctx.SelfID.ToString() <<
+                ", " << "Authentication failed: " <<
+                "'" << AuthcId << "' has broken Scram hash";
+            );
+            SendError(NKikimrIssues::TIssuesIds::UNEXPECTED, "");
+            return CleanupAndDie(ctx);
+        }
+
         AddServerNonce();
 
         const std::string firstServerMsg = BuildFirstServerMsg(Nonce, scramInitParams.Salt, scramInitParams.IterationsCount);

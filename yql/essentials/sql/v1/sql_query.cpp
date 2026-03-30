@@ -3841,7 +3841,6 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
         return TNodePtr();
     }),
-
     TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
@@ -3880,6 +3879,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
     PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
     PAIRED_TABLE_ELEM("WindowNewPipeline", WindowNewPipeline),
+    PAIRED_TABLE_ELEM("YqlSelectAllowUnnamedGroupByExpr", YqlSelectAllowUnnamedGroupByExpr),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),

@@ -12,8 +12,6 @@ namespace NActors {
 
     template<class TFrontend>
     class TLine;
-    class TInMemoryMetricsRegistry;
-    class TLineWriterState;
 
     template<class TValue = ui64>
     struct TOnChangeLineFrontend {
@@ -44,7 +42,38 @@ namespace NActors {
     private:
         friend class TLine<TOnChangeLineFrontend<TValue>>;
 
-        static bool Append(TInMemoryMetricsRegistry& registry, TLineWriterState* writer, const TValueType& value) noexcept;
+        static bool Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
     };
+
+    template<class TValue>
+    bool TOnChangeLineFrontend<TValue>::Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
+        const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
+        const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
+        const TLinePublishState state = backend.GetPublishState(writer);
+
+        if (state.HasLastPublished && state.LastPublishedValue == encoded) {
+            backend.MarkObserved(writer, nowTs);
+            return true;
+        } else if (state.HasLastPublished && state.LastObservedTs > state.LastPublishedTs) {
+            TStoredRecord previousRecord{
+                .TimestampTs = state.LastPublishedTs,
+                .Value = state.LastPublishedValue,
+            };
+            if (!backend.AppendStoredRecord(writer, previousRecord)) {
+                return false;
+            }
+            backend.MarkPublished(writer, state.LastPublishedValue, previousRecord.TimestampTs);
+        }
+
+        TStoredRecord record{
+            .TimestampTs = nowTs,
+            .Value = encoded,
+        };
+        if (!backend.AppendStoredRecord(writer, record)) {
+            return false;
+        }
+        backend.MarkPublished(writer, encoded, nowTs);
+        return true;
+    }
 
 } // namespace NActors

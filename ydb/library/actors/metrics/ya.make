@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     line_base.cpp
     line_base.h
+    line.h
     lines/on_change_line_frontend.h
     lines/raw_line_frontend.h
 )

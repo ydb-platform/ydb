@@ -78,15 +78,6 @@ namespace NActors {
         std::unique_ptr<TLineWriterState> Writer;
     };
 
-    class TLineWriterState {
-    public:
-        TLineReader* Reader = nullptr;
-        bool HasLastPublished = false;
-        ui64 LastPublishedValue = 0;
-        NHPTimer::STime LastPublishedTs = 0;
-        NHPTimer::STime LastObservedTs = 0;
-    };
-
     struct TSnapshotPinnedChunk {
         TInMemoryMetricsRegistry* Registry = nullptr;
         TChunk* Chunk = nullptr;

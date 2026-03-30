@@ -15,13 +15,13 @@
 namespace NActors {
     template<class TFrontend>
     class TLine;
+    class TLineReader;
     template<class TValue>
     struct TGenericRecordView {
         TInstant Timestamp;
         TValue Value;
     };
     class TInMemoryMetricsRegistry;
-    class TLineWriterState;
     class TLineSnapshot;
     class TSnapshot;
     struct TSnapshotData;
@@ -79,6 +79,28 @@ namespace NActors {
         ui64 LastPublishedValue = 0;
         NHPTimer::STime LastPublishedTs = 0;
         NHPTimer::STime LastObservedTs = 0;
+    };
+
+    class TLineWriterState {
+    public:
+        TLineReader* Reader = nullptr;
+        bool HasLastPublished = false;
+        ui64 LastPublishedValue = 0;
+        NHPTimer::STime LastPublishedTs = 0;
+        NHPTimer::STime LastObservedTs = 0;
+    };
+
+    class TLineWriteBackend {
+    public:
+        virtual ~TLineWriteBackend() = default;
+
+        virtual void CloseLine(TLineWriterState* writer) noexcept = 0;
+        virtual bool AppendStoredRecord(TLineWriterState* writer, const TStoredRecord& record) noexcept = 0;
+        virtual NHPTimer::STime CurrentTimestampTs() const noexcept = 0;
+        virtual TLinePublishState GetPublishState(const TLineWriterState* writer) const noexcept = 0;
+        virtual ui32 GetLineId(const TLineWriterState* writer) const noexcept = 0;
+        virtual void MarkObserved(TLineWriterState* writer, NHPTimer::STime nowTs) noexcept = 0;
+        virtual void MarkPublished(TLineWriterState* writer, ui64 value, NHPTimer::STime nowTs) noexcept = 0;
     };
 
     namespace NInMemoryMetricsPrivate {

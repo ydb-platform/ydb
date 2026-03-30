@@ -16,6 +16,7 @@ namespace NActors {
     template<class TFrontend>
     class TLine;
     class TLineReader;
+    struct TChunk;
     template<class TValue>
     struct TGenericRecordView {
         TInstant Timestamp;
@@ -101,6 +102,7 @@ namespace NActors {
         virtual ui32 GetLineId(const TLineWriterState* writer) const noexcept = 0;
         virtual void MarkObserved(TLineWriterState* writer, NHPTimer::STime nowTs) noexcept = 0;
         virtual void MarkPublished(TLineWriterState* writer, ui64 value, NHPTimer::STime nowTs) noexcept = 0;
+        virtual void ReleasePinnedChunk(TChunk* chunk) noexcept = 0;
     };
 
     namespace NInMemoryMetricsPrivate {

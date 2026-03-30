@@ -4,8 +4,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/util/datetime.h>
-
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
@@ -24,73 +22,6 @@
 #include <queue>
 
 namespace NActors {
-
-    struct TTimeAnchor {
-        NHPTimer::STime BaseCycles = 0;
-        TInstant BaseWallClock;
-    };
-
-    enum class ELineState : ui8 {
-        Open,
-        Closed,
-    };
-
-    enum class EChunkState : ui8 {
-        Free,
-        Writable,
-        Sealed,
-        Retiring,
-    };
-
-    struct TChunk {
-        explicit TChunk(ui32 chunkId, ui32 chunkSize)
-            : ChunkId(chunkId)
-            , Payload(chunkSize)
-        {
-        }
-
-        ui32 ChunkId = 0;
-        std::atomic<EChunkState> State = EChunkState::Free;
-        std::atomic<i32> Readers = 0;
-        std::atomic<ui32> CommittedBytes = 0;
-        std::atomic<ui64> Generation = 0;
-        std::atomic<NHPTimer::STime> FirstTs = 0;
-        std::atomic<NHPTimer::STime> LastTs = 0;
-
-        std::atomic<TLineReader*> Owner = nullptr;
-        std::atomic<ui32> OwnerLineId = 0;
-        TVector<char> Payload;
-    };
-
-    struct TLineStorage {
-        mutable TMutex Lock;
-        std::atomic<TChunk*> Writable = nullptr;
-        TVector<TChunk*> Chunks;
-    };
-
-    class TLineReader {
-    public:
-        ui32 LineId = 0;
-        TLineKey Key;
-        TLineMeta Meta;
-        std::atomic<ELineState> State = ELineState::Open;
-        TLineStorage Storage;
-        std::unique_ptr<TLineWriterState> Writer;
-    };
-
-    struct TSnapshotPinnedChunk {
-        TInMemoryMetricsRegistry* Registry = nullptr;
-        TChunk* Chunk = nullptr;
-        TChunkView View;
-    };
-
-    struct TSnapshotData {
-        ~TSnapshotData();
-
-        TTimeAnchor Anchor;
-        TVector<TSnapshotPinnedChunk> Chunks;
-    };
-
     struct TVictimKey {
         NHPTimer::STime LastTs = 0;
         bool Closed = false;
@@ -126,20 +57,6 @@ namespace NActors {
         constexpr TStringBuf RegistryAppendFailuresTotalMetric = "inmemory_metrics.append_failures_total";
 
         constexpr i32 RetiringBias = std::numeric_limits<i32>::min();
-
-        TInstant DecodeTs(const TTimeAnchor& anchor, NHPTimer::STime ts) noexcept {
-            return anchor.BaseWallClock + TDuration::MicroSeconds(Ts2Us(ts - anchor.BaseCycles));
-        }
-
-        bool TryPinChunk(TChunk* chunk) noexcept {
-            i32 readers = chunk->Readers.load(std::memory_order_acquire);
-            while (readers >= 0) {
-                if (chunk->Readers.compare_exchange_weak(readers, readers + 1, std::memory_order_acq_rel, std::memory_order_acquire)) {
-                    return true;
-                }
-            }
-            return false;
-        }
 
         bool IsRegistryMetricName(TStringBuf name) noexcept {
             return name.StartsWith(RegistryMetricsPrefix);
@@ -208,60 +125,6 @@ namespace NActors {
         bool SelfMetricsInitialized = false;
         TSelfMetricsLines SelfMetrics;
     };
-
-    TSnapshotData::~TSnapshotData() {
-        for (const auto& chunk : Chunks) {
-            if (chunk.Registry && chunk.Chunk) {
-                chunk.Registry->ReleasePinnedChunk(chunk.Chunk);
-            }
-        }
-    }
-
-    TLineSnapshot::TLineSnapshot() = default;
-    TLineSnapshot::TLineSnapshot(const TLineSnapshot&) = default;
-    TLineSnapshot::TLineSnapshot(TLineSnapshot&&) noexcept = default;
-    TLineSnapshot& TLineSnapshot::operator=(const TLineSnapshot&) = default;
-    TLineSnapshot& TLineSnapshot::operator=(TLineSnapshot&&) noexcept = default;
-    TLineSnapshot::~TLineSnapshot() = default;
-
-    void TLineSnapshot::ForEachRecord(const std::function<void(const TRecordView&)>& cb) const {
-        ForEachRecordInRange(TInstant::Zero(), TInstant::Max(), cb);
-    }
-
-    void TLineSnapshot::ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const {
-        if (!Data) {
-            return;
-        }
-        for (size_t chunkIndex : ChunkIndexes) {
-            const auto& pinned = Data->Chunks[chunkIndex];
-            cb(TChunkSnapshotView{
-                .Meta = pinned.View,
-                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.View.CommittedBytes),
-            });
-        }
-    }
-
-    TInstant TLineSnapshot::DecodeTimestampTs(NHPTimer::STime ts) const noexcept {
-        return Data ? DecodeTs(Data->Anchor, ts) : TInstant::Zero();
-    }
-
-    void TLineSnapshot::ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const {
-        const auto* frontend = Meta.Frontend ? Meta.Frontend : &TRawLineFrontend<>::Descriptor();
-        if (frontend->ReadRange) {
-            frontend->ReadRange(*this, beginTs, endTs, cb);
-        }
-    }
-
-    TSnapshot::TSnapshot() = default;
-    TSnapshot::TSnapshot(const TSnapshot&) = default;
-    TSnapshot::TSnapshot(TSnapshot&&) noexcept = default;
-    TSnapshot& TSnapshot::operator=(const TSnapshot&) = default;
-    TSnapshot& TSnapshot::operator=(TSnapshot&&) noexcept = default;
-    TSnapshot::~TSnapshot() = default;
-
-    TVector<TLineSnapshot> TSnapshot::Lines() const {
-        return SnapshotLines;
-    }
 
     std::unique_ptr<TInMemoryMetricsRegistry> MakeInMemoryMetricsRegistry(TInMemoryMetricsConfig config) {
         return std::make_unique<TInMemoryMetricsRegistry>(std::move(config));
@@ -546,7 +409,7 @@ namespace NActors {
         Impl->FreeList.push_back(chunk);
     }
 
-    void TInMemoryMetricsRegistry::ReleasePinnedChunk(TChunk* chunk) {
+    void TInMemoryMetricsRegistry::ReleasePinnedChunk(TChunk* chunk) noexcept {
         const i32 prev = chunk->Readers.fetch_sub(1, std::memory_order_acq_rel);
         if (prev == RetiringBias + 1) {
             ReturnChunkToFree(chunk);
@@ -784,26 +647,26 @@ namespace NActors {
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
             if (line->Writer) {
-                lineSnapshot.LastPublishedTimestamp = DecodeTs(data->Anchor, line->Writer->LastPublishedTs);
-                lineSnapshot.LastObservedTimestamp = DecodeTs(data->Anchor, line->Writer->LastObservedTs);
+                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->Writer->LastPublishedTs);
+                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->Writer->LastObservedTs);
             }
             lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
             lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
 
             for (TChunk* chunk : line->Storage.Chunks) {
-                if (!TryPinChunk(chunk)) {
+                if (!NInMemoryMetricsPrivate::TryPinChunk(chunk)) {
                     continue;
                 }
 
                 lineSnapshot.ChunkIndexes.push_back(data->Chunks.size());
                 lineSnapshot.Chunks.push_back(TChunkView{
                     .ChunkId = chunk->ChunkId,
-                    .FirstTs = DecodeTs(data->Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
-                    .LastTs = DecodeTs(data->Anchor, chunk->LastTs.load(std::memory_order_acquire)),
+                    .FirstTs = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
+                    .LastTs = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, chunk->LastTs.load(std::memory_order_acquire)),
                     .CommittedBytes = chunk->CommittedBytes.load(std::memory_order_acquire),
                 });
                 data->Chunks.push_back(TSnapshotPinnedChunk{
-                    .Registry = const_cast<TInMemoryMetricsRegistry*>(this),
+                    .Backend = const_cast<TInMemoryMetricsRegistry*>(this),
                     .Chunk = chunk,
                     .View = lineSnapshot.Chunks.back(),
                 });

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/subsystem.h>
 #include <ydb/library/actors/metrics/line_base.h>
 #include <ydb/library/actors/metrics/line.h>
+#include <ydb/library/actors/metrics/line_storage.h>
 #include <ydb/library/actors/metrics/lines/raw_line_frontend.h>
 #include <ydb/library/actors/metrics/lines/on_change_line_frontend.h>
 #include <util/generic/function.h>
@@ -14,9 +15,6 @@ namespace NActors {
     class TActorSystem;
     class TInMemoryMetricsRegistry;
     class IActor;
-    class TLineReader;
-    struct TChunk;
-    struct TSnapshotData;
 
     std::unique_ptr<TInMemoryMetricsRegistry> MakeInMemoryMetricsRegistry(TInMemoryMetricsConfig config);
     IActor* CreateInMemoryMetricsStatsActor(TDuration interval = TDuration::Seconds(1));
@@ -65,7 +63,7 @@ namespace NActors {
         void PublishSealedChunk(TChunk* chunk);
         void RetireChunk(TChunk* chunk);
         void ReturnChunkToFree(TChunk* chunk);
-        void ReleasePinnedChunk(TChunk* chunk);
+        void ReleasePinnedChunk(TChunk* chunk) noexcept override;
         void MaybeDropClosedLine(TLineReader* line);
         bool IsMetricAllowed(TStringBuf name) const noexcept;
 

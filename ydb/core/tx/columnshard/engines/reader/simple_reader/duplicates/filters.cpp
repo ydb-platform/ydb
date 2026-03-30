@@ -125,7 +125,7 @@ bool TFiltersStore::NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& const
     }
 
     auto& filter = filterIt->second;
-    Counters->OnReadyFilters(-1, -1 * filter.GetDataSize());
+    Counters->OnReadyFilters(-1, -static_cast<i64>(filter.GetDataSize()));
     constructor->AddFilter(MakeOrderedFilter(std::move(filter)));
     ReadyFilters.erase(filterIt);
     return true;
@@ -154,7 +154,7 @@ void TFiltersStore::Abort(const TString& error) {
 
 TFiltersStore::~TFiltersStore() {
     for (const auto& [_, filter] : ReadyFilters) {
-        Counters->OnReadyFilters(-1, -1 * filter.GetDataSize());
+        Counters->OnReadyFilters(-1, -static_cast<i64>(filter.GetDataSize()));
     }
 }
 

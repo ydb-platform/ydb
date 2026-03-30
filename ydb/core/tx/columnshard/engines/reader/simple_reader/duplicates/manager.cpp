@@ -143,7 +143,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 
     TBordersIterator bordersIterator = BordersFlowController.Next(mainPortion);
     THashMap<ui64, TPortionInfo::TConstPtr> portionsToFetch;
-    Counters->OnLeftBorders(-1 * bordersIterator.GetBorders().size());
+    Counters->OnLeftBorders(-static_cast<i64>(bordersIterator.GetBorders().size()));
     for (const auto& border : bordersIterator.GetBorders()) {
         for (const auto& id: border.GetPortionIds()) {
             portionsToFetch.emplace(id, Portions->GetPortionVerified(id));

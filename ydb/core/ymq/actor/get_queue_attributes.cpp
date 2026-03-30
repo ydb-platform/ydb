@@ -6,6 +6,7 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
@@ -150,8 +151,18 @@ private:
         }
 
         if (NeedRuntimeAttributes_) {
-            Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
-            ++WaitCount_;
+            if (!FeatureFlags_.EnableSQSMigrationFinished_) {
+                Send(QueueLeader_, MakeHolder<TSqsEvents::TEvGetRuntimeQueueAttributes>(RequestId_));
+                ++WaitCount_;
+            }
+            if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
+                Register(NPQ::NMLP::CreateDescriber(SelfId(), {
+                    .DatabasePath = GetDatabaseName(),
+                    .TopicName = GetTopicName(),
+                    .Consumer = ConsumerName,
+                }));
+                ++WaitCount_;
+            }
         }
 
         if (NeedArn_) {
@@ -177,7 +188,35 @@ private:
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvGetRuntimeQueueAttributesResponse, HandleRuntimeAttributes);
             hFunc(TSqsEvents::TEvQueueFolderIdAndCustomName, HandleQueueFolderIdAndCustomName);
+            hFunc(NPQ::NMLP::TEvDescribeResponse, Handle);
         }
+    }
+
+    void Handle(NPQ::NMLP::TEvDescribeResponse::TPtr& ev) {
+        auto* result = Response_.MutableGetQueueAttributes();
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            RLOG_SQS_ERROR("Get runtime queue attributes failed: " << ev->Get()->ErrorDescription);
+            MakeError(result, NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            SendReplyAndDie();
+            return;
+        }
+
+        if (HasAttributeName("CreatedTimestamp")) {
+            result->SetCreatedTimestamp(ev->Get()->TopicCreated.Seconds());
+        }
+        if (HasAttributeName("ApproximateNumberOfMessages")) {
+            result->SetApproximateNumberOfMessages(ev->Get()->ApproximateMessageCount + result->GetApproximateNumberOfMessages());
+        }
+        if (HasAttributeName("ApproximateNumberOfMessagesNotVisible")) {
+            result->SetApproximateNumberOfMessagesNotVisible(ev->Get()->ApproximateLockedMessageCount + result->GetApproximateNumberOfMessagesNotVisible());
+        }
+        if (HasAttributeName("ApproximateNumberOfMessagesDelayed")) {
+            result->SetApproximateNumberOfMessagesDelayed(ev->Get()->ApproximateDelayedMessageCount + result->GetApproximateNumberOfMessagesDelayed());
+        }
+
+        --WaitCount_;
+        ReplyIfReady();
     }
 
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
@@ -249,13 +288,13 @@ private:
             result->SetCreatedTimestamp(ev->Get()->CreatedTimestamp.Seconds());
         }
         if (HasAttributeName("ApproximateNumberOfMessages")) {
-            result->SetApproximateNumberOfMessages(ev->Get()->MessagesCount);
+            result->SetApproximateNumberOfMessages(ev->Get()->MessagesCount + result->GetApproximateNumberOfMessages());
         }
         if (HasAttributeName("ApproximateNumberOfMessagesNotVisible")) {
-            result->SetApproximateNumberOfMessagesNotVisible(ev->Get()->InflyMessagesCount);
+            result->SetApproximateNumberOfMessagesNotVisible(ev->Get()->InflyMessagesCount + result->GetApproximateNumberOfMessagesNotVisible());
         }
         if (HasAttributeName("ApproximateNumberOfMessagesDelayed")) {
-            result->SetApproximateNumberOfMessagesDelayed(ev->Get()->MessagesDelayed);
+            result->SetApproximateNumberOfMessagesDelayed(ev->Get()->MessagesDelayed + result->GetApproximateNumberOfMessagesDelayed());
         }
 
         --WaitCount_;

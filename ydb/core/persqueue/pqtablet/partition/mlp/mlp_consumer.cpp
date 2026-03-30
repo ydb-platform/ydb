@@ -1067,9 +1067,9 @@ void TConsumerActor::NotifyPQRB(bool force) {
         auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId, useForReading);
 
         const auto& metrics = Storage->GetMetrics();
-        ev->Record.SetLockedMessages(metrics.LockedMessageCount);
-        ev->Record.SetDelayedMessages(metrics.DelayedMessageCount);
-        ev->Record.SetMessages(PartitionEndOffset - LastCommittedOffset - metrics.CommittedMessageCount);
+        ev->Record.SetLockedMessageCount(metrics.LockedMessageCount);
+        ev->Record.SetDelayedMessageCount(metrics.DelayedMessageCount);
+        ev->Record.SetMessageCount(PartitionEndOffset - LastCommittedOffset - metrics.CommittedMessageCount);
 
         Send(PartitionActorId, std::move(ev));
         LastUseForReading = useForReading;

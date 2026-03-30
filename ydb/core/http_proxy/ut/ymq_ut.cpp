@@ -831,8 +831,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
         }
 
-        // TODO support approximate number of messages
-        // WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+        WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
 
         Sleep(TDuration::Seconds(1));
 
@@ -860,8 +859,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
         }
 
-        // TODO support approximate number of messages
-        // WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
+        WaitQueueAttributes(queueUrl, 10, {{"ApproximateNumberOfMessages", "11"}});
 
         Sleep(TDuration::Seconds(1));
 
@@ -1378,16 +1376,15 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         // Set VisibilityTimeout to large value to be sure the message is in-flight during the test.
         ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 1}, {"VisibilityTimeout", 43000}});  // ~12 hours
 
-        // TODO: support approximate number of messages
-        // WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-        //     return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
-        // });
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "2" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        });
 
         PurgeQueue({{"QueueUrl", queueUrl}});
 
-        // WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-        //     return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
-        // });
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "0" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
     }
 
     Y_UNIT_TEST_F(TestPurgeQueue_TableImplementation, THttpProxyTestMock) {
@@ -1872,16 +1869,15 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"VisibilityTimeout", 1}
         });
 
-        // TODO SQS Migration Compatibility: Wait for message to be visible
-        //WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
-        //    return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
-        //});
-        //
-        // ChangeMessageVisibility({
-        //     {"QueueUrl", queueUrl},
-        //     {"ReceiptHandle", receiptHandle},
-        //     {"VisibilityTimeout", 1}
-        // }, 400);
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
+
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", receiptHandle},
+            {"VisibilityTimeout", 1}
+        }, 400);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibility_TableImplementation, THttpProxyTestMock) {

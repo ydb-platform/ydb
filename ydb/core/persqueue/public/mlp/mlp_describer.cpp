@@ -61,8 +61,8 @@ STFUNC(TDescriberActor::DescribeState) {
 }
 
 void TDescriberActor::DoRuntimeAttributes() {
-    LOG_D("Start select partition");
-    Become(&TDescriberActor::DoRuntimeAttributes);
+    LOG_D("Start DoRuntimeAttributes");
+    Become(&TDescriberActor::RuntimeAttributesState);
     SendToTablet(TopicInfo.Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetRuntimeAttributesRequest(Settings.TopicName, Settings.Consumer));
 }
 

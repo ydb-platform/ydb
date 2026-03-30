@@ -76,7 +76,7 @@ public:
             auto newGroupsToRemove = groups
                 | std::views::filter([&] (auto* group) { return group->Active; })
                 | std::views::take(groupsToRemove - std::ssize(storagePool.InactiveGroups));
-            storagePool.InactiveGroups.reserve(groupsToRemove);
+            storagePool.InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
                 BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
                 group->Active = false;
@@ -101,7 +101,7 @@ public:
 };
 
 ITransaction* THive::CreateShrinkPool(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
-    const auto record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
     return new TTxShrinkPool(ev->Sender, record.GetStoragePool(), record.GetNewSize(), this);
 }
 
@@ -147,7 +147,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        ctx.Send(Self->CmsPipe, Event->Release());
+        ctx.Send(Self->CmsPipe, Event->Release(), 0, Event->Cookie);
     }
 };
 

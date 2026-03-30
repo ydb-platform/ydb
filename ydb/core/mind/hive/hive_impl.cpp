@@ -3800,7 +3800,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         CmsPipe = ev->Sender;
         auto* domain = FindDomain(TSubDomainKey(record.GetSubDomain()));
         if (auto tenantHive = GetPipeToTenantHive(domain)) {
-            return NTabletPipe::SendData(SelfId(), *tenantHive, std::move(ev)->Get());
+            return NTabletPipe::SendData(SelfId(), *tenantHive, ev->Release().Release());
         }
     }
 

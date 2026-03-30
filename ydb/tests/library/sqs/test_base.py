@@ -623,12 +623,12 @@ class KikimrSqsTestBase(object):
     def _kick_tablets_from_node(self, node_index):
         mon_port = self._get_mon_port(0)
 
-        toggle_down_url = 'http://localhost:{}/tablets/app?TabletID=72057594037968897&node={}&page=SetDown&down=1'.format(mon_port, node_index + 1)
+        toggle_down_url = 'http://localhost:{}/tablets/app/secure?TabletID=72057594037968897&node={}&page=SetDown&down=1'.format(mon_port, node_index + 1)
         toggle_down_reply = requests.post(toggle_down_url)
         assert_that(toggle_down_reply.status_code, equal_to(200))
         logging.debug('Toggle down reply: {}'.format(toggle_down_reply.text))
 
-        kick_url = 'http://localhost:{}/tablets/app?TabletID=72057594037968897&node={}&page=KickNode'.format(mon_port, node_index + 1)
+        kick_url = 'http://localhost:{}/tablets/app/secure?TabletID=72057594037968897&node={}&page=KickNode'.format(mon_port, node_index + 1)
         kick_reply = requests.post(kick_url)
         assert_that(kick_reply.status_code, equal_to(200))
         logging.debug('Kick reply: {}'.format(kick_reply.text))
@@ -643,7 +643,7 @@ class KikimrSqsTestBase(object):
 
             try:
                 mon_port = self._get_mon_port(0)
-                toggle_up_url = 'http://localhost:{}/tablets/app?TabletID=72057594037968897&node={}&page=SetDown&down=0'.format(mon_port, node_index + 1)
+                toggle_up_url = 'http://localhost:{}/tablets/app/secure?TabletID=72057594037968897&node={}&page=SetDown&down=0'.format(mon_port, node_index + 1)
                 toggle_up_reply = requests.post(toggle_up_url)
 
                 logging.debug('Toggle up reply: {}'.format(toggle_up_reply.text))

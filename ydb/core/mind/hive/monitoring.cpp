@@ -2,7 +2,9 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <util/generic/hash_set.h>
 #include <util/string/vector.h>
+#include <ydb/core/base/tablet_mon_admin.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include "hive_impl.h"
@@ -51,6 +53,42 @@ NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TStr
         << content
     );
 }
+
+namespace {
+
+bool HiveMonPageRequiresAdminPath(const TString& page, HTTP_METHOD method) {
+    if (page == "Settings") {
+        return method == HTTP_METHOD_POST;
+    }
+    static const THashSet<TString> pages = [] {
+        THashSet<TString> s;
+        const char* names[] = {
+            "SetDomain", "DeleteTablet", "ResetTablet", "CreateTablet", "StopTablet", "StopDomain",
+            "MoveTablet", "InitMigration", "QueryMigration", "KickNode", "DrainNode",
+            "Rebalance", "RebalanceFromScratch", "ReassignTablet", "StorageRebalance",
+            "TabletAvailability", "UpdateResources", "SetDown", "SetFreeze", "ResumeTablet",
+        };
+        for (const char* n : names) {
+            s.insert(n);
+        }
+        return s;
+    }();
+    return pages.contains(page);
+}
+
+bool RequireHiveTabletMonAdminPath(const TString& page, NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {
+    if (!HiveMonPageRequiresAdminPath(page, ev->Get()->GetMethod())) {
+        return true;
+    }
+    if (NKikimr::NTabletMon::IsAdminAppPathInfo(ev->Get()->PathInfo())) {
+        return true;
+    }
+    ctx.Send(ev->Sender, MakeRawHttpEvent(THttpStatus::FORBIDDEN,
+        R"({"error":"Use /tablets/app/secure for this operation; requires administration_allowed_sids"})"));
+    return false;
+}
+
+} // namespace
 
 class TTxMonEvent_DbState : public TTransactionBase<THive> {
 public:
@@ -2035,7 +2073,7 @@ function continueReassign() {
         $('#current_inflight').text(current_inflight);
         $.ajax({
             type: 'POST',
-            url: 'app?TabletID=' + hiveId
+            url: 'app/secure?TabletID=' + hiveId
                 + '&page=ReassignTablet&tablet=' + tablet.tabletId
                 + '&channel=' + tablet.channels
                 + '&wait=1'
@@ -2090,7 +2128,7 @@ function reassignGroups() {
         var max_inflight = $('#tablet_reassign_inflight').val();
         var async = $('#reassign_async')[0].checked;
         var num_tablets = $('#confirm_tablets').val();
-        var url = 'app?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0';
+        var url = 'app/secure?TabletID=' + hiveId + '&page=ReassignTablet' + '&tablet=all' + '&wait=0';
         if (storage_pool) {
             url = url + '&storagePool=' + storage_pool;
         }
@@ -2135,11 +2173,11 @@ function setDown(element, nodeId, down) {
     if (down && $(element).hasClass('glyphicon-ok')) {
         $(element).removeClass('glyphicon-ok');
         element.inProgress = true;
-        $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=1', success: function(){ $(element).addClass('glyphicon-remove'); element.inProgress = false; }});
     } else if (!down && $(element).hasClass('glyphicon-remove')) {
         $(element).removeClass('glyphicon-remove');
         element.inProgress = true;
-        $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0', success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetDown&down=0', success: function(){ $(element).addClass('glyphicon-ok'); element.inProgress = false; }});
     }
 }
 
@@ -2151,33 +2189,33 @@ function toggleFreeze(element, nodeId) {
     if ($(element).hasClass('glyphicon-play')) {
         $(element).removeClass('glyphicon-play');
         element.inProgress = true;
-        $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1', success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=1', success: function(){ $(element).addClass('glyphicon-pause'); element.inProgress = false; }});
     } else if ($(element).hasClass('glyphicon-pause')) {
         $(element).removeClass('glyphicon-pause');
         element.inProgress = true;
-        $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0', success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
+        $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=SetFreeze&freeze=0', success: function(){ $(element).addClass('glyphicon-play'); element.inProgress = false; }});
     }
 }
 
 function kickNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode', success: function(){ $(element).addClass('glyphicon-transfer'); }});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=KickNode', success: function(){ $(element).addClass('glyphicon-transfer'); }});
 }
 
 function drainNode(element, nodeId) {
     $(element).removeClass('glyphicon-transfer');
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + nodeId + '&page=DrainNode', success: function(){ $(element).addClass('blinking'); Nodes[nodeId].Drain = true; }});
 }
 
 function rebalanceTablets() {
     var max_movements = $('#balancer_max_movements').val();
     var in_flight = $('#balancer_in_flight').val();
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
 }
 
 function rebalanceTabletsFromScratch(element) {
     var tenant_name = $('#tenant_name').val();
-    $.ajax({type: 'POST', url:'app?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&page=RebalanceFromScratch&tenantName=' + tenant_name});
 }
 
 function toggleAlert() {
@@ -2224,12 +2262,12 @@ function showConfirmationModal(message, onConfirm, onDismiss) {
 
 function enableType(element, node, type) {
     $(element).css('color', 'gray');
-    $.ajax({type: 'POST', url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&resettype=' + type});
 }
 
 function disableType(element, node, type) {
     $(element).css('color', 'gray');
-    $.ajax({type: 'POST', url:'?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
+    $.ajax({type: 'POST', url:'app/secure?TabletID=' + hiveId + '&node=' + node + '&page=TabletAvailability&maxcount=0&changetype=' + type});
 }
 
 function changeDefaultTabletLimit(button, val, tabletTypeName) {
@@ -2253,7 +2291,7 @@ function applySetting(button, name, val, text) {
             }
             $.ajax({
                 type: 'POST',
-                url: document.URL + '&page=Settings&' + name + '=' + val,
+                url: 'app/secure?TabletID=' + hiveId + '&page=Settings&' + name + '=' + val,
             });
         },
         function () {
@@ -5031,7 +5069,7 @@ public:
 
                 function sendPostRequest(data) {
                     $.ajax({
-                        url: 'app',
+                        url: 'app/secure',
                         method: 'POST',
                         data: data,
                         success: function(d) {
@@ -5084,6 +5122,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     TCgiParameters cgi = GetParams(httpInfo);
     TString page = cgi.Has("page") ? cgi.Get("page") : "";
+    if (!RequireHiveTabletMonAdminPath(page, ev, ctx)) {
+        return;
+    }
     if (page == "MemStateTablets")
         return Execute(new TTxMonEvent_MemStateTablets(ev->Sender, ev, this), ctx);
     if (page == "MemStateNodes")

@@ -1,6 +1,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_index_build_info.h"
 
+#include <ydb/core/base/tablet_mon_admin.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -450,7 +451,11 @@ public:
         if (page ==  TCgi::TPages::AdminRequest) {
             NIceDb::TNiceDb db(txc.DB);
             db.NoMoreReadsForTx();
-
+            if (!NKikimr::NTabletMon::IsAdminAppPathInfo(Ev->Get()->PathInfo())) {
+                LinkToMain(Answer);
+                Answer << "<p>AdminRequest must be used under /tablets/app/secure (requires administration_allowed_sids).</p>";
+                return true;
+            }
             LinkToMain(Answer);
             OutputAdminRequestPage(Answer, db, cgi, ctx);
             return true;
@@ -707,7 +712,7 @@ private:
         // to give user clear knowledge what parameters were.
         // Params in the body are the actually used ones, query parameters will be ignored
         // (see ydb/core/tablet/tablet_monitoring_proxy.cpp).
-        const TString actionUrl = TStringBuilder() << "app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
+        const TString actionUrl = TStringBuilder() << "app/secure?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
             << "&" << TCgi::Action.AsCgiParam(TCgi::TActions::ForceDropUnsafe)
             << "&" << TCgi::OwnerPathId.AsCgiParam(pathId.OwnerId)
             << "&" << TCgi::LocalPathId.AsCgiParam(pathId.LocalPathId)
@@ -723,7 +728,7 @@ private:
 
     void OutputAdminPage(TStringStream& str) const {
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
+            str << "<form method=\"GET\" action=\"app/secure\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Settings to change: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
@@ -734,7 +739,7 @@ private:
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
+            str << "<form method=\"GET\" action=\"app/secure\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Execute upgrade DB's ACL, grant ACCESS to all existed users: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
@@ -746,7 +751,7 @@ private:
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
+            str << "<form method=\"GET\" action=\"app/secure\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Make all Access Database rights no inheritable at all database: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
@@ -758,7 +763,7 @@ private:
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
+            str << "<form method=\"GET\" action=\"app/secure\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
             str << "<legend> Send configuration update to all coordinators: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
@@ -1648,6 +1653,10 @@ private:
     void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
         if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
             SendBadRequest("Action requires a POST method", ctx);
+            return;
+        }
+        if (!NKikimr::NTabletMon::IsAdminAppPathInfo(Ev->Get()->PathInfo())) {
+            SendBadRequest("This action requires /tablets/app/secure and administration_allowed_sids", ctx);
             return;
         }
 

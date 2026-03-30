@@ -1595,7 +1595,7 @@ class TestViewer(object):
             'Cookie': 'ydb_session_id=' + cls.database_session_id,
         })
 
-        result['down_node_root'] = cls.post_viewer("/tablets/app", params={
+        result['down_node_root'] = cls.post_viewer("/tablets/app/secure", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',

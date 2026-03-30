@@ -30,6 +30,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
+#include <library/cpp/getopt/small/completer.h>
+
 #include <util/folder/path.h>
 #include <util/folder/dirut.h>
 #include <util/string/strip.h>
@@ -90,6 +92,96 @@ void SetupSignalActions() {
 #endif
 
 } // anonymous namespace
+
+namespace {
+
+TString DefaultProfileConfigPath(TStringBuf ydbDir) {
+    return TStringBuilder() << GetHomeDir() << '/' << ydbDir << "/config/config.yaml";
+}
+
+TString GetProfileConfigPathFromArgs(int argc, const char** argv) {
+    for (int i = 1; i < argc; ++i) {
+        if (TStringBuf(argv[i]) == "--profile-file" && i + 1 < argc) {
+            return TString(argv[i + 1]);
+        }
+    }
+    return DefaultProfileConfigPath("ydb");
+}
+
+TString DescribeProfileForCompletion(const std::shared_ptr<IProfile>& profile) {
+    TStringBuilder desc;
+    if (profile->Has("endpoint")) {
+        desc << "Endpoint: " << profile->GetValue("endpoint").as<TString>();
+    }
+    if (profile->Has("database")) {
+        if (desc) {
+            desc << ", ";
+        }
+        desc << "Database: " << profile->GetValue("database").as<TString>();
+    }
+    if (profile->Has("authentication")) {
+        try {
+            auto authValue = profile->GetValue("authentication");
+            TString authMethod = authValue["method"].as<TString>();
+            if (desc) {
+                desc << ", ";
+            }
+            desc << "Auth: " << authMethod;
+        } catch (...) {
+        }
+    }
+    return desc;
+}
+
+class TProfileLaunchSelfCompleter : public NLastGetopt::NComp::ICompleter {
+public:
+    TProfileLaunchSelfCompleter(NLastGetopt::NComp::TCustomCompleter* completer)
+        : Completer_(completer)
+    {
+    }
+
+    void GenerateBash(NLastGetopt::TFormattedOutput& out) const override {
+        out.Line() << "IFS=$'\\n'";
+        out.Line() << "COMPREPLY+=( $(compgen -W \"$(${words[@]} ---CUSTOM-COMPLETION--- "
+                    << Completer_->GetUniqueName()
+                    << " \"${cword}\" \"\" \"\" 2> /dev/null | cut -d: -f1)\" -- ${cur}) )";
+        out.Line() << "IFS=$' \\t\\n'";
+    }
+
+    TStringBuf GenerateZshAction(NLastGetopt::NComp::TCompleterManager& manager) const override {
+        return manager.GetCompleterID(this);
+    }
+
+    void GenerateZsh(NLastGetopt::TFormattedOutput& out, NLastGetopt::NComp::TCompleterManager&) const override {
+        out.Line() << "local -a _profiles";
+        out.Line() << "_profiles=( \"${(@f)$(${words_orig[@]} ---CUSTOM-COMPLETION--- "
+                    << Completer_->GetUniqueName()
+                    << " \"${current_orig}\" \"${prefix_orig}\" \"${suffix_orig}\" 2> /dev/null)}\" )";
+        out.Line() << "_describe 'profile name' _profiles";
+    }
+
+private:
+    NLastGetopt::NComp::TCustomCompleter* Completer_;
+};
+
+} // anonymous namespace
+
+Y_COMPLETER(ProfileCompleter) {
+    try {
+        TString configPath = GetProfileConfigPathFromArgs(argc, argv);
+        auto profileManager = CreateProfileManager(configPath);
+        for (const auto& name : profileManager->ListProfiles()) {
+            auto profile = profileManager->GetProfile(name);
+            TString desc = DescribeProfileForCompletion(profile);
+            if (desc) {
+                AddCompletion(TStringBuilder() << name << ":" << desc);
+            } else {
+                AddCompletion(name);
+            }
+        }
+    } catch (...) {
+    }
+}
 
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
@@ -233,7 +325,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
             VerbosityLevel++;
         });
     opts.AddLongOption('p', "profile", "Profile name to use configuration parameters from")
-        .RequiredArgument("NAME").StoreResult(&ProfileName);
+        .RequiredArgument("NAME").StoreResult(&ProfileName)
+        .CompletionArgHelp("Profile name")
+        .Completer(MakeSimpleShared<TProfileLaunchSelfCompleter>(&ProfileCompleter));
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
         .Optional().StoreTrue(&config.AssumeYes);
 
@@ -532,7 +626,7 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
 
 void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (ProfileFile.empty()) {
-        config.ProfileFile = TStringBuilder() << HomeDir << '/' << Settings.YdbDir << "/config/config.yaml";
+        config.ProfileFile = DefaultProfileConfigPath(Settings.YdbDir);
     } else {
         config.ProfileFile = TFsPath(ProfileFile).RealLocation().GetPath();
     }

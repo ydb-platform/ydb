@@ -74,17 +74,16 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
         ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
 
-        // This is critical: without compaction DataStats.DataSize stays zero even without
-        // disabling StatsUpdateInProgress and enabling StatsNeedUpdate
         CompactTable(*runtime, shard1, tableId, false);
 
         {
             Cerr << "... waiting for stats after compaction" << Endl;
             auto stats = WaitTableStats(*runtime, shard1, [](const NKikimrTableStats::TTableStats& s) {
-                return s.GetPartCount() >= 1 && s.GetRowCount() == 3;
+                return s.GetRowCount() == 3 && s.GetDataSize() != 0 && s.GetPartCount() == 1;
             });
             UNIT_ASSERT_VALUES_EQUAL(stats.GetDatashardId(), shard1);
             UNIT_ASSERT_VALUES_EQUAL(stats.GetTableStats().GetRowCount(), 3);
+            // Because DataSize is size of MemTable
             UNIT_ASSERT_GT(stats.GetTableStats().GetDataSize(), 0u);
         }
 

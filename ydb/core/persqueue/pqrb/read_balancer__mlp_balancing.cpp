@@ -26,14 +26,13 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
 }
 
-bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, std::optional<bool> readingIsFinished,
-    std::optional<bool> useForReading, ui32 generation, ui64 cookie) {
+bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readingIsFinished,
+    std::optional<bool> useForReading, const TMetrics& metrics, ui32 generation, ui64 cookie) {
     auto& status = Partitions[partitionId];
 
     if (status.Generation < generation || (status.Generation == generation && status.Cookie < cookie)) {
         auto result = false;
 
-        status.Messages = messages;
         if (readingIsFinished) {
             result |= status.ReadingIsFinished != *readingIsFinished;
             status.ReadingIsFinished = *readingIsFinished;
@@ -44,6 +43,7 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, ui64 messages, std::option
         }
         status.Generation = generation;
         status.Cookie = cookie;
+        status.Metrics = metrics;
 
         return result;
     }
@@ -162,9 +162,13 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
     PQ_LOG_D("Handle TEvPQ::TEvReadingPartitionStatusRequest " << record.ShortDebugString());
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
-                     0, // expected messages
                      true, // reading is finished
                      std::nullopt, // use for reading
+                     TMLPConsumer::TMetrics{
+                        .LockedMessages = record.GetLockedMessageCount(),
+                        .DelayedMessages = record.GetDelayedMessageCount(),
+                        .Messages = record.GetMessageCount()
+                     },
                      record.GetGeneration(),
                      record.GetCookie());
 }
@@ -174,9 +178,13 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     PQ_LOG_D("Handle TEvPQ::TEvMLPConsumerStatus " << record.ShortDebugString());
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
-                     record.GetMessages(), // expected messages
                      std::nullopt, // reading is finished
                      record.GetUseForReading(), // use for reading
+                     TMLPConsumer::TMetrics{
+                        .LockedMessages = record.GetLockedMessageCount(),
+                        .DelayedMessages = record.GetDelayedMessageCount(),
+                        .Messages = record.GetMessageCount()
+                     },
                      record.GetGeneration(),
                      record.GetCookie());
 }
@@ -195,7 +203,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 
         if (mlpConsumers.contains(consumerName)) {
             for (const auto& partitionId : addedPartitions) {
-                consumer.SetUseForReading(partitionId, 0, false, false, 0, 0);
+                consumer.SetUseForReading(partitionId, false, false, {}, 0, 0);
             }
             if (!addedPartitions.empty()) {
                 consumer.Rebuild();
@@ -215,9 +223,9 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 
 void TMLPBalancer::SetUseForReading(const TString& consumerName,
                                     ui32 partitionId,
-                                    ui64 messages,
                                     std::optional<bool> readingIsFinished,
                                     std::optional<bool> useForReading,
+                                    const TMLPConsumer::TMetrics& metrics,
                                     ui32 generation,
                                     ui64 cookie) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
@@ -234,7 +242,7 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName,
     auto [it, _] = Consumers.try_emplace(consumerName, *this);
     auto& consumer = it->second;
 
-    if (consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie)) {
+    if (consumer.SetUseForReading(partitionId, readingIsFinished, useForReading, metrics, generation, cookie)) {
         consumer.Rebuild();
     }
 }

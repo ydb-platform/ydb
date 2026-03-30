@@ -1268,6 +1268,10 @@ private:
         TActorId ActorId;
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
         bool UseForReading = true;
+        ui64 LockedMessageCount = 0;
+        ui64 DelayedMessageCount = 0;
+        ui64 MessageCount = 0;
+
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 

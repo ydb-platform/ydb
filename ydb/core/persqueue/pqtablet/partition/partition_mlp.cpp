@@ -114,6 +114,9 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
 
     auto& consumerInfo = it->second;
     consumerInfo.UseForReading = record.GetUseForReading();
+    consumerInfo.LockedMessageCount = record.GetLockedMessageCount();
+    consumerInfo.DelayedMessageCount = record.GetDelayedMessageCount();
+    consumerInfo.MessageCount = record.GetMessageCount();
 
     record.SetGeneration(TabletGeneration);
     record.SetCookie(++PQRBCookie);

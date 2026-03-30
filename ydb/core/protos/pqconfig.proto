@@ -1151,6 +1151,9 @@ message TEvReadingPartitionStatusRequest {
     optional uint32 PartitionId = 2;
     optional uint32 Generation = 3;
     optional uint32 Cookie = 4;
+    optional uint64 MessageCount = 5;
+    optional uint64 LockedMessageCount = 6;
+    optional uint64 DelayedMessageCount = 7;
 };
 
 // The consumer's reading of the partition is finished (from ReadSession)
@@ -1428,10 +1431,12 @@ message TEvMLPConsumerStatus {
     optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
     optional string Consumer = 2;
     optional uint32 PartitionId = 3;
-    optional uint64 Messages = 5;
     optional bool UseForReading = 6;
     optional uint32 Generation = 7;
     optional uint64 Cookie = 8;
+    optional uint64 MessageCount = 9;
+    optional uint64 LockedMessageCount = 10;
+    optional uint64 DelayedMessageCount = 11;
 }
 
 

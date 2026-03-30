@@ -1739,10 +1739,9 @@ struct TEvPQ {
     struct TEvMLPConsumerStatus : TEventPB<TEvMLPConsumerStatus, NKikimrPQ::TEvMLPConsumerStatus, EvMLPConsumerStatus> {
         TEvMLPConsumerStatus() = default;
 
-        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, ui64 messages, bool useForReading) {
+        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, bool useForReading) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
         }
     };

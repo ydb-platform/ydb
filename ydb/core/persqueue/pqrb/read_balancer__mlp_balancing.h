@@ -26,6 +26,8 @@ public:
         std::optional<bool> useForReading, const TMetrics& metrics, ui32 generation, ui64 cookie);
     void Rebuild();
 
+    const TMetrics& GetMetrics() const;
+
 private:
     const TMLPBalancer& Balancer;
 
@@ -42,6 +44,7 @@ private:
         TMetrics Metrics;
     };
     absl::flat_hash_map<ui32, TPartitionStatus> Partitions;
+    TMetrics Metrics;
 };
 
 class TMLPBalancer {
@@ -49,6 +52,7 @@ public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
     void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr&);
 
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr&, const TActorContext&);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);

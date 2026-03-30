@@ -27,6 +27,7 @@ struct TTopicInfo {
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
 
+    ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };

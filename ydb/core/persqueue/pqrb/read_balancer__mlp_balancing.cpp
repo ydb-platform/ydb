@@ -27,7 +27,7 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
 }
 
 bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readingIsFinished,
-    std::optional<bool> useForReading, const TMetrics& metrics, ui32 generation, ui64 cookie) {
+    std::optional<bool> useForReading, const TMLPConsumer::TMetrics& metrics, ui32 generation, ui64 cookie) {
     auto& status = Partitions[partitionId];
 
     if (status.Generation < generation || (status.Generation == generation && status.Cookie < cookie)) {
@@ -41,9 +41,14 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readin
             result |= status.UseForReading != *useForReading;
             status.UseForReading = *useForReading;
         }
+
+        Metrics.LockedMessages += metrics.LockedMessages - status.Metrics.LockedMessages;
+        Metrics.DelayedMessages += metrics.DelayedMessages - status.Metrics.DelayedMessages;
+        Metrics.Messages += metrics.Messages - status.Metrics.Messages;
+        status.Metrics = metrics;
+
         status.Generation = generation;
         status.Cookie = cookie;
-        status.Metrics = metrics;
 
         return result;
     }
@@ -77,6 +82,10 @@ void TMLPConsumer::Rebuild() {
     }
 
     PQ_LOG_D("Rebuild " << JoinSeq(",", PartitionsForBalancing) << " partitions for balancing");
+}
+
+const TMLPConsumer::TMetrics& TMLPConsumer::GetMetrics() const {
+    return Metrics;
 }
 
 TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
@@ -115,6 +124,36 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     }
 
     TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetPartitionResponse(node->Id, node->TabletId), 0, ev->Cookie);
+}
+
+void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
+    const auto& consumerName = ev->Get()->GetConsumer();
+
+    const auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
+    if (!consumerConfig) {
+        PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
+        TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() << "Consumer '" << consumerName << "' does not exist"), 0, ev->Cookie);
+        return;
+    }
+
+    if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+        PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
+        TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+            TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer"), 0, ev->Cookie);
+        return;
+    }
+
+    auto it = Consumers.find(consumerName);
+    if (it == Consumers.end()) {
+        TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetRuntimeAttributesResponse(0, 0, 0), 0, ev->Cookie);
+        return;
+    }
+
+    const auto& consumer = it->second;
+    const auto& metrics = consumer.GetMetrics();
+
+    TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetRuntimeAttributesResponse(metrics.Messages, metrics.DelayedMessages, metrics.LockedMessages), 0, ev->Cookie);
 }
 
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {

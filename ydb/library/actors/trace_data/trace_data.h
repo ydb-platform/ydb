@@ -12,22 +12,24 @@ namespace NActors::NTracing {
         ReceiveLocal = 1,
         New = 2,
         Die = 3,
+        ForwardLocal = 4,
     };
 
     struct TTraceEvent {
         ui64 Timestamp;    // microseconds since Unix epoch
-        ui64 Actor1;       // Sender LocalId (Send/Receive), ActorId (New/Die)
-        ui64 Actor2;       // Recipient LocalId (Send/Receive), 0 (New/Die)
-        ui32 Aux;          // MessageType index (Send/Receive), 0 (New/Die)
-        ui16 Extra;        // ActivityIndex (Send/Receive), 0 (New/Die)
+        ui64 Actor1;       // Sender LocalId (Send/Receive), ActorId (New/Die), NewHandlePtr (ForwardLocal)
+        ui64 Actor2;       // Recipient LocalId (Send/Receive), 0 (New/Die), Recipient LocalId (ForwardLocal)
+        ui32 Aux;          // MessageType index (Send/Receive), 0 (New/Die), Original message type (ForwardLocal)
+        ui16 Extra;        // ActivityIndex (Send/Receive), 0 (New/Die), Forwarder ActivityIndex (ForwardLocal)
         ui8  Type;         // ETraceEventType
         ui8  Flags;        // Thread buffer index (0-127)
+        ui64 HandlePtr;    // IEventHandle* (Send/Receive), old HandlePtr (ForwardLocal), 0 (New/Die)
     };
 
-    static_assert(sizeof(TTraceEvent) == 32);
+    static_assert(sizeof(TTraceEvent) == 40);
 
     constexpr ui32 TraceFileMagic = 0x41525459; // "YTRA" little-endian
-    constexpr ui32 TraceFileVersion = 1;
+    constexpr ui32 TraceFileVersion = 2;
 
     struct TTraceFileHeader {
         ui32 Magic = TraceFileMagic;

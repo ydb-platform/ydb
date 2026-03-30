@@ -138,6 +138,10 @@ namespace NActors::NTracing {
             return false;
         }
 
+        if (header.Version != TraceFileVersion) {
+            return false;
+        }
+
         nodeId = header.NodeId;
 
         const char* dictEnd = ptr + header.HeaderSize;

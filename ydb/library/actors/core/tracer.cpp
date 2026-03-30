@@ -186,6 +186,7 @@ namespace NActors::NTracing {
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.Type;
             ev.Extra = ts.CurrentActivityIndex;
+            ev.HandlePtr = reinterpret_cast<ui64>(&event);
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
         }
@@ -204,8 +205,26 @@ namespace NActors::NTracing {
             ev.Actor2 = event.GetRecipientRewrite().LocalId();
             ev.Aux = event.Type;
             ev.Extra = activityIndex;
+            ev.HandlePtr = reinterpret_cast<ui64>(&event);
             TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
             TracerImpl.RegisterEventTypeName(ts.Buffer, event.Type, event.GetTypeName());
+        }
+
+        void HandleForward(ui64 oldHandlePtr, IEventHandle& event, ui32 originalType) override {
+            if (State.load(std::memory_order_acquire) != ETracerState::Recording) {
+                return;
+            }
+            auto& ts = GetThreadState();
+            if (!ts.Buffer) return;
+            TTraceEvent ev{};
+            ev.Type = static_cast<ui8>(ETraceEventType::ForwardLocal);
+            ev.Actor1 = reinterpret_cast<ui64>(&event);
+            ev.Actor2 = event.GetRecipientRewrite().LocalId();
+            ev.Aux = originalType;
+            ev.Extra = ts.CurrentActivityIndex;
+            ev.HandlePtr = oldHandlePtr;
+            TracerImpl.AddEvent(ts.Buffer, ev, ts.Idx);
+            TracerImpl.RegisterEventTypeName(ts.Buffer, originalType, event.GetTypeName());
         }
 
         bool Start() override {

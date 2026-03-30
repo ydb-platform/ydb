@@ -18,7 +18,7 @@ using namespace NActors::NTracing;
 Y_UNIT_TEST_SUITE(TracerTest) {
 
     Y_UNIT_TEST(EventSize) {
-        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 32u);
+        UNIT_ASSERT_VALUES_EQUAL(sizeof(TTraceEvent), 40u);
     }
 
     Y_UNIT_TEST(SerializeDeserializeRoundTrip) {
@@ -38,6 +38,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev2.Actor2 = 42;
         ev2.Aux = 100;
         ev2.Type = static_cast<ui8>(ETraceEventType::SendLocal);
+        ev2.HandlePtr = 0x11111111;
         chunk.Events.push_back(ev2);
 
         TTraceEvent ev3{};
@@ -47,6 +48,7 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev3.Aux = 100;
         ev3.Extra = 3;
         ev3.Type = static_cast<ui8>(ETraceEventType::ReceiveLocal);
+        ev3.HandlePtr = 0x11111111;
         chunk.Events.push_back(ev3);
 
         TTraceEvent ev4{};
@@ -54,6 +56,16 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         ev4.Actor1 = 42;
         ev4.Type = static_cast<ui8>(ETraceEventType::Die);
         chunk.Events.push_back(ev4);
+
+        TTraceEvent ev5{};
+        ev5.Timestamp = 1000040;
+        ev5.Actor1 = 0x22222222;
+        ev5.Actor2 = 42;
+        ev5.Aux = 100;
+        ev5.Extra = 3;
+        ev5.Type = static_cast<ui8>(ETraceEventType::ForwardLocal);
+        ev5.HandlePtr = 0x11111111;
+        chunk.Events.push_back(ev5);
 
         auto buf = SerializeTrace(chunk, 1);
         UNIT_ASSERT(buf.Size() > 0);
@@ -64,13 +76,17 @@ Y_UNIT_TEST_SUITE(TracerTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(nodeId, 1u);
         UNIT_ASSERT_VALUES_EQUAL(restored.ActivityDict.size(), 3u);
-        UNIT_ASSERT_VALUES_EQUAL(restored.Events.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events.size(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(restored.EventNamesDict.size(), 2u);
 
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[0].Type, static_cast<ui8>(ETraceEventType::New));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].Type, static_cast<ui8>(ETraceEventType::SendLocal));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[2].Type, static_cast<ui8>(ETraceEventType::ReceiveLocal));
         UNIT_ASSERT_VALUES_EQUAL(restored.Events[3].Type, static_cast<ui8>(ETraceEventType::Die));
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Type, static_cast<ui8>(ETraceEventType::ForwardLocal));
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[1].HandlePtr, 0x11111111ull);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].HandlePtr, 0x11111111ull);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Events[4].Actor1, 0x22222222ull);
     }
 
     Y_UNIT_TEST(DeserializeRejectsBadMagic) {
@@ -156,6 +172,27 @@ Y_UNIT_TEST_SUITE(TracerTest) {
         int Remaining;
     };
 
+    class TForwardActor : public TActor<TForwardActor> {
+    public:
+        explicit TForwardActor(TActorId target)
+            : TActor(&TThis::StateWork)
+            , Target(target)
+        {}
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvPing, Handle);
+            }
+        }
+
+        void Handle(TEvPing::TPtr& ev, const TActorContext&) {
+            Forward(ev, Target);
+        }
+
+    private:
+        TActorId Target;
+    };
+
     Y_UNIT_TEST(RealActorSystemCollectsEvents) {
         THolder<TActorSystemSetup> setup(new TActorSystemSetup());
         setup->NodeId = 1;
@@ -204,16 +241,22 @@ Y_UNIT_TEST_SUITE(TracerTest) {
                 case ETraceEventType::SendLocal:
                     sendCount++;
                     UNIT_ASSERT(ev.Actor2 != 0);
+                    UNIT_ASSERT(ev.HandlePtr != 0);
                     break;
                 case ETraceEventType::ReceiveLocal:
                     receiveCount++;
                     UNIT_ASSERT(ev.Actor2 != 0);
+                    UNIT_ASSERT(ev.HandlePtr != 0);
                     break;
                 case ETraceEventType::New:
                     newCount++;
                     UNIT_ASSERT(ev.Actor1 != 0);
                     break;
                 case ETraceEventType::Die:
+                    UNIT_ASSERT(ev.Actor1 != 0);
+                    break;
+                case ETraceEventType::ForwardLocal:
+                    UNIT_ASSERT(ev.HandlePtr != 0);
                     UNIT_ASSERT(ev.Actor1 != 0);
                     break;
             }
@@ -263,6 +306,73 @@ Y_UNIT_TEST_SUITE(TracerTest) {
             UNIT_ASSERT_C(chunk.EventNamesDict.contains(eventType),
                 "Event type " << eventType << " should be in EventNamesDict");
         }
+    }
+
+    Y_UNIT_TEST(ForwardCreatesHandleRemapEvent) {
+        THolder<TActorSystemSetup> setup(new TActorSystemSetup());
+        setup->NodeId = 1;
+        setup->ExecutorsCount = 1;
+        setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
+        setup->Executors[0].Reset(new TBasicExecutorPool(0, 1, 20));
+        setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 0)));
+
+        auto logSettings = MakeIntrusive<NLog::TSettings>(
+            TActorId(1, "logger"),
+            0,
+            NLog::PRI_WARN);
+        logSettings->TracerSettings.AutoStart = true;
+        logSettings->TracerSettings.MaxBufferSizePerThread = 4096;
+
+        TActorSystem actorSystem(setup, nullptr, logSettings);
+        actorSystem.Start();
+
+        auto pongActorId = actorSystem.Register(new TPongActor());
+        auto forwardActorId = actorSystem.Register(new TForwardActor(pongActorId));
+
+        TManualEvent done;
+        const int messageCount = 8;
+        auto pingActorId = actorSystem.Register(new TPingActor(forwardActorId, done, messageCount));
+        actorSystem.Send(pingActorId, new TEvents::TEvBootstrap());
+
+        done.WaitT(TDuration::Seconds(5));
+
+        auto* tracer = actorSystem.GetActorTracer();
+        UNIT_ASSERT(tracer != nullptr);
+
+        tracer->Stop();
+        auto chunk = tracer->GetTraceData();
+
+        actorSystem.Stop();
+        actorSystem.Cleanup();
+
+        THashSet<ui64> sendHandles;
+        THashSet<ui64> receiveHandles;
+        TVector<TTraceEvent> forwardEvents;
+
+        for (const auto& ev : chunk.Events) {
+            const auto type = static_cast<ETraceEventType>(ev.Type);
+            if (type == ETraceEventType::SendLocal) {
+                sendHandles.insert(ev.HandlePtr);
+            } else if (type == ETraceEventType::ReceiveLocal) {
+                receiveHandles.insert(ev.HandlePtr);
+            } else if (type == ETraceEventType::ForwardLocal) {
+                forwardEvents.push_back(ev);
+            }
+        }
+
+        UNIT_ASSERT_C(!forwardEvents.empty(), "Expected at least one ForwardLocal event");
+
+        bool foundMatchedRemap = false;
+        for (const auto& ev : forwardEvents) {
+            UNIT_ASSERT_VALUES_EQUAL(ev.Aux, TEvPing::EventType);
+            UNIT_ASSERT_VALUES_EQUAL(ev.Actor2, pongActorId.LocalId());
+            if (receiveHandles.contains(ev.HandlePtr) && sendHandles.contains(ev.Actor1)) {
+                foundMatchedRemap = true;
+            }
+        }
+
+        UNIT_ASSERT_C(foundMatchedRemap,
+            "Expected ForwardLocal remap to connect received old handle with sent new handle");
     }
 
     Y_UNIT_TEST(EventsFilteredByStartTimestamp) {

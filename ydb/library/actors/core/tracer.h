@@ -30,6 +30,7 @@ namespace NActors {
             virtual void HandleDie(IActor& actor) = 0;
             virtual void HandleSend(IEventHandle& event) = 0;
             virtual void HandleReceive(IActor& recipient, IEventHandle& event) = 0;
+            virtual void HandleForward(ui64 oldHandlePtr, IEventHandle& event, ui32 originalType) = 0;
             virtual bool Start() = 0;
             virtual bool Stop() = 0;
             virtual TTraceChunk GetTraceData() = 0;

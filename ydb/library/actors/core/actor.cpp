@@ -49,6 +49,19 @@ namespace NActors {
 
     static thread_local TActorRunnableQueue* TlsActorRunnableQueue = nullptr;
 
+    template <typename TEventHandlePtr>
+    auto ForwardWithTracing(TActorSystem* actorSystem, TEventHandlePtr& ev, const TActorId& recipient) {
+        const ui64 oldHandlePtr = ev ? reinterpret_cast<ui64>(ev.Get()) : 0;
+        const ui32 originalType = ev ? ev->GetTypeRewrite() : 0;
+        auto forwarded = IEventHandle::Forward(ev, recipient);
+        if (oldHandlePtr && forwarded) {
+            if (auto tracer = actorSystem ? actorSystem->GetActorTracer() : nullptr) {
+                tracer->HandleForward(oldHandlePtr, *forwarded, originalType);
+            }
+        }
+        return forwarded;
+    }
+
     TActorRunnableQueue::TActorRunnableQueue(IActor* actor) noexcept {
         Actor_ = actor;
         Prev_ = TlsActorRunnableQueue;
@@ -501,7 +514,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActivationContext::Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) {
-        return Send(IEventHandle::Forward(ev, recipient));
+        return Send(ForwardWithTracing(TlsActivationContext->ExecutorThread.ActorSystem, ev, recipient));
     }
 
     template bool TActivationContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient);
@@ -510,7 +523,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActivationContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) {
-        return Send(IEventHandle::Forward(ev, recipient));
+        return Send(ForwardWithTracing(TlsActivationContext->ExecutorThread.ActorSystem, ev, recipient));
     }
 
     template bool TActorContext::Send<ESendingType::Common>(const TActorId& recipient, IEventBase* ev, TEventFlags flags, ui64 cookie, NWilson::TTraceId traceId) const;
@@ -537,7 +550,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActorContext::Forward(TAutoPtr<IEventHandle>& ev, const TActorId& recipient) const {
-        return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
+        return ExecutorThread.Send<SendingType>(ForwardWithTracing(ExecutorThread.ActorSystem, ev, recipient));
     }
 
     template bool TActorContext::Forward<ESendingType::Common>(THolder<IEventHandle>& ev, const TActorId& recipient) const;
@@ -546,7 +559,7 @@ namespace NActors {
 
     template <ESendingType SendingType>
     bool TActorContext::Forward(THolder<IEventHandle>& ev, const TActorId& recipient) const {
-        return ExecutorThread.Send<SendingType>(IEventHandle::Forward(ev, recipient));
+        return ExecutorThread.Send<SendingType>(ForwardWithTracing(ExecutorThread.ActorSystem, ev, recipient));
     }
 
     template TActorId TActivationContext::Register<ESendingType::Common>(IActor* actor, TActorId parentId, TMailboxType::EType mailboxType, ui32 poolId);

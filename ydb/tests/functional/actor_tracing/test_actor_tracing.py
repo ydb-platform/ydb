@@ -17,9 +17,9 @@ from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 logger = logging.getLogger(__name__)
 
 TRACE_FILE_MAGIC = 0x41525459
-EVENT_SIZE = 32
+EVENT_SIZE = 40
 HEADER_FMT = "<IIIIq"
-EVENT_FMT = "<QQQIHbb"
+EVENT_FMT = "<QQQIHbbQ"
 
 OUTPUT_DIR = os.path.join(os.getcwd(), "test_output")
 
@@ -36,11 +36,12 @@ def parse_trace_events(data, header_size, event_count):
     for i in range(event_count):
         offset = events_offset + i * EVENT_SIZE
         vals = struct.unpack_from(EVENT_FMT, data, offset)
-        timestamp, actor1, actor2, aux, extra, ev_type, flags = vals
+        timestamp, actor1, actor2, aux, extra, ev_type, flags, handle_ptr = vals
         events.append({
             'timestamp': timestamp, 'actor1': actor1,
             'actor2': actor2, 'aux': aux, 'extra': extra,
             'type': ev_type,
+            'handle_ptr': handle_ptr,
         })
     return events
 
@@ -59,7 +60,7 @@ def assert_trace_has_events(data, label=""):
     magic, version, node_id, header_size, event_count = \
         parse_trace_header(data)
     assert magic == TRACE_FILE_MAGIC, f"Bad magic: {magic:#x}"
-    assert version == 1
+    assert version == 2
     assert node_id > 0
     assert event_count > 0, (
         f"No events {label}: header_size={header_size} "
@@ -72,7 +73,7 @@ def assert_trace_has_events(data, label=""):
         type_counts[t] = type_counts.get(t, 0) + 1
         assert ev['timestamp'] > 0
 
-    names = {0: 'SendLocal', 1: 'ReceiveLocal', 2: 'New', 3: 'Die'}
+    names = {0: 'SendLocal', 1: 'ReceiveLocal', 2: 'New', 3: 'Die', 4: 'ForwardLocal'}
     for t, c in sorted(type_counts.items()):
         logger.info("  %s: %d", names.get(t, str(t)), c)
 

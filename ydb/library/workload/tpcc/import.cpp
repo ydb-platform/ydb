@@ -763,6 +763,15 @@ TOperation::TOperationId CreateAlterTableOperation(
     } else {
         tablePath = table;
     }
+    const auto expectedOperationKind = [&settings]{
+        if (!settings.AddIndexes_.empty()) {
+            return TOperation::TOperationId::BUILD_INDEX;
+        }
+        if (settings.Compact_.has_value()) {
+            return TOperation::TOperationId::COMPACTION;
+        }
+        return TOperation::TOperationId::UNUSED;
+    } ();
 
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
@@ -770,8 +779,8 @@ TOperation::TOperationId CreateAlterTableOperation(
         if (IsOperationStarted(opResult.Status())) {
             operationId = opResult.Id();
             LOG_I("Started to " << operationName << ": " << operationId.ToString());
-            if (operationId.GetKind() == TOperation::TOperationId::BUILD_INDEX) {
-                return TStatus(EStatus::SUCCESS, NIssue::TIssues());
+            if (operationId.GetKind() == expectedOperationKind || opResult.Status().GetStatus() == EStatus::STATUS_UNDEFINED) {
+                return TStatus(EStatus::SUCCESS, NIssue::TIssues(opResult.Status().GetIssues()));
             }
             return opResult.Status();
         } else {
@@ -834,13 +843,10 @@ void CompactTable(
     const char* table,
     TLog* Log)
 {
-    if (!config.Compact) {
-        return;
-    }
     NTable::TTableClient client(driver);
     auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
         NTable::TAlterTableSettings()
-            .Compact(NTable::TCompact(false, 1000))
+            .Compact(NTable::TCompact())
     );
     LOG_T("Compacting table " << table << ": " << id.ToString());
     loadState.CompactionStates.emplace_back(id, table, table);
@@ -1110,17 +1116,21 @@ public:
                     LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()
                 ) {
                     LOG_I("Indices created successfully");
-                    for (const auto& table: TPCC_TABLES) {
-                        CompactTable(drivers.front(), LoadState, Config, table, Log.get());
-                    }
+                    if (Config.Compact) {
+                        for (const auto& table: TPCC_TABLES) {
+                            CompactTable(drivers.front(), LoadState, Config, table, Log.get());
+                        }
 /*
-                    for (const auto& indexState: LoadState.IndexBuildStates) {
-                        TStringBuilder indexImplTable;
-                        indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
-                        CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
-                    }
+                        for (const auto& indexState: LoadState.IndexBuildStates) {
+                            TStringBuilder indexImplTable;
+                            indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
+                            CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
+                        }
 */
-                    LoadState.State = TImportState::EWAIT_COMPACTION;
+                        LoadState.State = TImportState::EWAIT_COMPACTION;
+                    } else {
+                        LoadState.State = TImportState::ESUCCESS;
+                    }
                     continue;
                 }
                 break;
@@ -1344,7 +1354,7 @@ private:
             // waiting for indices
             if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
                 std::stringstream ss;
-                ss << "Waiting for indices and compaction";
+                ss << "Waiting for indices" << (Config.Compact ? " and compaction" : "");
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     const auto& indexState = LoadState.IndexBuildStates[i];
                     if (i > 0) ss << ", ";

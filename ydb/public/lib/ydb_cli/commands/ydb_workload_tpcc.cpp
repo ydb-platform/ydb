@@ -125,7 +125,7 @@ void TCommandTPCCImport::Config(TConfig& config) {
             .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
     config.Opts->AddLongOption(
-        "compact", "compact tables after import data"
+        "compact", "Compact tables after importing data"
     ).NoArgument().StoreTrue(&RunConfig->Compact);
 
     // TODO: detect automatically

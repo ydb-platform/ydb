@@ -1925,7 +1925,6 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kSequencer: {
-                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
                 partitionsCount = originStageInfo.Tasks.size();
                 break;
             }

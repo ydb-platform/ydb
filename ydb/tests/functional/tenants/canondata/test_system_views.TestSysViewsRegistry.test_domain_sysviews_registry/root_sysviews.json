@@ -370,6 +370,10 @@
       {
         "name": "SlotSizeInUnits",
         "type": "Uint32?"
+      },
+      {
+        "name": "MaintenanceStatus",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [

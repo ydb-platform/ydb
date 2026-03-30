@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 

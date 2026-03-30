@@ -1,0 +1,166 @@
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_mlp.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+package NKikimrPQ;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvSubDomainStatus {
+    required bool SubDomainOutOfSpace = 1;
+};
+
+message TEvCheckPartitionStatusRequest {
+    optional uint32 Partition = 1;
+    optional string SourceId = 2;
+};
+
+message TEvCheckPartitionStatusResponse {
+    optional ETopicPartitionStatus Status = 1;
+    optional uint64 SeqNo = 2;
+};
+
+// The consumer's reading of the partition is finished  (from the partition)
+message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+    optional uint64 MessageCount = 5;
+    optional uint64 LockedMessageCount = 6;
+    optional uint64 DelayedMessageCount = 7;
+};
+
+message TEvPartitionScaleStatusChanged {
+    required uint32 PartitionId = 1;
+    required EScaleStatus ScaleStatus = 2;
+    optional TPartitionScaleParticipants ParticipatingPartitions = 3;
+    optional string SplitBoundary = 4;
+};
+
+message TBroadcastPartitionError {
+    message TMessageGroup {
+        repeated TStatusResponse.TErrorMessage Errors = 1;
+    }
+    repeated TMessageGroup MessageGroups = 1;
+};
+
+message TEvMLPGetPartitionRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+}
+
+// From PQRB
+message TEvMLPGetPartitionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional uint32 PartitionId = 2;
+    optional uint64 TabletId = 3;
+}
+
+// From PQTablet
+message TEvMLPErrorResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional string ErrorMessage = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// To PQTablet
+message TEvMLPReadRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 WaitDeadlineMilliseconds = 4;
+    optional uint64 ProcessingTimeoutMilliseconds = 5;
+    // The maximum number of messages to return.
+    optional uint32 MaxNumberOfMessages = 6;
+}
+
+// From PQTablet
+message TEvMLPReadResponse {
+    repeated TMLPMessage Message = 1;
+}
+
+// To PQTablet
+// Подтверждает что сообщение было обработано
+message TEvMLPCommitRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+// From PQTablet
+message TEvMLPCommitResponse {
+}
+
+// To PQTablet
+// освобождает сообщение до истечения таймаута. Может быть полезно для протоколов, которые держат постоянное соединение с клиентом, и могут обрабатывать обрыв соединения
+message TEvMLPUnlockRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+// From PQTablet
+message TEvMLPUnlockResponse {
+}
+
+// To PQTablet
+// Изменяет дедлайн сообщения
+message TEvMLPChangeMessageDeadlineRequest {
+    message TOffsetWithDeadline {
+        optional uint64 Offset = 1;
+        optional uint64 DeadlineTimestampSeconds = 2;
+    }
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated TOffsetWithDeadline Message = 6;
+}
+
+// From PQTablet
+message TEvMLPChangeMessageDeadlineResponse {
+}
+
+// To PQTablet
+message TEvMLPPurgeRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// From PQTablet
+message TEvMLPPurgeResponse {
+    optional uint32 PartitionId = 1;
+}
+
+// To PQRB
+message TEvMLPGetRuntimeAttributesRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+}
+
+// From PQRB
+message TEvMLPGetRuntimeAttributesResponse {
+    optional uint64 ApproximateMessageCount = 1;
+    optional uint64 ApproximateDelayedMessageCount = 2;
+    optional uint64 ApproximateLockedMessageCount = 3;
+}
+
+message TEvMLPConsumerStatus {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional bool UseForReading = 6;
+    optional uint32 Generation = 7;
+    optional uint64 Cookie = 8;
+    optional uint64 MessageCount = 9;
+    optional uint64 LockedMessageCount = 10;
+    optional uint64 DelayedMessageCount = 11;
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
+}

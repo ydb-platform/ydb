@@ -1,5 +1,7 @@
 #include "mlp_message_enricher.h"
 
+#include <ydb/core/protos/pqdata_mlp.pb.h>
+
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -35,10 +34,6 @@ public:
 private:
     NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
-    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

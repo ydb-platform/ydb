@@ -12,6 +12,50 @@
 using namespace NKafka;
 using namespace NYdb;
 
+Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
+    // Test PLAIN message with empty username
+    Y_UNIT_TEST(EmptyUsername) {
+        TInsecureTestServer testServer("2");
+        TKafkaTestClient client(testServer.Port);
+
+        auto apiVersionsMsg = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersionsMsg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        auto handshakeMsg = client.SaslHandshake("PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(handshakeMsg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        auto response = client.SaslPlainAuthenticate("@/Root", "ourUserPassword");
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+
+        UNIT_ASSERT(response->ErrorMessage.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. ");
+    }
+
+    // Test PLAIN message with incorrect tokens count
+    Y_UNIT_TEST(IncorrectTokensCount) {
+        TInsecureTestServer testServer("2");
+        TKafkaTestClient client(testServer.Port);
+
+        auto apiVersionsMsg = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersionsMsg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        auto handshakeMsg = client.SaslHandshake("PLAIN");
+        UNIT_ASSERT_VALUES_EQUAL(handshakeMsg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        TStringBuilder username;
+        username << "ouruser" << '\0' << "@/Root";
+        auto response = client.SaslPlainAuthenticate(username, "ourUserPassword");
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(response->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::SASL_AUTHENTICATION_FAILED));
+
+        UNIT_ASSERT(response->ErrorMessage.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*response->ErrorMessage, "Authentication failure. Invalid SASL/PLAIN request: expected 3 tokens, got 4");
+    }
+}
+
 Y_UNIT_TEST_SUITE(KafkaScramFirstMessage) {
 
     // Test successful first SCRAM message with valid user

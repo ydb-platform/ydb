@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/persqueue/events
     ydb/core/persqueue/public/cloud_events
 )
 

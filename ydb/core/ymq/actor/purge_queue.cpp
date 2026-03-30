@@ -57,7 +57,7 @@ private:
                 .ParentBuilder().Start();
             ++InflightRequests_;
         }
-        if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+        if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
             Register(NPQ::NMLP::CreatePurger(SelfId(), {
                 .DatabasePath = GetDatabaseName(),
                 .TopicName = GetTopicName(),
@@ -134,7 +134,6 @@ private:
                 auto* result = Response_.MutablePurgeQueue();
                 MakeError(result, NErrors::INTERNAL_FAILURE, response.ErrorDescription);
                 return SendReplyAndDie();
-                break;
             }
         }
     }
@@ -144,7 +143,7 @@ private:
     }
 
 private:
-    size_t InflightRequests_ = 0;    
+    size_t InflightRequests_ = 0;
 };
 
 class TPurgeQueueBatchActor

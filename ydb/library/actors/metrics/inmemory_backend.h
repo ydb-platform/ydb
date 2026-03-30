@@ -38,17 +38,17 @@ namespace NActors {
         const TInMemoryMetricsConfig& GetConfig() const noexcept;
         void Shutdown() noexcept;
 
-        void CloseLine(TLineWriterState* writer) noexcept override;
+        void CloseLine(TLineWriterState* state) noexcept override;
         bool AppendChunkData(
-            TLineWriterState* writer,
+            TLineWriterState* state,
             std::span<const char> data,
             NHPTimer::STime firstTs,
             NHPTimer::STime lastTs) noexcept override;
         NHPTimer::STime CurrentTimestampTs() const noexcept override;
-        TLinePublishState GetPublishState(const TLineWriterState* writer) const noexcept override;
-        ui32 GetLineId(const TLineWriterState* writer) const noexcept override;
-        void MarkObserved(TLineWriterState* writer, NHPTimer::STime nowTs) noexcept override;
-        void MarkPublished(TLineWriterState* writer, ui64 value, NHPTimer::STime nowTs) noexcept override;
+        TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept override;
+        ui32 GetLineId(const TLineWriterState* state) const noexcept override;
+        void MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept override;
+        void MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept override;
         void ReleasePinnedChunk(TChunk* chunk) noexcept override;
 
     private:

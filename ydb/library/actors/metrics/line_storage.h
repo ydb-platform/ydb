@@ -60,7 +60,7 @@ namespace NActors {
         TLineMeta Meta;
         std::atomic<ELineState> State = ELineState::Open;
         TLineStorage Storage;
-        std::unique_ptr<TLineWriterState> Writer;
+        std::unique_ptr<TLineWriterState> WriteState;
     };
 
     struct TSnapshotPinnedChunk {

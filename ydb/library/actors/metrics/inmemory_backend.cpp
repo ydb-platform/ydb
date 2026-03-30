@@ -210,9 +210,9 @@ namespace NActors {
         TLineReader* linePtr = line.get();
         Impl->LinesById.emplace(linePtr->LineId, linePtr);
         Impl->LinesByKey.emplace(linePtr->Key, std::move(line));
-        linePtr->Writer = std::make_unique<TLineWriterState>();
-        linePtr->Writer->Reader = linePtr;
-        return linePtr->Writer.get();
+        linePtr->WriteState = std::make_unique<TLineWriterState>();
+        linePtr->WriteState->Reader = linePtr;
+        return linePtr->WriteState.get();
     }
 
     bool TInMemoryMetricsBackend::IsMetricAllowed(TStringBuf name) const noexcept {
@@ -316,8 +316,8 @@ namespace NActors {
                     line = it->second;
                 }
             }
-            if (line && line->Writer) {
-                auto metricLine = TLine<TOnChangeLineFrontend<>>(this, line->Writer.get());
+            if (line && line->WriteState) {
+                auto metricLine = TLine<TOnChangeLineFrontend<>>(this, line->WriteState.get());
                 metricLine.Append(value);
                 metricLine.ReleaseLineId();
             }
@@ -471,7 +471,7 @@ namespace NActors {
     }
 
     bool TInMemoryMetricsBackend::AppendChunkData(
-        TLineWriterState* writer,
+        TLineWriterState* state,
         std::span<const char> data,
         NHPTimer::STime firstTs,
         NHPTimer::STime lastTs) noexcept {
@@ -480,10 +480,10 @@ namespace NActors {
             return false;
         };
 
-        if (!writer || !writer->Reader || Impl->ShuttingDown.load(std::memory_order_acquire)) {
+        if (!state || !state->Reader || Impl->ShuttingDown.load(std::memory_order_acquire)) {
             return fail();
         }
-        TLineReader* line = writer->Reader;
+        TLineReader* line = state->Reader;
         if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
             return fail();
         }
@@ -549,12 +549,12 @@ namespace NActors {
         }
     }
 
-    void TInMemoryMetricsBackend::CloseLine(TLineWriterState* writer) noexcept {
-        if (!writer || !writer->Reader) {
+    void TInMemoryMetricsBackend::CloseLine(TLineWriterState* state) noexcept {
+        if (!state || !state->Reader) {
             return;
         }
-        TLineReader* line = writer->Reader;
-        writer->Reader = nullptr;
+        TLineReader* line = state->Reader;
+        state->Reader = nullptr;
 
         bool shouldDrop = false;
         TChunk* sealedChunk = nullptr;
@@ -605,9 +605,9 @@ namespace NActors {
 
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
-            if (line->Writer) {
-                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->Writer->LastPublishedTs);
-                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->Writer->LastObservedTs);
+            if (line->WriteState) {
+                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->WriteState->LastPublishedTs);
+                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->WriteState->LastObservedTs);
             }
             lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
             lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
@@ -654,31 +654,31 @@ namespace NActors {
         return static_cast<NHPTimer::STime>(GetCycleCountFast());
     }
 
-    TLinePublishState TInMemoryMetricsBackend::GetPublishState(const TLineWriterState* writer) const noexcept {
+    TLinePublishState TInMemoryMetricsBackend::GetPublishState(const TLineWriterState* state) const noexcept {
         return TLinePublishState{
-            .HasLastPublished = writer ? writer->HasLastPublished : false,
-            .LastPublishedValue = writer ? writer->LastPublishedValue : 0,
-            .LastPublishedTs = writer ? writer->LastPublishedTs : 0,
-            .LastObservedTs = writer ? writer->LastObservedTs : 0,
+            .HasLastPublished = state ? state->HasLastPublished : false,
+            .LastPublishedValue = state ? state->LastPublishedValue : 0,
+            .LastPublishedTs = state ? state->LastPublishedTs : 0,
+            .LastObservedTs = state ? state->LastObservedTs : 0,
         };
     }
 
-    ui32 TInMemoryMetricsBackend::GetLineId(const TLineWriterState* writer) const noexcept {
-        return writer && writer->Reader ? writer->Reader->LineId : 0;
+    ui32 TInMemoryMetricsBackend::GetLineId(const TLineWriterState* state) const noexcept {
+        return state && state->Reader ? state->Reader->LineId : 0;
     }
 
-    void TInMemoryMetricsBackend::MarkObserved(TLineWriterState* writer, NHPTimer::STime nowTs) noexcept {
-        if (writer) {
-            writer->LastObservedTs = nowTs;
+    void TInMemoryMetricsBackend::MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept {
+        if (state) {
+            state->LastObservedTs = nowTs;
         }
     }
 
-    void TInMemoryMetricsBackend::MarkPublished(TLineWriterState* writer, ui64 value, NHPTimer::STime nowTs) noexcept {
-        if (writer) {
-            writer->HasLastPublished = true;
-            writer->LastPublishedValue = value;
-            writer->LastPublishedTs = nowTs;
-            writer->LastObservedTs = nowTs;
+    void TInMemoryMetricsBackend::MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept {
+        if (state) {
+            state->HasLastPublished = true;
+            state->LastPublishedValue = value;
+            state->LastPublishedTs = nowTs;
+            state->LastObservedTs = nowTs;
         }
     }
 

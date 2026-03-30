@@ -10,27 +10,27 @@ namespace NActors {
         using TValueType = typename TFrontend::TValueType;
 
         TLine() noexcept = default;
-        TLine(ILineWriteBackend* backend, TLineWriterState* writer) noexcept
+        TLine(ILineWriteBackend* backend, TLineWriterState* state) noexcept
             : Backend(backend)
-            , Writer(writer)
+            , State(state)
         {
         }
 
         TLine(TLine&& rhs) noexcept
             : Backend(rhs.Backend)
-            , Writer(rhs.Writer)
+            , State(rhs.State)
         {
             rhs.Backend = nullptr;
-            rhs.Writer = nullptr;
+            rhs.State = nullptr;
         }
 
         TLine& operator=(TLine&& rhs) noexcept {
             if (this != &rhs) {
                 Close();
                 Backend = rhs.Backend;
-                Writer = rhs.Writer;
+                State = rhs.State;
                 rhs.Backend = nullptr;
-                rhs.Writer = nullptr;
+                rhs.State = nullptr;
             }
             return *this;
         }
@@ -43,38 +43,38 @@ namespace NActors {
         }
 
         explicit operator bool() const noexcept {
-            return Backend && Writer;
+            return Backend && State;
         }
 
         bool Append(const TValueType& value) noexcept {
-            if (!Backend || !Writer) {
+            if (!Backend || !State) {
                 return false;
             }
-            return TFrontend::Append(*Backend, Writer, value);
+            return TFrontend::Append(*Backend, State, value);
         }
 
         void Close() noexcept {
-            if (Backend && Writer) {
-                Backend->CloseLine(Writer);
+            if (Backend && State) {
+                Backend->CloseLine(State);
                 Backend = nullptr;
-                Writer = nullptr;
+                State = nullptr;
             }
         }
 
         ui32 GetLineId() const noexcept {
-            return Backend && Writer ? Backend->GetLineId(Writer) : 0;
+            return Backend && State ? Backend->GetLineId(State) : 0;
         }
 
         ui32 ReleaseLineId() noexcept {
             const ui32 lineId = GetLineId();
             Backend = nullptr;
-            Writer = nullptr;
+            State = nullptr;
             return lineId;
         }
 
     private:
         ILineWriteBackend* Backend = nullptr;
-        TLineWriterState* Writer = nullptr;
+        TLineWriterState* State = nullptr;
     };
 
 } // namespace NActors

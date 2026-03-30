@@ -85,19 +85,19 @@ namespace NActors {
     public:
         virtual ~ILineWriteBackend() = default;
 
-        virtual void CloseLine(TLineWriterState* writer) noexcept = 0;
+        virtual void CloseLine(TLineWriterState* state) noexcept = 0;
         // Backend only manages raw chunk memory and lifetime. Physical record layout
         // is defined by a concrete line frontend and passed here as opaque bytes.
         virtual bool AppendChunkData(
-            TLineWriterState* writer,
+            TLineWriterState* state,
             std::span<const char> data,
             NHPTimer::STime firstTs,
             NHPTimer::STime lastTs) noexcept = 0;
         virtual NHPTimer::STime CurrentTimestampTs() const noexcept = 0;
-        virtual TLinePublishState GetPublishState(const TLineWriterState* writer) const noexcept = 0;
-        virtual ui32 GetLineId(const TLineWriterState* writer) const noexcept = 0;
-        virtual void MarkObserved(TLineWriterState* writer, NHPTimer::STime nowTs) noexcept = 0;
-        virtual void MarkPublished(TLineWriterState* writer, ui64 value, NHPTimer::STime nowTs) noexcept = 0;
+        virtual TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept = 0;
+        virtual ui32 GetLineId(const TLineWriterState* state) const noexcept = 0;
+        virtual void MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept = 0;
+        virtual void MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept = 0;
         virtual void ReleasePinnedChunk(TChunk* chunk) noexcept = 0;
     };
 

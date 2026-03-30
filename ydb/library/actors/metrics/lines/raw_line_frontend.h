@@ -69,11 +69,11 @@ namespace NActors {
     private:
         friend class TLine<TRawLineFrontend<TValue>>;
 
-        static bool Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
+        static bool Append(ILineWriteBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
     };
 
     template<class TValue>
-    bool TRawLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
+    bool TRawLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
 
@@ -82,10 +82,10 @@ namespace NActors {
             .Value = encoded,
         };
         const auto data = std::span<const char>(reinterpret_cast<const char*>(&record), sizeof(record));
-        if (!backend.AppendChunkData(writer, data, record.TimestampTs, record.TimestampTs)) {
+        if (!backend.AppendChunkData(state, data, record.TimestampTs, record.TimestampTs)) {
             return false;
         }
-        backend.MarkPublished(writer, encoded, nowTs);
+        backend.MarkPublished(state, encoded, nowTs);
         return true;
     }
 

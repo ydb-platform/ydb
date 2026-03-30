@@ -48,30 +48,30 @@ namespace NActors {
     private:
         friend class TLine<TOnChangeLineFrontend<TValue>>;
 
-        static bool Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
+        static bool Append(ILineWriteBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
     };
 
     template<class TValue>
-    bool TOnChangeLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
+    bool TOnChangeLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
         using TStorageRecord = typename TRawLineFrontend<TValue>::TStorageRecord;
 
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
-        const TLinePublishState state = backend.GetPublishState(writer);
+        const TLinePublishState publishState = backend.GetPublishState(state);
 
-        if (state.HasLastPublished && state.LastPublishedValue == encoded) {
-            backend.MarkObserved(writer, nowTs);
+        if (publishState.HasLastPublished && publishState.LastPublishedValue == encoded) {
+            backend.MarkObserved(state, nowTs);
             return true;
-        } else if (state.HasLastPublished && state.LastObservedTs > state.LastPublishedTs) {
+        } else if (publishState.HasLastPublished && publishState.LastObservedTs > publishState.LastPublishedTs) {
             TStorageRecord previousRecord{
-                .TimestampTs = state.LastPublishedTs,
-                .Value = state.LastPublishedValue,
+                .TimestampTs = publishState.LastPublishedTs,
+                .Value = publishState.LastPublishedValue,
             };
             const auto previousData = std::span<const char>(reinterpret_cast<const char*>(&previousRecord), sizeof(previousRecord));
-            if (!backend.AppendChunkData(writer, previousData, previousRecord.TimestampTs, previousRecord.TimestampTs)) {
+            if (!backend.AppendChunkData(state, previousData, previousRecord.TimestampTs, previousRecord.TimestampTs)) {
                 return false;
             }
-            backend.MarkPublished(writer, state.LastPublishedValue, previousRecord.TimestampTs);
+            backend.MarkPublished(state, publishState.LastPublishedValue, previousRecord.TimestampTs);
         }
 
         TStorageRecord record{
@@ -79,10 +79,10 @@ namespace NActors {
             .Value = encoded,
         };
         const auto data = std::span<const char>(reinterpret_cast<const char*>(&record), sizeof(record));
-        if (!backend.AppendChunkData(writer, data, record.TimestampTs, record.TimestampTs)) {
+        if (!backend.AppendChunkData(state, data, record.TimestampTs, record.TimestampTs)) {
             return false;
         }
-        backend.MarkPublished(writer, encoded, nowTs);
+        backend.MarkPublished(state, encoded, nowTs);
         return true;
     }
 

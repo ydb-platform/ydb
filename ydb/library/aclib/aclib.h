@@ -189,8 +189,7 @@ protected:
     bool IsContainer;
 };
 
-class TUserContext : public TThrRefBase
-{
+class TUserContext : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUserContext>;
 
@@ -217,8 +216,7 @@ protected:
     NWilson::TTraceId UserTraceId;
 };
 
-class TUserContextBuilder
-{
+class TUserContextBuilder {
 public:
     using TPtr = TIntrusivePtr<TUserContext>;
 

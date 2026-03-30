@@ -6,6 +6,7 @@
 #include "params.h"
 #include "serviceid.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
 #include <util/string/join.h>
@@ -40,19 +41,34 @@ private:
     void DoAction() override {
         Become(&TThis::StateFunc);
 
-        TExecutorBuilder(SelfId(), RequestId_)
-            .User(UserName_)
-            .Queue(GetQueueName())
-            .QueueLeader(QueueLeader_)
-            .QueryId(SET_RETENTION_ID)
-            .Counters(QueueCounters_)
-            .RetryOnTimeout()
-            .Params()
+        if (!FeatureFlags_.EnableSQSMigrationFinished_) {
+            TExecutorBuilder(SelfId(), RequestId_)
+                .User(UserName_)
+                .Queue(GetQueueName())
+                .QueueLeader(QueueLeader_)
+                .QueryId(SET_RETENTION_ID)
+                .Counters(QueueCounters_)
+                .RetryOnTimeout()
+                .Params()
                 .Uint64("QUEUE_ID_NUMBER", QueueVersion_.GetRef())
                 .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_.GetRef()))
                 .Uint64("NOW", Now().MilliSeconds())
                 .Bool("PURGE", true)
-            .ParentBuilder().Start();
+                .ParentBuilder().Start();
+            ++InflightRequests_;
+        }
+        if (FeatureFlags_.EnableSQSMigrationCompatibility_ && IsTopicCreated()) {
+            Register(NPQ::NMLP::CreatePurger(SelfId(), {
+                .DatabasePath = GetDatabaseName(),
+                .TopicName = GetTopicName(),
+                .Consumer = ConsumerName,
+            }));
+            ++InflightRequests_;
+        }
+
+        if (InflightRequests_ == 0) {
+            SendReplyAndDie();
+        }
     }
 
     TString DoGetQueueName() const override {
@@ -63,6 +79,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+            hFunc(NPQ::NMLP::TEvPurgeResponse, Handle);
         }
     }
 
@@ -94,14 +111,39 @@ private:
             RLOG_SQS_ERROR("Request failed: " << record);
 
             MakeError(result, NErrors::INTERNAL_FAILURE);
+            return SendReplyAndDie();
         }
 
-        SendReplyAndDie();
+        --InflightRequests_;
+        if (InflightRequests_ == 0) {
+            SendReplyAndDie();
+        }
+    }
+
+    void Handle(NPQ::NMLP::TEvPurgeResponse::TPtr& ev) {
+        auto& response = *ev->Get();
+        --InflightRequests_;
+        switch (response.Status) {
+            case Ydb::StatusIds::SUCCESS: {
+                if (InflightRequests_ == 0) {
+                    SendReplyAndDie();
+                }
+                break;
+            }
+            default: {
+                auto* result = Response_.MutablePurgeQueue();
+                MakeError(result, NErrors::INTERNAL_FAILURE, response.ErrorDescription);
+                return SendReplyAndDie();
+            }
+        }
     }
 
     const TPurgeQueueRequest& Request() const {
         return SourceSqsRequest_.GetPurgeQueue();
     }
+
+private:
+    size_t InflightRequests_ = 0;
 };
 
 class TPurgeQueueBatchActor

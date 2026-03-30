@@ -1,5 +1,6 @@
 #include "common_helper.h"
 #include "../datashard_impl.h"
+#include "../range_ops.h"
 #include "../scan_common.h"
 #include "../upload_stats.h"
 #include "../buffer_data.h"
@@ -69,6 +70,12 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TBufferData* UploadBuf = nullptr;
     TBufferData* DocsBuf = nullptr;
 
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedTableRange RequestedRange;
+    TSerializedTableRange TableRange;
+    TSerializedCellVec LastProcessedKey;
+    TSerializedCellVec LastAckedKey;
+
     const NKikimrTxDataShard::TEvBuildFulltextIndexRequest Request;
     const TActorId ResponseActorId;
     const TAutoPtr<TEvDataShard::TEvBuildFulltextIndexResponse> Response;
@@ -85,10 +92,18 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
+        , KeyTypes(table.KeyColumnTypes)
+        , TableRange(table.Range)
         , Request(std::move(request))
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {
+        if (Request.HasKeyRange()) {
+            RequestedRange.Load(Request.GetKeyRange());
+        } else {
+            RequestedRange = TableRange;
+        }
+
         LOG_I("Create " << Debug());
 
         Y_ENSURE(Request.settings().columns().size() == 1);
@@ -186,7 +201,18 @@ public:
                 : EScan::Sleep;
         }
 
-        lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
+
+        if (scanRange.From) {
+            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            lead.To(ScanTags, scanRange.From, seek);
+        } else {
+            lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        }
+
+        if (scanRange.To) {
+            lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
 
         return EScan::Feed;
     }
@@ -197,6 +223,8 @@ public:
 
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
+
+        LastProcessedKey = TSerializedCellVec(key);
 
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
@@ -305,6 +333,10 @@ public:
         record.SetDocCount(DocCount);
         record.SetTotalDocLength(TotalDocLength);
 
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
+
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
@@ -361,9 +393,23 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && LastProcessedKey.GetBuffer() &&
+                LastProcessedKey.GetBuffer() != LastAckedKey.GetBuffer()) {
+                LastAckedKey = LastProcessedKey;
+
+                auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+                auto& record = progress->Record;
+                record.SetId(BuildId);
+                record.SetTabletId(TabletId);
+                record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
+                record.SetRequestSeqNoRound(Request.GetSeqNoRound());
+                record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -382,6 +428,7 @@ protected:
     TString Debug() const
     {
         return TStringBuilder() << "TBuildFulltextIndexScan TabletId: " << TabletId << " Id: " << BuildId
+            << ", last acked key: " << DebugPrintPoint(KeyTypes, LastAckedKey.GetCells(), *AppData()->TypeRegistry)
             << " " << Uploader.Debug();
     }
 };

@@ -1508,6 +1508,89 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("tables").GetArraySafe().size(), 1);
     }
+
+    Y_UNIT_TEST(ExplainQueryWithUndeclaredParams) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$min_key")
+                .Uint64(10)
+                .Build()
+            .AddParam("$max_key")
+                .Uint64(100)
+                .Build()
+            .Build();
+
+        auto result = db.ExecuteQuery(
+            R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key >= $min_key AND Key <= $max_key;
+            )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            params,
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto plan = result.GetStats()->GetPlan();
+        UNIT_ASSERT(plan);
+        Cerr << *plan << Endl;
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*plan, &planJson, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(planJson));
+
+        auto range = FindPlanNodeByKv(planJson, "ReadRange", "[\"Key [$min_key, $max_key]\"]");
+        UNIT_ASSERT_C(range.IsDefined(), "Expected ReadRange with parameter references in plan");
+    }
+
+    Y_UNIT_TEST(ExplainUpsertWithUndeclaredParamsNoSideEffects) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto readTable = [&]() {
+            auto result = db.ExecuteQuery(
+                R"(SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key;)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        auto dataBefore = readTable();
+
+        auto params = TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(999)
+                .Build()
+            .AddParam("$value")
+                .String("ExplainShouldNotInsertThis")
+                .Build()
+            .Build();
+
+        auto explainResult = db.ExecuteQuery(
+            R"(UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES ($key, $value);)",
+            NYdb::NQuery::TTxControl::NoTx(),
+            params,
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+        auto plan = explainResult.GetStats()->GetPlan();
+        UNIT_ASSERT(plan);
+        Cerr << *plan << Endl;
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*plan, &planJson, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(planJson));
+
+        auto upsert = FindPlanNodeByKv(planJson, "Name", "Upsert");
+        UNIT_ASSERT_C(upsert.IsDefined(), "Expected Upsert node in explain plan");
+
+        auto dataAfter = readTable();
+        UNIT_ASSERT_VALUES_EQUAL_C(dataBefore, dataAfter,
+            "EXPLAIN should not modify data, but table contents changed");
+    }
 }
 
 } // namespace NKqp

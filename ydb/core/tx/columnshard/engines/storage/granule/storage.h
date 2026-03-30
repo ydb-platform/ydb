@@ -106,6 +106,26 @@ public:
     }
 };
 
+class TGranuleOrdered {
+private:
+    NStorageOptimizer::TOptimizationPriority Priority;
+    YDB_READONLY_DEF(std::shared_ptr<TGranuleMeta>, Granule);
+
+public:
+    const NStorageOptimizer::TOptimizationPriority& GetPriority() const {
+        return Priority;
+    }
+
+    TGranuleOrdered(const NStorageOptimizer::TOptimizationPriority& priority, const std::shared_ptr<TGranuleMeta>& meta)
+        : Priority(priority)
+        , Granule(meta) {
+    }
+
+    bool operator<(const TGranuleOrdered& item) const {
+        return Priority < item.Priority;
+    }
+};
+
 class TGranulesStorage {
 private:
     const NColumnShard::TEngineLogsCounters Counters;
@@ -212,10 +232,13 @@ public:
         return Counters;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
-    std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,
-        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), const std::optional<ui64> waitingPriority = std::nullopt,
-        std::shared_ptr<TGranuleMeta>* granuleResult = nullptr) const;
+    /**
+    Returns granules for compaction in descending order of priority
+    */
+    std::vector<TGranuleOrdered> GetGranulesForCompaction(
+        const std::set<TInternalPathId>& pathIds = Default<std::set<TInternalPathId>>(), 
+        const std::optional<ui64> waitingPriority = std::nullopt
+    ) const;
 };
 
 }   // namespace NKikimr::NOlap

@@ -15,6 +15,8 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
+REQUIREMENTS(ram:16)
+
 DEPENDS(
     ydb/apps/dstool
 )

@@ -885,6 +885,36 @@ private:
     }
 
     TSQLResult<TGroupBy> Build(const TRule_group_by_clause& rule) {
+        TPosition position = Ctx_.TokenPosition(rule.GetToken1());
+        Token(rule.GetToken1());
+
+        if (rule.HasBlock2()) {
+            return Unsupported("GROUP COMPACT BY");
+        }
+
+        if (Ctx_.IsAnyUnusedHintForToken(position, [](const auto& hint) { return to_lower(hint.Name) == "compact"; })) {
+            return Unsupported("GROUP /*+ compact */ BY");
+        }
+
+        if (TPosition position; IsDistinctOptSet(rule.GetRule_opt_set_quantifier4(), position)) {
+            Ctx_.Error(position) << "DISTINCT is not supported in GROUP BY clause yet!";
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        if (rule.HasBlock6()) {
+            return Unsupported("GROUP BY ... WITH an_id");
+        }
+
+        const auto& list = rule.GetRule_grouping_element_list5();
+        if (auto result = Build(list.GetRule_grouping_element1()); !result) {
+            return std::unexpected(result.error());
+        }
+        for (const auto& block : list.GetBlock2()) {
+            if (auto result = Build(block.GetRule_grouping_element2()); !result) {
+                return std::unexpected(result.error());
+            }
+        }
+
         TGroupByClause legacy(*this);
         legacy.SetYqlSelectProduced(true);
         if (!legacy.Build(rule)) {
@@ -894,19 +924,27 @@ private:
         if (!legacy.Aliases().empty()) {
             return Unsupported("GROUP BY aliases");
         }
-        if (legacy.GetLegacyHoppingWindow() != nullptr) {
-            return Unsupported("GROUP BY HOP");
-        }
-        if (legacy.IsCompactGroupBy()) {
-            return Unsupported("GROUP COMPACT BY");
-        }
-        if (!legacy.GetSuffix().empty()) {
-            return Unsupported("GROUP BY ... WITH an_id");
-        }
 
         return TGroupBy{
             .Keys = std::move(legacy.Content()),
         };
+    }
+
+    TSQLStatus Build(const TRule_grouping_element& rule) {
+        switch (rule.GetAltCase()) {
+            case TRule_grouping_element::kAltGroupingElement1:
+                return std::monostate();
+            case TRule_grouping_element::kAltGroupingElement2:
+                return Unsupported("rollup_list");
+            case TRule_grouping_element::kAltGroupingElement3:
+                return Unsupported("cube_list");
+            case TRule_grouping_element::kAltGroupingElement4:
+                return Unsupported("grouping_sets_specification");
+            case TRule_grouping_element::kAltGroupingElement5:
+                return Unsupported("hopping_window_specification");
+            case TRule_grouping_element::ALT_NOT_SET:
+                Y_UNREACHABLE();
+        }
     }
 
     TSQLResult<TOrderBy> Build(const TRule_ext_order_by_clause& rule) {

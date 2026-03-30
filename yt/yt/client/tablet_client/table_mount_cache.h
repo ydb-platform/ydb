@@ -161,8 +161,8 @@ struct TTableMountInfo final
     TTabletInfoPtr GetTabletForKey(NTableClient::TUnversionedValueRange key) const;
     TTabletInfoPtr GetTabletForRow(NTableClient::TUnversionedRow row) const;
     TTabletInfoPtr GetTabletForRow(NTableClient::TVersionedRow row) const;
-    int GetRandomMountedTabletIndex() const;
-    TTabletInfoPtr GetRandomMountedTablet() const;
+    //! Returns error in case no mounted tablets are present. It may be used for cache invalidation.
+    TErrorOr<TTabletInfoPtr> GetRandomMountedTablet() const;
 
     void ValidateTabletOwner() const;
     void ValidateDynamic() const;

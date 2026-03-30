@@ -43,7 +43,7 @@ NOperationQueue::EStartStatus TTenantShredManager::StartShredOperation(const TSh
     default:
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
-    RunnigShardsCounter->Inc();
+    RunningShardsCounter->Inc();
     WaitingShardsCounter->Dec();
     ActivePipes[shardIdx] = SchemeShard->PipeClientCache->Send(ctx, ui64(tabletId), request.release());
     return NOperationQueue::EStartStatus::EOperationRunning;
@@ -65,7 +65,7 @@ TTenantShredManager::TTenantShredManager(TSchemeShard* const schemeShard, const 
     TIntrusivePtr<NMonitoring::TDynamicCounters> schemeShardCounters = GetServiceCounters(rootCounters, "SchemeShard");
     NMonitoring::TDynamicCounterPtr shredCounters = schemeShardCounters->GetSubgroup("subsystem", "TenantShredTotal");
     WaitingShardsCounter = shredCounters->GetSubgroup("TenantShred", "Waiting")->GetCounter("WaitingShredShards", true);
-    RunnigShardsCounter = shredCounters->GetSubgroup("TenantShred", "Running")->GetCounter("RunningShredShards", true);
+    RunningShardsCounter = shredCounters->GetSubgroup("TenantShred", "Running")->GetCounter("RunningShredShards", true);
     CompletedShardsCounter = shredCounters->GetSubgroup("TenantShred", "Completed")->GetCounter("CompletedShredShards", true);
 
     const auto& tenantShredConfig = config.GetTenantDataErasureConfig();
@@ -108,7 +108,7 @@ void TTenantShredManager::Start() {
             SchemeShard->TenantShredManager->GetCompletedGeneration(),
             NKikimrScheme::TEvTenantShredResponse::COMPLETED
         );
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[Start] Send to domain schemeshard: "
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[Start] Send to root schemeshard: "
             << "gen# " << SchemeShard->TenantShredManager->GetGeneration()
         );
         SchemeShard->PipeClientCache->Send(ctx, ui64(SchemeShard->ParentDomainId.OwnerId), response.release());
@@ -146,7 +146,7 @@ void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
     Status = EShredStatus::IN_PROGRESS;
     CompletedShardsCounter->Set(SchemeShard->ShardInfos.size());
     WaitingShardsCounter->Set(0);
-    RunnigShardsCounter->Set(0);
+    RunningShardsCounter->Set(0);
     for (const auto& [shardIdx, shardInfo] : SchemeShard->ShardInfos) {
         switch (shardInfo.TabletType) {
         case NKikimr::NSchemeShard::ETabletType::DataShard:
@@ -225,11 +225,15 @@ void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabl
             << " at schemeshard " << SchemeShard->TabletID());
     }
 
-    ActivePipes.erase(shardIdx);
+    bool wasRunning = ActivePipes.erase(shardIdx) > 0;
     auto waitingShardIt = WaitingShredShards.find(shardIdx);
     if (waitingShardIt != WaitingShredShards.end()) {
         WaitingShredShards.erase(waitingShardIt);
-        RunnigShardsCounter->Dec();
+        if (wasRunning) {
+            RunningShardsCounter->Dec();
+        } else {
+            WaitingShardsCounter->Dec();
+        }
         CompletedShardsCounter->Inc();
         db.Table<Schema::WaitingShredShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
     }
@@ -237,7 +241,7 @@ void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabl
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantShredManager] Shred in shards is completed: "
             << "Generation# " << Generation
-            << ". Send response to domain schemeshard");
+            << ". Send response to root schemeshard");
         Queue->Clear();
         ActivePipes.clear();
         Status = EShredStatus::COMPLETED;
@@ -249,7 +253,7 @@ void TTenantShredManager::FinishShred(NIceDb::TNiceDb& db, const TTabletId& tabl
 void TTenantShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& clientId, const TActorContext& ctx) {
     if (tabletId == TTabletId(SchemeShard->ParentDomainId.OwnerId)) {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[TenantShredManager] [HandleDisconnect] Retry send response to domain schemeshard "
+            "[TenantShredManager] [HandleDisconnect] Retry send response to root schemeshard "
             << "from# " << SchemeShard->TabletID()
             << ", generation# " << SchemeShard->TenantShredManager->GetCompletedGeneration()
         );
@@ -275,7 +279,7 @@ void TTenantShredManager::HandleDisconnect(TTabletId tabletId, const TActorId& c
         << "to tablet: " << tabletId
         << ", at schemeshard: " << SchemeShard->TabletID());
     WaitingShardsCounter->Inc();
-    RunnigShardsCounter->Dec();
+    RunningShardsCounter->Dec();
     ActivePipes.erase(it);
     StartShredOperation(shardIdx);
 }
@@ -288,6 +292,10 @@ void TTenantShredManager::RetryShred(const TTabletId& tabletId) {
     const auto& shardIdx = tabletIt->second;
     Queue->OnDone(shardIdx);
     Queue->Enqueue(shardIdx);
+    if (ActivePipes.erase(shardIdx)) {
+        WaitingShardsCounter->Inc();
+        RunningShardsCounter->Dec();
+    }
 }
 
 bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
@@ -328,13 +336,21 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
         }
         if (Status == EShredStatus::IN_PROGRESS && WaitingShredShards.empty()) {
             Status = EShredStatus::COMPLETED;
+            CompletedGeneration = Generation;
         }
+    }
+    RunningShardsCounter->Set(0);
+    WaitingShardsCounter->Set(WaitingShredShards.size());
+    if (SchemeShard->ShardInfos.size() > WaitingShredShards.size()) {
+        CompletedShardsCounter->Set(SchemeShard->ShardInfos.size() - WaitingShredShards.size());
+    } else {
+        CompletedShardsCounter->Set(0);
     }
     auto ctx = SchemeShard->ActorContext();
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantShredManager] Restore: Generation# " << Generation
         << ", Status# " << Status
-        << ", WaitingShredShardsg# " << WaitingShredShards.size()
+        << ", WaitingShredShards# " << WaitingShredShards.size()
         << ", CompletedGeneration# " << CompletedGeneration);
     return true;
 }
@@ -344,7 +360,7 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
     if (it != WaitingShredShards.end()) {
         Queue->Remove(shardIdx);
         if (ActivePipes.erase(shardIdx)) {
-            RunnigShardsCounter->Dec();
+            RunningShardsCounter->Dec();
         } else {
             WaitingShardsCounter->Dec();
         }
@@ -355,7 +371,7 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
             auto ctx = SchemeShard->ActorContext();
             LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "[TenantShredManager] [StopWaitingShred] Shred in shards is completed for generation# " << CompletedGeneration
-                << ". Send response to domain schemeshard");
+                << ". Send response to root schemeshard");
         }
         return true;
     }
@@ -376,7 +392,7 @@ struct TSchemeShard::TTxRunTenantShred : public TSchemeShard::TRwTxBase {
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxRunTenantShred: Execute at schemestard: " << Self->TabletID()
+            "TTxRunTenantShred: Execute at schemeshard: " << Self->TabletID()
         );
         auto& shredManager = Self->TenantShredManager;
         if (record.GetGeneration() > shredManager->GetGeneration()) {
@@ -419,7 +435,7 @@ struct TSchemeShard::TTxCompleteShredShard : public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxCompleteShredShard Execute at schemestard: " << Self->TabletID());
+            "TTxCompleteShredShard Execute at schemeshard: " << Self->TabletID());
         if (!IsSuccess(Ev)) {
             HandleBadStatus(Ev, ctx);
             return;
@@ -429,7 +445,7 @@ struct TSchemeShard::TTxCompleteShredShard : public TSchemeShard::TRwTxBase {
         if (completedGeneration != shredManager->GetGeneration()) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TTxCompleteShredShard: Unknown generation#" << completedGeneration
-                << ", Expected gen# " << shredManager->GetGeneration() << " at schemestard: " << Self->TabletID());
+                << ", Expected gen# " << shredManager->GetGeneration() << " at schemeshard: " << Self->TabletID());
             return;
         }
         NIceDb::TNiceDb db(txc.DB);
@@ -441,7 +457,7 @@ struct TSchemeShard::TTxCompleteShredShard : public TSchemeShard::TRwTxBase {
 
     void DoComplete(const TActorContext& ctx) override {
         if (Response) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteShredShard Complete. Send to domain schemeshard: "
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCompleteShredShard Complete. Send to root schemeshard: "
                 "gen# " << Self->TenantShredManager->GetGeneration()
             );
             Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
@@ -459,7 +475,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCompleteShredShard: shred failed at DataShard#" << record.GetTabletId()
             << " with status: " << NKikimrTxDataShard::TEvVacuumResult::EStatus_Name(record.GetStatus())
-            << ", schemestard: " << Self->TabletID());
+            << ", schemeshard: " << Self->TabletID());
         Self->TenantShredManager->RetryShred(TTabletId(record.GetTabletId()));
     }
 
@@ -483,7 +499,7 @@ private:
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "TTxCompleteShredShard: shred failed at KeyValue#" << record.tablet_id()
             << " with status: " << NKikimrKeyValue::VacuumResponse::Status_Name(record.status())
-            << ", schemestard: " << Self->TabletID());
+            << ", schemeshard: " << Self->TabletID());
         Self->TenantShredManager->RetryShred(TTabletId(record.tablet_id()));
     }
 
@@ -519,7 +535,7 @@ struct TSchemeShard::TTxAddNewShardToShred : public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxAddEntryToShred Execute at schemestard: " << Self->TabletID());
+            "TTxAddEntryToShred Execute at schemeshard: " << Self->TabletID());
 
         auto& shredManager = Self->TenantShredManager;
         if (shredManager->GetStatus() != EShredStatus::IN_PROGRESS) {
@@ -537,8 +553,8 @@ struct TSchemeShard::TTxAddNewShardToShred : public TSchemeShard::TRwTxBase {
     void DoComplete(const TActorContext& ctx) override {
         if (Response) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxAddEntryToShred Complete "
-                << "at schemestard: " << Self->TabletID()
-                << "Send to domain schemeshard: gen# " << Self->TenantShredManager->GetGeneration()
+                << "at schemeshard: " << Self->TabletID()
+                << "Send to root schemeshard: gen# " << Self->TenantShredManager->GetGeneration()
             );
             Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
         }
@@ -562,7 +578,7 @@ struct TSchemeShard::TTxCancelShredShards : public TSchemeShard::TRwTxBase {
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxCancelShredShards Execute at schemestard: " << Self->TabletID());
+            "TTxCancelShredShards Execute at schemeshard: " << Self->TabletID());
 
         auto& shredManager = Self->TenantShredManager;
         if (shredManager->GetStatus() != EShredStatus::IN_PROGRESS) {
@@ -582,11 +598,11 @@ struct TSchemeShard::TTxCancelShredShards : public TSchemeShard::TRwTxBase {
 
     void DoComplete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxCancelShredShards Complete at schemestard: " << Self->TabletID());
+            "TTxCancelShredShards Complete at schemeshard: " << Self->TabletID());
         if (Response) {
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxCancelShredShards Complete "
-                << "at schemestard: " << Self->TabletID()
-                << "Send to domain schemeshard: gen# " << Self->TenantShredManager->GetGeneration()
+                << "at schemeshard: " << Self->TabletID()
+                << "Send to root schemeshard: gen# " << Self->TenantShredManager->GetGeneration()
             );
             Self->PipeClientCache->Send(ctx, ui64(Self->ParentDomainId.OwnerId), Response.release());
         }

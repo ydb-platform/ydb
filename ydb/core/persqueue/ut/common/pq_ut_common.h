@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/user_info.h>
 #include <ydb/core/testlib/actors/test_runtime.h>

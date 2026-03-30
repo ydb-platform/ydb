@@ -1,6 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
---ignore runonopt plan diff
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -26,7 +23,7 @@ WHERE
         GROUP BY
             l_orderkey
         HAVING
-            Sum(l_quantity) > 300
+            Sum(l_quantity) > $to_decimal(300)
     )
     AND c_custkey == o_custkey
     AND o_orderkey == l_orderkey

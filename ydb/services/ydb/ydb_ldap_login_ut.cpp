@@ -75,8 +75,10 @@ private:
 
 TCertStorage CertStorage;
 
-void LdapAuthWithValidCredentials(const ESecurityConnectionType& secureType) {
-    TString login = "ldapuser";
+void LdapAuthWithValidCredentials(
+        const ESecurityConnectionType& secureType,
+        const TString& login = "ldapuser")
+{
     TString password = "ldapUserPassword";
 
     LdapMock::TLdapMockResponses responses;
@@ -142,6 +144,10 @@ Y_UNIT_TEST_SUITE(TGRpcLdapAuthentication) {
 
     Y_UNIT_TEST(CanAuthWithValidCredentialsLdaps) {
         LdapAuthWithValidCredentials(ESecurityConnectionType::LDAPS_SCHEME);
+    }
+
+    Y_UNIT_TEST(CanAuthWithSpecialSymbolsInLdapUserSid) {
+        LdapAuthWithValidCredentials(ESecurityConnectionType::NON_SECURE, "ldap.user+test-1_2");
     }
 
     Y_UNIT_TEST(LdapAuthWithInvalidRobouserLogin) {

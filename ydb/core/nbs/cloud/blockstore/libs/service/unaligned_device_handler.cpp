@@ -3,6 +3,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
+#include <util/string/builder.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 using namespace NThreading;

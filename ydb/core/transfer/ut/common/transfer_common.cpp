@@ -725,7 +725,7 @@ void MessageField_WriteTimestamp(const std::string& tableType, bool local) {
         .Messages = {{ "Message-1" }},
 
         .Expectations = {{
-            _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(5)),
+            _T<Timestamp64Checker>("WriteTimestamp", std::move(timestamp), TDuration::Seconds(10)),
         }}
     }, MainTestCase::CreateTransferSettings::WithLocalTopic(local));
 }

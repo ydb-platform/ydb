@@ -61,3 +61,7 @@ class FunctionalTestBase:
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
         return yatest.common.execute(YdbCliHelper.get_cli_command() + argv)
+
+    @classmethod
+    def do_teardown_class(cls):
+        cls.cluster.stop()

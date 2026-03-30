@@ -154,6 +154,12 @@ DEFINE_ENUM_WITH_UNDERLYING_TYPE(ETableSchemaMode, i8,
     ((Strong)    (1))
 );
 
+// COMPAT(cherepashka)
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(ECompatOptimizeFor, i32,
+    ((Lookup)  (0))
+    ((Scan)    (1))
+);
+
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i8,
     ((Lookup)  (0))
     ((Scan)    (1))

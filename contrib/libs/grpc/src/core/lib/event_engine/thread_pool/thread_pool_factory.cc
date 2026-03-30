@@ -52,15 +52,13 @@ size_t GetMaxPoolThreadFromEnv() {
 
 }  // namespace
 
-size_t ThreadPool::SetThreadsLimit(size_t count) {
-    size_t prev = threads_limit_;
+void ThreadPool::SetThreadsLimit(size_t count) {
     const auto threads_limit_env = GetMaxPoolThreadFromEnv();
     if (threads_limit_env && threads_limit_env < count) {
         gpr_log(GPR_INFO, "Threads limit changed via env from %u to %u", count, threads_limit_env);
         count = threads_limit_env;
     }
     threads_limit_ = count;
-    return prev;
 }
 
 size_t ThreadPool::GetThreadsLimit() { return threads_limit_; }

@@ -1676,7 +1676,10 @@ private:
                         continue;
                     }
 
-                    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || TYtTableBaseInfo::GetMeta(path.Table())->IsDynamic; })) {
+                    if (AnyOf(section.Paths(), [](const TYtPath& path) {
+                        auto meta = TYtTableBaseInfo::GetMeta(path.Table());
+                        return !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>() || meta->IsDynamic || meta->HasRLS;
+                    })) {
                         continue;
                     }
                     // Dependency on more than 1 operation

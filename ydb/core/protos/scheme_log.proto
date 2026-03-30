@@ -64,6 +64,7 @@ message TAlterRecord {
     optional bytes Default = 10;    // Serialized default value for cell
     optional bool NotNull = 24 [default = false];
     optional bool IsSensitive = 28 [default = false];
+    repeated uint32 ByKeyFilterPrefixes = 29; // Prefix bloom filter column counts (number of leading PK columns)
 
     optional uint64 ExecutorCacheSize = 100;
     optional NKikimrCompaction.TCompactionPolicy CompactionPolicy = 101;

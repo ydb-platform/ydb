@@ -43,6 +43,9 @@ public:
 protected:
     void ResolveSchemeShard(const TActorContext &ctx);
     virtual NKikimrScheme::TEvLogin CreateLoginRequest() const = 0;
+    void SendLoginRequest();
+    virtual void ProceedWithAuthentication(const TActorContext &ctx,
+        TIntrusivePtr<NSchemeCache::TDomainInfo> domainInfo) = 0;
     virtual void SendIssuedToken(const NKikimrScheme::TEvLoginResult& loginResult) const = 0;
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
         NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
@@ -73,7 +76,7 @@ public:
         const std::string& peerName);
 
 protected:
-    void ProcessAuthMsg(const TActorContext &ctx);
+    [[nodiscard]] bool ProcessAuthMsg(const TActorContext &ctx);
 
 protected:
     const std::string AuthMsg;

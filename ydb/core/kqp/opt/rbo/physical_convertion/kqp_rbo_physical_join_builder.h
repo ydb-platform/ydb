@@ -8,19 +8,35 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-class TPhysicalJoinBuilder: public TPhysicalBinaryOpBuilder {
+using TModifyKeysList = TVector<std::tuple<TCoAtom, TCoAtom, ui32, const TTypeAnnotationNode*>>;
+enum EJoinSide { Right, Left, Both };
+
+class TPhysicalJoinBuilder: public TPhysicalBinaryOpBuilderWithOpProps {
 public:
     TPhysicalJoinBuilder(TIntrusivePtr<TOpJoin> join, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalBinaryOpBuilder(ctx, pos)
+        : TPhysicalBinaryOpBuilderWithOpProps(ctx, pos)
         , Join(join) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) override;
+    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, const TPhysicalOpProps& props) override;
 
 private:
-    TExprNode::TPtr BuildGraceJoinCore(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
+    TExprNode::TPtr BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, const TPhysicalOpProps& props);
     TExprNode::TPtr BuildCrossJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput);
-    TString GetValidJoinKind(const TString& joinKind);
+    TString GetValidJoinKind(const TString& joinKind) const;
+    void PrepareJoinKeys(TVector<TString>& leftJoinKeys, TVector<TString>& rightJoinKeys, TModifyKeysList& remapLeft, TModifyKeysList& remapRight,
+                         THashMap<TString, TString>& leftColumnRemap, THashMap<TString, TString>& rightColumnRemap, TVector<TString>& leftJoinKeyRenames,
+                         TVector<TString>& rightJoinKeyRenames, const TStructExprType* leftInputType, const TStructExprType* rightInputType, const bool outer,
+                         const EJoinSide joinSide);
+    TExprNode::TPtr PrepareJoinSide(TExprNode::TPtr input, const TVector<TInfoUnit>& colNames, TVector<TString>& joinKeys, const TModifyKeysList& remap,
+                                    const bool filterNulls);
+    TExprNode::TPtr SqueezeJoinInputToDict(TExprNode::TPtr input, const ui32 width, const TVector<ui32>& joinKeys, const bool withPayloads);
+    TExprNode::TPtr BuildMapJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TVector<TCoAtom>& leftColumnIdxs, TVector<TCoAtom>& rightColumnIdxs,
+                                 TVector<TCoAtom>& leftRenames, TVector<TCoAtom>& rightRenames, TVector<TCoAtom>& leftKeyColumnNames,
+                                 TVector<TCoAtom>& rightKeyColumnNames);
+    TExprNode::TPtr BuildGraceJoin(const TString& joinType, TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TVector<TCoAtom>& leftColumnIdxs, TVector<TCoAtom>& rightColumnIdxs,
+                                   TVector<TCoAtom>& leftRenames, TVector<TCoAtom>& rightRenames, TVector<TCoAtom>& leftKeyColumnNames,
+                                   TVector<TCoAtom>& rightKeyColumnNames);
 
     TIntrusivePtr<TOpJoin> Join;
 };

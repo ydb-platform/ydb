@@ -14,7 +14,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.8/compiler-rt-21.1.8.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 NO_COMPILER_WARNINGS()
 

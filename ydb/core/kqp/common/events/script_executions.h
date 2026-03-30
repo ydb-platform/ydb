@@ -373,7 +373,7 @@ struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, T
     struct TDescription {
         TDescription(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
         Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, NYql::TIssues issues, std::optional<NKqpProto::TKqpStatsQuery> queryStats,
-        std::optional<TString> queryPlan, std::optional<TString> queryAst, i64 leaseGeneration)
+        std::optional<TString> queryPlan, std::optional<TString> queryAst, i64 leaseGeneration, bool cancelledByUser = false)
             : FinalizationStatus(finalizationStatus)
             , ExecutionId(executionId)
             , Database(database)
@@ -384,6 +384,7 @@ struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, T
             , QueryPlan(std::move(queryPlan))
             , QueryAst(std::move(queryAst))
             , LeaseGeneration(leaseGeneration)
+            , CancelledByUser(cancelledByUser)
         {}
 
         EFinalizationStatus FinalizationStatus;
@@ -396,14 +397,15 @@ struct TEvScriptFinalizeRequest : public TEventLocal<TEvScriptFinalizeRequest, T
         std::optional<TString> QueryPlan;
         std::optional<TString> QueryAst;
         i64 LeaseGeneration;
+        bool CancelledByUser = false; // User cancel API; false when status is CANCELLED from execution (e.g. streaming retry).
         std::optional<TString> QueryPlanCompressionMethod;
         std::optional<TString> QueryAstCompressionMethod;
     };
 
     TEvScriptFinalizeRequest(EFinalizationStatus finalizationStatus, const TString& executionId, const TString& database,
         Ydb::StatusIds::StatusCode operationStatus, Ydb::Query::ExecStatus execStatus, NYql::TIssues issues, std::optional<NKqpProto::TKqpStatsQuery> queryStats,
-        std::optional<TString> queryPlan, std::optional<TString> queryAst, i64 leaseGeneration)
-        : Description(finalizationStatus, executionId, database, operationStatus, execStatus, issues, queryStats, queryPlan, queryAst, leaseGeneration)
+        std::optional<TString> queryPlan, std::optional<TString> queryAst, i64 leaseGeneration, bool cancelledByUser = false)
+        : Description(finalizationStatus, executionId, database, operationStatus, execStatus, issues, queryStats, queryPlan, queryAst, leaseGeneration, cancelledByUser)
     {}
 
     TDescription Description;

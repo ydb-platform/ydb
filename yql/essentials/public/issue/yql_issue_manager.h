@@ -37,7 +37,7 @@ public:
     }
 
     void RaiseIssueForEmptyScope();
-    void Mute();
+    void Mute(bool onlyWarnings);
     void Unmute();
 
 private:
@@ -53,6 +53,12 @@ private:
         }
     };
 
+    enum class EMuteMode {
+        None,
+        Warnings,
+        All
+    };
+
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
     TIssuePtr CheckUniqAndLimit(TIssuePtr issue);
     void LeaveAllScopes();
@@ -64,7 +70,7 @@ private:
     std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
     std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
     size_t IssueLimit_ = 0;
-    bool IsMuted_ = false;
+    EMuteMode MuteMode_ = EMuteMode::None;
 };
 
 class TIssueScopeGuard: private TNonCopyable {

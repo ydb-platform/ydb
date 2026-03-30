@@ -607,8 +607,9 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
+        auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, data.Requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {

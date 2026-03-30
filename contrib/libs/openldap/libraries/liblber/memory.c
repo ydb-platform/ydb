@@ -705,11 +705,22 @@ ber_bvreplace_x( struct berval *dst, LDAP_CONST struct berval *src, void *ctx )
 	assert( !BER_BVISNULL( src ) );
 
 	if ( BER_BVISNULL( dst ) || dst->bv_len < src->bv_len ) {
-		dst->bv_val = ber_memrealloc_x( dst->bv_val, src->bv_len + 1, ctx );
+		char *ptr = ber_memrealloc_x( dst->bv_val, src->bv_len + 1, ctx );
+		if ( ptr != NULL ) {
+			dst->bv_val = ptr;
+			dst->bv_len = src->bv_len;
+		}
+		/* if realloc failed, dst is left unchanged
+		 * and the value copied into it will be truncated.
+		 * callers never check this function's return value.
+		 */
+	} else {
+		dst->bv_len = src->bv_len;
 	}
 
-	AC_MEMCPY( dst->bv_val, src->bv_val, src->bv_len + 1 );
-	dst->bv_len = src->bv_len;
+	if ( dst->bv_val != NULL ) {
+		AC_MEMCPY( dst->bv_val, src->bv_val, dst->bv_len + 1 );
+	}
 
 	return dst;
 }

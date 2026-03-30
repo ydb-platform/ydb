@@ -89,8 +89,6 @@ namespace NSchemeShard {
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
 
-class TShredManager;
-
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
@@ -411,6 +409,7 @@ public:
     bool EnableResourcePoolsOnServerless = false;
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
+    bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableJsonIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
@@ -539,6 +538,7 @@ public:
     }
 
     TTxId GetCachedTxId(const TActorContext& ctx);
+    void ReturnTxIdToCache(const TTxId txId);
 
     EAttachChildResult AttachChild(TPathElement::TPtr child);
     bool PathIsActive(TPathId pathId) const;
@@ -1287,7 +1287,8 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
-        const TActorContext& ctx);
+        const TActorContext& ctx,
+        const TString& specificImplTableName = "");
 
     TString FindTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,

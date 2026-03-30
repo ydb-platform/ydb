@@ -53,8 +53,10 @@ public:
 
     TGenerateTasksResult GenerateTasksImpl(
         const TGenerateTasksContext& context
-    ) {
+    ) override {
         const auto& mapOperationParams = std::get<TMapOperationParams>(context.OperationParams);
+
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Map operation";
 
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
@@ -78,7 +80,7 @@ public:
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         TGetNewPartIdsForTaskResult result;
         TMapTaskParams& mapTaskParams = std::get<TMapTaskParams>(context.Task->TaskParams);
         TString newPartId = GenerateId();
@@ -92,7 +94,7 @@ public:
         return result;
     }
 
-    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TMapTaskParams& mapTaskParams = std::get<TMapTaskParams>(context.Task->TaskParams);
         for (auto& fmrTableOutputRef: mapTaskParams.Output) {

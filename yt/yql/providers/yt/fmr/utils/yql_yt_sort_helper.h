@@ -22,7 +22,7 @@ public:
     TSortedRowOrdering GetSortedRowOrdering() const;
 
 private:
-    std::vector<TIndexedBlock> Blocks_;
+    const std::vector<TIndexedBlock>& Blocks_;
     const std::vector<ESortOrder> SortOrders_;
 };
 

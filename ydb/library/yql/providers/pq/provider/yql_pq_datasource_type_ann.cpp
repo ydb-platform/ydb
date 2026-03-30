@@ -10,6 +10,8 @@
 #include <ydb/library/yql/providers/common/pushdown/settings.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -32,6 +34,7 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::StringTypes |
             EFlag::TimestampCtor |
             EFlag::IntervalCtor |
+            EFlag::DateCtor |
             EFlag::ImplicitConversionToInt64 |
             EFlag::DoNotCheckCompareArgumentsTypes |
 
@@ -39,9 +42,14 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::ArithmeticalExpressions |
             EFlag::CastExpression |
             EFlag::DivisionExpressions |
+            EFlag::ExpressionAsPredicate |
             EFlag::JustPassthroughOperators |
             EFlag::UnaryOperators |
             EFlag::MinMax |
+            EFlag::IsDistinctOperator |
+            EFlag::ToBytesFromStringExpressions |
+            EFlag::ToStringFromStringExpressions |
+            EFlag::FlatMapOverOptionals |
             EFlag::NonDeterministic
         );
     }
@@ -249,8 +257,15 @@ public:
             const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
             const auto lambdaBody = lambda.Body();
             if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
+                TStringBuilder err;
+                err << "Bad watermark expression: ";
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                // SerializeWatermarkExpr is for more sensible error message
+                if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
+                    // SerializeWatermarkExpr unexpectedly succeed
+                    err << "[unspecified error, please report to support]";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), err));
                 return TStatus::Error;
             }
         }
@@ -268,7 +283,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7, 9, ctx)) {
             return TStatus::Error;
         }
 
@@ -306,9 +321,26 @@ public:
             return TStatus::Error;
         }
 
-        if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
-            const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
-            if (!EnsureAtom(*watermark, ctx)) {
+        if (TDqPqTopicSource::idx_WatermarkExpr < input->ChildrenSize()) {
+            auto& watermarkExpr = input->ChildRef(TDqPqTopicSource::idx_WatermarkExpr);
+            const auto status = ConvertToLambda(watermarkExpr, ctx, 1, 1);
+            if (status != TStatus::Ok) {
+                return status;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+                return TStatus::Error;
+            }
+            if (!watermarkExpr->GetTypeAnn()) {
+                return TStatus::Repeat;
+            }
+            if (!EnsureSpecificDataType(*watermarkExpr, EDataSlot::Timestamp, ctx, true)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (TDqPqTopicSource::idx_WatermarkSerialized < input->ChildrenSize()) {
+            const auto watermarkSerialized = input->Child(TDqPqTopicSource::idx_WatermarkSerialized);
+            if (!EnsureAtom(*watermarkSerialized, ctx)) {
                 return TStatus::Error;
             }
         }

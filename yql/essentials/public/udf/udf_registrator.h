@@ -211,14 +211,17 @@ Y_PRAGMA_DIAGNOSTIC_PUSH
 Y_PRAGMA_NO_DEPRECATED
 
 inline TStaticSymbols GetStaticSymbols() {
-    return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject
+    return {.UdfAllocateFunc = &UdfAllocate, .UdfFreeFunc = &UdfFree, .UdfTerminate = &UdfTerminate, .UdfRegisterObject = &UdfRegisterObject, .UdfUnregisterObject = &UdfUnregisterObject
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
             ,
-            &UdfAllocateWithSize, &UdfFreeWithSize
+            .UdfAllocateWithSizeFunc = &UdfAllocateWithSize,
+            .UdfFreeWithSizeFunc = &UdfFreeWithSize
     #endif
     #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 37)
             ,
-            &UdfArrowAllocate, &UdfArrowReallocate, &UdfArrowFree
+            .UdfArrowAllocateFunc = &UdfArrowAllocate,
+            .UdfArrowReallocateFunc = &UdfArrowReallocate,
+            .UdfArrowFreeFunc = &UdfArrowFree
     #endif
     };
 }

@@ -36,8 +36,6 @@ TFixture::TTableRecord::TTableRecord(const std::string& key, const std::string& 
 void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
-    settings.SetEnableTopicServiceTx(true);
-    settings.SetEnableTopicSplitMerge(true);
     settings.SetEnableHtapTx(GetEnableHtapTx());
     settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
 

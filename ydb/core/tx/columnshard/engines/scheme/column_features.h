@@ -1,7 +1,6 @@
 #pragma once
 #include "column/info.h"
 
-#include <ydb/core/formats/arrow/dictionary/object.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/formats/arrow/transformer/abstract.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>

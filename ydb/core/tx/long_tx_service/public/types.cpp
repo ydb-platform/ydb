@@ -187,16 +187,10 @@ Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TLongTxId, out, txId) {
     out << txId.ToString();
 }
 
-template <>
-void Out<NKikimr::NLongTxService::TLockInfo>(
-        IOutputStream& o,
-        const NKikimr::NLongTxService::TLockInfo& li) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TLockInfo, o, li) {
     o << "{ LockId: " << li.LockId << ", LockNodeId: " << li.LockNodeId << " }";
 }
 
-template <>
-void Out<NKikimr::NLongTxService::TWaitEdgeId>(
-        IOutputStream& o,
-        const NKikimr::NLongTxService::TWaitEdgeId& id) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NLongTxService::TWaitEdgeId, o, id) {
     o << "{ OwnerId: " << id.OwnerId << ", RequestId: " << id.RequestId << " }";
 }

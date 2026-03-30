@@ -105,8 +105,7 @@ void FillTopicDetails(TopicDetails* details, const NKikimrSchemeOp::TPersQueueGr
             *retention = google::protobuf::util::TimeUtil::SecondsToDuration(partCfg.GetLifetimeSeconds());
         }
         if (partCfg.HasStorageLimitBytes()) {
-            constexpr ui64 BYTES_IN_MB = 1024ull * 1024ull;
-            details->set_retention_storage_mb(partCfg.GetStorageLimitBytes() / BYTES_IN_MB);
+            details->set_retention_storage_mb(partCfg.GetStorageLimitBytes() / 1_MB);
         }
         if (cfg.HasMeteringMode()) {
             details->set_metering_mode(ConvertMeteringMode(cfg.GetMeteringMode()));
@@ -247,10 +246,6 @@ void Fill(TEvent& ev, const TCloudEventInfo& info) {
     });
 }
 
-template void Fill<TAlterTopicEvent>(TAlterTopicEvent& ev, const TCloudEventInfo& info);
-template void Fill<TCreateTopicEvent>(TCreateTopicEvent& ev, const TCloudEventInfo& info);
-template void Fill<TDeleteTopicEvent>(TDeleteTopicEvent& ev, const TCloudEventInfo& info);
-
 template<typename TEvent>
 TString SerializeEvent(const TEvent& ev) {
     TString data;
@@ -260,25 +255,25 @@ TString SerializeEvent(const TEvent& ev) {
 
 } // anonymous namespace
 
-TString BuildTopicCloudEventJson(const TCloudEventInfo& info) {
-    TString json;
+TString BuildTopicCloudEvent(const TCloudEventInfo& info) {
+    TString data;
 
     auto type = info.ModifyScheme.GetOperationType();
     if (type == NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup) {
         TCreateTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        data = SerializeEvent(proto);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup) {
         TAlterTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        data = SerializeEvent(proto);
     } else if (type == NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup) {
         TDeleteTopicEvent proto;
         Fill(proto, info);
-        json = SerializeEvent(proto);
+        data = SerializeEvent(proto);
     }
 
-    return json;
+    return data;
 }
 
 TCloudEventsActor::TCloudEventsActor()
@@ -311,7 +306,7 @@ void TCloudEventsActor::Handle(TCloudEvent::TPtr& ev) {
         return;
     }
 
-    TString data = BuildTopicCloudEventJson(ev.Get()->Get()->Info);
+    TString data = BuildTopicCloudEvent(ev.Get()->Get()->Info);
     if (EventsWriter) {
         EventsWriter->Write(data);
     }

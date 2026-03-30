@@ -164,7 +164,7 @@ TPlainAuthActorBase::TPlainAuthActorBase(TActorId sender, const std::string& dat
 {
 }
 
-void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
+bool TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
     std::vector<std::string> authMsgParts = StringSplitter(AuthMsg).Split('\0');
     if (authMsgParts.size() != 3) {
         std::string error = "Wrong SASL PLAIN auth message format";
@@ -173,7 +173,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
             ", " << error
         );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-        return CleanupAndDie(ctx);
+        CleanupAndDie(ctx);
+        return false;
     }
 
     AuthzId = authMsgParts[0];
@@ -190,7 +191,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
                 ", " << error
             );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-            return CleanupAndDie(ctx);
+            CleanupAndDie(ctx);
+            return false;
         }
 
         AuthzId = std::move(prepAuthzId);
@@ -203,7 +205,8 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
             ", " << error
         );
         SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-        return CleanupAndDie(ctx);
+        CleanupAndDie(ctx);
+        return false;
     } else {
         std::string prepAuthcId;
         auto saslPrepRC = SaslPrep(AuthcId, prepAuthcId);
@@ -214,11 +217,14 @@ void TPlainAuthActorBase::ProcessAuthMsg(const TActorContext &ctx) {
                 ", " << error
             );
             SendError(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
-            return CleanupAndDie(ctx);
+            CleanupAndDie(ctx);
+            return false;
         }
 
         AuthcId = std::move(prepAuthcId);
     }
+
+    return true;
 }
 
 }

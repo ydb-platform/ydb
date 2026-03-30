@@ -1318,7 +1318,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     UpdateTimedCountersImpl();
     Y_ABORT_UNLESS(block.Valid);
-    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - block.OriginalMemoryUsage);
+    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
     (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
@@ -1327,7 +1327,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     if (!SendImplScheduled.exchange(true)) {
         CompressionExecutor->Post([cbContext = SelfContext]() {
             if (auto self = cbContext->LockShared()) {
-                self->SendImplScheduled = false;
+                self->SendImplScheduled.store(false);
                 with_lock (self->Lock) {
                     self->SendImpl();
                 }

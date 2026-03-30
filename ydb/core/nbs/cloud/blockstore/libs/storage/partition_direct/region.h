@@ -29,6 +29,7 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
+        NProto::TStorageServiceConfig::TWriteMode writeMode,
         NWilson::TTraceId traceId);
 
 private:

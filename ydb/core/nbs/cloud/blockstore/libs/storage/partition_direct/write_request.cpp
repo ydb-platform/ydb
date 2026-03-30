@@ -7,6 +7,8 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TWriteRequestExecutor::TWriteRequestExecutor(
@@ -25,10 +27,8 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(Request->Lsn)
-    , WriteMode(Request->WriteMode)
     , PBufferReplyTimeoutMicroseconds(Request->PBufferReplyTimeoutMicroseconds)
 {
-    constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
     if (!PBufferReplyTimeoutMicroseconds) {
         PBufferReplyTimeoutMicroseconds =
             DefaultPBufferReplyTimeoutMicroseconds;
@@ -49,22 +49,25 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
     }
 }
 
-void TWriteRequestExecutor::Run()
+void TWriteRequestExecutor::Run(
+    NProto::TStorageServiceConfig::TWriteMode writeMode)
 {
-    if (WriteMode == NProto::TStorageServiceConfig::PBufferReplication) {
-        SendWriteRequestToManyPBuffers();
-        return;
-    }
-    if (WriteMode == NProto::TStorageServiceConfig::DirectPBuffersFilling) {
-        SendWriteRequest(ELocation::PBuffer0);
-        SendWriteRequest(ELocation::PBuffer1);
-        SendWriteRequest(ELocation::PBuffer2);
-        return;
+    switch (writeMode) {
+        case NProto::TStorageServiceConfig::PBufferReplication:
+            SendWriteRequestToManyPBuffers();
+            return;
+        case NProto::TStorageServiceConfig::DirectPBuffersFilling:
+            SendWriteRequest(ELocation::PBuffer0);
+            SendWriteRequest(ELocation::PBuffer1);
+            SendWriteRequest(ELocation::PBuffer2);
+            return;
+        default:
+            break;
     }
 
     auto resultError = MakeError(
         E_FAIL,
-        "Unsupported write mode: " + std::to_string(WriteMode));
+        "Unsupported write mode: " + std::to_string(writeMode));
     LOG_ERROR(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

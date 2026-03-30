@@ -38,7 +38,7 @@ public:
 
     ~TWriteRequestExecutor();
 
-    void Run();
+    void Run(NProto::TStorageServiceConfig::TWriteMode writeMode);
 
     NThreading::TFuture<TResponse> GetFuture() const;
 
@@ -66,7 +66,6 @@ private:
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
     TDDiskIdToHostIndex DDiskIdToHostIndex;
-    NProto::TStorageServiceConfig::TWriteMode WriteMode;
     ui32 PBufferReplyTimeoutMicroseconds{};
 };
 

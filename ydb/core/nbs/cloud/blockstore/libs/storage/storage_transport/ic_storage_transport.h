@@ -45,7 +45,7 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
-        const std::vector<NKikimr::NDDisk::TPersistentBufferId>&
+        const TVector<NKikimr::NDDisk::TPersistentBufferId>&
             persistentBufferIds,
         const ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& data,

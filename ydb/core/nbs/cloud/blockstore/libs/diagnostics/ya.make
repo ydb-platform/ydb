@@ -9,7 +9,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/nbs/cloud/blockstore/libs/service
 
     ydb/core/nbs/cloud/storage/core/libs/diagnostics

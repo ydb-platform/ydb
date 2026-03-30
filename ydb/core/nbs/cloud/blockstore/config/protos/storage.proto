@@ -44,8 +44,8 @@ message TStorageServiceConfig
 
     // Mode of write requests.
     enum TWriteMode {
-        // Persistent Buffers replication is going from one of PB. Write request
-        // will be sended to 1 PB, then this PB will send request to other PB.
+        // Persistent Buffers replication is going from one of PBuffers. Write request
+        // will be sended to 1 PBuffer, then this PBuffer will send request to other PBuffer.
         PBufferReplication = 0;
 
         // WriteRequests are going to all Persistent Buffers directly.

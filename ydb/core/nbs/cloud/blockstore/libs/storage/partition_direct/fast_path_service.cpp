@@ -144,12 +144,12 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
     request->Lsn = GenerateSequenceNumber();
-    request->WriteMode = WriteMode;
     request->PBufferReplyTimeoutMicroseconds = PBufferReplyTimeoutMicroseconds;
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
+        WriteMode,
         std::move(traceId));
 
     result.Subscribe(

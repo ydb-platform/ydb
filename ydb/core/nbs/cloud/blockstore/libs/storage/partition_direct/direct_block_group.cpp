@@ -324,8 +324,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
         NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
-    std::vector<NKikimr::NDDisk::TPersistentBufferId> disksIds(
-        hostIndexes.size());
+    TVector<NKikimr::NDDisk::TPersistentBufferId> disksIds(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;

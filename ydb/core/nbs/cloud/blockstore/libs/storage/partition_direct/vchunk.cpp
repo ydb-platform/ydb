@@ -116,6 +116,7 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    NProto::TStorageServiceConfig::TWriteMode writeMode,
     NWilson::TTraceId traceId)
 {
     // VHost thread
@@ -148,6 +149,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
+         writeMode,
          traceId = std::move(traceId)]() mutable
         {
             if (auto self = weakSelf.lock()) {
@@ -156,6 +158,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     vchunkRange,
                     std::move(callContext),
                     std::move(request),
+                    writeMode,
                     std::move(traceId));
             } else {
                 promise.SetValue(
@@ -276,6 +279,7 @@ void TVChunk::DoWriteBlocksLocal(
     TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    NProto::TStorageServiceConfig::TWriteMode writeMode,
     NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -308,7 +312,7 @@ void TVChunk::DoWriteBlocksLocal(
                 f.GetValue());
         });
 
-    writeExecutor->Run();
+    writeExecutor->Run(writeMode);
 }
 
 void TVChunk::OnWriteBlocksResponse(

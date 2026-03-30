@@ -167,7 +167,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
         case EJoinAlgoType::GraceJoin:
             return true;
         case EJoinAlgoType::ReverseBlockJoin:
-            return BlockJoinEnabled && joinKind == EJoinKind::LeftJoin;
+            return BlockJoinEnabled && (joinKind == EJoinKind::LeftJoin | joinKind == EJoinKind::LeftOnly | joinKind == EJoinKind::LeftSemi);
         default:
             return false;
     }

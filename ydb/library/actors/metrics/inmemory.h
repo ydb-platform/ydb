@@ -63,6 +63,11 @@ namespace NActors {
         ui32 CommittedBytes = 0;
     };
 
+    struct TChunkSnapshotView {
+        TChunkView Meta;
+        std::span<const char> Payload;
+    };
+
     struct TStoredRecord {
         NHPTimer::STime TimestampTs = 0;
         ui64 Value = 0;
@@ -126,8 +131,8 @@ namespace NActors {
 
         void ForEachRecord(const std::function<void(const TRecordView&)>& cb) const;
         void ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const;
-        void ForEachMaterializedRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const;
-        bool TryGetLastMaterializedRecord(TRecordView& record) const;
+        void ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const;
+        TInstant DecodeTimestampTs(NHPTimer::STime ts) const noexcept;
         template<class TValueType, class TCallback>
         void ForEachRecordAs(TCallback&& cb) const {
             ForEachRecord([&](const TRecordView& record) {

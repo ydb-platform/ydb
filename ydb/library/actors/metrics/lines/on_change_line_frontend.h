@@ -27,7 +27,7 @@ namespace NActors {
         }
 
         static void ReadRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) {
-            snapshot.ForEachMaterializedRecordInRange(beginTs, endTs, cb);
+            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, cb);
         }
 
         static const TLineFrontendOps& Descriptor() noexcept {

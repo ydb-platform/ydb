@@ -235,46 +235,21 @@ namespace NActors {
         ForEachRecordInRange(TInstant::Zero(), TInstant::Max(), cb);
     }
 
-    void TLineSnapshot::ForEachMaterializedRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const {
+    void TLineSnapshot::ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const {
         if (!Data) {
             return;
         }
         for (size_t chunkIndex : ChunkIndexes) {
             const auto& pinned = Data->Chunks[chunkIndex];
-            const auto* storedRecords = reinterpret_cast<const TStoredRecord*>(pinned.Chunk->Payload.data());
-            const ui32 recordsCount = pinned.View.CommittedBytes / sizeof(TStoredRecord);
-            for (ui32 i = 0; i < recordsCount; ++i) {
-                const TRecordView record{
-                    .Timestamp = DecodeTs(Data->Anchor, storedRecords[i].TimestampTs),
-                    .Value = storedRecords[i].Value,
-                };
-                if (beginTs <= record.Timestamp && record.Timestamp <= endTs) {
-                    cb(record);
-                }
-            }
+            cb(TChunkSnapshotView{
+                .Meta = pinned.View,
+                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.View.CommittedBytes),
+            });
         }
     }
 
-    bool TLineSnapshot::TryGetLastMaterializedRecord(TRecordView& record) const {
-        if (!Data || ChunkIndexes.empty()) {
-            return false;
-        }
-        for (size_t i = ChunkIndexes.size(); i > 0; --i) {
-            const auto& pinned = Data->Chunks[ChunkIndexes[i - 1]];
-            const ui32 recordsCount = pinned.View.CommittedBytes / sizeof(TStoredRecord);
-            if (!recordsCount) {
-                continue;
-            }
-
-            const auto* storedRecords = reinterpret_cast<const TStoredRecord*>(pinned.Chunk->Payload.data());
-            const auto& stored = storedRecords[recordsCount - 1];
-            record = TRecordView{
-                .Timestamp = DecodeTs(Data->Anchor, stored.TimestampTs),
-                .Value = stored.Value,
-            };
-            return true;
-        }
-        return false;
+    TInstant TLineSnapshot::DecodeTimestampTs(NHPTimer::STime ts) const noexcept {
+        return Data ? DecodeTs(Data->Anchor, ts) : TInstant::Zero();
     }
 
     void TLineSnapshot::ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const {

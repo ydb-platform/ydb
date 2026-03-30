@@ -29,14 +29,19 @@ namespace NActors {
         }
 
         static void ReadRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) {
-            snapshot.ForEachMaterializedRecordInRange(beginTs, endTs, cb);
-
             TRecordView lastRecord;
+            bool hasLastRecord = false;
+            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, cb);
+            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, TInstant::Zero(), TInstant::Max(), [&](const TRecordView& record) {
+                lastRecord = record;
+                hasLastRecord = true;
+            });
+
             const TInstant lastObservedTimestamp = snapshot.GetLastObservedTimestamp();
             const TInstant lastPublishedTimestamp = snapshot.GetLastPublishedTimestamp();
             if (!snapshot.Closed
                 && lastObservedTimestamp > lastPublishedTimestamp
-                && snapshot.TryGetLastMaterializedRecord(lastRecord)
+                && hasLastRecord
                 && lastRecord.Timestamp < lastObservedTimestamp
                 && beginTs <= lastObservedTimestamp
                 && lastObservedTimestamp <= endTs) {

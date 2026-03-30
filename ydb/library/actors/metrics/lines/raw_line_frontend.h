@@ -27,7 +27,27 @@ namespace NActors {
         }
 
         static void ReadRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) {
-            snapshot.ForEachMaterializedRecordInRange(beginTs, endTs, cb);
+            ForEachStoredRecordInRange(snapshot, beginTs, endTs, cb);
+        }
+
+        template<class TCallback>
+        static void ForEachStoredRecordInRange(const TLineSnapshot& snapshot,
+                                               TInstant beginTs,
+                                               TInstant endTs,
+                                               TCallback&& cb) {
+            snapshot.ForEachChunk([&](const TChunkSnapshotView& chunk) {
+                const auto* storedRecords = reinterpret_cast<const TStoredRecord*>(chunk.Payload.data());
+                const size_t recordsCount = chunk.Payload.size() / sizeof(TStoredRecord);
+                for (size_t i = 0; i < recordsCount; ++i) {
+                    const TRecordView record{
+                        .Timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs),
+                        .Value = storedRecords[i].Value,
+                    };
+                    if (beginTs <= record.Timestamp && record.Timestamp <= endTs) {
+                        cb(record);
+                    }
+                }
+            });
         }
 
         static const TLineFrontendOps& Descriptor() noexcept {

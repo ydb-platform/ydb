@@ -14,6 +14,7 @@ namespace NYdb::NBS::NBlockStore {
 struct TRequestHeaders
 {
     TRequestHeaders Clone(TBlockRange64 range) const;
+    size_t GetRequestSize() const;
 
     const TVolumeConfigPtr VolumeConfig;
     const TString ClientId;
@@ -42,9 +43,6 @@ struct TWriteBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
-
-    // Set during execution
-    ui64 Lsn = 0;
 
     explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))

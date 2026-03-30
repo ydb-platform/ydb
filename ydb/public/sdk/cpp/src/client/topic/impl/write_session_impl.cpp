@@ -631,6 +631,7 @@ void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
 
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.value_or(TInstant::Now());
+    bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
     {
         std::lock_guard guard(Lock);
@@ -657,9 +658,10 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         );
 
         FlushWriteIfRequiredImpl();
-        if (OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk) {
-            EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
-        }
+        readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
+    }
+    if (readyToAccept) {
+        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
 }
 

@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <library/cpp/json/writer/json.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -44,6 +45,10 @@ enum EPrintPlanOptions: ui32 {
     PrintFullStatistics = 0x08
 };
 // clang-format on
+
+enum EPlanToJsonOptions: ui32 {
+    BasicInfo = 0x01
+};
 
 enum EOrderEnforcerAction : ui32 { REQUIRE, MAINTAIN };
 enum EOrderEnforcerReason : ui32 { USER, INTERNAL };
@@ -605,6 +610,9 @@ public:
     TOpIterator end() {
         return TOpIterator(nullptr);
     }
+
+    NJson::TJsonValue GetExecutionJson(ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExplainJson(ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

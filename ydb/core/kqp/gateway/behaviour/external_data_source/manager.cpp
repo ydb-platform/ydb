@@ -313,8 +313,8 @@ bool IsResolveResourceIdNeeded(const auto& schemeTx) {
 
 TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDataSourceManager::TExternalModificationContext& context, const std::shared_ptr<NKikimrSchemeOp::TModifyScheme>& schemeTxState, const std::shared_ptr<std::vector<TString>>& secrets) {
     auto actorSystem = context.GetActorSystem();
-    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourcesIamAuth()) {
-        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM requires EnableExternalDataSourceIamAuth feature. Please contact your system administrator to enable it"));
+    if (!AppData(actorSystem)->FeatureFlags.GetEnableExternalDataSourcesAuthMethodIam()) {
+        return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_UNSUPPORTED, "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it"));
     }
     return ChainFeatures(validationFuture, [schemeTxState, secrets, actorSystem] () -> TAsyncStatus {
         if (!secrets || secrets->size() != 1) {

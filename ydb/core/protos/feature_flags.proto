@@ -285,5 +285,5 @@ message TFeatureFlags {
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
-    optional bool EnableExternalDataSourcesIamAuth = 250 [default = false];
+    optional bool EnableExternalDataSourcesAuthMethodIam = 250 [default = false];
 }

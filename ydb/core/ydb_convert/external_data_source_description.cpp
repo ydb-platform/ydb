@@ -50,7 +50,7 @@ void Convert(const TAws& in, TProperties& out) {
     out["AWS_REGION"] = in.GetAwsRegion();
 }
 
-void Convert(const TIamAuth& in, TProperties& out) {
+void Convert(const TIamImpersonate& in, TProperties& out) {
     out["SERVICE_ACCOUNT_ID"] = in.GetServiceAccountId();
     out["RESOURCE_ID"] = in.GetResourceId();
     SetSecretSettingName(in.GetInitialTokenSecretName(), "INITIAL_TOKEN_SECRET", out);

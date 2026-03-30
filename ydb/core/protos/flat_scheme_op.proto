@@ -2271,7 +2271,7 @@ message TToken {
     optional string TokenSecretName = 2;
 }
 
-message TIamAuth {
+message TIamImpersonate {
     optional string ServiceAccountId = 1;
     optional string InitialTokenSecretName = 2;
     optional string ResourceId = 3;
@@ -2285,7 +2285,7 @@ message TAuth {
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
         TToken Token = 8;
-        TIamAuth Iam = 9;
+        TIamImpersonate Iam = 9;
     }
 }
 

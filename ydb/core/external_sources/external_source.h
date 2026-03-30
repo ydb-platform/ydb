@@ -44,10 +44,10 @@ struct TServiceAccount {
     TString ServiceAccountIdSignature;
 };
 
-struct TIamAuth {
+struct TIamImpersonate {
     static constexpr std::string_view Method = "IAM";
 
-    TIamAuth(TString serviceAccountId, TString resourceId)
+    TIamImpersonate(TString serviceAccountId, TString resourceId)
         : ServiceAccountId{std::move(serviceAccountId)}
         , ResourceId{std::move(resourceId)}
     {}
@@ -56,7 +56,7 @@ struct TIamAuth {
     TString ResourceId;
 };
 
-using TAuth = std::variant<TNone, TServiceAccount, TAws, TIamAuth>;
+using TAuth = std::variant<TNone, TServiceAccount, TAws, TIamImpersonate>;
 
 std::string_view GetMethod(const TAuth& auth);
 
@@ -72,8 +72,8 @@ inline TAuth MakeAws(const TString& accessKey, const TString& secretAccessKey, c
     return TAuth{std::in_place_type_t<TAws>{}, accessKey, secretAccessKey, region};
 }
 
-inline TAuth MakeIamAuth(const TString& serviceAccountId, const TString& resourceId) {
-    return TAuth{std::in_place_type_t<TIamAuth>{}, serviceAccountId, resourceId};
+inline TAuth MakeIamImpersonate(const TString& serviceAccountId, const TString& resourceId) {
+    return TAuth{std::in_place_type_t<TIamImpersonate>{}, serviceAccountId, resourceId};
 }
 
 } // namespace NAuth

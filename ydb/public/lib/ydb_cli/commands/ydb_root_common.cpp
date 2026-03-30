@@ -170,9 +170,20 @@ Y_COMPLETER(ProfileCompleter) {
     try {
         TString configPath = GetProfileConfigPathFromArgs(argc, argv);
         auto profileManager = CreateProfileManager(configPath);
+        TString activeProfile = profileManager->GetActiveProfileName();
         for (const auto& name : profileManager->ListProfiles()) {
             auto profile = profileManager->GetProfile(name);
-            TString desc = DescribeProfileForCompletion(profile);
+            TString settings = DescribeProfileForCompletion(profile);
+            TStringBuilder desc;
+            if (name == activeProfile) {
+                desc << "(active)";
+            }
+            if (settings) {
+                if (desc) {
+                    desc << " ";
+                }
+                desc << settings;
+            }
             if (desc) {
                 AddCompletion(TStringBuilder() << name << ":" << desc);
             } else {

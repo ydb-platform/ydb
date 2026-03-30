@@ -11,7 +11,12 @@ CREATE EXTERNAL DATA SOURCE external_data_source WITH (
   USE_TLS="use_tls",
   AUTH_METHOD="auth_method",
   LOGIN="login",
-  PASSWORD_SECRET_PATH="password_secret_path"
+  PASSWORD_SECRET_PATH="password_secret_path",
+  AWS_ACCESS_KEY_ID_SECRET_PATH="aws_access_key_id_secret_path",
+  AWS_SECRET_ACCESS_KEY_SECRET_PATH="aws_secret_access_key_secret_path",
+  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_key_id_secret_name",
+  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_secret_access_key_secret_name",
+  AWS_REGION="aws_region"
 )
 ```
 
@@ -21,9 +26,12 @@ CREATE EXTERNAL DATA SOURCE external_data_source WITH (
 * `source_type` - тип внешнего источника данных. Возможные значения: [`ClickHouse`](#clickhouse), [`PostgreSQL`](#postgresql), [`ObjectStorage`](#object_storage).
 * `ip_address_or_fqdn:port` - полный сетевой адрес внешнего источника данных, включая порт. В качестве сетевого адреса можно указывать IP-адрес или FQDN.
 * `use_tls` - флаг, указывающий требование подключения через безопасное соединение (TLS). Возможные значения: `TRUE`, `FALSE`.
-* `auth_method` - способ аутентификации во внешнем источника данных. Для внешних источников типов `ClickHouse`, `PostgreSQL` поддерживается только тип аутентификации `BASIC`. Для внешнего источника `ObjectStorage` в данный момент поддерживает только тип аутентификации `NONE`.
+* `auth_method` - способ аутентификации во внешнем источнике данных. Для внешних источников типов `ClickHouse`, `PostgreSQL` поддерживается только тип аутентификации `BASIC`. Для внешнего источника `ObjectStorage` поддерживаются типы аутентификации `NONE` и `AWS`.
 * `login` - логин, используемый для подключения к внешнему источнику данных.
 * `password_secret_path` - [секрет](../../../concepts/datamodel/secrets.md), содержащий пароль для подключения к внешнему источнику данных.
+* `aws_access_key_id_secret_path` / `aws_secret_access_key_secret_path` - путь к [секрету](../../../concepts/datamodel/secrets.md), содержащему `Access Key ID` / `Secret Access Key` для `AUTH_METHOD="AWS"`.
+* `aws_access_key_id_secret_name` / `aws_secret_access_key_secret_name` - имя схемного объекта [секрета](../../../concepts/datamodel/secrets.md) (полный путь), содержащего `Access Key ID` / `Secret Access Key` для `AUTH_METHOD="AWS"`. Удобно использовать для интеграции с tiering в `ColumnShard`.
+* `aws_region` - регион S3-совместимого хранилища для `AUTH_METHOD="AWS"`.
 
 При работе по защищенным TLS каналам связи используется системные сертификаты, расположенные на серверах {{ydb-full-name}}.
 
@@ -104,13 +112,18 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 - в поле `SOURCE_TYPE` значение `ObjectStorage`;
 - в поле `LOCATION` сетевой путь к бакету;
-- в поле `AUTH_METHOD` значение `NONE`.
+- в поле `AUTH_METHOD` одно из значений:
+  - `NONE` — для публичного бакета без аутентификации;
+  - `AWS` — для доступа с AWS-учетными данными.
 
-{% note info %}
+Если используется `AUTH_METHOD="AWS"`, укажите параметры:
 
-В настоящий момент поддерживается работа только с бакетами, не защищенными аутентификацией.
+- `AWS_ACCESS_KEY_ID_SECRET_PATH` и `AWS_SECRET_ACCESS_KEY_SECRET_PATH`, либо
+- `AWS_ACCESS_KEY_ID_SECRET_NAME` и `AWS_SECRET_ACCESS_KEY_SECRET_NAME`.
 
-{% endnote %}
+Параметры с суффиксом `_SECRET_NAME` ссылаются на схемные объекты секретов и рекомендуются для сценариев с `ColumnShard` tiering.
+
+Также для `AUTH_METHOD="AWS"` необходимо указать `AWS_REGION`.
 
 Подключение возможно к любым источникам данных с протоколом доступа [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html). Возможно указание любых URL к системам, поддерживающим этот протокол.
 
@@ -130,5 +143,19 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="ObjectStorage",
   LOCATION="http://s3.amazonaws.com/bucket/folder/",
   AUTH_METHOD="NONE"
+)
+```
+
+Пример для приватного S3-совместимого хранилища с аутентификацией `AWS` и ссылками на схемные объекты секретов:
+
+```yql
+CREATE EXTERNAL DATA SOURCE TestPrivateDataSource WITH (
+  SOURCE_TYPE="ObjectStorage",
+  LOCATION="http://s3.amazonaws.com/bucket/folder/",
+  AUTH_METHOD="AWS",
+  AWS_ACCESS_KEY_ID_SECRET_NAME="/Root/access-key-secret",
+  AWS_SECRET_ACCESS_KEY_SECRET_NAME="/Root/secret-key-secret",
+  AWS_REGION="ru-central-1"
+)
 ```
 

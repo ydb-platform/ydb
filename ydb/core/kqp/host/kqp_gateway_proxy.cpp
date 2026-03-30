@@ -8,6 +8,7 @@
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -611,21 +612,23 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize);
                 ngram->SetCaseSensitive(settings.CaseSensitive);
-                if (settings.FilterSizeBytes && settings.RecordsCount) {
-                    // DEPRECATED: old syntax, pass original values directly
-                    double fpp = NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(
-                        *settings.FilterSizeBytes, *settings.RecordsCount);
-                    ngram->SetFilterSizeBytes(*settings.FilterSizeBytes);
-                    ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                    ngram->SetRecordsCount(*settings.RecordsCount);
-                    ngram->SetFalsePositiveProbability(fpp);
+                double fpp;
+                if (settings.FalsePositiveProbability) {
+                    fpp = *settings.FalsePositiveProbability;
+                } else if (settings.FilterSizeBytes || settings.RecordsCount) {
+                    const ui32 filterSizeBytes = settings.FilterSizeBytes.value_or(
+                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(0.1));
+                    const ui32 recordsCount = settings.RecordsCount.value_or(
+                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::DeprecatedRecordsCount);
+                    fpp = NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(filterSizeBytes, recordsCount);
                 } else {
-                    double fpp = settings.FalsePositiveProbability;
-                    ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                    ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                    ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                    ngram->SetFalsePositiveProbability(fpp);
+                    fpp = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
                 }
+
+                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                ngram->SetFalsePositiveProbability(fpp);
 
                 break;
             }

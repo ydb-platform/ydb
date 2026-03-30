@@ -98,6 +98,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
@@ -1482,6 +1483,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->FolderServiceFactory = ModuleFactories
         ? ModuleFactories->FolderServiceFactory
         : nullptr;
+
+    if (runConfig.ServicesMask.EnableLongTxService) {
+        AppData->SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
+    }
 
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.Get();

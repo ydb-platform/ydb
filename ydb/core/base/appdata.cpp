@@ -161,7 +161,6 @@ TAppData::TAppData(
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
-    , SnapshotRegistryHolder(CreateImmutableSnapshotRegistryHolder())
 {}
 
 TAppData::~TAppData()

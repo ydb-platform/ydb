@@ -159,7 +159,6 @@ private:
 
     [[nodiscard]] bool ComputeHash(const TActorContext &ctx,
         const std::unordered_map<NLoginProto::EHashType::HashType, std::string>& hashesInitParams) {
-        std::string computedHash;
         for (const auto& allowedHashType : ALLOWED_HASHES_TO_AUTH) {
             const auto itHashesInitParams = hashesInitParams.find(allowedHashType);
             if (itHashesInitParams == hashesInitParams.end()) {
@@ -246,7 +245,7 @@ private:
             return false;
         }
 
-        return true;;
+        return true;
     }
 
     void SendResponse(std::unique_ptr<TEvSasl::TEvSaslPlainLoginResponse> response) const {

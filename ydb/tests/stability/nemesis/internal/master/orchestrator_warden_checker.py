@@ -8,7 +8,8 @@ import threading
 import time
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
@@ -16,10 +17,8 @@ from ydb.tests.stability.nemesis.internal.config import get_master_settings
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop, asyncio_run_blocking
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 from ydb.tests.stability.nemesis.internal.warden_catalog import (
-    CHECK_ID_AGENT_UNIFIED_VERIFY,
-    CHECK_ID_MASTER_PDISK,
-    CHECK_ID_MASTER_VERIFY_AGGREGATED,
-    MASTER_SAFETY_CHECK_IDS_ORDER,
+    agent_safety_check_id,
+    master_safety_check_id,
 )
 
 
@@ -140,38 +139,12 @@ class OrchestratorWardenChecker:
             safety_results = []
 
             if cluster is not None:
-                # Run liveness checks with progress updates
-                logger.debug("Running liveness checks...")
-                for result in self._run_liveness_checks_with_progress():
-                    liveness_results.append(result)
-                    # Update report with current progress
-                    with self._lock:
-                        self._last_report = WardenCheckReport(
-                            status='running',
-                            started_at=self._last_report.started_at,
-                            completed_at=None,
-                            liveness_checks=liveness_results.copy(),
-                            safety_checks=safety_results.copy()
-                        )
-                logger.debug(f"Liveness checks completed: {len(liveness_results)} checks")
-
-                logger.debug(
-                    "Running master safety checks (ordered: %s). "
-                    "PDisk first so the report updates before aggregated waits on agents.",
-                    ", ".join(MASTER_SAFETY_CHECK_IDS_ORDER),
-                )
-
-                for cid in MASTER_SAFETY_CHECK_IDS_ORDER:
-                    if cid == CHECK_ID_MASTER_PDISK:
-                        part = await asyncio_run_blocking(
-                            lambda: list(self._run_pdisk_check_sync(cluster))
-                        )
-                        safety_results.extend(part)
-                    elif cid == CHECK_ID_MASTER_VERIFY_AGGREGATED:
-                        agg = await self._run_aggregated_verify_failed_check_async()
-                        safety_results.append(agg)
+                for step in ORCHESTRATOR_WARDEN_STEPS:
+                    batch = await step.run(self, cluster)
+                    if step.report_section == "liveness":
+                        liveness_results.extend(batch)
                     else:
-                        raise RuntimeError(f"Unknown master safety check_id: {cid}")
+                        safety_results.extend(batch)
                     with self._lock:
                         self._last_report = WardenCheckReport(
                             status="running",
@@ -181,7 +154,8 @@ class OrchestratorWardenChecker:
                             safety_checks=safety_results.copy(),
                         )
                 logger.debug(
-                    "Master safety done: %d safety row(s) on orchestrator",
+                    "Orchestrator warden steps done: liveness=%d, safety=%d row(s)",
+                    len(liveness_results),
                     len(safety_results),
                 )
 
@@ -335,16 +309,10 @@ class OrchestratorWardenChecker:
                 error_message=str(e)
             )]
 
-    def _run_liveness_checks_with_progress(self, timeout_seconds: int = 60) -> List[WardenCheckResult]:
-        """Run liveness checks via subprocess with timeout and yield results."""
-        # Since subprocess runs as a single unit, we can't show progress during execution
-        # But we can yield results as soon as they're available
-        for result in self._run_liveness_checks_sync(timeout_seconds):
-            yield result
-
     def _run_pdisk_check_sync(self, cluster) -> List[WardenCheckResult]:
         """Run PDisk state check."""
         results = []
+        pdisk_check_id = master_safety_check_id("pdisk")
 
         try:
             pdisk_warden = AllPDisksAreInValidStateSafetyWarden(
@@ -359,7 +327,7 @@ class OrchestratorWardenChecker:
                 category='safety',
                 violations=violations if violations else [],
                 status=status,
-                check_id=CHECK_ID_MASTER_PDISK,
+                check_id=pdisk_check_id,
             ))
             if violations:
                 logger.info(f"AllPDisksAreInValidState: {len(violations)} violation(s) found")
@@ -371,13 +339,14 @@ class OrchestratorWardenChecker:
                 violations=[],
                 status='error',
                 error_message=str(e),
-                check_id=CHECK_ID_MASTER_PDISK,
+                check_id=pdisk_check_id,
             ))
 
         return results
 
     async def _run_aggregated_verify_failed_check_async(self, max_wait_seconds: int = 120, poll_interval_seconds: float = 2.0) -> WardenCheckResult:
         """Aggregate VERIFY failed errors from all agents."""
+        unified_agent_verify_id = agent_safety_check_id("unified_verify_failed")
         monitored = (
             self._get_monitored_hosts()
             if self._get_monitored_hosts is not None
@@ -447,7 +416,7 @@ class OrchestratorWardenChecker:
                 # Extract VERIFY failed violations
                 if result.get("safety_checks"):
                     for check in result["safety_checks"]:
-                        if check.get("check_id") == CHECK_ID_AGENT_UNIFIED_VERIFY:
+                        if check.get("check_id") == unified_agent_verify_id:
                             if check.get("violations"):
                                 return host, check["violations"]
                         elif "UnifiedAgentVerifyFailed" in check.get("name", ""):
@@ -482,6 +451,7 @@ class OrchestratorWardenChecker:
             aggregated_violations.append(f"Timeout: agents {list(pending_hosts)} did not complete in {max_wait_seconds}s")
             error_message = f"Timeout: agents {list(pending_hosts)} did not complete in {max_wait_seconds}s"
 
+        aggregated_check_id = master_safety_check_id("verify_failed_aggregated")
         return WardenCheckResult(
             name='UnifiedAgentVerifyFailedAggregated',
             category='safety',
@@ -489,5 +459,43 @@ class OrchestratorWardenChecker:
             status='violation' if aggregated_violations or error_message else 'ok',
             error_message=error_message,
             affected_hosts=verify_failed_hosts,
-            check_id=CHECK_ID_MASTER_VERIFY_AGGREGATED,
+            check_id=aggregated_check_id,
         )
+
+
+# --- Ordered orchestrator steps (single loop in _run_checks_async; extend this tuple for new master checks) ---
+
+ReportSection = Literal["liveness", "safety"]
+
+
+@dataclass(frozen=True)
+class OrchestratorWardenStep:
+    report_section: ReportSection
+    run: Callable[[OrchestratorWardenChecker, Any], Awaitable[List[WardenCheckResult]]]
+
+
+async def _orch_step_liveness_subprocess(
+    checker: OrchestratorWardenChecker, cluster: Any
+) -> List[WardenCheckResult]:
+    del cluster
+    return await asyncio_run_blocking(checker._run_liveness_checks_sync)
+
+
+async def _orch_step_master_pdisk(
+    checker: OrchestratorWardenChecker, cluster: Any
+) -> List[WardenCheckResult]:
+    return await asyncio_run_blocking(lambda: list(checker._run_pdisk_check_sync(cluster)))
+
+
+async def _orch_step_master_verify_aggregated(
+    checker: OrchestratorWardenChecker, cluster: Any
+) -> List[WardenCheckResult]:
+    del cluster
+    return [await checker._run_aggregated_verify_failed_check_async()]
+
+
+ORCHESTRATOR_WARDEN_STEPS: tuple[OrchestratorWardenStep, ...] = (
+    OrchestratorWardenStep("liveness", _orch_step_liveness_subprocess),
+    OrchestratorWardenStep("safety", _orch_step_master_pdisk),
+    OrchestratorWardenStep("safety", _orch_step_master_verify_aggregated),
+)

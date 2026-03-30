@@ -1,4 +1,5 @@
 import atexit
+import logging
 from functools import lru_cache
 
 from flask import Flask, current_app, jsonify
@@ -30,7 +31,7 @@ def initialize_app():
         return
 
     settings = get_settings()
-
+    logging.getLogger().setLevel(logging.DEBUG)
     agent_router.warden_checker = AgentWardenChecker(
         log_directory=AgentSettings().kikimr_logs_directory,
     )

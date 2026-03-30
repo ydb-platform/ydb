@@ -9,6 +9,7 @@ PY_SRCS(
     internal/nemesis/catalog.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
+    internal/agent/agent_safety_runs.py
     internal/agent/nemesis/runner.py
     internal/master/install.py
     internal/master/orchestrator_warden_checker.py

@@ -68,3 +68,98 @@
 ## UI в браузере
 
 `http://<orchestrator_host>:31434/static/index.html`
+
+---
+
+## Расширение: свой nemesis
+
+Реестр и UI-группы: **`internal/nemesis/catalog.py`** (`NEMESIS_TYPES`, `NEMESIS_UI_GROUPS`).
+
+### Как выполняется nemesis
+
+1. **Оркестратор** по расписанию или вручную вызывает планировщик (`ChaosMasterStore` → `NemesisPlannerBase`), получает список `DispatchCommand`.
+2. Команды уходят на агенты: **HTTP `POST /api/processes`** с телом `{ type, action, payload }` (см. `internal/master/nemesis/schedule_loop.py`, `chaos_dispatch.py`).
+3. **Агент** в `routers/agent_router.py` берёт `runner` из `NEMESIS_TYPES[type]` и запускает **`inject_fault` / `extract_fault`** в потоке через `NemesisManager` (`internal/agent/nemesis/runner.py`).
+
+Тело сценария всегда на **агенте**; оркестратор только планирует **какой** тип, **на каком** хосте и **какой** payload.
+
+### Регистрация типа
+
+1. Добавьте класс актора, наследник **`MonitoredAgentActor`** (как `NetworkNemesis` / `KillNodeNemesis`): реализуйте **`inject_fault`** и **`extract_fault`**, при необходимости читайте `payload` из dispatch.
+2. Заведите **строковый id** процесса (константа, как `NETWORK_NEMESIS` в `network_planner.py`).
+3. В **`NEMESIS_TYPES`** добавьте запись:
+   - **`runner`**: экземпляр актора;
+   - **`schedule`**: интервал по умолчанию для UI (секунды);
+   - **`ui_group`**: id группы в **`NEMESIS_UI_GROUPS`** (описание для `/api/process_types/grouped`; неизвестная группа попадёт под «Other», если не добавить описание);
+   - **`planner_cls`**: класс планировщика **или отсутствие ключа** (см. ниже).
+
+### Без своего планировщика
+
+**Не указывайте `planner_cls`** в записи `NEMESIS_TYPES`. Тогда `build_all_planners()` подставит **`DefaultRandomHostPlanner`** (`internal/master/nemesis/default_planner.py`):
+
+- на каждый тик расписания выбирается **случайный** хост из кластера и шлётся **inject** с **пустым** `PAYLOAD_INJECT`;
+- при **выключении** расписания **extract по списку затронутых хостов не планируется** (планировщик никого не «помнит»);
+- ручной inject/extract из UI по-прежнему уходит на выбранный хост.
+
+Этого достаточно, если сценарий **без памяти между тиками** и **без массового extract** при отключении расписания (например, одноразовый удар по случайной ноде с пустым payload, если актор сам всё делает локально).
+
+### Со своим планировщиком
+
+Нужен, если требуется, например:
+
+- вести **множество затронутых хостов** и при **отключении** расписания сделать **extract на всех**;
+- на одном тике **несколько** команд или **своя** логика выбора хостов (не «один случайный»);
+- **разные** `PAYLOAD_INJECT` / `PAYLOAD_EXTRACT` (как у сетевого nemesis).
+
+Шаги:
+
+1. Подкласс **`NemesisPlannerBase`** (`internal/master/nemesis/nemesis_planner_base.py`): задайте **`nemesis_type`**, **`PAYLOAD_INJECT`**, **`PAYLOAD_EXTRACT`**, реализуйте **`scheduled_tick`**, **`_drain_tracked_hosts`**, **`_register_inject`**, **`_register_extract`** (ориентир — `network_planner.py`, `kill_node_planner.py`).
+2. В **`NEMESIS_TYPES`** укажите **`planner_cls`: ВашPlanner`** (класс, не экземпляр — его создаёт `build_all_planners()`).
+
+### Кратко: когда обходиться без планировщика
+
+| Нужно | Достаточно `DefaultRandomHostPlanner` (без `planner_cls`) |
+|--------|--------------------------------------------------------|
+| Один inject на случайный хост за тик, payload не важен / фиксирован в акторе | Да |
+| Помнить «кого задели» и при выключении расписания сделать extract всем | Нет, свой planner |
+| Нестандартный выбор хостов / несколько команд за тик | Нет, свой planner |
+
+---
+
+## Расширение: liveness и safety checks
+
+Каталог проверок: **`internal/warden_catalog.py`**. API списка проверок: **`GET /api/warden/checks`** (`get_all_warden_definitions()`).
+
+### Где что выполняется
+
+| Категория | Где исполняется | Как попадает в отчёт |
+|-----------|-----------------|----------------------|
+| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (тот же набор, что в `MASTER_LIVENESS_CHECKS` в `__main__.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
+| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `asyncio_run_blocking`) | По каждому хосту в том же JSON |
+| **Safety (master)** | **Оркестратор** (`OrchestratorWardenChecker`): PDisk по кластеру, aggregated VERIFY — опрос результатов агентов по HTTP | В `_orchestrator.safety_checks` |
+
+Агенты **liveness не запускают** (в отчёте по хосту блок liveness пустой).
+
+### Добавить liveness check
+
+1. В **`warden_catalog.py`** добавьте элемент в кортеж **`MASTER_LIVENESS_CHECKS`**: `name`, `description`, **`build(cluster)`** — фабрика, возвращающая warden с **`list_of_liveness_violations`** (как у классов из `ydb.tests.library.wardens.*`).
+2. В **`__main__.py`** команда **`liveness`** уже итерирует **`MASTER_LIVENESS_CHECKS`** — отдельный список дублировать не нужно.
+
+Исполнение: бинарь на мастере вызывает `nemesis liveness`, внутри — тот же каталог.
+
+### Добавить safety check
+
+Зависит от **location** (`agent` / `master`).
+
+**Общее для API:** строки **`SAFETY_CHECK_ROWS`** для **`"agent"`** и **`"master"`** строятся из **`AGENT_SAFETY_CHECKS`** и **`MASTER_SAFETY_CHECKS`** — **`SafetyCheckRow`** для safety вручную не дублировать.
+
+**Agent (`location: "agent"`)** — проверка с доступом к **локальным** логам / dmesg и т.п.:
+
+1. В **`warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: стабильный короткий **`id`** (станет префиксом **`safety.agent.<id>`** в API), **`name`**, **`description`**, **`build(ctx: AgentSafetyContext)`** — как у **`MASTER_LIVENESS_CHECKS`**, но контекст — логи и hostname агента. Снаружи при необходимости используйте **`agent_safety_check_id("<id>")`**.
+
+**Master (`location: "master"`)** — логика на оркестраторе (кластер, агрегация по агентам):
+
+1. В **`warden_catalog.py`** добавьте элемент в **`MASTER_SAFETY_CHECKS`**: стабильный короткий **`id`** (в API будет **`safety.master.<id>`**), **`name`**, **`description`**. В коде оркестратора для поля **`check_id`** в результатах используйте **`master_safety_check_id("<id>")`**.
+2. В конце **`orchestrator_warden_checker.py`** добавьте шаг в кортеж **`ORCHESTRATOR_WARDEN_STEPS`**: **`OrchestratorWardenStep("liveness" | "safety", ваша_async_run)`**, где **`ваша_async_run(checker, cluster) -> list[WardenCheckResult]`**. Для блокирующего кода внутри шага используйте **`asyncio_run_blocking`**.
+
+Для проверок, которые **собирают данные с агентов**, ориентир — **`_run_aggregated_verify_failed_check_async`**: опрос **`fetch_agent_warden_result`**, разбор **`safety_checks`** по **`check_id`**.

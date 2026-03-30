@@ -39,13 +39,19 @@ def get_app_port() -> int:
 
 
 def is_local_host(host: str) -> bool:
-    """Check if the host is the local machine"""
-    try:
-        settings = Settings()
-        app_host = settings.app_host
-        return host in ('localhost', '127.0.0.1', '::1', app_host)
-    except Exception:
+    """
+    True if ``host`` is served by this process's agent API (in-process call, no HTTP loopback).
+
+    Nemesis deploys the orchestrator on the first entry in ``cluster.yaml``; ``hosts`` is that list
+    (see ``install_on_hosts`` / ``app.initialize_app``). Only ``hosts[0]`` is local here.
+    """
+    if not host:
         return False
+    if host.strip() in ("localhost", "127.0.0.1", "::1"):
+        return True
+    if not hosts:
+        return False
+    return host.strip() == hosts[0].strip()
 
 
 def fetch_agent_warden_result(host: str) -> dict[str, Any]:

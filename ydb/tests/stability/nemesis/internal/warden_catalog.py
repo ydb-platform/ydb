@@ -2,49 +2,169 @@
 Single source of truth for warden check definitions (liveness + safety).
 
 - MASTER_LIVENESS_CHECKS: liveness checks on the master (orchestrator / CLI subprocess).
-- SAFETY_CHECK_ROWS: every safety check (stable check_id + API name + location).
-- MASTER_SAFETY_CHECK_IDS_ORDER: execution order for master-side safety (parallel tasks allowed).
-- check_id_for_agent_warden_instance: map library warden object -> check_id for aggregation / API.
+- AGENT_SAFETY_CHECKS: agent safety checks; build(ctx) returns one warden with list_of_safety_violations.
+- MASTER_SAFETY_CHECKS: master-only safety metadata (wire ids + API rows; execution in orchestrator).
+- SAFETY_CHECK_ROWS: every safety check for the API (agent + master rows mirror the catalogs above).
+- Master-side safety/liveness execution order: orchestrator_warden_checker.ORCHESTRATOR_WARDEN_STEPS.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Tuple
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
+from ydb.tests.library.nemesis.safety_warden import (
+    GrepDMesgForPatternsSafetyWarden,
+    GrepGzippedLogFilesForMarkersSafetyWarden,
+    GrepLogFileForMarkers,
+    UnifiedAgentVerifyFailedSafetyWarden,
+)
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 
-# --- Stable ids (API + orchestrator aggregation; do not rename casually) -------------
+# --- Stable wire ids (API + orchestrator aggregation; do not rename slugs casually) -------------
+# Agent: AgentSafetyCheck.id -> AgentSafetyCheck.check_id ("safety.agent.<id>").
+# Master: MasterSafetyCheck.id -> MasterSafetyCheck.check_id ("safety.master.<id>").
+# Resolve at call sites with agent_safety_check_id(...) / master_safety_check_id(...).
 
-CHECK_ID_AGENT_KIKIMR_START_PLAIN = "safety.agent.kikimr_start_plain"
-CHECK_ID_AGENT_KIKIMR_START_GZIP = "safety.agent.kikimr_start_gzip"
-CHECK_ID_AGENT_DMESG = "safety.agent.dmesg"
-CHECK_ID_AGENT_UNIFIED_VERIFY = "safety.agent.unified_verify_failed"
+# Markers for kikimr.start plain + gzip checks (same set as former kikimr_start_logs_safety_warden_factory).
+_AGENT_KIKIMR_START_MARKERS: List[str] = [
+    "VERIFY",
+    "FAIL ",
+    "signal 11",
+    "signal 6",
+    "signal 15",
+    "uncaught exception",
+    "ERROR: AddressSanitizer",
+    "SIG",
+]
 
-CHECK_ID_MASTER_PDISK = "safety.master.pdisk"
-CHECK_ID_MASTER_VERIFY_AGGREGATED = "safety.master.verify_failed_aggregated"
+_AGENT_DMESG_MARKERS: List[str] = ["Out of memory: Kill process"]
 
-MASTER_SAFETY_CHECK_IDS_ORDER: Tuple[str, ...] = (
-    CHECK_ID_MASTER_PDISK,
-    CHECK_ID_MASTER_VERIFY_AGGREGATED,
+
+@dataclass(frozen=True)
+class AgentSafetyContext:
+    """Context passed to every agent safety check build (like ExternalKiKiMRCluster for liveness)."""
+
+    log_directory: str
+    hostname: str
+
+    @property
+    def log_prefix(self) -> str:
+        return f"[{self.hostname}] "
+
+    @property
+    def local_hosts(self) -> List[str]:
+        return [self.hostname]
+
+
+@dataclass(frozen=True)
+class AgentSafetyCheck:
+    """One agent safety check; build(ctx) returns a warden with list_of_safety_violations."""
+
+    id: str
+    name: str
+    description: str
+    build: Callable[[AgentSafetyContext], Any]
+
+    @property
+    def check_id(self) -> str:
+        """Stable id in JSON / for master↔agent matching (prefix + catalog slug)."""
+        return f"safety.agent.{self.id}"
+
+
+AGENT_SAFETY_CHECKS: Tuple[AgentSafetyCheck, ...] = (
+    AgentSafetyCheck(
+        "kikimr_start_plain",
+        "GrepLogFileForMarkersSafetyWarden",
+        "Check kikimr.start logs for error markers",
+        lambda ctx: GrepLogFileForMarkers(
+            ctx.local_hosts,
+            log_file_name=os.path.join(ctx.log_directory, "kikimr.start"),
+            list_of_markers=_AGENT_KIKIMR_START_MARKERS,
+            username=None,
+            lines_after=5,
+            cut=True,
+        ),
+    ),
+    AgentSafetyCheck(
+        "kikimr_start_gzip",
+        "GrepGzippedLogFilesForMarkersSafetyWarden",
+        "Check gzipped kikimr.start logs for error markers",
+        lambda ctx: GrepGzippedLogFilesForMarkersSafetyWarden(
+            ctx.local_hosts,
+            log_file_pattern=os.path.join(ctx.log_directory, "kikimr.start.*gz"),
+            list_of_markers=_AGENT_KIKIMR_START_MARKERS,
+            modification_days=1,
+            username=None,
+            lines_after=5,
+            cut=True,
+        ),
+    ),
+    AgentSafetyCheck(
+        "dmesg",
+        "GrepDMesgForPatternsSafetyWarden",
+        "Check dmesg for OOM and other critical patterns",
+        lambda ctx: GrepDMesgForPatternsSafetyWarden(
+            ctx.local_hosts,
+            list_of_markers=_AGENT_DMESG_MARKERS,
+            username=None,
+            lines_after=5,
+        ),
+    ),
+    AgentSafetyCheck(
+        "unified_verify_failed",
+        "UnifiedAgentVerifyFailedSafetyWarden",
+        "Check unified_agent logs for VERIFY failed errors",
+        lambda _ctx: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
+    ),
 )
 
 
-def check_id_for_agent_warden_instance(warden: Any) -> str:
-    """Map a library safety warden instance to a stable check_id."""
-    cls = type(warden).__name__
-    if cls == "GrepLogFileForMarkers":
-        return CHECK_ID_AGENT_KIKIMR_START_PLAIN
-    if cls == "GrepGzippedLogFilesForMarkersSafetyWarden":
-        return CHECK_ID_AGENT_KIKIMR_START_GZIP
-    if cls == "GrepDMesgForPatternsSafetyWarden":
-        return CHECK_ID_AGENT_DMESG
-    if cls == "UnifiedAgentVerifyFailedSafetyWarden":
-        return CHECK_ID_AGENT_UNIFIED_VERIFY
-    return f"safety.agent.{cls}"
+def agent_safety_check_id(slug: str) -> str:
+    """Return wire check_id for an agent check by its catalog slug (see AgentSafetyCheck.id)."""
+    for spec in AGENT_SAFETY_CHECKS:
+        if spec.id == slug:
+            return spec.check_id
+    raise KeyError(slug)
+
+
+@dataclass(frozen=True)
+class MasterSafetyCheck:
+    """Master-only safety check metadata (execution is in orchestrator_warden_checker)."""
+
+    id: str
+    name: str
+    description: str
+
+    @property
+    def check_id(self) -> str:
+        return f"safety.master.{self.id}"
+
+
+MASTER_SAFETY_CHECKS: Tuple[MasterSafetyCheck, ...] = (
+    MasterSafetyCheck(
+        "pdisk",
+        "AllPDisksAreInValidState",
+        "Check all PDisks are in valid state",
+    ),
+    MasterSafetyCheck(
+        "verify_failed_aggregated",
+        "UnifiedAgentVerifyFailedAggregated",
+        "Aggregate and deduplicate VERIFY failed errors from all agents",
+    ),
+)
+
+
+def master_safety_check_id(slug: str) -> str:
+    """Return wire check_id for a master safety check by its catalog slug (see MasterSafetyCheck.id)."""
+    for spec in MASTER_SAFETY_CHECKS:
+        if spec.id == slug:
+            return spec.check_id
+    raise KeyError(slug)
 
 
 @dataclass(frozen=True)
@@ -91,41 +211,13 @@ class SafetyCheckRow:
 
 
 SAFETY_CHECK_ROWS: Tuple[SafetyCheckRow, ...] = (
-    SafetyCheckRow(
-        CHECK_ID_AGENT_KIKIMR_START_PLAIN,
-        "GrepLogFileForMarkersSafetyWarden",
-        "Check kikimr.start logs for error markers",
-        "agent",
+    *(
+        SafetyCheckRow(s.check_id, s.name, s.description, "agent")
+        for s in AGENT_SAFETY_CHECKS
     ),
-    SafetyCheckRow(
-        CHECK_ID_AGENT_KIKIMR_START_GZIP,
-        "GrepGzippedLogFilesForMarkersSafetyWarden",
-        "Check gzipped kikimr.start logs for error markers",
-        "agent",
-    ),
-    SafetyCheckRow(
-        CHECK_ID_AGENT_DMESG,
-        "GrepDMesgForPatternsSafetyWarden",
-        "Check dmesg for OOM and other critical patterns",
-        "agent",
-    ),
-    SafetyCheckRow(
-        CHECK_ID_AGENT_UNIFIED_VERIFY,
-        "UnifiedAgentVerifyFailedSafetyWarden",
-        "Check unified_agent logs for VERIFY failed errors",
-        "agent",
-    ),
-    SafetyCheckRow(
-        CHECK_ID_MASTER_PDISK,
-        "AllPDisksAreInValidState",
-        "Check all PDisks are in valid state",
-        "master",
-    ),
-    SafetyCheckRow(
-        CHECK_ID_MASTER_VERIFY_AGGREGATED,
-        "UnifiedAgentVerifyFailedAggregated",
-        "Aggregate and deduplicate VERIFY failed errors from all agents",
-        "master",
+    *(
+        SafetyCheckRow(s.check_id, s.name, s.description, "master")
+        for s in MASTER_SAFETY_CHECKS
     ),
 )
 

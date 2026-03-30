@@ -1062,6 +1062,12 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.MutablePipelineConfig()->CopyFrom(changes.GetPipelineConfig());
     }
 
+    if (changes.HasEnableFilterByKey() && !changes.GetEnableFilterByKey() &&
+        changes.ByKeyFilterPrefixesSize() > 0) {
+        errDescr = "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes in the same operation";
+        return false;
+    }
+
     if (changes.HasEnableFilterByKey()) {
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
         if (!changes.GetEnableFilterByKey()) {

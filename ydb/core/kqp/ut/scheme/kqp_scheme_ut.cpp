@@ -1678,6 +1678,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1);
         )");
+        // data_columns are not supported for local bloom filter index
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) COVER (Value);
+        )");
     }
 
     void CreateTableWithReadReplicas(bool compat) {

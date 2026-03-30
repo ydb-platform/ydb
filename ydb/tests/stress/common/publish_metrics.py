@@ -16,7 +16,7 @@ import sys
 import traceback
 import json
 import threading
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -95,7 +95,7 @@ class MetricsPublisher:
         self._buffer_lock = threading.Lock()
         self._buffer: dict[tuple, dict] = {}
 
-        self._flush_timer: threading.Timer | None = None
+        self._flush_timer: Optional[threading.Timer] = None
         self._stopped = False
 
         if self.mode in ['send', 'both']:

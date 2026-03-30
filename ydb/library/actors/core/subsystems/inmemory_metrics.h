@@ -20,6 +20,8 @@ namespace NActors {
 
         // Single-writer contract: a line can be created only once for a key.
         // Duplicate CreateLine() calls return a noop line.
+        // Line key canonicalizes label order, so the same (name, labels) with different
+        // input label ordering still resolves to the same line.
         // Common labels are registry-wide mutable state and are not part of line identity.
         TLine<TRawLineFrontend<>> CreateLine(TStringBuf name, std::span<const TLabel> labels);
         template<class TFrontend>

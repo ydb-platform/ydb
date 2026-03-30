@@ -601,6 +601,33 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
     }
 
+    Y_UNIT_TEST(DuplicateKeyIgnoresLabelOrder) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 256,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        const std::array<TLabel, 2> firstLabels{{
+            TLabel{"a", "1"},
+            TLabel{"b", "2"},
+        }};
+        const std::array<TLabel, 2> secondLabels{{
+            TLabel{"b", "2"},
+            TLabel{"a", "1"},
+        }};
+
+        auto first = registry.CreateLine("line", firstLabels);
+        auto duplicate = registry.CreateLine("line", secondLabels);
+
+        UNIT_ASSERT(first);
+        UNIT_ASSERT(!duplicate);
+        UNIT_ASSERT(first.Append(10));
+
+        auto lines = FilterUserLines(registry.Snapshot().Lines());
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+    }
+
     Y_UNIT_TEST(ZeroMemoryWriterDrops) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 0,

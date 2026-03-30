@@ -13,17 +13,15 @@
 #include <type_traits>
 
 namespace NActors {
-    template<class TFrontend>
-    class TLine;
-    class TInMemoryMetricsBackend;
     class TLineReader;
     struct TChunk;
+
     template<class TValue>
     struct TGenericRecordView {
         TInstant Timestamp;
         TValue Value;
     };
-    class TInMemoryMetricsRegistry;
+
     class TLineSnapshot;
     class TSnapshot;
     struct TSnapshotData;
@@ -45,6 +43,8 @@ namespace NActors {
 
     struct TLineKey {
         TString Name;
+        // Line identity is order-independent by labels.
+        // Labels stored in TLineKey must be canonically sorted by (Name, Value).
         TVector<TLabel> Labels;
 
         bool operator==(const TLineKey& rhs) const noexcept;

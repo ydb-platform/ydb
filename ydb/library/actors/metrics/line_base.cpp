@@ -1,6 +1,8 @@
 #include "line_base.h"
 #include "lines/raw_line_frontend.h"
 
+#include <util/generic/algorithm.h>
+
 namespace NActors {
 
     bool TLabel::operator==(const TLabel& rhs) const noexcept {
@@ -41,6 +43,12 @@ namespace NActors {
         for (const auto& label : labels) {
             key.Labels.push_back(label);
         }
+        Sort(key.Labels, [](const TLabel& lhs, const TLabel& rhs) {
+            if (lhs.Name != rhs.Name) {
+                return lhs.Name < rhs.Name;
+            }
+            return lhs.Value < rhs.Value;
+        });
         return key;
     }
 

@@ -1,15 +1,6 @@
 import asyncio
 import threading
 from concurrent.futures import Future
-from typing import Callable, TypeVar
-
-T = TypeVar("T")
-
-
-async def asyncio_run_blocking(fn: Callable[[], T]) -> T:
-    """Run a blocking callable in the event loop's default executor (thread pool)."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, fn)
 
 
 class BackgroundEventLoop:

@@ -1,19 +1,20 @@
 """
-AgentWardenChecker — runs an ordered list of safety runnables (agent_safety_runs.build_agent_safety_runs).
-Each run is sync Callable[[], list[WardenCheckResult]]; executed via asyncio_run_blocking one step at a time.
+AgentWardenChecker — runs safety checks from agent_safety_runs.build_agent_safety_runs in parallel
+on the background event loop (blocking callables via run_in_executor).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 import threading
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List
 
-from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import build_agent_safety_runs
+from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import AgentSafetyRun, build_agent_safety_runs
 from ydb.tests.stability.nemesis.internal.warden_catalog import AgentSafetyContext
-from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop, asyncio_run_blocking
+from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class AgentWardenChecker:
     def start_checks(self) -> bool:
         with self._lock:
             if self._is_running:
-                logger.debug("[%s] Safety checks already running, skipping", self._hostname)
+                logger.debug("Safety checks already running, skipping")
                 return False
             self._is_running = True
             self._last_report = WardenCheckReport(
@@ -49,23 +50,33 @@ class AgentWardenChecker:
                 started_at=datetime.utcnow().isoformat() + "Z",
             )
 
-        logger.info("[%s] Starting agent safety checks", self._hostname)
+        logger.info("Starting agent safety checks")
         self._event_loop.submit(self._run_checks_async())
         return True
 
     async def _run_checks_async(self):
-        start_time = datetime.utcnow()
-        hostname = self._hostname
-        logger.info("[%s] Agent safety checks execution started", hostname)
+        logger.info("Agent safety checks execution started")
 
         try:
-            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=hostname)
+            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
             runs = build_agent_safety_runs(ctx)
-            accumulated: list[WardenCheckResult] = []
+            loop = asyncio.get_running_loop()
+            n = len(runs)
+            batches: List[List[WardenCheckResult] | None] = [None] * n
 
-            for run in runs:
-                batch = await asyncio_run_blocking(run)
-                accumulated.extend(batch)
+            async def _run_at_index(i: int, run: AgentSafetyRun) -> tuple[int, List[WardenCheckResult]]:
+                batch = await loop.run_in_executor(None, run)
+                return i, batch
+
+            tasks = [_run_at_index(i, r) for i, r in enumerate(runs)]
+            accumulated: List[WardenCheckResult] = []
+            for finished in asyncio.as_completed(tasks):
+                i, batch = await finished
+                batches[i] = batch
+                accumulated = []
+                for j in range(n):
+                    if batches[j] is not None:
+                        accumulated.extend(batches[j])
                 with self._lock:
                     self._last_report = WardenCheckReport(
                         status="running",
@@ -75,32 +86,20 @@ class AgentWardenChecker:
                         safety_checks=list(accumulated),
                     )
 
-            ok_count = sum(1 for r in accumulated if r.status == "ok")
-            violation_count = sum(1 for r in accumulated if r.status == "violation")
-            error_count = sum(1 for r in accumulated if r.status == "error")
-
             with self._lock:
                 self._last_report = WardenCheckReport(
                     status="completed",
                     started_at=self._last_report.started_at,
                     completed_at=datetime.utcnow().isoformat() + "Z",
                     liveness_checks=[],
-                    safety_checks=accumulated,
+                    safety_checks=list(accumulated),
                 )
                 self._is_running = False
 
-            elapsed = (datetime.utcnow() - start_time).total_seconds()
-            logger.info(
-                "[%s] Agent safety checks completed in %.1fs: %d ok, %d violations, %d errors",
-                hostname,
-                elapsed,
-                ok_count,
-                violation_count,
-                error_count,
-            )
+            logger.info("Agent safety checks completed")
 
         except Exception as e:
-            logger.error("[%s] Error running safety checks: %s", hostname, e)
+            logger.error("Error running safety checks: %s", e)
             with self._lock:
                 self._last_report = WardenCheckReport(
                     status="error",

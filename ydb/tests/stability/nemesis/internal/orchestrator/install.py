@@ -192,7 +192,7 @@ def get_hosts_from_yaml(yaml_path):
 def install_on_hosts(hosts, settings: Settings):
     """
     Install services on hosts:
-    - First host: orchestrator mode (master)
+    - First host: orchestrator mode
     - Remaining hosts: agent mode
     """
     if not hosts:
@@ -221,7 +221,7 @@ StartLimitBurst=15
 Restart=always
 RestartSec=10
 Environment=NEMESIS_USER=robot-nemesis
-Environment=NEMESIS_TYPE=master
+Environment=NEMESIS_TYPE=orchestrator
 Environment=STATIC_LOCATION={root}/static
 Environment=APP_HOST=::
 Environment=APP_PORT={settings.app_port}
@@ -246,7 +246,7 @@ WantedBy=multi-user.target
 
     # Create service files for agents (remaining hosts)
     for host in agent_hosts:
-        agent_settings = AgentSettings.from_master_args(settings)
+        agent_settings = AgentSettings.from_orchestrator_args(settings)
         agent_settings.app_host = host
 
         with open(f"nemesis-agent.service.{host}", "w") as f:

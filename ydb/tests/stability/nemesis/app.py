@@ -8,10 +8,10 @@ from ydb.tests.library.stability.healthcheck.healthcheck_reporter import HealthC
 from ydb.tests.stability.nemesis.internal import config
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_checker import AgentWardenChecker
 from ydb.tests.stability.nemesis.internal.config import AgentSettings
-from ydb.tests.stability.nemesis.internal.master.install import get_hosts_from_yaml
-from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import ChaosMasterStore
-from ydb.tests.stability.nemesis.internal.master.nemesis.schedule_loop import OrchestratorNemesisSchedule
-from ydb.tests.stability.nemesis.internal.master.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 import ydb.tests.stability.nemesis.routers.orchestrator_router as orchestrator_router
 from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_blueprint
@@ -44,7 +44,7 @@ def initialize_app():
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
-        orchestrator_router.chaos_store = ChaosMasterStore()
+        orchestrator_router.chaos_store = ChaosOrchestratorStore()
         orchestrator_router.orchestrator_warden_checker = OrchestratorWardenChecker(
             hosts=loaded_hosts,
             mon_port=orchestrator_router.mon_port,

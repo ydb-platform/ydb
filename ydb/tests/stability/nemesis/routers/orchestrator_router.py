@@ -7,9 +7,9 @@ import requests
 from flask import Blueprint, request, jsonify
 
 from ydb.tests.stability.nemesis.internal.config import Settings
-from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import ChaosMasterStore
-from ydb.tests.stability.nemesis.internal.master.nemesis.schedule_loop import OrchestratorNemesisSchedule
-from ydb.tests.stability.nemesis.internal.master.orchestrator_warden_checker import OrchestratorWardenChecker
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.warden_catalog import get_all_warden_definitions
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
@@ -29,7 +29,7 @@ hosts: list[str] = []
 mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
-chaos_store: ChaosMasterStore | None = None
+chaos_store: ChaosOrchestratorStore | None = None
 healthcheck_reporter: Any = None
 
 
@@ -258,13 +258,13 @@ def get_healthcheck():
 def start_warden_checks_on_all_hosts():
     """
     Start warden checks:
-    - Liveness checks run centrally on master (HTTP monitoring)
+    - Liveness checks run centrally on orchestrator (HTTP monitoring)
     - Safety checks run on each agent (local log/dmesg access)
     """
     logger.info(f"Starting warden checks on all hosts. Total hosts: {len(hosts)}")
-    results = {"agents": {}, "master": {}}
+    results = {"agents": {}, "orchestrator": {}}
 
-    # 2. Start safety checks on all agents
+    # Start safety checks on all agents
     def start_safety_on_host(host):
         try:
             logger.debug(f"Starting safety checks on agent: {host}")
@@ -287,23 +287,13 @@ def start_warden_checks_on_all_hosts():
     with ThreadPoolExecutor() as executor:
         task_results = list(executor.map(start_safety_on_host, hosts))
 
-    started_count = 0
-    error_count = 0
-    for host, result in task_results:
-        results["agents"][host] = result
-        if result.get("status") == "started":
-            started_count += 1
-        elif result.get("status") == "error":
-            error_count += 1
+    logger.info(f"Agent safety checks initiated")
 
-    logger.info(f"Agent safety checks initiated: {started_count} started, {error_count} errors, {len(hosts) - started_count - error_count} already running")
-
-    # 1. Start orchestrator checks (liveness + orchestrator safety)
+    # Start orchestrator checks (liveness + orchestrator safety)
     logger.info("Starting orchestrator warden checks (liveness + PDisk + aggregated)")
 
-    # start_checks() is now synchronous - it submits to background event loop
     orchestrator_started = orchestrator_warden_checker.start_checks()
-    results["master"] = {
+    results["orchestrator"] = {
         "status": "started" if orchestrator_started else "already_running",
         "type": "liveness"
     }

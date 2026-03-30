@@ -74,13 +74,13 @@ export default {
           liveness.push({
             name: check.name,
             status: 'idle',
-            host: 'master'
+            host: 'orchestrator'
           })
         } else if (check.category === 'safety') {
           safety.push({
             name: check.name,
             status: 'idle',
-            isOrchestratorCheck: check.location === 'master',
+            isOrchestratorCheck: check.location === 'orchestrator',
             completedHosts: [],
             issues: []
           })
@@ -99,7 +99,7 @@ export default {
       // Liveness checks come from orchestrator
       if (orchestratorResult.value && orchestratorResult.value.liveness_checks) {
         for (const check of orchestratorResult.value.liveness_checks) {
-          liveness.push({ ...check, host: 'master' })
+          liveness.push({ ...check, host: 'orchestrator' })
         }
       }
       
@@ -122,14 +122,14 @@ export default {
             })
           }
           const agg = safetyMap.get(baseName)
-          agg.completedHosts.push('master')
+          agg.completedHosts.push('orchestrator')
           
           if (check.status === 'error') agg.status = 'error'
           else if (check.status === 'violation' && agg.status !== 'error') agg.status = 'violation'
           
           if (check.status !== 'ok') {
             agg.issues.push({
-              host: isAggregatedVerifyFailed ? 'aggregated' : 'master',
+              host: isAggregatedVerifyFailed ? 'aggregated' : 'orchestrator',
               violations: check.violations,
               error_message: check.error_message,
               affectedHosts: check.affected_hosts || []
@@ -282,7 +282,7 @@ export default {
     })
 
     function formatHost(host) {
-      if (host === 'master') return 'master'
+      if (host === 'orchestrator') return 'orchestrator'
       return host.split('.')[0]
     }
 

@@ -1,4 +1,4 @@
-"""Shared dispatch types and helpers (master → agent RPC shape)."""
+"""Shared dispatch types and helpers (orchestrator → agent RPC shape)."""
 
 from __future__ import annotations
 

@@ -62,7 +62,7 @@ class WardenCheckResult:
     status: str  # 'ok', 'violation', 'error'
     error_message: Optional[str] = None
     affected_hosts: List[str] = field(default_factory=list)
-    # Stable id from warden_catalog (API / master aggregation); optional for legacy liveness rows
+    # Stable id from warden_catalog (API / orchestrator aggregation); optional for legacy liveness rows
     check_id: Optional[str] = None
 
     def to_json(self) -> dict[str, Any]:

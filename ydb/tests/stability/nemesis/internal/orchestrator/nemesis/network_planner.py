@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
-from ydb.tests.stability.nemesis.internal.master.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
 NETWORK_NEMESIS = "NetworkNemesis"
 
@@ -22,7 +22,7 @@ class _NetworkIsolationState:
 
 
 class NetworkNemesisPlanner(NemesisPlannerBase):
-    """Holds isolation set on master; produces DispatchCommand lists for the orchestrator."""
+    """Holds isolation set on the orchestrator; produces DispatchCommand lists for agents."""
 
     nemesis_type = NETWORK_NEMESIS
     PAYLOAD_INJECT = PAYLOAD_INJECT

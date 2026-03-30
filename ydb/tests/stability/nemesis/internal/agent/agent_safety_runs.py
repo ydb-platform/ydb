@@ -1,6 +1,6 @@
 """
-Run agent safety checks from warden_catalog.AGENT_SAFETY_CHECKS (same pattern as MASTER_LIVENESS_CHECKS).
-Each spec yields Callable[[], list[WardenCheckResult]] for asyncio_run_blocking.
+Run agent safety checks from warden_catalog.AGENT_SAFETY_CHECKS (same pattern as ORCHESTRATOR_LIVENESS_CHECKS).
+Each spec yields Callable[[], list[WardenCheckResult]]; runs execute in parallel via run_in_executor.
 """
 
 from __future__ import annotations

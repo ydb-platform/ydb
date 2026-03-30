@@ -1,4 +1,4 @@
-"""Shared master-side planner logic: lock, manual inject/extract bookkeeping, drain + fanout."""
+"""Shared orchestrator-side planner logic: lock, manual inject/extract bookkeeping, drain + fanout."""
 
 from __future__ import annotations
 

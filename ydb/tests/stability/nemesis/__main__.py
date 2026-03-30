@@ -4,9 +4,9 @@ import logging
 import sys
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.stability.nemesis.internal.config import get_master_settings
-from ydb.tests.stability.nemesis.internal.warden_catalog import MASTER_LIVENESS_CHECKS
-from ydb.tests.stability.nemesis.internal.master.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
+from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
+from ydb.tests.stability.nemesis.internal.warden_catalog import ORCHESTRATOR_LIVENESS_CHECKS
+from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 
 
 def parse_args():
@@ -25,8 +25,8 @@ def parse_args():
     )
 
     # Optional settings arguments (override env and defaults)
-    parser.add_argument('--nemesis-type', choices=['master', 'agent'],
-                        help='Type of nemesis: master or agent')
+    parser.add_argument('--nemesis-type', choices=['orchestrator', 'agent'],
+                        help='Type of nemesis: orchestrator or agent')
     parser.add_argument('--app-host', help='Host to bind the application to')
     parser.add_argument('--app-port', type=int, help='Port to bind the application to')
     parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file')
@@ -83,11 +83,11 @@ def run_liveness_checks(settings):
         return
 
     # Create cluster object
-    cluster = ExternalKiKiMRCluster(get_master_settings().yaml_config_location, None, None)
+    cluster = ExternalKiKiMRCluster(settings.yaml_config_location, None, None)
 
     checks = []
     try:
-        for spec in MASTER_LIVENESS_CHECKS:
+        for spec in ORCHESTRATOR_LIVENESS_CHECKS:
             name = spec.name
             try:
                 warden = spec.build(cluster)
@@ -143,7 +143,7 @@ def main():
     if getattr(args, 'kikimr_logs_directory', None) is not None:
         argv_kwargs['kikimr_logs_directory'] = args.kikimr_logs_directory
 
-    settings = get_master_settings(**argv_kwargs)
+    settings = get_orchestrator_settings(**argv_kwargs)
 
     # Check for command-line arguments
     if args.command == "install":

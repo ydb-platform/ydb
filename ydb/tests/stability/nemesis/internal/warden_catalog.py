@@ -1,11 +1,11 @@
 """
 Single source of truth for warden check definitions (liveness + safety).
 
-- MASTER_LIVENESS_CHECKS: liveness checks on the master (orchestrator / CLI subprocess).
+- ORCHESTRATOR_LIVENESS_CHECKS: liveness on orchestrator (subprocess / ExternalKiKiMRCluster).
 - AGENT_SAFETY_CHECKS: agent safety checks; build(ctx) returns one warden with list_of_safety_violations.
-- MASTER_SAFETY_CHECKS: master-only safety metadata (wire ids + API rows; execution in orchestrator).
-- SAFETY_CHECK_ROWS: every safety check for the API (agent + master rows mirror the catalogs above).
-- Master-side safety/liveness execution order: orchestrator_warden_checker.ORCHESTRATOR_WARDEN_STEPS.
+- ORCHESTRATOR_SAFETY_CHECKS: orchestrator-only safety metadata (wire ids + API rows; execution in OrchestratorWardenChecker).
+- SAFETY_CHECK_ROWS: every safety check for the API (agent + orchestrator rows mirror the catalogs above).
+- Orchestrator safety/liveness execution order: orchestrator_warden_checker.ORCHESTRATOR_WARDEN_STEPS.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransa
 
 # --- Stable wire ids (API + orchestrator aggregation; do not rename slugs casually) -------------
 # Agent: AgentSafetyCheck.id -> AgentSafetyCheck.check_id ("safety.agent.<id>").
-# Master: MasterSafetyCheck.id -> MasterSafetyCheck.check_id ("safety.master.<id>").
-# Resolve at call sites with agent_safety_check_id(...) / master_safety_check_id(...).
+# Orchestrator: OrchestratorSafetyCheck.id -> check_id ("safety.orchestrator.<id>").
+# Resolve at call sites with agent_safety_check_id(...) / orchestrator_safety_check_id(...).
 
 # Markers for kikimr.start plain + gzip checks (same set as former kikimr_start_logs_safety_warden_factory).
 _AGENT_KIKIMR_START_MARKERS: List[str] = [
@@ -72,7 +72,7 @@ class AgentSafetyCheck:
 
     @property
     def check_id(self) -> str:
-        """Stable id in JSON / for master↔agent matching (prefix + catalog slug)."""
+        """Stable id in JSON / for orchestrator↔agent matching (prefix + catalog slug)."""
         return f"safety.agent.{self.id}"
 
 
@@ -133,8 +133,8 @@ def agent_safety_check_id(slug: str) -> str:
 
 
 @dataclass(frozen=True)
-class MasterSafetyCheck:
-    """Master-only safety check metadata (execution is in orchestrator_warden_checker)."""
+class OrchestratorSafetyCheck:
+    """Orchestrator-only safety check metadata (execution is in orchestrator_warden_checker)."""
 
     id: str
     name: str
@@ -142,16 +142,16 @@ class MasterSafetyCheck:
 
     @property
     def check_id(self) -> str:
-        return f"safety.master.{self.id}"
+        return f"safety.orchestrator.{self.id}"
 
 
-MASTER_SAFETY_CHECKS: Tuple[MasterSafetyCheck, ...] = (
-    MasterSafetyCheck(
+ORCHESTRATOR_SAFETY_CHECKS: Tuple[OrchestratorSafetyCheck, ...] = (
+    OrchestratorSafetyCheck(
         "pdisk",
         "AllPDisksAreInValidState",
         "Check all PDisks are in valid state",
     ),
-    MasterSafetyCheck(
+    OrchestratorSafetyCheck(
         "verify_failed_aggregated",
         "UnifiedAgentVerifyFailedAggregated",
         "Aggregate and deduplicate VERIFY failed errors from all agents",
@@ -159,40 +159,40 @@ MASTER_SAFETY_CHECKS: Tuple[MasterSafetyCheck, ...] = (
 )
 
 
-def master_safety_check_id(slug: str) -> str:
-    """Return wire check_id for a master safety check by its catalog slug (see MasterSafetyCheck.id)."""
-    for spec in MASTER_SAFETY_CHECKS:
+def orchestrator_safety_check_id(slug: str) -> str:
+    """Return wire check_id for an orchestrator safety check by its catalog slug (see OrchestratorSafetyCheck.id)."""
+    for spec in ORCHESTRATOR_SAFETY_CHECKS:
         if spec.id == slug:
             return spec.check_id
     raise KeyError(slug)
 
 
 @dataclass(frozen=True)
-class MasterLivenessCheck:
-    """One liveness check on the master; build(cluster) returns a warden with list_of_liveness_violations."""
+class OrchestratorLivenessCheck:
+    """One liveness check on the orchestrator; build(cluster) returns a warden with list_of_liveness_violations."""
 
     name: str
     description: str
     build: Callable[[ExternalKiKiMRCluster], Any]
 
 
-MASTER_LIVENESS_CHECKS: Tuple[MasterLivenessCheck, ...] = (
-    MasterLivenessCheck(
+ORCHESTRATOR_LIVENESS_CHECKS: Tuple[OrchestratorLivenessCheck, ...] = (
+    OrchestratorLivenessCheck(
         "AllTabletsAlive",
         "Check that all tablets are alive",
         lambda c: AllTabletsAliveLivenessWarden(c),
     ),
-    MasterLivenessCheck(
+    OrchestratorLivenessCheck(
         "BootQueueSize",
         "Check boot queue size is acceptable",
         lambda c: BootQueueSizeWarden(c),
     ),
-    MasterLivenessCheck(
+    OrchestratorLivenessCheck(
         "SchemeShardNoInFlightTx",
         "Check SchemeShard has no stuck in-flight transactions",
         lambda c: SchemeShardHasNoInFlightTransactions(c),
     ),
-    MasterLivenessCheck(
+    OrchestratorLivenessCheck(
         "TxCompleteLag",
         "Check transaction completion lag",
         lambda c: TxCompleteLagLivenessWarden(c),
@@ -207,7 +207,7 @@ class SafetyCheckRow:
     check_id: str
     name: str
     description: str
-    location: Literal["agent", "master"]
+    location: Literal["agent", "orchestrator"]
 
 
 SAFETY_CHECK_ROWS: Tuple[SafetyCheckRow, ...] = (
@@ -216,22 +216,22 @@ SAFETY_CHECK_ROWS: Tuple[SafetyCheckRow, ...] = (
         for s in AGENT_SAFETY_CHECKS
     ),
     *(
-        SafetyCheckRow(s.check_id, s.name, s.description, "master")
-        for s in MASTER_SAFETY_CHECKS
+        SafetyCheckRow(s.check_id, s.name, s.description, "orchestrator")
+        for s in ORCHESTRATOR_SAFETY_CHECKS
     ),
 )
 
 
 def get_all_warden_definitions() -> List[Dict[str, Any]]:
-    """Flat list for API: liveness (master) + safety (per location row)."""
+    """Flat list for API: liveness (orchestrator) + safety (per location row)."""
     out: List[Dict[str, Any]] = []
-    for c in MASTER_LIVENESS_CHECKS:
+    for c in ORCHESTRATOR_LIVENESS_CHECKS:
         out.append(
             {
                 "name": c.name,
                 "category": "liveness",
                 "description": c.description,
-                "location": "master",
+                "location": "orchestrator",
             }
         )
     for r in SAFETY_CHECK_ROWS:

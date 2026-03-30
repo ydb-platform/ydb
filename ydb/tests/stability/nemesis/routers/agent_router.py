@@ -1,5 +1,4 @@
 import logging
-import socket
 
 from flask import Blueprint, request, jsonify
 
@@ -46,27 +45,25 @@ def create_process_helper(
 
 def start_warden_checks_helper():
     """Helper function to start warden checks (can be called directly)"""
-    hostname = socket.gethostname()
-    logger.info(f"[{hostname}] Agent warden checks start requested")
+    logger.info("Agent warden checks start requested")
 
     # start_checks() is now synchronous - it submits to background event loop
     started = warden_checker.start_checks()
 
     if started:
-        logger.info(f"[{hostname}] Agent warden checks started successfully")
+        logger.info("Agent warden checks started successfully")
         return {"status": "started"}
     else:
-        logger.info(f"[{hostname}] Agent warden checks already running")
+        logger.info("Agent warden checks already running")
         return {"status": "already_running"}
 
 
 def get_warden_result_helper():
     """Helper function to get warden result (can be called directly)"""
-    hostname = socket.gethostname()
     result = warden_checker.get_last_result()
     status = result.get("status", "unknown")
     safety_count = len(result.get("safety_checks", []))
-    logger.debug(f"[{hostname}] Agent warden result requested: status={status}, safety_checks={safety_count}")
+    logger.debug("Agent warden result requested: status={status}, safety_checks={safety_count}")
     return result
 
 

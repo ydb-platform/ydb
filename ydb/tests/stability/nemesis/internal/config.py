@@ -64,7 +64,7 @@ class BaseSettings:
 
 class Settings(BaseSettings):
     app_name: str = "Nemesis"
-    nemesis_type: str = 'master'
+    nemesis_type: str = 'orchestrator'
     static_location: str = 'static'
     hosts: list[str] = []
     app_host: str = '::'
@@ -87,8 +87,8 @@ class AgentSettings(BaseSettings):
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
 
     @classmethod
-    def from_master_args(cls: Type['AgentSettings'], settings: Settings) -> 'AgentSettings':
-        """Create AgentSettings from master Settings."""
+    def from_orchestrator_args(cls: Type['AgentSettings'], settings: Settings) -> 'AgentSettings':
+        """Create AgentSettings from orchestrator Settings."""
         return cls(
             app_host=settings.app_host,
             app_port=settings.app_port,
@@ -99,8 +99,8 @@ class AgentSettings(BaseSettings):
 
 
 @lru_cache
-def get_master_settings(**kwargs):
-    """Get settings with argv arguments having highest priority."""
+def get_orchestrator_settings(**kwargs):
+    """Get orchestrator-mode settings with argv arguments having highest priority."""
     settings = Settings.from_args(**kwargs)
     print(settings, file=sys.stderr)
     return settings

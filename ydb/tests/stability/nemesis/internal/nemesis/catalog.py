@@ -7,7 +7,7 @@ Single registry:
 
 - NEMESIS_UI_GROUPS — group id -> description for /api/process_types/grouped.
 
-ChaosMasterStore receives a planner map from build_all_planners().
+ChaosOrchestratorStore receives a planner map from build_all_planners().
 """
 
 from __future__ import annotations
@@ -20,16 +20,16 @@ from typing import Any, Type
 from ydb.tests.tools.nemesis.library import base
 from ydb.tests.library.nemesis.network.client import NetworkClient
 
-from ydb.tests.stability.nemesis.internal.master.nemesis.kill_node_planner import (
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.kill_node_planner import (
     NODE_KILLER,
     KillNodeNemesisPlanner,
 )
-from ydb.tests.stability.nemesis.internal.master.nemesis.default_planner import DefaultRandomHostPlanner
-from ydb.tests.stability.nemesis.internal.master.nemesis.network_planner import (
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
     NETWORK_NEMESIS,
     NetworkNemesisPlanner,
 )
-from ydb.tests.stability.nemesis.internal.master.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
 # Dedicated logger for in-process nemesis runs; NemesisManager attaches a thread-local handler here (not on root).
 NEMESIS_EXECUTION_LOGGER = "ydb.tests.stability.nemesis.execution"
@@ -38,7 +38,7 @@ NEMESIS_EXECUTION_LOGGER = "ydb.tests.stability.nemesis.execution"
 class MonitoredAgentActor(base.AbstractMonitoredNemesis):
     """
     Agent-side execution only: AbstractMonitoredNemesis metrics.
-    Planning is on the orchestrator (ChaosMasterStore).
+    Planning is on the orchestrator (ChaosOrchestratorStore).
     """
 
     def __init__(self, scope="node"):

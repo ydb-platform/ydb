@@ -4,8 +4,8 @@
 
 ## Режимы работы
 
-- **master** (orchestrator) — планирование chaos-сценариев, диспетчеризация на агенты, UI, liveness/safety wardens с мастера.
-- **agent** — запуск nemesis runner’ов на хосте, локальные safety-проверки по логам; состояние процессов с мастера опрашивается по HTTP.
+- **orchestrator** — планирование chaos-сценариев, диспетчеризация на агенты, UI, liveness/safety wardens на оркестраторе.
+- **agent** — запуск nemesis runner’ов на хосте, локальные safety-проверки по логам; состояние процессов с оркестратора опрашивается по HTTP.
 
 ## Конфигурация
 
@@ -13,7 +13,7 @@
 
 | Параметр | Описание | По умолчанию |
 |----------|----------|--------------|
-| `NEMESIS_TYPE` | Режим: `master` или `agent` | `master` |
+| `NEMESIS_TYPE` | Режим: `orchestrator` или `agent` | `orchestrator` |
 | `APP_HOST` | Адрес привязки HTTP | `::` |
 | `APP_PORT` | Порт приложения | `31434` |
 | `MON_PORT` | Порт мониторинга (warden / health) | `8765` |
@@ -49,9 +49,9 @@
 
 ## Структура `internal/`
 
-- **Общее** (и master, и agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
+- **Общее** (и orchestrator, и agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
 - **`internal/agent/`** — только агент: `agent_warden_checker.py`, `nemesis/runner.py` (`NemesisManager`).
-- **`internal/master/`** — только оркестратор: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики). Состояние оркестратора (hosts, healthcheck, chaos store) живёт в `routers/orchestrator_router.py`.
+- **`internal/orchestrator/`** — только оркестратор: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики). Состояние оркестратора (hosts, healthcheck, chaos store) живёт в `routers/orchestrator_router.py`.
 
 ## UI и API-модели
 
@@ -59,7 +59,7 @@
 
 ## Результаты запусков на агенте
 
-Завершение и логи процессов на агенте **не пушатся** на мастер. Состояние снимается опросом с оркестратора: `GET /api/hosts/processes` (агрегирует `GET /api/processes` по хостам).
+Завершение и логи процессов на агенте **не пушатся** на оркестратор. Состояние снимается опросом с оркестратора: `GET /api/hosts/processes` (агрегирует `GET /api/processes` по хостам).
 
 ## Логирование nemesis runner’ов
 
@@ -77,8 +77,8 @@
 
 ### Как выполняется nemesis
 
-1. **Оркестратор** по расписанию или вручную вызывает планировщик (`ChaosMasterStore` → `NemesisPlannerBase`), получает список `DispatchCommand`.
-2. Команды уходят на агенты: **HTTP `POST /api/processes`** с телом `{ type, action, payload }` (см. `internal/master/nemesis/schedule_loop.py`, `chaos_dispatch.py`).
+1. **Оркестратор** по расписанию или вручную вызывает планировщик (`ChaosOrchestratorStore` → `NemesisPlannerBase`), получает список `DispatchCommand`.
+2. Команды уходят на агенты: **HTTP `POST /api/processes`** с телом `{ type, action, payload }` (см. `internal/orchestrator/nemesis/schedule_loop.py`, `chaos_dispatch.py`).
 3. **Агент** в `routers/agent_router.py` берёт `runner` из `NEMESIS_TYPES[type]` и запускает **`inject_fault` / `extract_fault`** в потоке через `NemesisManager` (`internal/agent/nemesis/runner.py`).
 
 Тело сценария всегда на **агенте**; оркестратор только планирует **какой** тип, **на каком** хосте и **какой** payload.
@@ -95,7 +95,7 @@
 
 ### Без своего планировщика
 
-**Не указывайте `planner_cls`** в записи `NEMESIS_TYPES`. Тогда `build_all_planners()` подставит **`DefaultRandomHostPlanner`** (`internal/master/nemesis/default_planner.py`):
+**Не указывайте `planner_cls`** в записи `NEMESIS_TYPES`. Тогда `build_all_planners()` подставит **`DefaultRandomHostPlanner`** (`internal/orchestrator/nemesis/default_planner.py`):
 
 - на каждый тик расписания выбирается **случайный** хост из кластера и шлётся **inject** с **пустым** `PAYLOAD_INJECT`;
 - при **выключении** расписания **extract по списку затронутых хостов не планируется** (планировщик никого не «помнит»);
@@ -113,7 +113,7 @@
 
 Шаги:
 
-1. Подкласс **`NemesisPlannerBase`** (`internal/master/nemesis/nemesis_planner_base.py`): задайте **`nemesis_type`**, **`PAYLOAD_INJECT`**, **`PAYLOAD_EXTRACT`**, реализуйте **`scheduled_tick`**, **`_drain_tracked_hosts`**, **`_register_inject`**, **`_register_extract`** (ориентир — `network_planner.py`, `kill_node_planner.py`).
+1. Подкласс **`NemesisPlannerBase`** (`internal/orchestrator/nemesis/nemesis_planner_base.py`): задайте **`nemesis_type`**, **`PAYLOAD_INJECT`**, **`PAYLOAD_EXTRACT`**, реализуйте **`scheduled_tick`**, **`_drain_tracked_hosts`**, **`_register_inject`**, **`_register_extract`** (ориентир — `network_planner.py`, `kill_node_planner.py`).
 2. В **`NEMESIS_TYPES`** укажите **`planner_cls`: ВашPlanner`** (класс, не экземпляр — его создаёт `build_all_planners()`).
 
 ### Кратко: когда обходиться без планировщика
@@ -134,32 +134,32 @@
 
 | Категория | Где исполняется | Как попадает в отчёт |
 |-----------|-----------------|----------------------|
-| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (тот же набор, что в `MASTER_LIVENESS_CHECKS` в `__main__.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
-| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `asyncio_run_blocking`) | По каждому хосту в том же JSON |
-| **Safety (master)** | **Оркестратор** (`OrchestratorWardenChecker`): PDisk по кластеру, aggregated VERIFY — опрос результатов агентов по HTTP | В `_orchestrator.safety_checks` |
+| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (тот же набор, что в `ORCHESTRATOR_LIVENESS_CHECKS` в `__main__.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
+| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно) | По каждому хосту в том же JSON |
+| **Safety (orchestrator)** | **Оркестратор** (`OrchestratorWardenChecker`): PDisk по кластеру, aggregated VERIFY — опрос результатов агентов по HTTP | В `_orchestrator.safety_checks` |
 
 Агенты **liveness не запускают** (в отчёте по хосту блок liveness пустой).
 
 ### Добавить liveness check
 
-1. В **`warden_catalog.py`** добавьте элемент в кортеж **`MASTER_LIVENESS_CHECKS`**: `name`, `description`, **`build(cluster)`** — фабрика, возвращающая warden с **`list_of_liveness_violations`** (как у классов из `ydb.tests.library.wardens.*`).
-2. В **`__main__.py`** команда **`liveness`** уже итерирует **`MASTER_LIVENESS_CHECKS`** — отдельный список дублировать не нужно.
+1. В **`warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: `name`, `description`, **`build(cluster)`** — фабрика, возвращающая warden с **`list_of_liveness_violations`** (как у классов из `ydb.tests.library.wardens.*`).
+2. В **`__main__.py`** команда **`liveness`** уже итерирует **`ORCHESTRATOR_LIVENESS_CHECKS`** — отдельный список дублировать не нужно.
 
-Исполнение: бинарь на мастере вызывает `nemesis liveness`, внутри — тот же каталог.
+Исполнение: бинарь на оркестраторе вызывает `nemesis liveness`, внутри — тот же каталог.
 
 ### Добавить safety check
 
-Зависит от **location** (`agent` / `master`).
+Зависит от **location** (`agent` / `orchestrator`).
 
-**Общее для API:** строки **`SAFETY_CHECK_ROWS`** для **`"agent"`** и **`"master"`** строятся из **`AGENT_SAFETY_CHECKS`** и **`MASTER_SAFETY_CHECKS`** — **`SafetyCheckRow`** для safety вручную не дублировать.
+**Общее для API:** строки **`SAFETY_CHECK_ROWS`** для **`"agent"`** и **`"orchestrator"`** строятся из **`AGENT_SAFETY_CHECKS`** и **`ORCHESTRATOR_SAFETY_CHECKS`** — **`SafetyCheckRow`** для safety вручную не дублировать.
 
 **Agent (`location: "agent"`)** — проверка с доступом к **локальным** логам / dmesg и т.п.:
 
-1. В **`warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: стабильный короткий **`id`** (станет префиксом **`safety.agent.<id>`** в API), **`name`**, **`description`**, **`build(ctx: AgentSafetyContext)`** — как у **`MASTER_LIVENESS_CHECKS`**, но контекст — логи и hostname агента. Снаружи при необходимости используйте **`agent_safety_check_id("<id>")`**.
+1. В **`warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: стабильный короткий **`id`** (станет префиксом **`safety.agent.<id>`** в API), **`name`**, **`description`**, **`build(ctx: AgentSafetyContext)`** — как у **`ORCHESTRATOR_LIVENESS_CHECKS`**, но контекст — логи и hostname агента. Снаружи при необходимости используйте **`agent_safety_check_id("<id>")`**.
 
-**Master (`location: "master"`)** — логика на оркестраторе (кластер, агрегация по агентам):
+**Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер, агрегация по агентам):
 
-1. В **`warden_catalog.py`** добавьте элемент в **`MASTER_SAFETY_CHECKS`**: стабильный короткий **`id`** (в API будет **`safety.master.<id>`**), **`name`**, **`description`**. В коде оркестратора для поля **`check_id`** в результатах используйте **`master_safety_check_id("<id>")`**.
-2. В конце **`orchestrator_warden_checker.py`** добавьте шаг в кортеж **`ORCHESTRATOR_WARDEN_STEPS`**: **`OrchestratorWardenStep("liveness" | "safety", ваша_async_run)`**, где **`ваша_async_run(checker, cluster) -> list[WardenCheckResult]`**. Для блокирующего кода внутри шага используйте **`asyncio_run_blocking`**.
+1. В **`warden_catalog.py`** добавьте элемент в **`ORCHESTRATOR_SAFETY_CHECKS`**: стабильный короткий **`id`** (в API будет **`safety.orchestrator.<id>`**), **`name`**, **`description`**. В коде оркестратора для поля **`check_id`** в результатах используйте **`orchestrator_safety_check_id("<id>")`**.
+2. В конце **`orchestrator_warden_checker.py`** добавьте шаг в кортеж **`ORCHESTRATOR_WARDEN_STEPS`**: **`OrchestratorWardenStep("liveness" | "safety", ваша_async_run)`**, где **`ваша_async_run(checker, cluster) -> list[WardenCheckResult]`**. Для блокирующего кода внутри шага используйте **`asyncio.get_running_loop().run_in_executor(...)`**.
 
 Для проверок, которые **собирают данные с агентов**, ориентир — **`_run_aggregated_verify_failed_check_async`**: опрос **`fetch_agent_warden_result`**, разбор **`safety_checks`** по **`check_id`**.

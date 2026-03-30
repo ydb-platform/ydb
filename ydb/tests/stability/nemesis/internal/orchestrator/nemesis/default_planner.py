@@ -1,11 +1,11 @@
-"""Fallback master planner: each scheduled tick picks one random cluster host for inject."""
+"""Fallback orchestrator planner: each scheduled tick picks one random cluster host for inject."""
 
 from __future__ import annotations
 
 import random
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
-from ydb.tests.stability.nemesis.internal.master.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
 
 class DefaultRandomHostPlanner(NemesisPlannerBase):

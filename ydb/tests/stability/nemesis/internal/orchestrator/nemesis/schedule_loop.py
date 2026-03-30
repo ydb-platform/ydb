@@ -16,7 +16,7 @@ import requests
 from ydb.tests.stability.nemesis.routers.agent_router import create_process_helper
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
-from ydb.tests.stability.nemesis.internal.master.nemesis.chaos_state import ChaosMasterStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class OrchestratorNemesisSchedule:
     def __init__(
         self,
         *,
-        chaos_store: ChaosMasterStore,
+        chaos_store: ChaosOrchestratorStore,
         get_hosts: Callable[[], List[str]],
         is_local_host: Callable[[str], bool],
         get_app_port: Callable[[], int],

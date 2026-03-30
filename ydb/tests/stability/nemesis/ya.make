@@ -11,14 +11,14 @@ PY_SRCS(
     internal/agent/agent_warden_checker.py
     internal/agent/agent_safety_runs.py
     internal/agent/nemesis/runner.py
-    internal/master/install.py
-    internal/master/orchestrator_warden_checker.py
-    internal/master/nemesis/schedule_loop.py
-    internal/master/nemesis/chaos_state.py
-    internal/master/nemesis/default_planner.py
-    internal/master/nemesis/kill_node_planner.py
-    internal/master/nemesis/network_planner.py
-    internal/master/nemesis/nemesis_planner_base.py
+    internal/orchestrator/install.py
+    internal/orchestrator/orchestrator_warden_checker.py
+    internal/orchestrator/nemesis/schedule_loop.py
+    internal/orchestrator/nemesis/chaos_state.py
+    internal/orchestrator/nemesis/default_planner.py
+    internal/orchestrator/nemesis/kill_node_planner.py
+    internal/orchestrator/nemesis/network_planner.py
+    internal/orchestrator/nemesis/nemesis_planner_base.py
     routers/agent_router.py
     routers/orchestrator_router.py
     app.py

@@ -36,6 +36,10 @@ public:
 
     i64 GetWrittenSize() const override;
 
+    i64 GetEncodedRowBatchCount() const override;
+
+    i64 GetEncodedColumnarBatchCount() const override;
+
     TFuture<void> Flush() override;
 
     std::optional<NTableClient::TRowsDigest> GetDigest() const override;

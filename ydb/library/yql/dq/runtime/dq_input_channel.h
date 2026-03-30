@@ -16,7 +16,7 @@ struct TDqInputChannelStats : TDqInputStats {
 };
 
  struct IDqInputChannelCallbacks {
-    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) = 0;
     virtual ~IDqInputChannelCallbacks() = default;
 };
 

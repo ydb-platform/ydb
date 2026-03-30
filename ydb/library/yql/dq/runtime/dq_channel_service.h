@@ -63,11 +63,24 @@ public:
         Timestamp = TInstant::Now();
     }
 
-    TDataChunk(NDqProto::TCheckpoint&& checkpoint, NDqProto::EDataTransportVersion transportVersion,
+    TDataChunk(
+        NDqProto::TCheckpoint&& checkpoint,
+        NDqProto::EDataTransportVersion transportVersion,
         NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
         : TransportVersion(transportVersion)
         , PackerVersion(packerVersion)
         , Checkpoint(std::move(checkpoint)) {
+            Bytes = 1;
+        Timestamp = TInstant::Now();
+    }
+
+    TDataChunk(
+        NDqProto::TWatermark&& watermark,
+        NDqProto::EDataTransportVersion transportVersion,
+        NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
+        : TransportVersion(transportVersion)
+        , PackerVersion(packerVersion)
+        , Watermark(std::move(watermark)) {
             Bytes = 1;
         Timestamp = TInstant::Now();
     }
@@ -82,6 +95,7 @@ public:
     bool Finished = false;
     TInstant Timestamp;
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
+    TMaybe<NDqProto::TWatermark> Watermark;
 };
 
 class IChannelBuffer {

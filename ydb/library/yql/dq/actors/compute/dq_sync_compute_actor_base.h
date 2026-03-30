@@ -436,9 +436,13 @@ protected:
         this->ProcessOutputsState.DataWasSent |= outputInfo.Finished || sent;
     }
 
-    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint) override {
+    virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) override {
         CA_LOG_D("Take checkpoint ");
-        this->Checkpoints->RegisterCheckpoint(checkpoint, 666);
+        auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
+        YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
+
+        inputChannel->Pause(checkpoint);
+        this->Checkpoints->RegisterCheckpoint(checkpoint, channelId);
     }
 
 protected:

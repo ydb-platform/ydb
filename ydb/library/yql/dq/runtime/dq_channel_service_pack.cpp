@@ -66,6 +66,10 @@ public:
          Cerr << "TNarrowSerializer Push checkpoint" << Endl;
         Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
     }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
+    }
     
     void Push(NUdf::TUnboxedValue&& value) override {
         Packer.AddItem(value);
@@ -116,6 +120,10 @@ public:
         Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
     }
 
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
+    }
+
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
         Packer.AddWideItem(values, width);
         Rows++;
@@ -156,6 +164,10 @@ public:
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
         Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
+    }
+
+    void Push(NDqProto::TWatermark&& watermark) override {
+        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {

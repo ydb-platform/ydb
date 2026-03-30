@@ -3,6 +3,7 @@
 
 #include "dq_arrow_helpers.h"
 #include "dq_channel_service_impl.h"
+#include "dq_output.h"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -57,6 +58,11 @@ void BufferToData(TDataChunk& data, TBuffer&& buffer) {
         data.Checkpoint->SetGeneration(ReadNumber<ui64>(source));
         data.Checkpoint->SetType(static_cast<NYql::NDqProto::ECheckpointType>(ReadNumber<ui8>(source)));
     }
+    bool hasWatermark = ReadNumber<bool>(source);
+    if (hasWatermark) {
+        data.Watermark = NDqProto::TWatermark{};
+        data.Watermark->SetTimestampUs(ReadNumber<ui64>(source));
+    }
 
     ui64 size = ReadNumber<ui64>(source);
     YQL_ENSURE(size == source.size(), "Spilled data is corrupted");
@@ -78,6 +84,10 @@ TChunkedBuffer DataToBuffer(TDataChunk&& data) {
         AppendNumber<ui64>(result, data.Checkpoint->GetId());
         AppendNumber<ui64>(result, data.Checkpoint->GetGeneration());
         AppendNumber<ui8>(result, data.Checkpoint->GetType());
+    }
+    AppendNumber<bool>(result, !data.Watermark.Empty());
+    if (data.Watermark) {
+        AppendNumber<ui64>(result, data.Watermark->GetTimestampUs());
     }
 
     AppendNumber<ui64>(result, data.Buffer.Size());
@@ -194,7 +204,6 @@ bool TLocalBuffer::IsEmpty() {
 
 bool TLocalBuffer::Pop(TDataChunk& data) {
     std::lock_guard lock(Mutex);
-
     if (Queue.empty()) {
         PushStats.TryPause();
         NeedToNotifyInput.store(true);
@@ -945,7 +954,12 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         Cerr << "SendMessage with checkpoint" << Endl;
         ev->Record.MutableCheckpoint()->CopyFrom(item->Data.Checkpoint.GetRef());
     }
-    
+
+    if (item->Data.Watermark) {
+        Cerr << "SendMessage with watermark" << Endl;
+        ev->Record.MutableWatermark()->CopyFrom(item->Data.Watermark.GetRef());
+    }
+
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
@@ -1937,19 +1951,24 @@ TString TDqChannelService::GetDebugInfo() {
 // TFastDqOutputChannel::
 
 bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) {
-    Y_UNUSED(watermark);
+
+    if (PausedByCheckpoint) {
+        return false;
+    }
 
     TDataChunk chunk;
     bool popResult = Buffer->Pop(chunk);
     if (popResult && chunk.Checkpoint) {
-        Cerr << "TFastDqInputChannel::Pop checkpoint" << Endl;
         if (Callback) {
-            Callback->TakeCheckpoint(*chunk.Checkpoint);
-            PausedByCheckpoint = true;
-
+            Callback->TakeCheckpoint(*chunk.Checkpoint, GetChannelId());
         }
         Y_ENSURE(batch.RowCount() == 0);
         return false;
+    }
+
+    if (popResult && chunk.Watermark) {
+        watermark = TInstant::MicroSeconds(chunk.Watermark->GetTimestampUs());
+        return true;
     }
 
     bool hasData = popResult && !chunk.Buffer.Empty();

@@ -730,6 +730,16 @@
         return labels.join(',');
     }
 
+    // Encode a '/'-separated path for use as a URL query parameter value embedded in
+    // the GitHub issue body (passed as a URL parameter that GitHub decodes once).
+    // Each path segment is URL-encoded, then '%' signs are doubled so that
+    // after GitHub's decoding, the encoded characters (e.g. %2B for '+') survive intact.
+    function encodePathForBodyUrl(path) {
+        return path.split('/').map(function(part) {
+            return encodeURIComponent(part).replace(/%/g, '%25');
+        }).join('/');
+    }
+
     function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, successRates, logUrls, errorText, reportUrl) {
         let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
         
@@ -785,7 +795,7 @@
         }
         
         // Always include test run history link
-        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodePathForBodyUrl(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
         
         // Always include report link
         body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
@@ -904,7 +914,9 @@
         const full_name = test.trim();
         const buildPreset = "{{ build_preset }}";
         const branch = "{{ branch }}";
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
+        // Encode each path segment but keep '/' as separator, so '+' becomes '%2B'
+        const encodedFullName = full_name.split('/').map(part => encodeURIComponent(part)).join('/');
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodedFullName + "&build_type=" + encodeURIComponent(buildPreset);
         window.open(url, '_blank');
     }
 

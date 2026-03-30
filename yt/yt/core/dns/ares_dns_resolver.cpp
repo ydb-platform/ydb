@@ -501,7 +501,7 @@ private:
 
     void Shutdown()
     {
-        if (Y_UNLIKELY(ShuttingDown_.exchange(true, std::memory_order::relaxed))) { // (d)
+        if (ShuttingDown_.exchange(true, std::memory_order::relaxed)) [[unlikely]] { // (d)
             return;
         }
         std::atomic_thread_fence(std::memory_order::seq_cst); // (e)

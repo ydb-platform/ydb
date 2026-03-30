@@ -35,7 +35,7 @@ void TMpmcQueueImpl::Enqueue(TEnqueuedAction&& action)
 
 void TMpmcQueueImpl::Enqueue(TMutableRange<TEnqueuedAction> actions)
 {
-    if (Y_UNLIKELY(actions.empty())) {
+    if (actions.empty()) [[unlikely]] {
         return;
     }
 

@@ -1078,7 +1078,7 @@ private:
             TCpuInstant GetInstant() const
             {
                 auto* front = Front();
-                if (Y_LIKELY(front)) {
+                if (front) [[likely]] {
                     return GetEventInstant(*front);
                 } else {
                     return std::numeric_limits<TCpuInstant>::max();

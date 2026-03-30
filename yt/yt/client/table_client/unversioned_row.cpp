@@ -437,7 +437,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
     }
 
-    if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
+    if (lhs.Type != rhs.Type) [[unlikely]] {
         return TernaryCompare(lhs.Type, rhs.Type);
     }
 

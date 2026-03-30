@@ -180,7 +180,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsContentDumpActive())) { \
+    if (!(context).Dumper().IsContentDumpActive()) [[likely]] { \
     } else \
         (context).Dumper().WriteContent(__VA_ARGS__)
 

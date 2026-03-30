@@ -217,7 +217,7 @@ void GenericBlockDecompress(TSource* source, TBlob* sink, TDecompressFn&& decomp
     TBlob inputBuffer(GetRefCountedTypeCookie<TTag>(), 0, false);
 
     while (source->Available() > 0) {
-        if (Y_UNLIKELY(hasBlockHeader)) {
+        if (hasBlockHeader) [[unlikely]] {
             hasBlockHeader = false;
         } else {
             ReadPod(*source, blockHeader);

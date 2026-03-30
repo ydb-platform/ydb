@@ -665,7 +665,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

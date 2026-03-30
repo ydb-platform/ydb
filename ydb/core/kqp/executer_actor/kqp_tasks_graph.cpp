@@ -1924,6 +1924,10 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is VectorResolve - " + ToString(partitionsCount));
                 break;
             }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                partitionsCount = originStageInfo.Tasks.size();
+                break;
+            }
             default:
                 break;
         }

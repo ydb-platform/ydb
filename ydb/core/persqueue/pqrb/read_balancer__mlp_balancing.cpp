@@ -146,6 +146,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 
     auto it = Consumers.find(consumerName);
     if (it == Consumers.end()) {
+        PQ_LOG_D("Consumer '" << consumerName << "' is not initialized");
         TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetRuntimeAttributesResponse(0, 0, 0), 0, ev->Cookie);
         return;
     }

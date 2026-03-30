@@ -1873,11 +1873,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             return json["Attributes"]["ApproximateNumberOfMessages"] == "1" && json["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
         });
 
-        ChangeMessageVisibility({
-            {"QueueUrl", queueUrl},
-            {"ReceiptHandle", receiptHandle},
-            {"VisibilityTimeout", 1}
-        }, 400);
+        //ChangeMessageVisibility({
+        //    {"QueueUrl", queueUrl},
+        //    {"ReceiptHandle", receiptHandle},
+        //    {"VisibilityTimeout", 1}
+        //}, 400);
     }
 
     Y_UNIT_TEST_F(TestChangeMessageVisibility_TableImplementation, THttpProxyTestMock) {

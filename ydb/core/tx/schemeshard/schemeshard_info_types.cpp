@@ -706,7 +706,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
         case NKikimrSchemeOp::TMetricsSettings::kNotConfigured:
             // The request asks for the current metrics settings to be dropped,
-            // keep this as NotConfigured in the table description. It wlll be processed
+            // keep this as NotConfigured in the table description. It will be processed
             // and removed in FinishAlter().
             if (op.GetMetricsSettings().HasNotConfigured()) {
                 alterData->TableDescriptionFull->MutableMetricsSettings()->MutableNotConfigured();
@@ -3047,6 +3047,8 @@ bool ValidateMetricsSettings(
             }
         }
 
+        break;
+
     case NKikimrSchemeOp::TMetricsSettings::kNotConfigured:
         // Do not allow dropping the metrics settings in CREATE TABLE
         if (forCreate && metricsSettings.HasNotConfigured()) {
@@ -3055,6 +3057,7 @@ bool ValidateMetricsSettings(
         }
 
         break;
+
     default:
         // Neither Configured nor NotConfigured is set, just ignore this configuration
         break;

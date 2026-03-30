@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableMetricsSettingsTest) {
      * Verify that CREATE TABLE with the metrics settings explicitly dropped
      * is not allowed and fails with an error.
      */
-    Y_UNIT_TEST(CreateTableDroppingMetricsSettingsNotAlllowed) {
+    Y_UNIT_TEST(CreateTableDroppingMetricsSettingsNotAllowed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 

@@ -390,6 +390,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "MetricsSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -409,7 +414,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3985,6 +3991,11 @@
                 "ColumnId": 15,
                 "ColumnName": "IsRestore",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "MetricsSettings",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4005,7 +4016,8 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

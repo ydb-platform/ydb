@@ -1,12 +1,10 @@
-RECURSE_FOR_TESTS(
-    ut
-)
-
 LIBRARY()
 
 SRCS(
+    meta_cluster_info.cpp
     meta.cpp
     meta_cache.cpp
+    meta_settings.cpp
     meta_versions.cpp
     mvp.cpp
 )
@@ -32,4 +30,9 @@ END()
 
 RECURSE(
     bin
+    support_links
+)
+
+RECURSE_FOR_TESTS(
+    ut
 )

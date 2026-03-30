@@ -42,6 +42,13 @@ enum class EIndexType {
     Unknown = std::numeric_limits<int>::max()
 };
 
+enum class ECompactState {
+    Unspecified = 0,
+    InProgress = 1,
+    Done = 2,
+    Cancelled = 3,
+};
+
 enum class EChangefeedMode {
     KeysOnly /* "KEYS_ONLY" */,
     Updates /* "UPDATES" */,

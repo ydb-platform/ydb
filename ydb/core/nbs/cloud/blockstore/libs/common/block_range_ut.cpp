@@ -77,52 +77,44 @@ Y_UNIT_TEST_SUITE(TBlockRangeTest)
         const auto src = TBlockRange64::WithLength(10, 10);
 
         {
-            const auto splitted4 = src.Split(4);
-            UNIT_ASSERT_VALUES_EQUAL(3, splitted4.size());
+            const auto splitBy4 = src.Split(4);
+            UNIT_ASSERT_VALUES_EQUAL(3, splitBy4.size());
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(10, 2),
-                splitted4[0]);
+                splitBy4[0]);
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(12, 4),
-                splitted4[1]);
+                splitBy4[1]);
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(16, 4),
-                splitted4[2]);
+                splitBy4[2]);
         }
 
         {
-            auto splitted5 = src.Split(5);
-            UNIT_ASSERT_VALUES_EQUAL(2, splitted5.size());
+            auto splitBy5 = src.Split(5);
+            UNIT_ASSERT_VALUES_EQUAL(2, splitBy5.size());
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(10, 5),
-                splitted5[0]);
+                splitBy5[0]);
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(15, 5),
-                splitted5[1]);
+                splitBy5[1]);
         }
 
         {
-            auto splitted5 = src.Split(10);
-            UNIT_ASSERT_VALUES_EQUAL(1, splitted5.size());
+            auto splitBy10 = src.Split(10);
+            UNIT_ASSERT_VALUES_EQUAL(1, splitBy10.size());
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(10, 10),
-                splitted5[0]);
+                splitBy10[0]);
         }
 
         {
-            auto splitted10 = src.Split(10);
-            UNIT_ASSERT_VALUES_EQUAL(1, splitted10.size());
+            auto splitBy100 = src.Split(100);
+            UNIT_ASSERT_VALUES_EQUAL(1, splitBy100.size());
             UNIT_ASSERT_VALUES_EQUAL(
                 TBlockRange64::WithLength(10, 10),
-                splitted10[0]);
-        }
-
-        {
-            auto splitted100 = src.Split(100);
-            UNIT_ASSERT_VALUES_EQUAL(1, splitted100.size());
-            UNIT_ASSERT_VALUES_EQUAL(
-                TBlockRange64::WithLength(10, 10),
-                splitted100[0]);
+                splitBy100[0]);
         }
     }
 
@@ -130,21 +122,25 @@ Y_UNIT_TEST_SUITE(TBlockRangeTest)
     {
         const auto src = TBlockRange64::WithLength(10, 10);
 
-        const auto nonSplitted = src.Split(0);
-        UNIT_ASSERT_VALUES_EQUAL(1, nonSplitted.size());
+        const auto nonSplit = src.Split(0);
+        UNIT_ASSERT_VALUES_EQUAL(1, nonSplit.size());
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange64::WithLength(10, 10),
-            nonSplitted[0]);
+            nonSplit[0]);
     }
 
     Y_UNIT_TEST(SplitByOneBlock)
     {
         const auto src = TBlockRange64::WithLength(10, 2);
 
-        const auto splitted = src.Split(1);
-        UNIT_ASSERT_VALUES_EQUAL(2, splitted.size());
-        UNIT_ASSERT_VALUES_EQUAL(TBlockRange64::MakeOneBlock(10), splitted[0]);
-        UNIT_ASSERT_VALUES_EQUAL(TBlockRange64::MakeOneBlock(11), splitted[1]);
+        const auto splitByOne = src.Split(1);
+        UNIT_ASSERT_VALUES_EQUAL(2, splitByOne.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeOneBlock(10),
+            splitByOne[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeOneBlock(11),
+            splitByOne[1]);
     }
 }
 

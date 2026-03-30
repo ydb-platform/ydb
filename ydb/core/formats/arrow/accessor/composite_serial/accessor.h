@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 
@@ -15,6 +16,7 @@ private:
     const bool ForLazyInitialization;
     mutable TAtomicCounter Counter = 0;
     TString InternalPathId;
+    std::shared_ptr<IAdditionalAccessorData> AdditionalAccessorData;
 
 protected:
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -76,12 +78,14 @@ public:
     }
 
     TDeserializeChunkedArray(const ui64 recordsCount, const std::shared_ptr<TColumnLoader>& loader, const TString& data,
-        const TString& internalPathId, const bool forLazyInitialization = false)
+        const TString& internalPathId, const bool forLazyInitialization = false,
+        std::shared_ptr<IAdditionalAccessorData> additionalAccessorData = nullptr)
         : TBase(recordsCount, NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray, loader->GetField()->type())
         , Loader(loader)
         , Data(data)
         , ForLazyInitialization(forLazyInitialization)
         , InternalPathId(internalPathId)
+        , AdditionalAccessorData(std::move(additionalAccessorData))
     {
         AFL_VERIFY(Loader);
     }

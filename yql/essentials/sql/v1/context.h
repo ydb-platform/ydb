@@ -259,6 +259,8 @@ public:
         return MatchRecognizeAggregations_;
     }
 
+    bool IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
 
     // `if ( ret.error()    ) an error issued`

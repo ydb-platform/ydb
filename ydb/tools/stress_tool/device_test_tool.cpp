@@ -276,8 +276,8 @@ int main(int argc, char **argv) {
     auto overrideDDiskInFlight = [](NDevicePerfTest::TDDiskTest& testProto, ui32 inFlight) {
         for (size_t j = 0; j < testProto.DDiskTestListSize(); ++j) {
             auto* record = testProto.MutableDDiskTestList(j);
-            if (record->Command_case() == NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad) {
-                record->MutableDDiskWriteLoad()->SetInFlightWrites(inFlight);
+            if (record->Command_case() == NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+                record->MutableDDiskLoad()->SetInFlight(inFlight);
             }
         }
     };

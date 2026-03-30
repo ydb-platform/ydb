@@ -2850,7 +2850,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3092,7 +3091,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 systemDirectory,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
 
@@ -3105,7 +3104,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 session,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
     }
@@ -3203,7 +3202,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
@@ -3251,7 +3249,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* systemDirectory = "/Root/.sys";
         constexpr const char* sysView = "/Root/.sys/partition_stats";
 
-        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true).ReplaceSysACL(true);
 
         cleanup();
         TestTableContentIsPreserved(table, querySession,
@@ -3313,7 +3311,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());

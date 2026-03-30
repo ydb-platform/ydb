@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/runtime)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     dq_arrow_helpers_ut.cpp

@@ -37,6 +37,8 @@ public:
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
         const auto& uploadOperationParams = std::get<TUploadOperationParams>(context.OperationParams);
 
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Upload operation";
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TUploadTaskParams uploadTaskParams;
@@ -52,6 +54,10 @@ public:
         }
 
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
+    }
+
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& /* context */) override {
+        return {}; // Upload writes to YT, not to FMR tables, nothing to clean in TDS
     }
 };
 

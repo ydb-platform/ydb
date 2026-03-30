@@ -126,6 +126,16 @@ class TPushOlapFilterRule : public ISimplifiedRule {
 };
 
 /**
+ * Push down projection to olap read.
+ */
+class TPushOlapProjectionRule : public ISimplifiedRule {
+  public:
+      TPushOlapProjectionRule() : ISimplifiedRule("Push olap projection", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Create inital CBO Tree
  */
 class TBuildInitialCBOTreeRule : public ISimplifiedRule {

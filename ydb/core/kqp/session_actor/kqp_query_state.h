@@ -462,11 +462,12 @@ public:
             return false;
         }
 
-        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
 
-        if (TxCtx->Locks.Broken()) {
+        if (TxCtx->TxManager->GetLockIssue()) {
             YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
             return false;  // Do not acquire locks after first lock issue
         }

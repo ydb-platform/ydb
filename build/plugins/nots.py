@@ -37,11 +37,20 @@ TS_LINT_DART_FIELDS = (
     df.ScriptRelPath.first_flat,  # required, used to lookup a SUITE_MAP in devtools/ya/test/explore/__init__.py
     df.SourceFolderPath.normalized,  # required
     df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
-    df.TestRecipes.value,  # from macro USE_RECIPE
+    df.TestRecipes.value,  # from macro USE_RECIPE()
     df.Size.from_macro_args_and_unit,
-    df.CustomDependencies.test_depends_only,  # from macro DEPENDS
+    df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
     df.TsCheckType.value,
+)
+
+TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
+    df.TestEnv.value,  # from macro ENV()
+    df.TestData.from_unit,  # from macro DATA()
+    df.TestTimeout.from_unit,  # from macro TIMEOUT()
+    df.Tag.from_unit,  # from macro TAG()
+    df.Requirements.from_unit,  # from macro REQUIREMENTS()
+    df.TsTestForPath.value,
 )
 
 
@@ -1067,7 +1076,7 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
 
     pm = _create_pm(unit)
     unit.on_setup_install_node_modules_recipe(pm.module_path)
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+    unit.on_setup_extract_output_tars_recipe(pm.module_path)
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
     if peers:
@@ -1082,8 +1091,7 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
 
-        assert check_type in ("lint"), f"Unknown check type: {check_type}"
-        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else None
+        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
 
         dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
         dart_record[df.TestFiles.KEY] = test_files
@@ -1224,6 +1232,13 @@ def on_ts_test_for_configure(
     data = ytest.dump_test(unit, dart_record)
     if data:
         unit.set_property(["DART_DATA", data])
+
+
+def on__ts_test_for_configure(unit: NotsUnitType) -> None:
+    # it has to be here because it uses TS_TEST_FOR_PATH that is set in plugin.
+    # if you call _SET_TS_TEST_FOR_INPUTS() directly
+    # from _TS_TEST_FOR_EPILOGUE(), TS_TEST_FOR_PATH is not set yet.
+    unit.on_set_ts_test_for_inputs()
 
 
 # noinspection PyUnusedLocal

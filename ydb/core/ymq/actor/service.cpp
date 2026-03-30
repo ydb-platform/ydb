@@ -74,7 +74,7 @@ bool IsInternalFolder(const TString& folder) {
 
 struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TQueueInfo(
-            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, bool isFifo, TString customName,
+            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, bool isFifo, bool topicCreated, TString customName,
             TString folderId, ui32 tablesFormat, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
             const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
@@ -90,6 +90,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , RootUrl_(std::move(rootUrl))
         , LeaderTabletId_(leaderTabletId)
         , IsFifo_(isFifo)
+        , TopicCreated_(topicCreated)
         , Counters_(userCounters->CreateQueueCounters(QueueName_, FolderId_, insertCounters))
         , UserCounters_(userCounters)
         , FolderCounters_(folderCounters)
@@ -179,6 +180,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TString RootUrl_;
     ui64 LeaderTabletId_ = 0;
     bool IsFifo_ = false;
+    bool TopicCreated_ = false;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TFolderCounters> FolderCounters_;
@@ -745,6 +747,8 @@ void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration:
     answer->Fail = false;
     answer->SchemeCache = SchemeCache_;
     answer->QuoterResources = queueInfo ? queueInfo->QuoterResourcesForUser_ : nullptr;
+    answer->Fifo = queueInfo->IsFifo_;
+    answer->TopicCreated = queueInfo->TopicCreated_;
     Send(ev->Sender, answer.Release());
 }
 
@@ -986,7 +990,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                            newListIt->Version,
                                            newListIt->ShardsCount,
                                            newListIt->CreatedTimestamp,
-                                           newListIt->IsFifo);
+                                           newListIt->IsFifo,
+                                           newListIt->TopicCreated);
                         oldQueueRequests.swap(oldListIt->second->GetLeaderNodeRequests_);
                         if (!oldListIt->second->GetLeaderNodeRequests_.empty()) {
                             QueuesWithGetNodeWaitingRequests.insert(oldListIt->second);
@@ -1008,7 +1013,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                        newListIt->Version,
                                        newListIt->ShardsCount,
                                        newListIt->CreatedTimestamp,
-                                       newListIt->IsFifo);
+                                       newListIt->IsFifo,
+                                       newListIt->TopicCreated);
                     ++oldListIt;
                     ++newListIt;
                 }
@@ -1028,7 +1034,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                          newListIt->Version,
                          newListIt->ShardsCount,
                          newListIt->CreatedTimestamp,
-                         newListIt->IsFifo);
+                         newListIt->IsFifo,
+                         newListIt->TopicCreated);
                 ++newListIt;
             }
 
@@ -1229,7 +1236,8 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
                                                                               const ui64 version,
                                                                               const ui64 shardsCount,
                                                                               const TInstant createdTimestamp,
-                                                                              bool isFifo) {
+                                                                              bool isFifo,
+                                                                              bool topicCreated) {
     auto user = MutableUser(userName, false); // don't move requests because they are already moved in our caller
     const TInstant now = TActivationContext::Now();
     const TInstant timeToInsertCounters = createdTimestamp + TDuration::MilliSeconds(Cfg().GetQueueCountersExportDelayMs());
@@ -1243,7 +1251,7 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     }
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
-            userName, queue, RootUrl_, leaderTabletId, isFifo, customName, folderId, tablesFormat, version, shardsCount,
+            userName, queue, RootUrl_, leaderTabletId, isFifo, topicCreated, customName, folderId, tablesFormat, version, shardsCount,
             user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters, user->UseLeaderCPUOptimization)))
     ).first;
 

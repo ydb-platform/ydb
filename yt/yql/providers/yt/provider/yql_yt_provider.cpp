@@ -69,6 +69,8 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
         writer.OnBooleanScalar(RowSpec && RowSpec->IsSorted());
         writer.OnKeyedItem("IsDynamic");
         writer.OnBooleanScalar(Meta->IsDynamic);
+        writer.OnKeyedItem("HasRLS");
+        writer.OnBooleanScalar(Meta->HasRLS);
         writer.OnKeyedItem("UniqueKeys");
         writer.OnBooleanScalar(RowSpec && RowSpec->UniqueKeys);
         writer.OnKeyedItem("CanWrite");

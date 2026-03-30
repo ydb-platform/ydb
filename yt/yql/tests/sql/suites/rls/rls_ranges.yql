@@ -1,0 +1,10 @@
+/* ytfile can not */
+/* dq can not */
+/* dqfile can not */
+pragma yt.OmitInaccessibleRows;
+
+select *
+from plato.Input
+order by key
+limit 1
+offset 1;

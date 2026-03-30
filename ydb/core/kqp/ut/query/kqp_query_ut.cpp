@@ -2206,6 +2206,150 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST(OlapCreateAsSelect_JaffleShop) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_customers` (
+                    customer_id Int32 NOT NULL,
+                    first_name Utf8,
+                    last_name Utf8,
+                    PRIMARY KEY (customer_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_orders` (
+                    order_id Int32 NOT NULL,
+                    customer_id Int32,
+                    order_date Date,
+                    PRIMARY KEY (order_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_payments` (
+                    payment_id Int32 NOT NULL,
+                    order_id Int32,
+                    amount Int64,
+                    PRIMARY KEY (payment_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_customers` (customer_id, first_name, last_name) VALUES
+                    (1, 'Alice', 'Anderson'),
+                    (2, 'Bob', 'Brown'),
+                    (3, 'Carol', 'Clark');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_orders` (order_id, customer_id, order_date) VALUES
+                    (1, 1, Date("2024-01-15")),
+                    (2, 1, Date("2024-03-20")),
+                    (3, 2, Date("2024-02-10"));
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_payments` (payment_id, order_id, amount) VALUES
+                    (1, 1, 100),
+                    (2, 2, 200),
+                    (3, 3, 50);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE
+                    `/Root/jaffle_shop/customers__dbt_tmp`
+                (PRIMARY KEY (customer_id))
+
+                WITH (
+                    STORE = column)
+                AS
+
+                SELECT
+                    customers.customer_id AS customer_id,
+                    customers.first_name AS first_name,
+                    customers.last_name AS last_name,
+                    customer_orders.first_order AS first_order,
+                    customer_orders.most_recent_order AS most_recent_order,
+                    customer_orders.number_of_orders AS number_of_orders,
+                    customer_payments.total_amount AS customer_lifetime_value
+
+                FROM `/Root/jaffle_shop/stg_customers` AS customers
+
+                LEFT JOIN (
+                    SELECT
+                        customer_id,
+
+                        min(order_date) AS first_order,
+                        max(order_date) AS most_recent_order,
+                        count(order_id) AS number_of_orders
+                    FROM `/Root/jaffle_shop/stg_orders`
+
+                    GROUP BY customer_id
+                ) AS customer_orders
+                    ON customers.customer_id = customer_orders.customer_id
+
+                LEFT JOIN (
+                    SELECT
+                        orders.customer_id AS customer_id,
+                        sum(amount) AS total_amount
+
+                    FROM `/Root/jaffle_shop/stg_payments` AS payments
+
+                    LEFT JOIN `/Root/jaffle_shop/stg_orders` AS orders ON
+                            payments.order_id = orders.order_id
+
+                    GROUP BY orders.customer_id
+                ) AS customer_payments
+                    ON customers.customer_id = customer_payments.customer_id;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT customer_id, first_name, last_name, number_of_orders, customer_lifetime_value
+                FROM `/Root/jaffle_shop/customers__dbt_tmp`
+                ORDER BY customer_id ASC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([
+                [1;["Alice"];["Anderson"];[2u];[300]];
+                [2;["Bob"];["Brown"];[1u];[50]];
+                [3;["Carol"];["Clark"];#;#]
+            ])");
+        }
+    }
+
     Y_UNIT_TEST(MixedCreateAsSelect) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);

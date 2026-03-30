@@ -241,6 +241,7 @@ IYtGateway::TPtr TYtRunTool::CreateYtGateway() {
 
         fmrServices.JobPreparer = jobPreparer;
     }
+    fmrServices.CheckSpecDoesntUseNativeYtTypes = false;
 
     auto [fmrGateway, worker] = NFmr::InitializeFmrGateway(ytGateway, MakeIntrusive<NFmr::TFmrServices>(fmrServices));
     FmrWorker_ = std::move(worker);

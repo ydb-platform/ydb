@@ -47,7 +47,8 @@ TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, b
         return Build<TKqpInSublink>(ctx, node->Pos())
             .Subquery(node->Child(4))
             .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
-            .InTuple(node->Child(2))
+            .OuterType(node->Child(2))
+            .InLambda(node->Child(3))
             .Done().Ptr();
         // clang-format on
     } else if (node->Child(0)->Content() == "exists") {
@@ -81,11 +82,13 @@ TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext 
                 .Done().Ptr();
             // clang-format on
         } else if (TKqpInSublink::Match(node.Get())) {
+            auto inSublink = sublink.Cast<TKqpInSublink>();
             // clang-format off
             return Build<TKqpInSublink>(ctx, node->Pos())
                 .Subquery(root.Cast().Input())
-                .ReturnPgBool(node->Child(TKqpInSublink::idx_ReturnPgBool))
-                .InTuple(sublink.Cast<TKqpInSublink>().InTuple())
+                .ReturnPgBool(inSublink.ReturnPgBool())
+                .OuterType(inSublink.OuterType())
+                .InLambda(inSublink.InLambda())
                 .Done().Ptr();
             // clang-format on
         }
@@ -386,6 +389,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> physicalStageRules;
     physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
+    physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
 
     // CBO stages.

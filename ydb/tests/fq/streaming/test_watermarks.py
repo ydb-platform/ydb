@@ -43,7 +43,7 @@ class TestWatermarksInYdb(StreamingTestBase):
                             ts String NOT NULL,
                             pass Uint64
                         )
-                        , WATERMARK AS ({ts} - Interval('PT5S'))
+                        , WATERMARK = {ts} - Interval('PT5S')
                         , WATERMARK_GRANULARITY = "PT1S"
                         {idleness_clause}
                     )

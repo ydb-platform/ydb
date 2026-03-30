@@ -138,8 +138,6 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
         "src/proto/grpc/status/ya.make",
-        # Keep proxy header
-        "src/core/lib/event_engine/thread_pool.h",
     ],
     ignore_targets=[
         "check_epollexclusive",

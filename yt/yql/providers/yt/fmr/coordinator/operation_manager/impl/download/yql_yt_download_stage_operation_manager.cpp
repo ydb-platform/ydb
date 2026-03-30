@@ -36,6 +36,8 @@ public:
     TGenerateTasksResult GenerateTasksImpl(const TGenerateTasksContext& context) final {
         const auto& downloadOperationParams = std::get<TDownloadOperationParams>(context.OperationParams);
 
+        YQL_CLOG(INFO, FastMapReduce) << "Starting Download operation";
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TDownloadTaskParams downloadTaskParams;
@@ -54,7 +56,7 @@ public:
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
 
-    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) {
+    TGetNewPartIdsForTaskResult GetNewPartIdsForTask(const TGetNewPartIdsForTaskContext& context) override {
         TGetNewPartIdsForTaskResult result;
         TDownloadTaskParams& downloadTaskParams = std::get<TDownloadTaskParams>(context.Task->TaskParams);
         TString tableId = downloadTaskParams.Output.TableId;
@@ -65,7 +67,7 @@ public:
         return result;
     }
 
-    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) {
+    std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TDownloadTaskParams& downloadTaskParams = std::get<TDownloadTaskParams>(context.Task->TaskParams);
         TString tableId = downloadTaskParams.Output.TableId;

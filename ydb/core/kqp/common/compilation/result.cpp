@@ -36,6 +36,8 @@ void TKqpCompileResult::SerializeTo(NKikimrKqp::TCompileCacheQueryInfo* to, std:
 
         to->SetUserSID(Query->UserSid);
         to->SetDatabase(Query->Database);
+        to->SetQueryType(NKikimrKqp::EQueryType_Name(Query->Settings.QueryType));
+        to->SetSyntax(Ydb::Query::Syntax_Name(Query->Settings.Syntax));
     }
 
 }

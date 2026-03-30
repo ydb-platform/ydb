@@ -72,12 +72,17 @@ ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 
 }
 
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary) {
+    return SplitPartitions(runtime, txId, dir, topic, {{partition, boundary}});
+}
+
+ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const std::map<ui32, TString>& partitionBoundaries) {
     ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
     scheme.SetName(topic);
-    auto* split = scheme.AddSplit();
-    split->SetPartition(partition);
-    split->SetSplitBoundary(boundary);
-
+    for (const auto& [partition, boundary] : partitionBoundaries) {
+        auto* split = scheme.AddSplit();
+        split->SetPartition(partition);
+        split->SetSplitBoundary(boundary);
+    }
     return DoRequest(runtime, txId, dir, scheme);
 }
 
@@ -103,9 +108,6 @@ TWriteMessage Msg(const TString& data, ui64 seqNo) {
 
 TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     NKikimrConfig::TFeatureFlags ff;
-    ff.SetEnableTopicSplitMerge(true);
-    ff.SetEnableTopicServiceTx(true);
-    ff.SetEnableTopicAutopartitioningForCDC(true);
     ff.SetEnableTopicAutopartitioningForReplication(true);
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();

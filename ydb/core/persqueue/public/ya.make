@@ -12,6 +12,8 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/cloud_events
 )
 
 END()
@@ -27,4 +29,5 @@ RECURSE(
     partition_index_generator
     partition_key_range
     write_meta
+    cloud_events
 )

@@ -4,6 +4,8 @@ import random
 import string
 import time
 
+import ydb
+
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
@@ -572,3 +574,26 @@ class TestStreamingInYdb(StreamingTestBase):
         assert len(readed_data) == 10
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_shared_reading_in_streaming_queries": False},
+            {"enable_shared_reading_in_streaming_queries": True},
+        ],
+        indirect=["kikimr"],
+    )
+    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        source_name = entity_name("MyEDS")
+
+        if enable_shared_reading_in_streaming_queries:
+            self.create_source(kikimr, source_name, shared=True)
+            kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
+        else:
+            with pytest.raises(
+                ydb.issues.GenericError,
+                match=r"SHARED_READING in External data source is not supported",
+            ):
+                self.create_source(kikimr, source_name, shared=True)

@@ -93,4 +93,5 @@ message TPDiskMetrics {
     optional uint64 SlotCount = 12;
     optional uint32 SlotSizeInUnits = 13;
     optional double PDiskUsage = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 15;  // Max(SharedQuota.Color, CommonLog.Color)
 }

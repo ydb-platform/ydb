@@ -2,7 +2,6 @@
 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
-#include <yql/essentials/core/yql_type_annotation.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
 
@@ -10,15 +9,14 @@ namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
 using NYql::TExprNode;
-using NYql::TTypeAnnotationContext;
 
 enum class EInequalityPredicateType : ui8 { Less, LessOrEqual, Greater, GreaterOrEqual, Equal };
 
 void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForFilter(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
-void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void PropagateStatisticsToStageArguments(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
@@ -32,15 +30,15 @@ void InferStatisticsForDqJoinBase(const TExprNode::TPtr& input, TKqpStatsStore* 
 void InferStatisticsForDqPhyCrossJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForAsList(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
-void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
-void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 bool InferStatisticsForListParam(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 void InferStatisticsForUnionAll(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 
 template <typename TAggregationCallable>
-void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
-extern template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+extern template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 
 
 std::shared_ptr<TOptimizerStatistics> RemoveSorting(const std::shared_ptr<TOptimizerStatistics>& stats);

@@ -669,7 +669,7 @@ void InferStatisticsForSkipNullMembers(const TExprNode::TPtr& input, TKqpStatsSt
     kqpStats->SetStats( input.Get(), inputStats );
 }
 
-void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
+void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto unionAll = inputNode.Cast<TCoExtendBase>();
 
@@ -692,7 +692,7 @@ void InferStatisticsForExtendBase(const TExprNode::TPtr& input, TKqpStatsStore* 
  * Infer statistics and costs for AggregateCombine
  * We just return the input statistics.
 */
-void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
+void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
 
     auto inputNode = TExprBase(input);
     auto agg = inputNode.Cast<TCoAggregateBase>();
@@ -969,7 +969,7 @@ void InferStatisticsForAsStruct(const TExprNode::TPtr& input, TKqpStatsStore* kq
     kqpStats->SetStats(inputNode.Raw(), std::move(stats));
 }
 
-void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
+void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto topBase = inputNode.Cast<TCoTopBase>();
 
@@ -999,7 +999,7 @@ void InferStatisticsForTopBase(const TExprNode::TPtr& input, TKqpStatsStore* kqp
     kqpStats->SetStats(inputNode.Raw(), std::move(topStats));
 }
 
-void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
+void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto sortBase = inputNode.Cast<TCoSortBase>();
 
@@ -1025,7 +1025,7 @@ void InferStatisticsForSortBase(const TExprNode::TPtr& input, TKqpStatsStore* kq
 }
 
 template <typename TAggregationCallable>
-void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* /*typeCtx*/) {
+void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto inputNode = TExprBase(input);
     auto aggr = inputNode.Cast<TAggregationCallable>();
 
@@ -1050,7 +1050,7 @@ void InferStatisticsForAggregationCallable(const TExprNode::TPtr& input, TKqpSta
     kqpStats->SetStats(aggr.Raw(), std::make_shared<TOptimizerStatistics>(std::move(aggStats)));
 }
 
-template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats, TTypeAnnotationContext* typeCtx);
+template void InferStatisticsForAggregationCallable<TCoShuffleByKeys>(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
 
 void InferStatisticsForEquiJoin(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
     auto equiJoin = TExprBase(input).Cast<TCoEquiJoin>();

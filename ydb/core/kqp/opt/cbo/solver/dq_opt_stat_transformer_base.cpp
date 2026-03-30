@@ -110,7 +110,7 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForSkipNullMembers(input, KqpStats);
     }
     else if(auto aggregateBase = TMaybeNode<TCoAggregateBase>(input.Get())){
-        InferStatisticsForAggregateBase(input, KqpStats, TypeCtx);
+        InferStatisticsForAggregateBase(input, KqpStats);
     }
     else if(TCoAggregateMergeFinalize::Match(input.Get())){
         InferStatisticsForAggregateMergeFinalize(input, KqpStats);
@@ -146,22 +146,22 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
         InferStatisticsForDqMerge(input, KqpStats);
     }
     else if (auto extendBase = TMaybeNode<TCoExtendBase>(input)) { // == union all
-        InferStatisticsForExtendBase(input, KqpStats, TypeCtx);
+        InferStatisticsForExtendBase(input, KqpStats);
     }
     else if (TCoAsStruct::Match(input.Get())) {
         InferStatisticsForAsStruct(input, KqpStats);
     }
     else if (auto topBase = TMaybeNode<TCoTopBase>(input)) {
-        InferStatisticsForTopBase(input, KqpStats, TypeCtx);
+        InferStatisticsForTopBase(input, KqpStats);
     }
     else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
-        InferStatisticsForSortBase(input, KqpStats, TypeCtx);
+        InferStatisticsForSortBase(input, KqpStats);
     }
     else if (TCoUnionAll::Match(input.Get())) {
         InferStatisticsForUnionAll(input, KqpStats);
     }
     else if (TCoShuffleByKeys::Match(input.Get())) {
-        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, KqpStats, TypeCtx);
+        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, KqpStats);
     }
     else {
         matched = false;

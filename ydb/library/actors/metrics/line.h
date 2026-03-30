@@ -65,13 +65,6 @@ namespace NActors {
             return Backend && State ? Backend->GetLineId(State) : 0;
         }
 
-        ui32 ReleaseLineId() noexcept {
-            const ui32 lineId = GetLineId();
-            Backend = nullptr;
-            State = nullptr;
-            return lineId;
-        }
-
     private:
         ILineWriteBackend* Backend = nullptr;
         TLineWriterState* State = nullptr;

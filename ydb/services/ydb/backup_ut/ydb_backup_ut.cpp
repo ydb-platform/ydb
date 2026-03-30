@@ -2461,6 +2461,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         appConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
 
         TKikimrWithGrpcAndRootSchema server(
             appConfig,

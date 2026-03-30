@@ -23,8 +23,14 @@ namespace NActors {
             return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
         }
 
-        static void ReadRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) {
-            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, cb);
+        static void ReadRange(const TLineSnapshot& snapshot,
+                              TInstant beginTs,
+                              TInstant endTs,
+                              void* opaque,
+                              TLineFrontendOps::TInvokeValue invoke) {
+            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
+                invoke(opaque, timestamp, &value);
+            });
         }
 
         static const TLineFrontendOps& Descriptor() noexcept {

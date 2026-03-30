@@ -27,8 +27,14 @@ namespace NActors {
             return NInMemoryMetricsPrivate::DecodeLineValue<TValue>(value);
         }
 
-        static void ReadRange(const TLineSnapshot& snapshot, TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) {
-            ForEachStoredRecordInRange(snapshot, beginTs, endTs, cb);
+        static void ReadRange(const TLineSnapshot& snapshot,
+                              TInstant beginTs,
+                              TInstant endTs,
+                              void* opaque,
+                              TLineFrontendOps::TInvokeValue invoke) {
+            ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
+                invoke(opaque, timestamp, &value);
+            });
         }
 
         template<class TCallback>
@@ -40,12 +46,9 @@ namespace NActors {
                 const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(chunk.Payload.data());
                 const size_t recordsCount = chunk.Payload.size() / sizeof(TStorageRecord);
                 for (size_t i = 0; i < recordsCount; ++i) {
-                    const TRecordView record{
-                        .Timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs),
-                        .Value = storedRecords[i].Value,
-                    };
-                    if (beginTs <= record.Timestamp && record.Timestamp <= endTs) {
-                        cb(record);
+                    const TInstant timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs);
+                    if (beginTs <= timestamp && timestamp <= endTs) {
+                        cb(timestamp, DecodeValue(storedRecords[i].Value));
                     }
                 }
             });

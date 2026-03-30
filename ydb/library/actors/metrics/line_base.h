@@ -11,7 +11,6 @@
 #include <memory>
 #include <span>
 #include <type_traits>
-
 namespace NActors {
     class TLineReader;
     struct TChunk;
@@ -52,11 +51,6 @@ namespace NActors {
 
     struct TLineKeyHash {
         size_t operator()(const TLineKey& key) const noexcept;
-    };
-
-    struct TRecordView {
-        TInstant Timestamp;
-        ui64 Value = 0;
     };
 
     struct TChunkView {
@@ -130,7 +124,8 @@ namespace NActors {
     } // namespace NInMemoryMetricsPrivate
 
     struct TLineFrontendOps {
-        using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, const std::function<void(const TRecordView&)>&);
+        using TInvokeValue = void (*)(void*, TInstant, const void*);
+        using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeValue);
 
         TStringBuf Name;
         TReadRange ReadRange = nullptr;
@@ -154,27 +149,26 @@ namespace NActors {
         TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
         ~TLineSnapshot();
 
-        void ForEachRecord(const std::function<void(const TRecordView&)>& cb) const;
-        void ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const;
         void ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const;
         TInstant DecodeTimestampTs(NHPTimer::STime ts) const noexcept;
         template<class TValueType, class TCallback>
         void ForEachRecordAs(TCallback&& cb) const {
-            ForEachRecord([&](const TRecordView& record) {
-                cb(TGenericRecordView<TValueType>{
-                    .Timestamp = record.Timestamp,
-                    .Value = NInMemoryMetricsPrivate::DecodeLineValue<TValueType>(record.Value),
-                });
-            });
+            ForEachRecordAsInRange<TValueType>(TInstant::Zero(), TInstant::Max(), std::forward<TCallback>(cb));
         }
         template<class TValueType, class TCallback>
         void ForEachRecordAsInRange(TInstant beginTs, TInstant endTs, TCallback&& cb) const {
-            ForEachRecordInRange(beginTs, endTs, [&](const TRecordView& record) {
-                cb(TGenericRecordView<TValueType>{
-                    .Timestamp = record.Timestamp,
-                    .Value = NInMemoryMetricsPrivate::DecodeLineValue<TValueType>(record.Value),
+            const auto* frontend = Meta.Frontend;
+            auto* callback = std::addressof(cb);
+            auto invoker = [](void* opaque, TInstant timestamp, const void* valuePtr) {
+                auto* callback = static_cast<std::remove_reference_t<TCallback>*>(opaque);
+                (*callback)(TGenericRecordView<TValueType>{
+                    .Timestamp = timestamp,
+                    .Value = *static_cast<const TValueType*>(valuePtr),
                 });
-            });
+            };
+            if (frontend && frontend->ReadRange) {
+                frontend->ReadRange(*this, beginTs, endTs, callback, invoker);
+            }
         }
 
         TInstant GetLastPublishedTimestamp() const noexcept {

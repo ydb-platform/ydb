@@ -1,5 +1,4 @@
 #include "line_storage.h"
-#include "lines/raw_line_frontend.h"
 
 #include <ydb/library/actors/util/datetime.h>
 
@@ -36,10 +35,6 @@ namespace NActors {
     TLineSnapshot& TLineSnapshot::operator=(TLineSnapshot&&) noexcept = default;
     TLineSnapshot::~TLineSnapshot() = default;
 
-    void TLineSnapshot::ForEachRecord(const std::function<void(const TRecordView&)>& cb) const {
-        ForEachRecordInRange(TInstant::Zero(), TInstant::Max(), cb);
-    }
-
     void TLineSnapshot::ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const {
         if (!Data) {
             return;
@@ -55,13 +50,6 @@ namespace NActors {
 
     TInstant TLineSnapshot::DecodeTimestampTs(NHPTimer::STime ts) const noexcept {
         return Data ? NInMemoryMetricsPrivate::DecodeTs(Data->Anchor, ts) : TInstant::Zero();
-    }
-
-    void TLineSnapshot::ForEachRecordInRange(TInstant beginTs, TInstant endTs, const std::function<void(const TRecordView&)>& cb) const {
-        const auto* frontend = Meta.Frontend ? Meta.Frontend : &TRawLineFrontend<>::Descriptor();
-        if (frontend->ReadRange) {
-            frontend->ReadRange(*this, beginTs, endTs, cb);
-        }
     }
 
     TSnapshot::TSnapshot() = default;

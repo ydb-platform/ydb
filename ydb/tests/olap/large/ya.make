@@ -10,8 +10,15 @@ PY3TEST()
     SPLIT_FACTOR(100)
 
     SIZE(LARGE)
+<<<<<<< HEAD
     TAG(ya:fat)
 
+=======
+
+    REQUIREMENTS(cpu:2)
+
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+>>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
     DEPENDS(
         ydb/apps/ydb
         )

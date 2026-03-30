@@ -3,7 +3,14 @@ IF (NOT WITH_VALGRIND)
 
     FORK_SUBTESTS()
 
+<<<<<<< HEAD
     SPLIT_FACTOR(60)
+=======
+
+SPLIT_FACTOR(120)
+
+REQUIREMENTS(cpu:2)
+>>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)

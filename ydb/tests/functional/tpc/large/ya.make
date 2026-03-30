@@ -12,10 +12,17 @@ IF (SANITIZER_TYPE != "memory" AND SANITIZER_TYPE != "thread")
 ENDIF()
 
 SIZE(LARGE)
+<<<<<<< HEAD
 TAG(ya:fat)
 
 
 REQUIREMENTS(ram:16)
+=======
+
+REQUIREMENTS(ram:16 cpu:2)
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+>>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

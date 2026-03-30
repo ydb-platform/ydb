@@ -1,9 +1,12 @@
 #pragma once
 
-#include "kqp_executer.h"
 #include "kqp_executer_stats.h"
+#include "kqp_executer.h"
 #include "kqp_planner.h"
+#include "kqp_streaming_helper.h"
 #include "kqp_table_resolver.h"
+#include "shards_resolver/kqp_shards_resolver.h"
+#include "tasks_graph/kqp_tasks_graph.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
@@ -20,9 +23,6 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
-#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
-#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>

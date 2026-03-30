@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kqp_tasks_graph.h"
+#include "tasks_graph/kqp_tasks_graph.h"
 
 namespace NKikimr::NKqp {
 

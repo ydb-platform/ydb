@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kqp_tasks_graph.h"
+#include "tasks_graph/kqp_tasks_graph.h"
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>

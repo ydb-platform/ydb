@@ -1,7 +1,7 @@
 #pragma once
 
+#include "max_tasks_graph.h"
 #include "shard_key_ranges.h"
-#include "tasks_graph/max_tasks_graph.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -408,6 +408,7 @@ public:
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
     void BuildLiteralTasks();
+    std::optional<NYql::TIssue> ValidateTasks() const;
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;

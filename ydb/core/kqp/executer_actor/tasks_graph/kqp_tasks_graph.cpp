@@ -3355,6 +3355,38 @@ void TKqpTasksGraph::BuildLiteralTasks() {
     }
 }
 
+std::optional<NYql::TIssue> TKqpTasksGraph::ValidateTasks() const {
+    auto ValidateChannel = [&](ui64 channelId) {
+        const auto& channel = GetChannel(channelId);
+
+        YQL_ENSURE(channel.SrcTask);
+        if (!GetMeta().AllowWithSpilling) {
+            YQL_ENSURE(channel.InMemory, "With spilling off, all channels should be stored in memory only. "
+                << "Not InMemory channelId: " << channelId);
+        }
+    };
+
+    try {
+        for (const auto& task : GetTasks()) {
+            for (const auto& input : task.Inputs) {
+                for (ui64 channelId : input.Channels) {
+                    ValidateChannel(channelId);
+                }
+            }
+
+            for (const auto& output : task.Outputs) {
+                for (ui64 channelId : output.Channels) {
+                    ValidateChannel(channelId);
+                }
+            }
+        }
+    } catch (const TYqlPanic& e) {
+        return YqlIssue({}, TIssuesIds::DEFAULT_ERROR, e.what());
+    }
+
+    return {};
+}
+
 TKqpTasksGraph::TKqpTasksGraph(
     const TString& database,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,

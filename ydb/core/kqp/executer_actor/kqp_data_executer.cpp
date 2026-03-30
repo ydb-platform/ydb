@@ -1,8 +1,4 @@
-#include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_locks_helper.h"
-#include "kqp_planner.h"
-#include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -633,9 +629,8 @@ private:
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
         }
 
-        TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
-            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
+        if (auto validateIssue = TasksGraph.ValidateTasks()) {
+            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, *validateIssue);
             return;
         }
 

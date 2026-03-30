@@ -1,7 +1,4 @@
-#include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_tasks_graph.h"
-#include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -163,8 +160,8 @@ private:
         OnEmptyResult();
 
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
+        if (auto validateIssue = TasksGraph.ValidateTasks()) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, *validateIssue);
             return;
         }
 

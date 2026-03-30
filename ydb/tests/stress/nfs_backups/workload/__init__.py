@@ -264,7 +264,9 @@ class WorkloadNfsExportImport(WorkloadBase):
 
         base_path, run_id = self.pending_import
         self.pending_import = None
-        import_dest = f"imported_{run_id}"
+
+        db_path = self.client.database.rstrip("/")
+        import_dest = f"{db_path}/imported_{run_id}"
 
         try:
             logger.info("[import] Starting ImportFromFs base_path=%s dest=%s", base_path, import_dest)
@@ -273,7 +275,6 @@ class WorkloadNfsExportImport(WorkloadBase):
                 base_path=base_path,
                 items=[(self.TABLE_NAME, import_dest)],
                 description=f"stress_import_{run_id}",
-                destination_path=self.client.database,
             )
             self._inc_stat("import_started")
             logger.info("[import] ImportFromFs started: op=%s", result.id)

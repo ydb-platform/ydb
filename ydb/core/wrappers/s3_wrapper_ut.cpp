@@ -64,6 +64,8 @@ public:
     void TearDown() override {
         Runtime.Reset();
         S3Mock.Reset();
+        Port = Nothing();
+        Edge = Nothing();
     }
 
     ui16 GetPort() const {

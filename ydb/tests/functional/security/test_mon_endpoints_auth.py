@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import pytest
 import requests
 
 
@@ -249,6 +250,16 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
 
 
+def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
+    node = cluster.nodes[node_index]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    node_id = node.node_id
+    full_path = f'/node/{node_id}{path_suffix}'
+    endpoint_url = f'{base_url}{full_path}'
+    for token, expected_status in expected_statuses_by_token.items():
+        _test_endpoint(endpoint_url, full_path, token, expected_status)
+
+
 def _test_endpoints(cluster, expected_results):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
@@ -399,20 +410,23 @@ def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_e
     )
 
 
-def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+# Built-in authorization page, so it returns 200
+@pytest.mark.parametrize('node_index', [1])
+def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
     ydb_cluster_with_enforce_user_token,
+    node_index,
 ):
-    _test_endpoints(
+    all_ok = {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    _test_endpoints_via_node_proxy(
         ydb_cluster_with_enforce_user_token,
-        {
-            # Forwarding entrypoint to node-specific surface.
-            '/node': {
-                None: 400,
-                'user@builtin': 400,
-                'database@builtin': 400,
-                'viewer@builtin': 400,
-                'monitoring@builtin': 400,
-                'root@builtin': 400,
-            },
-        },
+        node_index,
+        '/monitoring',
+        all_ok,
     )

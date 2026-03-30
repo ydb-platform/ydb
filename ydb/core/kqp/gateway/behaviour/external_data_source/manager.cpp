@@ -321,8 +321,8 @@ TAsyncStatus ResolveResourceId(TAsyncStatus validationFuture, const TExternalDat
             return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "AUTH=IAM expected resolved secrets"));
         }
         const auto& desc = schemeTxState->GetCreateExternalDataSource();
-        if (desc.GetSourceType() != "Ydb") {
-            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "AUTH=IAM supported only for EXTERNAL DATA SOURCES Type=ydb, requested for type: " << desc.GetSourceType()));
+        if (desc.GetSourceType() != ToString(NYql::EDatabaseType::Ydb)) {
+            return NThreading::MakeFuture(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "AUTH=IAM supported only for EXTERNAL DATA SOURCES ... SOURCE_TYPE=" << NYql::EDatabaseType::Ydb << ", requested for: " << desc.GetSourceType()));
         }
         const auto& prop = desc.GetProperties().GetProperties();
         TString endpoint = desc.GetLocation();

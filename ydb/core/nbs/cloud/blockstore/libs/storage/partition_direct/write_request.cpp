@@ -70,7 +70,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
         VChunkConfig.VChunkIndex,
         std::move(hostsIndexes),
         Lsn,
-        Range,
+        VChunkRange,
         Request->Sglist,
         NWilson::TTraceId(TraceId),
         DDiskIdToHostIndex);

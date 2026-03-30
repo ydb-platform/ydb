@@ -28,6 +28,8 @@ namespace NActors {
                               TInstant endTs,
                               void* opaque,
                               TLineFrontendOps::TInvokeValue invoke) {
+            // on_change reuses the same physical chunk format as raw; only write
+            // semantics differ.
             TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
                 invoke(opaque, timestamp, &value);
             });

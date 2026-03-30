@@ -1,12 +1,4 @@
-"""
-Module for collecting and publishing YDB stress test metrics.
-
-Provides:
-- ErrorEvent: class for representing events (success/error)
-- MetricsPublisher: class for publishing metrics (file/server)
-- MetricsCollector: class for aggregating metrics in memory
-- Decorators: @report_*_exception for automatic tracking
-"""
+"""Collecting and publishing YDB stress test metrics."""
 
 import atexit
 import time
@@ -25,26 +17,13 @@ __event_process_mode = os.getenv('YDB_STRESS_UTIL_EVENT_PROCESS_MODE', None)
 
 
 def set_event_process_mode(mode):
-    """
-    Sets the event processing mode.
-
-    Args:
-        mode: 'send', 'save', 'both' or None
-    """
+    """Sets the event processing mode ('send', 'save', 'both' or None)."""
     global __event_process_mode
     __event_process_mode = mode
 
 
 class ErrorEvent:
-    """
-    Represents an event (success or error) in a stress test.
-
-    Attributes:
-        kind: Event type ('query', 'init', 'work', 'teardown', 'verify')
-        type: 'success' or error name ('PreconditionFailed', etc.)
-        stress_util_name: Workload name (e.g., 'streaming.workload')
-        operation: Operation name (optional, for query metrics)
-    """
+    """Represents a success or error event in a stress test."""
     kind: str = None
     type: str = None
     stress_util_name: str = None
@@ -52,21 +31,10 @@ class ErrorEvent:
 
 
 class MetricsPublisher:
-    """
-    Class for publishing metrics to file and/or server.
+    """Publishes metrics to file and/or server.
 
-    Supports three modes:
-    - 'send': send metrics to server
-    - 'save': save metrics to file
-    - 'both': both send and save
-
-    Events sent to the server are buffered and flushed periodically
-    (every _FLUSH_INTERVAL seconds) using the timeseries field to avoid
-    overwriting values with identical timestamps.
-
-    Timestamps are rounded down to the nearest _TS_GRID_SECONDS boundary
-    so that all events within the same server aggregation window are summed
-    into a single timeseries point.
+    Events are buffered and flushed periodically using the timeseries field.
+    Timestamps are rounded to _TS_GRID_SECONDS to match the server aggregation window.
     """
 
     _FLUSH_INTERVAL = 360  # seconds
@@ -75,14 +43,6 @@ class MetricsPublisher:
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",
                  server_url: str = "http://localhost:3124/write"):
-        """
-        Initialize publisher.
-
-        Args:
-            mode: Operating mode ('send', 'save', 'both' or None)
-            file_path: Path to file for saving metrics
-            server_url: Server URL for sending metrics
-        """
         self.mode = mode
         self.file_path = file_path
         self.server_url = server_url
@@ -121,12 +81,7 @@ class MetricsPublisher:
             self._schedule_flush()
 
     def flush(self):
-        """
-        Flushes all buffered events to the metrics server.
-
-        Sends accumulated events using the timeseries field so that
-        multiple values within the same second are not overwritten.
-        """
+        """Flushes all buffered events to the metrics server."""
         with self._buffer_lock:
             if not self._buffer:
                 return
@@ -140,12 +95,7 @@ class MetricsPublisher:
                   file=sys.stderr)
 
     def stop(self):
-        """
-        Stops the periodic flush timer and flushes remaining events.
-
-        Should be called during shutdown to ensure all buffered events
-        are sent before the process exits.
-        """
+        """Stops the flush timer and flushes remaining events."""
         self._stopped = True
         if self._flush_timer is not None:
             self._flush_timer.cancel()
@@ -174,15 +124,7 @@ class MetricsPublisher:
         return tuple(sorted(labels.items()))
 
     def _buffer_event(self, event: ErrorEvent):
-        """
-        Adds an event to the internal buffer with immediate aggregation.
-
-        Events are grouped by their labels and aggregated by timestamp
-        at write time. The timestamp is rounded down to the nearest
-        _TS_GRID_SECONDS boundary to align with the server's aggregation
-        window, ensuring all events within the same window are summed
-        into one point.
-        """
+        """Adds an event to the buffer, aggregating by labels and rounded timestamp."""
         labels = self._make_labels(event)
         key = self._labels_key(labels)
         ts = int(time.time())
@@ -198,15 +140,7 @@ class MetricsPublisher:
             ts_map[ts] = ts_map.get(ts, 0) + 1
 
     def publish(self, event: ErrorEvent):
-        """
-        Publishes event according to configured mode.
-
-        For server sending, events are buffered and sent periodically.
-        For file saving, events are written immediately.
-
-        Args:
-            event: Event to publish
-        """
+        """Publishes a single event (buffered for server, immediate for file)."""
         if self.mode in ['send', 'both']:
             try:
                 self._buffer_event(event)
@@ -222,15 +156,7 @@ class MetricsPublisher:
                       file=sys.stderr)
 
     def publish_many(self, events: list[ErrorEvent]):
-        """
-        Publishes multiple events according to configured mode.
-
-        For server sending, events are buffered and sent periodically.
-        For file saving, events are written immediately.
-
-        Args:
-            events: List of events to publish
-        """
+        """Publishes multiple events (buffered for server, immediate for file)."""
         if not events:
             return
 
@@ -250,7 +176,7 @@ class MetricsPublisher:
                       file=sys.stderr)
 
     def _save_to_file(self, event: ErrorEvent):
-        """Saves event to file."""
+        """Saves a single event to file."""
         event_data = {
             "timestamp": time.time(),
             "kind": event.kind,
@@ -267,16 +193,7 @@ class MetricsPublisher:
                 f.write('\n')
 
     def _send_buffer_to_server(self, buffer: dict[tuple, dict]):
-        """
-        Sends buffered events to the metrics server using the timeseries field.
-
-        Each metric group (unique label set) is sent with a timeseries array
-        containing pre-aggregated timestamp+value pairs (already summed at
-        buffer time).
-
-        Args:
-            buffer: Snapshot of the internal buffer to send
-        """
+        """Sends pre-aggregated buffered events to the metrics server."""
         metrics = []
         for metric_data in buffer.values():
             # timeseries is already a {ts: count} dict, aggregated at write time
@@ -338,20 +255,9 @@ def get_metrics_publisher() -> MetricsPublisher:
 
 
 class MetricsCollector:
-    """
-    Collector for aggregating metrics in memory and publishing them.
-
-    Collects statistics for all operations and can publish
-    events through MetricsPublisher.
-    """
+    """Aggregates metrics in memory and publishes events through MetricsPublisher."""
 
     def __init__(self, publisher: MetricsPublisher = None):
-        """
-        Initialize collector.
-
-        Args:
-            publisher: Publisher for publishing events (optional)
-        """
         self.lock = threading.Lock()
         self.metrics = {
             'total_queries': 0,
@@ -363,16 +269,7 @@ class MetricsCollector:
         self.publisher = publisher or _global_publisher
 
     def wrap_call(self, method: Callable, operation_name: str, stress_util_name: str) -> Any:
-        """
-        Wrapper for instrumenting call with automatic metrics collection.
-
-        Args:
-            method: Method to call
-            operation_name: Operation name for metrics
-
-        Returns:
-            Method execution result
-        """
+        """Calls method and records success/failure metrics."""
         success = True
         error_type = None
 
@@ -393,15 +290,7 @@ class MetricsCollector:
 
     def record_query(self, operation: str, success: bool, error_type: str = None,
                      stress_util_name: str = None):
-        """
-        Records query execution result.
-
-        Args:
-            operation: Operation name (e.g., 'create_table', 'insert_data')
-            success: True if operation succeeded, False if error
-            error_type: Error type (e.g., 'PreconditionFailed')
-            stress_util_name: Workload name
-        """
+        """Records a query result and publishes an event."""
         with self.lock:
             self.metrics['total_queries'] += 1
 
@@ -471,11 +360,7 @@ def get_metrics_collector() -> MetricsCollector:
 
 
 class report_exception(object):
-    """
-    Standalone decorator class for tracking function success/errors.
-    Automatically publishes events through MetricsPublisher.
-    Can be used directly to decorate functions or methods.
-    """
+    """Decorator that publishes success/error events for the wrapped function."""
 
     def __init__(self, func, event_kind='general', publisher: MetricsPublisher = None):
         self.kind = event_kind

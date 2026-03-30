@@ -585,7 +585,7 @@ namespace NActors {
         }
     }
 
-    void TInMemoryMetricsBackend::ReadSnapshotImpl(const std::function<void(const TSnapshot&)>& cb) const {
+    void TInMemoryMetricsBackend::ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;

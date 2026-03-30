@@ -38,6 +38,10 @@ namespace NActors {
         Backend.UpdateSelfMetrics();
     }
 
+    void TInMemoryMetricsRegistry::ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const {
+        Backend.ReadSnapshot(cb);
+    }
+
     ui64 TInMemoryMetricsRegistry::GetReuseWatermark() const noexcept {
         return Backend.GetReuseWatermark();
     }

@@ -33,10 +33,7 @@ namespace NActors {
         TInMemoryMetricsStats GetStats() const;
         void UpdateSelfMetrics();
         // Snapshot and line views are borrowing objects and are valid only during cb().
-        template<class TCallback>
-        void ReadSnapshot(TCallback&& cb) const {
-            Backend.ReadSnapshot(std::forward<TCallback>(cb));
-        }
+        void ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const;
 
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;

@@ -27,12 +27,7 @@ namespace NActors {
         TInMemoryMetricsStats GetStats() const;
         void UpdateSelfMetrics();
         // Snapshot and line views are borrowing objects and are valid only during cb().
-        template<class TCallback>
-        void ReadSnapshot(TCallback&& cb) const {
-            ReadSnapshotImpl([&](const TSnapshot& snapshot) {
-                cb(snapshot);
-            });
-        }
+        void ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const;
 
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;
@@ -62,7 +57,6 @@ namespace NActors {
         void ReturnChunkToFree(TChunk* chunk);
         void MaybeDropClosedLine(TLineReader* line);
         bool IsMetricAllowed(TStringBuf name) const noexcept;
-        void ReadSnapshotImpl(const std::function<void(const TSnapshot&)>& cb) const;
 
     private:
         std::unique_ptr<TImpl> Impl;

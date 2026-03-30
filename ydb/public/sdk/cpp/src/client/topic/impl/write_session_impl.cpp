@@ -1231,7 +1231,7 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     if (diff >= 0) {
         MemoryUsage += static_cast<size_t>(diff);
     } else {
-        const size_t dec = static_cast<size_t>(-diff); // у вас безопасно, diff != INT64_MIN
+        const size_t dec = static_cast<size_t>(-diff);
         Y_ABORT_UNLESS(MemoryUsage >= dec);
         MemoryUsage -= dec;
     }

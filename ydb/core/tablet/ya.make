@@ -50,8 +50,6 @@ SRCS(
     tablet_setup.h
     tablet_sys.cpp
     tablet_sys.h
-    simple_tablet.cpp
-    simple_tablet.h
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
     private/aggregated_counters.cpp

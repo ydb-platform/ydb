@@ -641,11 +641,17 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
+    const bool mirroredPartition = MirroringEnabled(Config);
+
+    if (DeduplicationQueueActor && !mirroredPartition && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
+        LOG_D("Forwarding TPartition::TEvWrite to DeduplicationQueueActor");
+        Forward(ev, DeduplicationQueueActor);
+        return;
+    }
+
     ui32 sz = std::accumulate(ev->Get()->Msgs.begin(), ev->Get()->Msgs.end(), 0u, [](ui32 sum, const TEvPQ::TEvWrite::TMsg& msg) {
         return sum + msg.Data.size();
     });
-
-    bool mirroredPartition = MirroringEnabled(Config);
 
     if (mirroredPartition && !ev->Get()->OwnerCookie.empty()) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -678,6 +684,13 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         if (it->second.OwnerCookie != ev->Get()->OwnerCookie) {
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE,
                         TStringBuilder() << "incorrect ownerCookie " << ev->Get()->OwnerCookie << ", must be " << it->second.OwnerCookie);
+            return;
+        }
+
+        if (ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Error) {
+            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                TStringBuilder() << "Unable to check duplication info in parent partition");
+            DropOwner(it, ctx);
             return;
         }
 
@@ -1298,7 +1311,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         curOffset = poffset;
     }
 
-    auto deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    std::optional<ui64> deduplicationResult;
+    if (p.Msg.ExternalDeduplicationInfo.Status == TEvPQ::TEvWrite::EMessageExternalDeduplicationStatus::Duplicate) {
+        if (const auto po = p.Msg.ExternalDeduplicationInfo.OriginalPartitionAndOffset; po.has_value()) {
+            deduplicationResult = po->second;
+        } else {
+            Y_VERIFY_DEBUG_S(false, "Duplicate has no source info");
+            deduplicationResult = 0;
+        }
+    } else {
+        deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    }
     if (deduplicationResult) {
         LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
         p.DeduplicatedByMessageId = true;

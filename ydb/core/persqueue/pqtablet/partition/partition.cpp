@@ -14,6 +14,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
+#include <ydb/core/persqueue/pqtablet/partition/deduplication_write_queue.h>
 #include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer_factory.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -689,6 +690,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
+    if (DeduplicationQueueActor) {
+        Send(DeduplicationQueueActor, new TEvents::TEvPoisonPill());
+    }
+
     Die(ctx);
 }
 
@@ -777,6 +782,23 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
+    }
+    if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
+        TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions;
+        for (const auto& parentPartitionId : PartitionConfig->GetParentPartitionIds()) {
+            const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = NPQ::GetPartitionConfigFromAllPartitions(Config, parentPartitionId);
+            Y_VERIFY_S(configPtr != 0, "Unable to get partition #" << parentPartitionId << " config");
+            if (configPtr) {
+                // TODO: check creation time of parent partitions
+                parentPartitions.push_back(*configPtr);
+            }
+        }
+        DeduplicationQueueActor = ctx.Register(CreateDeduplicationWriteQueueActor(
+            ctx.SelfID,
+            TopicName(),
+            Partition.OriginalPartitionId,
+            std::move(parentPartitions)
+        ));
     }
 
     ProcessMLPPendingEvents();
@@ -4691,6 +4713,42 @@ void TPartition::ResetDetailedMetrics() {
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer) {
     return consumer.GetImportant() || consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+}
+
+void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    const ui32 partitionId = record.GetPartitionId();
+    LOG_T("TEvCheckMessageDeduplicationRequest for partition " << partitionId
+        << ", deduplication IDs count: " << record.MessageDeduplicationIdSize()
+        << ". Topic: \"" << TopicName() << "\""
+        << ". Partition: " << Partition);
+   if (Partition.InternalPartitionId != partitionId) {
+        LOG_W("TEvCheckMessageDeduplicationRequest for wrong partition " << partitionId
+            << ". Topic: \"" << TopicName() << "\""
+            << ". Partition: " << Partition);
+        return;
+    }
+    auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+    response->Record.SetPartitionId(Partition.InternalPartitionId);
+    response->Record.SetGeneration(record.GetGeneration());
+    if (IsActive()) {
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    for (const auto& messageId : record.GetMessageDeduplicationId()) {
+        std::optional offset = MessageIdDeduplicator.CheckMessageId(messageId);
+        auto& result = (*response->Record.MutableResult())[messageId];
+        result.SetIsDuplicate(offset.has_value());
+        if (offset.has_value()) {
+            result.SetOffset(*offset);
+        }
+    }
+    response->Record.SetStatus(NKikimrPQ::EStatus::OK);
+    Send(ev->Sender, response.Release());
 }
 
 } // namespace NKikimr::NPQ

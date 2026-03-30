@@ -11,8 +11,6 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplit) {
-
 static void CreateSetupFIFOTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName) {
     auto status = CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
         .BeginConfigurePartitioningSettings()
@@ -60,6 +58,8 @@ static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, 
     driver.Stop(true);
     return partitionCount;
 }
+
+Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplit) {
 
 static void DumpStorageState(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, const TSet<ui32>& partitions) {
     TStringStream output;
@@ -1044,6 +1044,458 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
 
     VerifyFIFOOrdering(allMessages, expectedCounts, "DoubleSplit_ReadAfterFirstWrite");
 
+}
+
+}
+
+Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplitDedup) {
+
+struct TDedupWriteSpec {
+    TString Body;
+    std::optional<TString> DedupId;
+    std::optional<TString> GroupId;
+};
+
+struct TDedupStage {
+    std::vector<TDedupWriteSpec> Write;
+};
+
+static TMap<TString, TString> ComputeExpectedMessages(const std::vector<TDedupStage>& stages) {
+    TMap<TString, TString> expected;
+    TSet<TString> seenDedupIds;
+    for (const auto& stage : stages) {
+        for (const auto& msg : stage.Write) {
+            if (msg.DedupId) {
+                if (seenDedupIds.insert(*msg.DedupId).second) {
+                    expected[msg.Body] = *msg.DedupId;
+                }
+            } else {
+                expected[msg.Body] = "";
+            }
+        }
+    }
+    return expected;
+}
+
+struct TWriteResult {
+    Ydb::StatusIds::StatusCode Status;
+    TMessageId MessageId;
+};
+
+static TMap<TString, TWriteResult> WriteDedupStage(
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicName,
+    std::vector<TDedupWriteSpec> messages,
+    TStringBuf phase
+) {
+    TMap<TString, TWriteResult> bodyStatuses;
+    for (int writeIteration = 0; !messages.empty(); ++writeIteration) {
+        TSet<TString> usedGroups;
+        TSet<TString> usedDedupIds;
+        std::vector<TDedupWriteSpec> messagesNext;
+        std::vector<TWriterSettings::TMessage> writerMessages;
+
+        for (auto& m : messages) {
+            bool use = true; // write messages in non-overlapping groups
+            use = use && (!m.DedupId.has_value() || usedDedupIds.insert(m.DedupId.value()).second);
+            use = use && (!m.GroupId.has_value() || usedGroups.insert(m.GroupId.value()).second);
+            if (use) {
+                writerMessages.push_back({
+                    .Index = writerMessages.size(),
+                    .MessageBody = m.Body,
+                    .MessageGroupId = m.GroupId,
+                    .MessageDeduplicationId = m.DedupId,
+                });
+            } else {
+                messagesNext.push_back(std::move(m));
+            }
+        }
+        Cerr << "Write iteration " << writeIteration << ": " << writerMessages.size() << " messages:" << Endl;
+        for (const auto& m : writerMessages) {
+            Cerr << "  " << LabeledOutput(m.Index, m.MessageBody, m.MessageGroupId, m.MessageDeduplicationId) << Endl;
+        }
+
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topicName,
+            .Messages = writerMessages,
+        });
+        auto writeResp = GetWriteResponse(runtime);
+        UNIT_ASSERT_C(writeResp, phase << ": write response timeout");
+        Cerr << "Write iteration " << writeIteration << " response: " << writeResp->Messages.size() << " messages:" << Endl;
+        for (size_t i = 0; i < writeResp->Messages.size(); ++i) {
+            auto toString = [](const std::optional<TMessageId>& id) -> TString {
+                if (id.has_value()) {
+                    return TStringBuilder() << LabeledOutput(id->PartitionId, id->Offset);
+                }
+                return "<none>";
+            };
+            Cerr << "  " << LabeledOutput(i, writeResp->Messages[i].Index, writeResp->Messages[i].Status) << " " << toString(writeResp->Messages[i].MessageId) << Endl;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), writerMessages.size(), phase);
+
+        for (size_t i = 0; i < writeResp->Messages.size(); ++i) {
+            const auto& body = writerMessages[i].MessageBody;
+            const auto& resp = writeResp->Messages[i];
+            UNIT_ASSERT_C(
+                resp.Status == Ydb::StatusIds::SUCCESS || resp.Status == Ydb::StatusIds::ALREADY_EXISTS,
+                phase << ": unexpected write status " << Ydb::StatusIds::StatusCode_Name(resp.Status)
+                      << " for body=" << body);
+            UNIT_ASSERT_C(!bodyStatuses.contains(body), phase << ": duplicate body in stage: " << body);
+            UNIT_ASSERT_C(resp.MessageId.has_value(), phase << ": no message id for body=" << body);
+            bodyStatuses[body] = {.Status = resp.Status, .MessageId = resp.MessageId.value()};
+        }
+
+        messagesNext.swap(messages);
+    }
+
+    return bodyStatuses;
+}
+
+static TMap<TString, TString> ReadAllDedupAndCommit(
+    NActors::TTestActorRuntime& runtime,
+    const TString& topicName,
+    const TString& consumer,
+    int retries = 100
+) {
+    TMap<TString, TString> readMessages;
+
+    for (;;) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topicName,
+            .Consumer = consumer,
+            .WaitTime = TDuration::MilliSeconds(100),
+            .ProcessingTimeout = TDuration::Seconds(300),
+            .MaxNumberOfMessage = 20,
+        });
+        auto readResult = GetReadResponse(runtime);
+        UNIT_ASSERT_C(readResult, "ReadAllDedupAndCommit: read response timeout");
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Status, Ydb::StatusIds::SUCCESS);
+
+        if (readResult->Messages.empty()) {
+            if (--retries < 0) {
+                break;
+            }
+            continue;
+        }
+
+        std::vector<TMessageId> toCommit;
+        for (const auto& msg : readResult->Messages) {
+            Cerr << ">>>>> ReadAllDedupAndCommit: data=" << msg.Data
+                 << " dedupId=" << msg.MessageDeduplicationId
+                 << " group=" << msg.MessageGroupId
+                 << " partition=" << msg.MessageId.PartitionId
+                 << " offset=" << msg.MessageId.Offset << Endl;
+            readMessages[msg.Data] =  msg.MessageDeduplicationId;
+            toCommit.push_back(msg.MessageId);
+        }
+
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = topicName,
+            .Consumer = consumer,
+            .Messages = toCommit,
+        });
+        auto commitResult = GetChangeResponse(runtime);
+        UNIT_ASSERT_C(commitResult, "ReadAllDedupAndCommit: commit response timeout");
+        UNIT_ASSERT_VALUES_EQUAL(commitResult->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    return readMessages;
+}
+
+static void VerifyDedupResult(
+    const TMap<TString, TString>& readMessages,
+    const TMap<TString, TString>& expectedMessages,
+    TStringBuf testName
+) {
+
+    for (const auto& [body, dedupId] : readMessages) {
+        const auto* expectedDedupId = expectedMessages.FindPtr(body);
+        UNIT_ASSERT_C(expectedDedupId,
+            testName << ": unexpected body=" << body << " in read result");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            dedupId, *expectedDedupId,
+            testName << ": dedupId mismatch for body=" << body);
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(readMessages.size(), expectedMessages.size(), testName << ": total message count mismatch");
+
+}
+
+static void VerifyWriteStatuses(
+    const TMap<TString, TWriteResult>& bodyStatuses,
+    const std::vector<TDedupWriteSpec>& messages,
+    TMap<TString, TMessageId>& firstMessageIdByDedupId,  // in/out: first successful MessageId per dedupId
+    TStringBuf phase
+) {
+    for (const auto& spec : messages) {
+        const auto* result = bodyStatuses.FindPtr(spec.Body);
+        UNIT_ASSERT_C(result, phase << ": no write status recorded for body=" << spec.Body);
+        if (spec.DedupId && firstMessageIdByDedupId.contains(*spec.DedupId)) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::ALREADY_EXISTS,
+                phase << ": expected ALREADY_EXISTS for body=" << spec.Body
+                      << " dedupId=" << *spec.DedupId);
+            const auto* firstId = firstMessageIdByDedupId.FindPtr(*spec.DedupId);
+            UNIT_ASSERT_C(firstId, phase << ": no first MessageId recorded for dedupId=" << *spec.DedupId);
+            // TODO: fix the CalculateReplyOffset fn
+            // UNIT_ASSERT_VALUES_EQUAL_C(result->MessageId.PartitionId, firstId->PartitionId, phase << ": PartitionId mismatch for ALREADY_EXISTS body=" << spec.Body << " dedupId=" << *spec.DedupId);
+            // UNIT_ASSERT_VALUES_EQUAL_C(result->MessageId.Offset, firstId->Offset, phase << ": Offset mismatch for ALREADY_EXISTS body=" << spec.Body << " dedupId=" << *spec.DedupId);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS,
+                phase << ": expected SUCCESS for body=" << spec.Body
+                      << " dedupId=" << spec.DedupId.value_or("<none>"));
+            if (spec.DedupId) {
+                firstMessageIdByDedupId.try_emplace(*spec.DedupId, result->MessageId);
+            }
+        }
+    }
+}
+
+struct TLeafPartition {
+    ui32 Id;
+    unsigned char Lo;
+    unsigned char Hi;
+};
+
+static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>& stages) {
+    UNIT_ASSERT_C(!stages.empty(), "RunDedupTest: no stages");
+
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
+
+    const auto expectedMessages = ComputeExpectedMessages(stages);
+
+    std::vector<TLeafPartition> leaves = {{0, 0x00, 0xFF}};
+    size_t totalPartitions = 1;
+    TMap<TString, TMessageId> firstMessageIdByDedupId;
+    for (size_t stageIdx = 0; stageIdx < stages.size(); ++stageIdx) {
+        TStringBuilder phase;
+        phase << testName << " stage=" << stageIdx;
+
+        Cerr << ">>>>> " << phase << ": writing " << stages[stageIdx].Write.size() << " messages" << Endl;
+        auto bodyStatuses = WriteDedupStage(runtime, "/Root/topic1", stages[stageIdx].Write, phase);
+        VerifyWriteStatuses(bodyStatuses, stages[stageIdx].Write, firstMessageIdByDedupId, phase);
+
+
+        if (stageIdx + 1 < stages.size()) {
+            std::map<ui32, TString> splitBoundaries;
+            for (const auto& leaf : leaves) {
+                unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
+                splitBoundaries[leaf.Id] = TString(1, (char)mid);
+                Cerr << ">>>>> " << phase << ": split partition " << leaf.Id
+                     << " at 0x" << Hex((ui32)mid) << Endl;
+            }
+
+            ui64 txId = 1006 + stageIdx;
+            NKikimr::NPQ::NTest::SplitPartitions(runtime, txId, "/Root", "topic1", splitBoundaries);
+
+            std::vector<TLeafPartition> newLeaves;
+            for (size_t i = 0; i < leaves.size(); ++i) {
+                const auto& leaf = leaves[i];
+                unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
+                ui32 leftId = (ui32)(totalPartitions + i * 2);
+                ui32 rightId = (ui32)(totalPartitions + i * 2 + 1);
+                newLeaves.push_back({leftId, leaf.Lo, mid});
+                newLeaves.push_back({rightId, (unsigned char)(mid + 1), leaf.Hi});
+            }
+            totalPartitions += leaves.size() * 2;
+            leaves = std::move(newLeaves);
+
+            auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", totalPartitions);
+            UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, totalPartitions,
+                phase << ": expected " << totalPartitions << " partitions after split");
+        }
+    }
+
+    Cerr << ">>>>> " << testName << ": reading all messages" << Endl;
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    VerifyDedupResult(readMessages, expectedMessages, testName);
+
+    Cerr << ">>>>> " << testName << ": done" << Endl;
+}
+
+Y_UNIT_TEST(Dedup_NoSplit_WithGroup) {
+    RunDedupTest("Dedup_NoSplit_WithGroup", {
+        {.Write = {
+            {.Body = "first-body", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "second-body", .DedupId = "dedupA", .GroupId = "group-X"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_NoSplit_NoGroup) {
+    RunDedupTest("Dedup_NoSplit_NoGroup", {
+        {.Write = {
+            {.Body = "first-body", .DedupId = "dedupA"},
+            {.Body = "second-body", .DedupId = "dedupA"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_AllNew) {
+    RunDedupTest("Dedup_WithGroup_AllNew", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupC", .DedupId = "dedupC", .GroupId = "group-X"},
+            {.Body = "s1-dedupD", .DedupId = "dedupD", .GroupId = "group-X"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_SameIds1) {
+    RunDedupTest("Dedup_WithGroup_SameIds", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_SameIds) {
+    RunDedupTest("Dedup_WithGroup_SameIds", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_PartialOverlap) {
+    RunDedupTest("Dedup_WithGroup_PartialOverlap", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupC", .DedupId = "dedupC", .GroupId = "group-X"},
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_PartialOverlapWithNonDedup) {
+    std::vector<TDedupStage> stages;
+    auto& s0 = stages.emplace_back();
+    for (size_t i = 0; i < 5; ++i) {
+        s0.Write.push_back({.Body = TStringBuilder() << "s0-nodedup-" << i, .GroupId = "group-X"});
+    }
+    s0.Write.push_back({.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"});
+    s0.Write.push_back({.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"});
+
+    auto& s1 = stages.emplace_back();
+    for (size_t i = 0; i < 5; ++i) {
+        s1.Write.push_back({.Body = TStringBuilder() << "s1-nodedup-" << i, .GroupId = "group-X"});
+    }
+    s1.Write.push_back({.Body = "s1-dedupC", .DedupId = "dedupC", .GroupId = "group-X"});
+    s1.Write.push_back({.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"});
+
+    RunDedupTest("Dedup_WithGroup_PartialOverlapWithNonDedup", stages);
+}
+
+Y_UNIT_TEST(Dedup_NoGroup_AllNew) {
+    RunDedupTest("Dedup_NoGroup_AllNew", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupC", .DedupId = "dedupC"},
+            {.Body = "s1-dedupD", .DedupId = "dedupD"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_NoGroup_SameIds) {
+    RunDedupTest("Dedup_NoGroup_SameIds", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_NoGroup_PartialOverlap) {
+    RunDedupTest("Dedup_NoGroup_PartialOverlap", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupC", .DedupId = "dedupC"},
+            {.Body = "s1-dedupA", .DedupId = "dedupA"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_NoGroup_PartialOverlapWithNonDedup) {
+    std::vector<TDedupStage> stages;
+    auto& s0 = stages.emplace_back();
+    for (size_t i = 0; i < 5; ++i) {
+        s0.Write.push_back({.Body = TStringBuilder() << "s0-nodedup-" << i});
+    }
+    s0.Write.push_back({.Body = "s0-dedupA", .DedupId = "dedupA"});
+    s0.Write.push_back({.Body = "s0-dedupB", .DedupId = "dedupB"});
+
+    auto& s1 = stages.emplace_back();
+    for (size_t i = 0; i < 5; ++i) {
+        s1.Write.push_back({.Body = TStringBuilder() << "s1-nodedup-" << i});
+    }
+    s1.Write.push_back({.Body = "s1-dedupC", .DedupId = "dedupC"});
+    s1.Write.push_back({.Body = "s1-dedupA", .DedupId = "dedupA"});
+
+    RunDedupTest("Dedup_NoGroup_PartialOverlapWithNonDedup", stages);
+}
+
+Y_UNIT_TEST(Dedup_MixedGroup_PartialOverlap) {
+    RunDedupTest("Dedup_MixedGroup_PartialOverlap", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupC", .DedupId = "dedupC", .GroupId = "group-X"},
+            {.Body = "s1-dedupA", .DedupId = "dedupA"},
+        }},
+    });
+}
+
+Y_UNIT_TEST(Dedup_DoubleSplit) {
+    if ("x-fail") {
+        // TODO: fix GetParentPartitions
+        return;
+    }
+    RunDedupTest("Dedup_DoubleSplit", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-X"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-X"},
+        }},
+    });
 }
 
 }

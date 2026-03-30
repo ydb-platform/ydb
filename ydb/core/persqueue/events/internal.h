@@ -249,6 +249,24 @@ struct TEvPQ {
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
+        enum class EWriteExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Checked,
+            Error,
+        };
+
+        enum class EMessageExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Duplicate,
+            Unique,
+            Error,
+        };
+
+        struct TMessageExternalDeduplicationInfo {
+            EMessageExternalDeduplicationStatus Status = EMessageExternalDeduplicationStatus::Unchecked;
+            std::optional<std::pair<ui32, ui64>> OriginalPartitionAndOffset;
+        };
+
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
@@ -274,9 +292,10 @@ struct TEvPQ {
             TMaybe<i16> ProducerEpoch;
 
             std::optional<TString> MessageDeduplicationId;
+            TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
@@ -284,6 +303,7 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
+        , ExternalDeduplicationStatus(externalDeduplicationStatus)
         {
         }
 
@@ -294,7 +314,7 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
-
+        EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -1783,7 +1803,7 @@ struct TEvPQ {
             return Record.GetConsumer();
         }
     };
-    
+
     struct TEvMLPGetRuntimeAttributesResponse : TEventPB<TEvMLPGetRuntimeAttributesResponse, NKikimrPQ::TEvMLPGetRuntimeAttributesResponse, EvMLPGetRuntimeAttributesResponse> {
         TEvMLPGetRuntimeAttributesResponse() = default;
 

@@ -85,4 +85,10 @@ NThreading::TFuture<TOperationsList<NQuery::TScriptExecutionOperation>> TOperati
     return List<NQuery::TScriptExecutionOperation>("scriptexec", pageSize, pageToken);
 }
 
+template NThreading::TFuture<NTable::TCompactionOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NTable::TCompactionOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NTable::TCompactionOperation>("compaction", pageSize, pageToken);
+}
+
 } // namespace NYdb::NOperation

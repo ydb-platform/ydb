@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.h"
+#include "filters.h"
 
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -34,26 +35,101 @@ public:
     }
 };
 
-class TEvFilterConstructionResult
-    : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
+}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering::NPrivate
+
+namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
+    
+class TBuildFilterTaskExecutor;
+class TBuildFilterTaskContext {
 private:
-    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
-    TConclusion<TFilters> Result;
-    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
+    TBuildFilterContext Context;
+    YDB_READONLY_DEF(std::shared_ptr<TBuildFilterTaskExecutor>, Executor);
+    YDB_READONLY_DEF(std::vector<TIntervalInfo>, Intervals);
+    YDB_READONLY_DEF(THashSet<ui64>, RequiredPortions);
 
 public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result, TJobStatus::TResultInFlightGuard&& guard)
-        : Result(std::move(result)), ResultGuard(std::move(guard))
+    TBuildFilterTaskContext(
+        TBuildFilterContext&& context, const std::shared_ptr<TBuildFilterTaskExecutor>& executor, std::vector<TIntervalInfo>&& intervals, THashSet<ui64>&& portions)
+        : Context(std::move(context))
+        , Executor(executor)
+        , Intervals(std::move(intervals))
+        , RequiredPortions(std::move(portions))
     {
     }
 
-    const TConclusion<TFilters>& GetConclusion() const {
-        return Result;
+    const TBuildFilterContext& GetGlobalContext() const {
+        return Context;
     }
 
-    TFilters&& ExtractResult() {
-        return Result.DetachResult();
+    TBuildFilterContext&& ExtractGlobalContext() {
+        return std::move(Context);
     }
 };
 
-}   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering::NPrivate
+class TDuplicateSourceCacheResult {
+private:
+    using TColumnData = THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
+    TColumnData DataByAddress;
+
+public:
+    TDuplicateSourceCacheResult(TColumnData&& data)
+        : DataByAddress(std::move(data))
+    {
+    }
+
+    THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> ExtractDataByPortion(
+        const std::map<ui32, std::shared_ptr<arrow::Field>>& fieldByColumn) {
+        THashMap<ui64, std::shared_ptr<NArrow::TGeneralContainer>> dataByPortion;
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (const auto& [_, field] : fieldByColumn) {
+            fields.emplace_back(field);
+        }
+
+        THashMap<ui64, THashMap<ui32, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>> columnsByPortion;
+        for (auto&& [address, data] : DataByAddress) {
+            AFL_VERIFY(columnsByPortion[address.GetPortionId()].emplace(address.GetColumnId(), data).second);
+        }
+
+        for (auto& [portion, columns] : columnsByPortion) {
+            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> sortedColumns;
+            for (const auto& [columnId, _] : fieldByColumn) {
+                auto column = columns.FindPtr(columnId);
+                AFL_VERIFY(column);
+                sortedColumns.emplace_back(*column);
+            }
+            std::shared_ptr<NArrow::TGeneralContainer> container =
+                std::make_shared<NArrow::TGeneralContainer>(fields, std::move(sortedColumns));
+            AFL_VERIFY(dataByPortion.emplace(portion, std::move(container)).second);
+        }
+
+        return dataByPortion;
+    }
+};
+
+class TEvIntervalConstructionResult
+    : public NActors::TEventLocal<TEvIntervalConstructionResult, NColumnShard::TEvPrivate::EvIntervalConstructionResult> {
+public:
+    TBuildFilterTaskContext Context;
+    TConclusion<TDuplicateSourceCacheResult> Result;
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AllocationGuard;
+    std::optional<TJobStatus::TResultInFlightGuard> ResultGuard;
+
+public:
+    TEvIntervalConstructionResult(TBuildFilterTaskContext&& context,
+        THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& columns,
+        const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& allocationGuard)
+        : Context(std::move(context))
+        , Result(std::move(columns))
+        , AllocationGuard(allocationGuard)
+    {}
+    
+    TEvIntervalConstructionResult(TBuildFilterTaskContext&& context,
+        TConclusion<TDuplicateSourceCacheResult>&& error,
+        std::optional<TJobStatus::TResultInFlightGuard>&& resultGuard)
+        : Context(std::move(context))
+        , Result(std::move(error))
+        , ResultGuard(std::move(resultGuard))
+    {}
+};
+
+}

@@ -693,8 +693,14 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
+            // TODO(anely-d): workaround — warmup needs ydb_user in GUCSettings to match
+            // explicit sessions for compile cache key. Pass "" instead of Nothing() so
+            // FillGUCSettings sets ydb_user="". Proper fix: normalize GUCSettings globally.
+            auto userName = ev->Get()->GetIsWarmupCompilation()
+                ? TMaybe<TString>("")
+                : Nothing();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", "", "", "", "", "", Nothing(), result))
+                database, false, false, "", "", "", "", "", "", userName, result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -1579,7 +1585,7 @@ private:
         ResourcePoolsCache.UpdateConfig(FeatureFlags, WorkloadManagerConfig, ActorContext());
 
         const auto& databaseId = ev->Get()->GetDatabaseId();
-        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall()) {
+        if (!ResourcePoolsCache.ResourcePoolsEnabled(databaseId) || ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
             ev->Get()->SetPoolId("");
             return true;
         }
@@ -1898,14 +1904,16 @@ private:
     }
 
     void InitSharedReading() {
-        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!FederatedQuerySetup || !FeatureFlags.GetEnableStreamingQueries() || RowDispatcherService) {
+        if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
         }
+        AFL_VERIFY(FederatedQuerySetup);
+        AFL_VERIFY(FeatureFlags.GetEnableStreamingQueries());
 
         const auto& pqGatewayFactory = FederatedQuerySetup->PqGatewayFactory;
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
+        const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(
             streamingQueries.GetExternalStorage(),
             NKikimr::CreateYdbCredentialsProviderFactory,

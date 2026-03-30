@@ -65,7 +65,7 @@ public:
             ++ReadRequestCount;
             ctx->AddTime(EProcessingStage::Postponed, TDuration::Seconds(1));
 
-            auto startIndex = request->Range.Start;
+            auto startIndex = request->Headers.Range.Start;
             auto guard = request->Sglist.Acquire();
             const auto& dst = guard.Get();
 
@@ -76,7 +76,7 @@ public:
             auto src = SgList;
             src.erase(src.begin(), src.begin() + startIndex);
             auto sz = SgListCopy(src, dst);
-            UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+            UNIT_ASSERT(sz == request->Headers.Range.Size() * BlockSize);
 
             return MakeFuture(TReadBlocksLocalResponse());
         };
@@ -93,7 +93,7 @@ public:
                 {
                     Y_UNUSED(f);
 
-                    auto startIndex = request->Range.Start;
+                    auto startIndex = request->Headers.Range.Start;
                     auto guard = request->Sglist.Acquire();
                     const auto& src = guard.Get();
 
@@ -104,7 +104,8 @@ public:
                     auto dst = SgList;
                     dst.erase(dst.begin(), dst.begin() + startIndex);
                     auto sz = SgListCopy(src, dst);
-                    UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+                    UNIT_ASSERT(
+                        sz == request->Headers.Range.Size() * BlockSize);
 
                     return TWriteBlocksLocalResponse();
                 });
@@ -114,7 +115,7 @@ public:
                 std::shared_ptr<TZeroBlocksLocalRequest> request)
         {
             ++ZeroRequestCount;
-            ZeroedBlocksCount += request->Range.Size();
+            ZeroedBlocksCount += request->Headers.Range.Size();
             ctx->AddTime(EProcessingStage::Postponed, TDuration::Seconds(100));
 
             auto future = WriteTrigger.GetFuture();
@@ -123,15 +124,16 @@ public:
                 {
                     Y_UNUSED(f);
 
-                    auto startIndex = request->Range.Start;
+                    auto startIndex = request->Headers.Range.Start;
                     TSgList src(
-                        request->Range.Size(),
+                        request->Headers.Range.Size(),
                         TBlockDataRef::CreateZeroBlock(BlockSize));
 
                     auto dst = SgList;
                     dst.erase(dst.begin(), dst.begin() + startIndex);
                     auto sz = SgListCopy(src, dst);
-                    UNIT_ASSERT(sz == request->Range.Size() * BlockSize);
+                    UNIT_ASSERT(
+                        sz == request->Headers.Range.Size() * BlockSize);
 
                     return TZeroBlocksLocalResponse();
                 });
@@ -390,13 +392,13 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
-            for (ui32 i = 0; i < request->Range.Size(); ++i) {
-                auto index = request->Range.Start + i;
+            for (ui32 i = 0; i < request->Headers.Range.Size(); ++i) {
+                auto index = request->Headers.Range.Start + i;
                 auto& zeroBlock = zeroBlocks[index];
 
                 UNIT_ASSERT(!zeroBlock);
@@ -508,8 +510,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TReadBlocksLocalResponse>();
         };
@@ -533,8 +535,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TWriteBlocksLocalResponse>();
         };
@@ -557,8 +559,8 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(ctx);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Start == startIndex);
-            UNIT_ASSERT(request->Range.Size() == blocksCount);
+            UNIT_ASSERT(request->Headers.Range.Start == startIndex);
+            UNIT_ASSERT(request->Headers.Range.Size() == blocksCount);
 
             return MakeFuture<TZeroBlocksLocalResponse>();
         };
@@ -743,17 +745,17 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TSgList src(
-                request->Range.Size(),
+                request->Headers.Range.Size(),
                 TBlockDataRef(zeroBlock.data(), zeroBlock.size()));
 
             TBlockDataRef dst(
-                device.data() + request->Range.Start * blockSize,
+                device.data() + request->Headers.Range.Start * blockSize,
                 src.size() * blockSize);
 
             auto bytesCount = SgListCopy(src, dst);
@@ -769,14 +771,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TBlockDataRef dst(
-                device.data() + request->Range.Start * blockSize,
-                request->Range.Size() * blockSize);
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
 
             auto guard = request->Sglist.Acquire();
             UNIT_ASSERT(guard);
@@ -794,14 +796,14 @@ Y_UNIT_TEST_SUITE(TDeviceHandlerTest)
             Y_UNUSED(callContext);
 
             UNIT_ASSERT(request->Headers.ClientId == clientId);
-            UNIT_ASSERT(request->Range.Size() <= blocksCountLimit);
+            UNIT_ASSERT(request->Headers.Range.Size() <= blocksCountLimit);
             UNIT_ASSERT(
-                request->Range.Start + request->Range.Size() <=
+                request->Headers.Range.Start + request->Headers.Range.Size() <=
                 deviceBlocksCount);
 
             TBlockDataRef src(
-                device.data() + request->Range.Start * blockSize,
-                request->Range.Size() * blockSize);
+                device.data() + request->Headers.Range.Start * blockSize,
+                request->Headers.Range.Size() * blockSize);
 
             TReadBlocksLocalResponse response;
 

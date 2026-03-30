@@ -2823,7 +2823,217 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(str, "[[[111u];[1u];[\"One\"]]]");
     }
 
+    Y_UNIT_TEST(AlterTableCompact) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableForcedCompactions(true);
 
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/Test` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    PARTITION_AT_KEYS = (250, 500, 750)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/Test` (Key, Value)
+                    VALUES
+                        (100, "value_1"),
+                        (400, "value_2"),
+                        (700, "value_3"),
+                        (1000, "value_4");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 0));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 2));
+
+            auto result = session.AlterTable("", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        }
+
+        {
+
+            NYdb::NTable::TClientSettings clientSettings;
+            clientSettings.AuthToken("badguy@builtin");
+            NYdb::NTable::TTableClient clientbad(driver, clientSettings);
+            auto getSessionResult = clientbad.CreateSession().ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+            auto session = getSessionResult.GetSession();
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 2));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Access denied for# badguy@builtin, path# /Root/Test, access# DescribeSchema|AlterSchema");
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 1));
+
+            auto result = session.AlterTable("/Root/Test", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 3));
+
+            auto result = session.AlterTable("/Root/WrongPath", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 1);
+            auto op = result.GetList()[0];
+            UNIT_ASSERT_VALUES_EQUAL(op.Ready(), true);
+            UNIT_ASSERT_VALUES_EQUAL(op.Status().GetStatus(), EStatus::SUCCESS);
+            auto meta = op.Metadata();
+            UNIT_ASSERT_VALUES_EQUAL(meta.State, NYdb::NTable::ECompactState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(meta.Progress, 100, 0.001);
+
+            UNIT_ASSERT_VALUES_EQUAL(meta.Path, "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(meta.Cascade, false);
+            UNIT_ASSERT_VALUES_EQUAL(meta.MaxInFlight, 1);
+            UNIT_ASSERT_VALUES_EQUAL(meta.Total, 4);
+            UNIT_ASSERT_VALUES_EQUAL(meta.Done, 4);
+
+
+            auto result2 = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.GetList()[0].Id()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.Status().GetStatus(), EStatus::SUCCESS, result2.Status().GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().State, NYdb::NTable::ECompactState::Done);
+            UNIT_ASSERT_DOUBLES_EQUAL(result2.Metadata().Progress, 100, 0.001);
+
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Path, "/Root/Test");
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Cascade, false);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().MaxInFlight, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Total, 4);
+            UNIT_ASSERT_VALUES_EQUAL(result2.Metadata().Done, 4);
+
+            {
+                // Cancel already finished operation do nothing
+                auto resultOp = operationClient.Cancel(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::PRECONDITION_FAILED, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Forget(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.GetStatus(), EStatus::SUCCESS, resultOp.GetIssues().ToString());
+            }
+
+            {
+                auto resultOp = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.GetList()[0].Id()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(resultOp.Status().GetStatus(), EStatus::NOT_FOUND, resultOp.Status().GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableCompactAsyncOp) {
+        TKikimrWithGrpcAndRootSchema server;
+        server.Server_->GetRuntime()->GetAppData().FeatureFlags.SetEnableForcedCompactions(true);
+
+        NYdb::TDriver driver(
+            TDriverConfig()
+                .SetEndpoint(
+                    TStringBuilder() << "localhost:" << server.GetPort())
+                .SetDatabase("/Root")
+        );
+
+        {
+            NYdb::NOperation::TOperationClient operationClient(driver);
+            auto result = operationClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0); // No operations in progress
+        }
+
+        NYdb::NTable::TTableClient client(driver);
+        auto getSessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(getSessionResult.GetStatus(), EStatus::SUCCESS, getSessionResult.GetIssues().ToString());
+        auto session = getSessionResult.GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"___(
+                CREATE TABLE `/Root/Test` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    PARTITION_AT_KEYS = (250, 500, 750)
+                );
+            )___").ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            result = session.ExecuteDataQuery(R"___(
+                UPSERT INTO `/Root/Test` (Key, Value)
+                    VALUES
+                        (100, "value_1"),
+                        (400, "value_2"),
+                        (700, "value_3"),
+                        (1000, "value_4");
+            )___", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings()
+                .Compact(TCompact(false, 3));
+
+            auto result = session.AlterTableLong("/Root/Test", settings).ExtractValueSync();
+
+            // Compact is async operation
+            UNIT_ASSERT_C(!result.Ready(), result.Status().GetIssues().ToString());
+
+            NYdb::NOperation::TOperationClient operationClient(driver);
+
+            for (;;) {
+                auto getResult = operationClient.Get<NYdb::NTable::TCompactionOperation>(result.Id()).GetValueSync();
+                if (getResult.Ready()) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(getResult.Status().GetStatus(), EStatus::SUCCESS, getResult.Status().GetIssues().ToString());
+                    break;
+                } else {
+                    Sleep(TDuration::MilliSeconds(100));
+                }
+            }
+        }
+    }
 
     Y_UNIT_TEST(QueryStats) {
         NKikimrConfig::TAppConfig appConfig;

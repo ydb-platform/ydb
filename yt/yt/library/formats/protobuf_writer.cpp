@@ -580,8 +580,6 @@ class TWriterImpl
 {
 private:
     using TMessageSize = ui32;
-    std::vector<TBlobOutput> EmbeddedBuffers;
-    TProtobufWriterFormatDescriptionPtr FormatDescription;
 
 public:
     TWriterImpl(
@@ -589,14 +587,15 @@ public:
         const TNameTablePtr& nameTable,
         const TProtobufWriterFormatDescriptionPtr& description,
         const TYsonConverterConfig& config)
-        : EmbeddedBuffers(description->GetTableDescription(0).Embeddings.size())
-        , FormatDescription(description)
+        : FormatDescription(description)
+        , EmbeddedBuffers_(GetMaxEmbeddingsSize(description))
         , OtherColumnsWriter_(schemas, nameTable, description, config)
     { }
 
     void SetTableIndex(i64 tableIndex)
     {
         OtherColumnsWriter_.SetTableIndex(tableIndex);
+        TableIndex_ = tableIndex;
     }
 
     Y_FORCE_INLINE void OnBeginRow(TZeroCopyWriterWithGaps* writer)
@@ -643,7 +642,7 @@ public:
     Y_FORCE_INLINE void OnValue(TUnversionedValue value, const TProtobufWriterFieldDescription& fieldDescription)
     {
         if (fieldDescription.ParentEmbeddingIndex != TProtobufWriterEmbeddingDescription::InvalidIndex) {
-            TZeroCopyWriterWithGaps writer(&EmbeddedBuffers[fieldDescription.ParentEmbeddingIndex]);
+            TZeroCopyWriterWithGaps writer(&EmbeddedBuffers_[fieldDescription.ParentEmbeddingIndex]);
             DoOnValue(&writer, value, fieldDescription);
         } else {
             DoOnValue(Writer_, value, fieldDescription);
@@ -684,13 +683,13 @@ public:
     Y_FORCE_INLINE void OnEndRow()
     {
         TZeroCopyWriterWithGaps* writer = Writer_;
-        auto& embeddings = FormatDescription->GetTableDescription(0).Embeddings;
+        auto& embeddings = FormatDescription->GetTableDescription(TableIndex_).Embeddings;
 
         int parentEmbeddingIndex = 0;
 
-        std::function<int(int)> EmitMessage = [&] (int parentEmbeddingIndex) {
+        std::function<int(int)> emitMessage = [&] (int parentEmbeddingIndex) {
             auto& embeddingDescription = embeddings[parentEmbeddingIndex];
-            auto& blob = EmbeddedBuffers[parentEmbeddingIndex];
+            auto& blob = EmbeddedBuffers_[parentEmbeddingIndex];
 
             int myParentEmbeddingIndex = parentEmbeddingIndex;
 
@@ -701,7 +700,7 @@ public:
                 blob.Clear();
                 parentEmbeddingIndex++;
                 while (parentEmbeddingIndex < std::ssize(embeddings) && embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == myParentEmbeddingIndex) {
-                    parentEmbeddingIndex = EmitMessage(parentEmbeddingIndex);
+                    parentEmbeddingIndex = emitMessage(parentEmbeddingIndex);
                 }
             });
             return parentEmbeddingIndex;
@@ -709,7 +708,7 @@ public:
 
         while (parentEmbeddingIndex < std::ssize(embeddings)) {
             YT_VERIFY(embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == TProtobufWriterEmbeddingDescription::InvalidIndex);
-            parentEmbeddingIndex = EmitMessage(parentEmbeddingIndex);
+            parentEmbeddingIndex = emitMessage(parentEmbeddingIndex);
         }
 
         OtherColumnsWriter_.OnEndRow();
@@ -890,11 +889,24 @@ private:
         parser->ParseEndList();
     }
 
+    static size_t GetMaxEmbeddingsSize(const TProtobufWriterFormatDescriptionPtr& description)
+    {
+        size_t maxSize = 0;
+        for (int i = 0; i < description->GetTableCount(); ++i) {
+            maxSize = std::max(maxSize, description->GetTableDescription(i).Embeddings.size());
+        }
+        return maxSize;
+    }
+
 private:
+    const TProtobufWriterFormatDescriptionPtr FormatDescription;
+
+    std::vector<TBlobOutput> EmbeddedBuffers_;
     TOtherColumnsWriter OtherColumnsWriter_;
     TZeroCopyWriterWithGaps* Writer_;
     TZeroCopyWriterWithGaps::TGapPosition MessageSizeGapPosition_;
     ui64 TotalWrittenSizeBefore_;
+    i64 TableIndex_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -16,6 +16,7 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
         fd_unix.go
         fd_unixjs.go
         fd_writev_libc.go
+        fstatat_unix.go
         hook_unix.go
         iovec_unix.go
         sendfile.go
@@ -39,6 +40,7 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
         fd_unix.go
         fd_unixjs.go
         fd_writev_unix.go
+        fstatat_unix.go
         hook_cloexec.go
         hook_unix.go
         iovec_unix.go
@@ -78,6 +80,7 @@ ELSEIF (OS_EMSCRIPTEN AND ARCH_WASM32 AND RACE AND CGO_ENABLED OR OS_EMSCRIPTEN 
         fd_posix.go
         fd_unix.go
         fd_wasip1.go
+        fstatat_unix.go
         hook_unix.go
         sendfile.go
         sys_cloexec.go

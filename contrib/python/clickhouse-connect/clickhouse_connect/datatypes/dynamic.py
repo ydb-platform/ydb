@@ -1,9 +1,12 @@
+import logging
 from collections import namedtuple
 from typing import List, Tuple, Sequence, Collection, Any
 from urllib.parse import unquote
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import get_from_name
+from clickhouse_connect.datatypes.string import String
+from clickhouse_connect.driver.bytesource import ByteArraySource
 from clickhouse_connect.driver.common import unescape_identifier, first_value, write_uint64
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.errors import handle_error
@@ -15,8 +18,11 @@ from clickhouse_connect.json_impl import any_to_json
 
 SHARED_DATA_TYPE: ClickHouseType
 STRING_DATA_TYPE: ClickHouseType
+SHARED_VARIANT_TYPE: ClickHouseType
 _JSON_NULL = b'null'
 _JSON_NULL_STR = 'null'
+
+logger = logging.getLogger(__name__)
 
 json_serialization_format = 0x1
 
@@ -28,6 +34,24 @@ def _json_path_segments(path: str) -> List[str]:
     if '%' in path:
         return [unquote(segment) for segment in segments]
     return segments
+
+
+def _nest_value(target: dict, path: str, value) -> None:
+    """Insert a value into a nested dict structure using a dot-separated path."""
+    chain = _json_path_segments(path)
+    item = target
+    for key in chain[:-1]:
+        child = item.get(key)
+        if child is None:
+            child = {}
+            item[key] = child
+        item = child
+    item[chain[-1]] = value
+
+
+class SharedDataString(String):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
+        return source.read_str_col(num_rows, None)
 
 
 TypedVariant = namedtuple('TypedVariant', 'value type_name')
@@ -193,7 +217,7 @@ def read_dynamic_prefix(_, source: ByteSource, ctx: QueryContext) -> DynamicStat
         raise DataError('Unrecognized dynamic structure version')
     num_variants = source.read_leb128()
     variant_types = [get_from_name(source.read_leb128_str()) for _ in range(num_variants)]
-    variant_types.append(STRING_DATA_TYPE)
+    variant_types.append(SHARED_VARIANT_TYPE)
     if source.read_uint64() != 0:  # discriminator format, currently only 0 is recognized
         raise DataError('Unexpected discriminator format in Variant column prefix')
     variant_states = [e_type.read_column_prefix(source, ctx) for e_type in variant_types]
@@ -264,11 +288,199 @@ def write_str_values(ch_type: ClickHouseType, column: Sequence, dest: bytearray,
     handle_error(data_conv.write_str_col(col, False, encoding, dest), ctx)
 
 
-JSONState = namedtuple('JSONState', 'serialize_version dynamic_paths typed_states dynamic_states')
+JSONState = namedtuple("JSONState", "serialize_version dynamic_paths typed_states dynamic_states shared_state")
+
+# Discriminator byte to ClickHouse type name for types we can decode.
+# From ClickHouse src/DataTypes/DataTypesBinaryEncoding.cpp BinaryTypeIndex enum.
+STANDARD_DISCRIMINATOR_TYPES = {
+    0x00: "Nothing",
+    0x01: "UInt8",
+    0x02: "UInt16",
+    0x03: "UInt32",
+    0x04: "UInt64",
+    0x05: "UInt128",
+    0x06: "UInt256",
+    0x07: "Int8",
+    0x08: "Int16",
+    0x09: "Int32",
+    0x0A: "Int64",
+    0x0B: "Int128",
+    0x0C: "Int256",
+    0x0D: "Float32",
+    0x0E: "Float64",
+    0x15: "String",
+    0x2D: "Bool",
+}
+
+# Known fixed payload sizes for BinaryTypeIndex values outside STANDARD_DISCRIMINATOR_TYPES.
+# Used to validate variant-encoded data in the printable ASCII overlap range (0x20+).
+_EXTENDED_PAYLOAD_SIZE = {
+    0x0F: 2,   # Date (UInt16)
+    0x10: 4,   # Date32 (Int32)
+    0x11: 4,   # DateTimeUTC (UInt32)
+    0x13: 8,   # DateTime64UTC (Int64)
+    0x1D: 16,  # UUID
+    0x28: 4,   # IPv4
+    0x29: 16,  # IPv6
+    0x31: 2,   # BFloat16
+}
+
+# Expected payload sizes for fixed-size discriminator types.
+# Used to validate that binary data is actually variant-encoded vs a plain string
+# whose first byte happens to collide with a discriminator value.
+_DISCRIMINATOR_PAYLOAD_SIZE = {
+    0x00: 0,   # Nothing
+    0x01: 1,   # UInt8
+    0x02: 2,   # UInt16
+    0x03: 4,   # UInt32
+    0x04: 8,   # UInt64
+    0x05: 16,  # UInt128
+    0x06: 32,  # UInt256
+    0x07: 1,   # Int8
+    0x08: 2,   # Int16
+    0x09: 4,   # Int32
+    0x0A: 8,   # Int64
+    0x0B: 16,  # Int128
+    0x0C: 32,  # Int256
+    0x0D: 4,   # Float32
+    0x0E: 8,   # Float64
+    0x2D: 1,   # Bool
+    # String (0x15) is variable-length and validated separately
+}
+
+
+def _validate_variant_length(binary_data: bytes, discriminator: int) -> bool:
+    """Check whether binary_data has the correct length for a variant-encoded value."""
+    payload = binary_data[1:]
+    expected = _DISCRIMINATOR_PAYLOAD_SIZE.get(discriminator)
+    if expected is not None:
+        return len(payload) == expected
+    if discriminator == 0x15:  # String: LEB128 length prefix + that many bytes
+        if len(payload) == 0:
+            return False
+        length = 0
+        shift = 0
+        for i, b in enumerate(payload):
+            length |= (b & 0x7F) << shift
+            shift += 7
+            if (b & 0x80) == 0:
+                return len(payload) == i + 1 + length
+        return False
+    return True  # Unknown discriminator, skip validation
+
+
+def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool = True):
+    """Try to decode variant-encoded binary data.
+
+    Returns the decoded value on success, or the original bytes on failure
+    (unknown discriminator, unsupported type, decode error).
+    """
+    if len(binary_data) == 0:
+        return b""
+
+    discriminator = binary_data[0]
+    if discriminator == 255:
+        return None
+
+    type_name = STANDARD_DISCRIMINATOR_TYPES.get(discriminator)
+    if type_name is None:
+        return binary_data
+
+    if validate_length and not _validate_variant_length(binary_data, discriminator):
+        return None
+
+    value_type = get_from_name(type_name)
+    try:
+        byte_source = ByteArraySource(binary_data[1:])
+        read_state = value_type.read_column_prefix(byte_source, ctx)
+        result = value_type.read_column_data(byte_source, 1, ctx, read_state)
+        return result[0] if result else None
+
+    # pylint: disable=broad-exception-caught
+    except Exception as e:
+        logger.debug("Variant decode failed: %s", e)
+        return binary_data
+
+
+def decode_shared_data_value(binary_data: bytes, ctx: QueryContext):
+    """Decode a variant-encoded value from JSON shared data."""
+    if binary_data is None:
+        return None
+    if not isinstance(binary_data, bytes):
+        if isinstance(binary_data, memoryview):
+            binary_data = bytes(binary_data)
+        elif isinstance(binary_data, str):
+            return binary_data  # already decoded
+        else:
+            binary_data = bytes(binary_data)
+    return _decode_variant(binary_data, ctx)
+
+
+# pylint: disable=too-many-return-statements, too-many-branches
+def decode_shared_variant_value(binary_data: bytes, ctx: QueryContext):
+    """Decode a value from a Dynamic column's shared variant.
+
+    The shared variant can contain either:
+    - Variant-encoded binary data i.e. from paths promoted from shared data after merge
+    - Plain string bytes i.e. from paths that were already dynamic
+
+    Heuristics for distinguishing the two:
+    1. Supported types (STANDARD_DISCRIMINATOR_TYPES): length-validate then decode.
+    2. Control characters (< 0x20): no real string starts with these, so it's
+       variant-encoded with an unsupported type — return raw bytes.
+    3. Printable range (>= 0x20) with known fixed payload size: length-validate,
+       return raw bytes if it matches.
+    4. Everything else: treat as a plain UTF-8 string.
+    """
+    if binary_data is None:
+        return None
+    if not isinstance(binary_data, bytes):
+        if isinstance(binary_data, memoryview):
+            binary_data = bytes(binary_data)
+        elif isinstance(binary_data, str):
+            return binary_data
+        else:
+            binary_data = bytes(binary_data)
+    if len(binary_data) == 0:
+        return ""
+
+    discriminator = binary_data[0]
+    if discriminator == 255:
+        return None
+
+    # 1. Supported type we can fully decode —> validate length and decode
+    if discriminator in STANDARD_DISCRIMINATOR_TYPES:
+        if _validate_variant_length(binary_data, discriminator):
+            return _decode_variant(binary_data, ctx, validate_length=False)
+        # Length mismatch —> not variant-encoded -> fall through to string
+
+    # 2. Control character range -> almost certainly variant-encoded
+    elif discriminator < 0x20:
+        return _decode_variant(binary_data, ctx)
+
+    # 3. Printable range with known fixed payload size —> validate length
+    else:
+        expected = _EXTENDED_PAYLOAD_SIZE.get(discriminator)
+        if expected is not None and len(binary_data) == 1 + expected:
+            return binary_data  # variant-encoded but unsupported fixed-size type
+
+    # 4. Plain UTF-8 string
+    try:
+        return binary_data.decode("utf-8")
+    except UnicodeDecodeError:
+        return binary_data
+
+
+class SharedVariant(String):
+    """Reads the shared variant sub-column in Dynamic columns."""
+
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
+        raw_values = source.read_str_col(num_rows, None)
+        return [decode_shared_variant_value(v, ctx) for v in raw_values]
 
 
 class JSON(ClickHouseType):
-    _slots = 'typed_paths', 'typed_types'
+    __slots__ = "typed_paths", "typed_types", "skips"
     python_type = dict
     valid_formats = 'string', 'native'
     _data_size = json_sample_size
@@ -276,12 +488,12 @@ class JSON(ClickHouseType):
     shared_data_type: ClickHouseType
     max_dynamic_paths = 0
     max_dynamic_types = 0
-    typed_paths = []
-    typed_types = []
-    skips = []
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
+        self.typed_paths = []
+        self.typed_types = []
+        self.skips = []
         typed_paths = []
         typed_types = []
         skips = []
@@ -342,7 +554,8 @@ class JSON(ClickHouseType):
         dynamic_paths = [source.read_leb128_str() for _ in range(dynamic_path_cnt)]
         typed_states = [typed.read_column_prefix(source, ctx) for typed in self.typed_types]
         dynamic_states = [read_dynamic_prefix(self, source, ctx) for _ in range(dynamic_path_cnt)]
-        return JSONState(serialize_version, dynamic_paths, typed_states, dynamic_states)
+        shared_state = SHARED_DATA_TYPE.read_column_prefix(source, ctx)
+        return JSONState(serialize_version, dynamic_paths, typed_states, dynamic_states, shared_state)
 
     # pylint: disable=too-many-locals
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: JSONState):
@@ -351,34 +564,23 @@ class JSON(ClickHouseType):
         dynamic_columns = [
             read_variant_column(source, num_rows, ctx, dynamic_state.variant_types, dynamic_state.variant_states)
             for dynamic_state in read_state.dynamic_states]
-        SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, None)
+        shared_columns = SHARED_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state.shared_state)
         col = []
         for row_num in range(num_rows):
             top = {}
             for ix, field in enumerate(self.typed_paths):
-                value = typed_columns[ix][row_num]
-                item = top
-                chain = _json_path_segments(field)
-                for key in chain[:-1]:
-                    child = item.get(key)
-                    if child is None:
-                        child = {}
-                        item[key] = child
-                    item = child
-                item[chain[-1]] = value
+                _nest_value(top, field, typed_columns[ix][row_num])
             for ix, field in enumerate(read_state.dynamic_paths):
                 value = dynamic_columns[ix][row_num]
-                if value is None:
-                    continue
-                item = top
-                chain = _json_path_segments(field)
-                for key in chain[:-1]:
-                    child = item.get(key)
-                    if child is None:
-                        child = {}
-                        item[key] = child
-                    item = child
-                item[chain[-1]] = value
+                if value is not None:
+                    _nest_value(top, field, value)
+            if shared_columns and row_num < len(shared_columns):
+                shared_data = shared_columns[row_num]
+                if shared_data:
+                    for key, raw_value in shared_data.items():
+                        value = decode_shared_data_value(raw_value, ctx)
+                        if value is not None:
+                            _nest_value(top, key, value)
             col.append(top)
         if self.read_format(ctx) == 'string':
             return [any_to_json(v) for v in col]

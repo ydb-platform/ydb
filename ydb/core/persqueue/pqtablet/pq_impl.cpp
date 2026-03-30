@@ -3257,11 +3257,6 @@ bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& ope
     return Partitions.contains(partitionId);
 }
 
-static bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation) {
-    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
-    return !isRead;
-}
-
 bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
 {
     if (!txBody.HasWriteId()) {
@@ -4179,6 +4174,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                 const TPartitionInfo& partition = Partitions.at(partitionId);
 
                 event->SupportivePartitionActor = partition.Actor;
+                event->SetSkipSrcIdInfo(tx.GetSkipSrcIdInfo());
             }
         } else {
             PQ_LOG_TX_W("Unknown WriteId " << writeId << " for TxId " << tx.TxId);

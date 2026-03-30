@@ -55,6 +55,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicMessageLevelParallelism, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);

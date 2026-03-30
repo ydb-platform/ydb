@@ -25,8 +25,8 @@ class TestOverlappingPortions(object):
             column_shard_config={"compaction_enabled": False},
             deduplication_grouped_memory_limiter_config={
                 "enabled": True,
-                "memory_limit": 1024 * 1024,
-                "hard_memory_limit": 1024 * 1024,
+                "memory_limit": 32 * 1024,
+                "hard_memory_limit": 32 * 1024,
             },
         )
         cls.cluster = KiKiMR(config)

@@ -1269,12 +1269,16 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
                 }
                 TString normalizedClusterName;
                 auto foundProvider = Ctx_.GetClusterProvider(clusterName, normalizedClusterName);
-                if (!foundProvider) {
+                if (!foundProvider && !service) {
                     Ctx_.Error() << "Unknown cluster: " << clusterName;
                     return false;
                 }
 
-                if (service && *foundProvider != service) {
+                if (!foundProvider && service) {
+                    normalizedClusterName = clusterName;
+                }
+
+                if (service && foundProvider && *foundProvider != service) {
                     Ctx_.Error() << "Mismatch of cluster " << clusterName << " service, expected: "
                                  << *foundProvider << ", got: " << service;
                     return false;

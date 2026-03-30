@@ -408,7 +408,7 @@ private:
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
 
-        Uploader = this->Register(actor);
+        Uploader = this->Register(actor, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 };
 

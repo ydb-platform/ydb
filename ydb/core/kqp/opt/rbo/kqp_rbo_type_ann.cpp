@@ -32,44 +32,76 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
     return {std::move(tableName), tableDesc};
 }
 
+bool IsNeededToUpdateOlapReadType(TExprNode::TPtr lambda) {
+    if (!lambda) {
+        return false;
+    }
+    // Only olap projection can change the return type.
+    return !!FindNode(lambda, [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TKqpOlapProjections>(node); });
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpRead> read, TRBOContext& ctx) {
-    auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+    const auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve tablei.";
         return TStatus::Error;
     }
 
-    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata");
-
-    auto meta = table.second->Metadata;
+    YQL_ENSURE(table.second->Metadata, "Expected loaded metadata.");
+    const auto meta = table.second->Metadata;
 
     TVector<TCoAtom> columns;
-    for (auto c : read->Columns) {
-        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(c).Done());
+    for (const auto& column : read->Columns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, read->Pos).Value(column).Done());
     }
-
-    auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, read->Pos).Add(columns).Done();
 
     const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster, 
         table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
     if (!rowType) {
-        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type";
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type.";
         return TStatus::Error;
     }
 
-    TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
+    const auto structType = rowType->Cast<TStructExprType>();
+    TVector<const TItemExprType*> structItemTypes = structType->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (const auto* t : structItemTypes) {
-        TString columnName = TString(t->GetName());
-        auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
-        auto columnIndex = std::distance(read->Columns.begin(), it);
-        auto fullName = read->OutputIUs[columnIndex].GetFullName();
-        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, t->GetItemType()));
+    for (const auto itemType : structItemTypes) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(read->Columns.begin(), read->Columns.end(), columnName);
+        const auto columnIndex = std::distance(read->Columns.begin(), it);
+        const auto fullName = read->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+
+    if (IsNeededToUpdateOlapReadType(read->OlapFilterLambda)) {
+        auto& lambda = read->OlapFilterLambda;
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.ExprCtx.MakeType<TFlowExprType>(structType)}, ctx.ExprCtx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Could not update olap filter lambda arg types.";
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        ctx.TypeAnnTransformer.Rewind();
+        IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok, "Cannot type annotate olap lambda.");
+        do {
+            status = ctx.TypeAnnTransformer.Transform(lambda, lambda, ctx.ExprCtx);
+        } while (status == IGraphTransformer::TStatus::Repeat);
+        Y_ENSURE(status == IGraphTransformer::TStatus::Ok && lambda->GetTypeAnn());
+
+        // Clear old items list, we will update it based on olap filter/projections types.
+        newItemTypes.clear();
+        newStructType = lambda->GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TStructExprType>();
+        const auto alias = read->Alias;
+        for (const auto itemType : newStructType->GetItems()) {
+            const auto colName = TInfoUnit(alias, TString(itemType->GetName()));
+            const auto fullName = colName.GetFullName();
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+        }
+        newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     }
 
-    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
     read->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
-
     return TStatus::Ok;
 }
 

@@ -78,8 +78,8 @@ TVector<TInfoUnit> TOpRead::GetOutputIUs() {
     return OutputIUs;
 }
 
-bool TOpRead::NeedsMap() {
-    for (size_t i=0; i<Columns.size(); i++) {
+bool TOpRead::NeedsMap() const {
+    for (size_t i = 0; i < Columns.size(); i++) {
         if (TInfoUnit("", Columns[i]) != OutputIUs[i]) {
             return true;
         }
@@ -118,8 +118,9 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << "])";
     const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
     res << " (StorageType: " << storageType << ")";
-    if (OlapFilterLambda)
+    if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
+    }
     return res;
 }
 

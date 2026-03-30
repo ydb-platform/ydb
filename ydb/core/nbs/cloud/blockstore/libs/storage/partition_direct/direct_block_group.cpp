@@ -96,13 +96,6 @@ TExecutorPtr TDirectBlockGroup::GetExecutor()
     return Executor;
 }
 
-ui64 TDirectBlockGroup::GenerateLsn()
-{
-    static std::atomic<ui64> LsnGenerator;   // TODO move to FastPathService
-
-    return ++LsnGenerator;
-}
-
 void TDirectBlockGroup::EstablishConnections()
 {
     Executor->ExecuteSimple(

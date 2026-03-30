@@ -502,7 +502,7 @@ private:
                     // TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                     // LogStage("NewRBOPhysicalPeephole"),
                     TTransformStage{newRBOCompilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR},
-                    // TTransformStage{ newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or
+                    TTransformStage{newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR}, // TODO(sk): only on stats mode or
                     // if explain-only
                 },
                 false);

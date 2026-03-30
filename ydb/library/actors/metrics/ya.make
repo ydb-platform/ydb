@@ -1,6 +1,8 @@
 LIBRARY()
 
 SRCS(
+    inmemory_backend.cpp
+    inmemory_backend.h
     line_base.cpp
     line_base.h
     line.h

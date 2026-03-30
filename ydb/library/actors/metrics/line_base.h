@@ -15,6 +15,7 @@
 namespace NActors {
     template<class TFrontend>
     class TLine;
+    class TInMemoryMetricsBackend;
     class TLineReader;
     struct TChunk;
     template<class TValue>
@@ -194,6 +195,7 @@ namespace NActors {
     private:
         template<class TFrontend>
         friend class TLine;
+        friend class TInMemoryMetricsBackend;
         friend class TInMemoryMetricsRegistry;
         std::shared_ptr<TSnapshotData> Data;
         TVector<size_t> ChunkIndexes;
@@ -216,6 +218,7 @@ namespace NActors {
         TVector<TLabel> CommonLabels;
 
     private:
+        friend class TInMemoryMetricsBackend;
         friend class TInMemoryMetricsRegistry;
         TVector<TLineSnapshot> SnapshotLines;
     };

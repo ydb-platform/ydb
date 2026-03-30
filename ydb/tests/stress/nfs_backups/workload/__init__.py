@@ -273,6 +273,7 @@ class WorkloadNfsExportImport(WorkloadBase):
                 base_path=base_path,
                 items=[(self.TABLE_NAME, import_dest)],
                 description=f"stress_import_{run_id}",
+                destination_path=self.client.database,
             )
             self._inc_stat("import_started")
             logger.info("[import] ImportFromFs started: op=%s", result.id)

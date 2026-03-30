@@ -74,6 +74,17 @@ EExecutionStatus TTruncateUnit::Execute(
     txc.DB.Truncate(localTid);
 
     auto userTable = DataShard.AlterTableSchemaVersion(actorCtx, txc, pathId, version);
+
+    // After truncate the old DataStats (DataSize, RowCount from SST files) are stale.
+    // Force a full stats rebuild so that the next periodic report reflects the empty table.
+    // StatsUpdateInProgress must be reset to false: the new userTable object is a copy of the
+    // old one, so it may have inherited StatsUpdateInProgress=true from a builder that was
+    // launched before the truncate. That builder's result would overwrite Stats with pre-truncate
+    // data and leave StatsNeedUpdate=false, preventing a fresh rebuild. By resetting the flag
+    // here we allow TTxInitiateStatsUpdate to start a new builder immediately.
+    userTable->StatsUpdateInProgress = false;
+    userTable->StatsNeedUpdate = true;
+
     DataShard.AddUserTable(pathId, userTable, &locksDb);
     if (userTable->NeedSchemaSnapshots()) {
         DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, actorCtx);

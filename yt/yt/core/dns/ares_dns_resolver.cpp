@@ -149,7 +149,7 @@ public:
         SetAresSocketCallback();
     }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         ResolverThread_ = New<TResolverThread>(this);
         ShutdownCookie_ = RegisterShutdownCallback(
@@ -816,9 +816,7 @@ private:
 
 IDnsResolverPtr CreateAresDnsResolver(TAresDnsResolverConfigPtr config)
 {
-    auto resolver =  New<TAresDnsResolver>(std::move(config));
-    resolver->Initialize();
-    return resolver;
+    return New<TAresDnsResolver>(std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -143,7 +143,7 @@ public:
         , SensorTreeUpdateDuration_(Registry_->GetSelfProfiler().Timer("/sensor_service_tree_update_duration"))
     { }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         UpdateSensorTreeExecutor_ = New<TPeriodicExecutor>(
             Exporter_->ControlQueue_->GetInvoker(),
@@ -279,12 +279,10 @@ IYPathServicePtr CreateSensorService(
     TSolomonRegistryPtr registry,
     TSolomonExporterPtr exporter)
 {
-    auto service = New<TSensorService>(
+    return New<TSensorService>(
         std::move(config),
         std::move(registry),
         std::move(exporter));
-    service->Initialize();
-    return service;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

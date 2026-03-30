@@ -6,6 +6,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <random>
 #include <thread>
 
@@ -168,6 +169,31 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
             UNIT_ASSERT_VALUES_EQUAL(values[1], 20);
             UNIT_ASSERT(timestamps[0] <= timestamps[1]);
+        });
+    }
+
+    Y_UNIT_TEST(SnapshotPayloadIsPageAligned) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        auto writer = registry.CreateLine("line", NoLabels());
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 1);
+
+            size_t chunkCount = 0;
+            lines[0]->ForEachChunk([&](const TChunkSnapshotView& chunk) {
+                ++chunkCount;
+                UNIT_ASSERT_EQUAL(reinterpret_cast<uintptr_t>(chunk.Payload.data()) % TChunk::PayloadAlignment, 0);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(chunkCount, 1);
         });
     }
 

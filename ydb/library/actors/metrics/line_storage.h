@@ -6,7 +6,9 @@
 #include <util/system/mutex.h>
 
 #include <atomic>
+#include <cstddef>
 #include <memory>
+#include <new>
 
 namespace NActors {
 
@@ -27,7 +29,45 @@ namespace NActors {
         Retiring,
     };
 
+    class TAlignedChunkPayload {
+    public:
+        static constexpr size_t Alignment = 4096;
+
+        explicit TAlignedChunkPayload(size_t size)
+            : Size(size)
+            , Data(static_cast<char*>(::operator new(size, std::align_val_t(Alignment))))
+        {
+        }
+
+        ~TAlignedChunkPayload() {
+            ::operator delete(Data, std::align_val_t(Alignment));
+        }
+
+        TAlignedChunkPayload(const TAlignedChunkPayload&) = delete;
+        TAlignedChunkPayload& operator=(const TAlignedChunkPayload&) = delete;
+        TAlignedChunkPayload(TAlignedChunkPayload&&) = delete;
+        TAlignedChunkPayload& operator=(TAlignedChunkPayload&&) = delete;
+
+        char* data() noexcept {
+            return Data;
+        }
+
+        const char* data() const noexcept {
+            return Data;
+        }
+
+        size_t size() const noexcept {
+            return Size;
+        }
+
+    private:
+        size_t Size = 0;
+        char* Data = nullptr;
+    };
+
     struct TChunk {
+        static constexpr size_t PayloadAlignment = TAlignedChunkPayload::Alignment;
+
         explicit TChunk(ui32 chunkId, ui32 chunkSize)
             : ChunkId(chunkId)
             , Payload(chunkSize)
@@ -44,7 +84,7 @@ namespace NActors {
 
         std::atomic<TLineReader*> Owner = nullptr;
         std::atomic<ui32> OwnerLineId = 0;
-        TVector<char> Payload;
+        TAlignedChunkPayload Payload;
     };
 
     struct TLineStorage {

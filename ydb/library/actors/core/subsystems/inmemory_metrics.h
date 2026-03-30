@@ -2,8 +2,6 @@
 
 #include <ydb/library/actors/core/subsystem.h>
 #include <ydb/library/actors/metrics/inmemory.h>
-#include <ydb/library/actors/util/datetime.h>
-
 #include <util/generic/function.h>
 
 #include <memory>
@@ -74,8 +72,6 @@ namespace NActors {
         friend struct TRawLineFrontend;
         template<class TValue>
         friend struct TOnChangeLineFrontend;
-        template<class TValue>
-        friend struct TOnChangeWithHeartbeatLineFrontend;
         friend struct TSnapshotData;
 
         class TImpl;
@@ -199,31 +195,6 @@ namespace NActors {
         if (state.HasLastPublished && state.LastPublishedValue == encoded) {
             registry.MarkObserved(writer, nowTs);
             return true;
-        }
-
-        TStoredRecord record{
-            .TimestampTs = nowTs,
-            .Value = encoded,
-        };
-        if (!registry.AppendStoredRecord(writer, record)) {
-            return false;
-        }
-        registry.MarkPublished(writer, encoded, nowTs);
-        return true;
-    }
-
-    template<class TValue>
-    bool TOnChangeWithHeartbeatLineFrontend<TValue>::Append(TInMemoryMetricsRegistry& registry, TLineWriterState* writer, const TValue& value) noexcept {
-        const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
-        const NHPTimer::STime nowTs = registry.CurrentTimestampTs();
-        const TLinePublishState state = registry.GetPublishState(writer);
-
-        if (state.HasLastPublished && state.LastPublishedValue == encoded) {
-            registry.MarkObserved(writer, nowTs);
-            if (state.Heartbeat <= TDuration::Zero()
-                || nowTs - state.LastPublishedTs < static_cast<NHPTimer::STime>(Us2Ts(state.Heartbeat.MicroSeconds()))) {
-                return true;
-            }
         } else if (state.HasLastPublished && state.LastObservedTs > state.LastPublishedTs) {
             TStoredRecord previousRecord{
                 .TimestampTs = state.LastPublishedTs,

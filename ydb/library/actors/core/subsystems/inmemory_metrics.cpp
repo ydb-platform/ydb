@@ -291,7 +291,6 @@ namespace NActors {
             .LastPublishedValue = writer ? writer->LastPublishedValue : 0,
             .LastPublishedTs = writer ? writer->LastPublishedTs : 0,
             .LastObservedTs = writer ? writer->LastObservedTs : 0,
-            .Heartbeat = writer && writer->Reader ? writer->Reader->Meta.Heartbeat : TDuration::Zero(),
         };
     }
 
@@ -429,20 +428,17 @@ namespace NActors {
         TGuard<TMutex> guard(Impl->SelfMetricsLock);
         if (!Impl->SelfMetricsInitialized) {
             const std::span<const TLabel> noLabels;
-            const TOnChangeWithHeartbeatLineFrontend<>::TConfig config{
-                .Heartbeat = TDuration::Hours(1),
-            };
-            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryCommittedBytesMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryFreeChunksMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryUsedChunksMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistrySealedChunksMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryWritableChunksMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryRetiringChunksMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.Lines = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryLinesMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryClosedLinesMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels, config).ReleaseLineId();
-            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels, config).ReleaseLineId();
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryCommittedBytesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryFreeChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryUsedChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistrySealedChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryWritableChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryRetiringChunksMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.Lines = CreateLine<TOnChangeLineFrontend<>>(RegistryLinesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeLineFrontend<>>(RegistryClosedLinesMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels).ReleaseLineId();
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels).ReleaseLineId();
             Impl->SelfMetricsInitialized = true;
         }
 
@@ -459,7 +455,7 @@ namespace NActors {
                 }
             }
             if (line && line->Writer) {
-                auto metricLine = TLine<TOnChangeWithHeartbeatLineFrontend<>>(this, line->Writer.get());
+                auto metricLine = TLine<TOnChangeLineFrontend<>>(this, line->Writer.get());
                 metricLine.Append(value);
                 metricLine.ReleaseLineId();
             }

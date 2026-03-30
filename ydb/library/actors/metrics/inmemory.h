@@ -78,7 +78,6 @@ namespace NActors {
         ui64 LastPublishedValue = 0;
         NHPTimer::STime LastPublishedTs = 0;
         NHPTimer::STime LastObservedTs = 0;
-        TDuration Heartbeat;
     };
 
     namespace NInMemoryMetricsPrivate {
@@ -112,10 +111,9 @@ namespace NActors {
 
     struct TLineMeta {
         const TLineFrontendOps* Frontend = nullptr;
-        TDuration Heartbeat;
 
         TLineMeta() noexcept;
-        TLineMeta(const TLineFrontendOps* frontend, TDuration heartbeat = TDuration::Zero()) noexcept;
+        explicit TLineMeta(const TLineFrontendOps* frontend) noexcept;
 
         TStringBuf FrontendName() const noexcept;
     };
@@ -218,4 +216,3 @@ namespace NActors {
 
 #include "lines/raw_line_frontend.h"
 #include "lines/on_change_line_frontend.h"
-#include "lines/on_change_with_heartbeat_line_frontend.h"

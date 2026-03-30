@@ -24,9 +24,8 @@ namespace NActors {
     {
     }
 
-    TLineMeta::TLineMeta(const TLineFrontendOps* frontend, TDuration heartbeat) noexcept
+    TLineMeta::TLineMeta(const TLineFrontendOps* frontend) noexcept
         : Frontend(frontend ? frontend : &TRawLineFrontend<>::Descriptor())
-        , Heartbeat(heartbeat)
     {
     }
 

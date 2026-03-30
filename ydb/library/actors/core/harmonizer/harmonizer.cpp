@@ -58,16 +58,16 @@ public:
 
     struct TInMemoryMetricWriters {
         using TRawMetricLine = TLine<TRawLineFrontend<>>;
-        using THeartbeatMetricLine = TLine<TOnChangeWithHeartbeatLineFrontend<>>;
+        using TOnChangeMetricLine = TLine<TOnChangeLineFrontend<>>;
 
         struct TPoolMetricWriters {
             TRawMetricLine AvgUsedCpuX1e6;
             TRawMetricLine AvgElapsedCpuX1e6;
             TRawMetricLine PotentialMaxThreadCountX1e6;
-            THeartbeatMetricLine SharedCpuQuotaX1e6;
-            THeartbeatMetricLine IsNeedy;
-            THeartbeatMetricLine IsStarved;
-            THeartbeatMetricLine IsHoggish;
+            TOnChangeMetricLine SharedCpuQuotaX1e6;
+            TOnChangeMetricLine IsNeedy;
+            TOnChangeMetricLine IsStarved;
+            TOnChangeMetricLine IsHoggish;
         };
 
         bool Initialized = false;
@@ -201,22 +201,18 @@ void THarmonizer::EnsureInMemoryMetricsInitialized() {
         writers.AvgUsedCpuX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::AvgUsedCpuX1e6)], labels);
         writers.AvgElapsedCpuX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::AvgElapsedCpuX1e6)], labels);
         writers.PotentialMaxThreadCountX1e6 = registry->CreateLine(PoolMetricNames[static_cast<size_t>(EPoolMetric::PotentialMaxThreadCountX1e6)], labels);
-        writers.SharedCpuQuotaX1e6 = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+        writers.SharedCpuQuotaX1e6 = registry->CreateLine<TOnChangeLineFrontend<>>(
             PoolMetricNames[static_cast<size_t>(EPoolMetric::SharedCpuQuotaX1e6)],
-            labels,
-            {.Heartbeat = TDuration::Seconds(5)});
-        writers.IsNeedy = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            labels);
+        writers.IsNeedy = registry->CreateLine<TOnChangeLineFrontend<>>(
             PoolMetricNames[static_cast<size_t>(EPoolMetric::IsNeedy)],
-            labels,
-            {.Heartbeat = TDuration::Seconds(5)});
-        writers.IsStarved = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            labels);
+        writers.IsStarved = registry->CreateLine<TOnChangeLineFrontend<>>(
             PoolMetricNames[static_cast<size_t>(EPoolMetric::IsStarved)],
-            labels,
-            {.Heartbeat = TDuration::Seconds(5)});
-        writers.IsHoggish = registry->CreateLine<TOnChangeWithHeartbeatLineFrontend<>>(
+            labels);
+        writers.IsHoggish = registry->CreateLine<TOnChangeLineFrontend<>>(
             PoolMetricNames[static_cast<size_t>(EPoolMetric::IsHoggish)],
-            labels,
-            {.Heartbeat = TDuration::Seconds(5)});
+            labels);
     }
 
     InMemoryMetrics.Enabled = true;

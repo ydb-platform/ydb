@@ -266,12 +266,10 @@ public:
             const TGroupId groupId = TGroupId::FromValue(groups[i]);
             if (const TGroupInfo *group = Self->FindGroup(groupId); !group) { // group has vanished
                 groupsToDiscard.insert(groupsToDiscard.end(), groupId);
-            } else {
-                if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
-                    groupIDsToRead.insert(groupId);
-                }
+            } else if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
+                groupIDsToRead.insert(groupId);
             }
-        };
+        }
         for (ui32 groupIdProto : groups) {
             // Keep backward-compatible behavior: every group requested explicitly by NodeWarden
             // must remain in GroupsRequested.

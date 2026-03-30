@@ -90,21 +90,6 @@ def cluster_endpoint(cluster):
     return f'{cluster.nodes[1].host}:{cluster.nodes[1].grpc_port}'
 
 
-class CaptureFileOutput:
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __enter__(self):
-        self.saved_pos = os.path.getsize(self.filename)
-        return self
-
-    def __exit__(self, *exc):
-        time.sleep(0.5)
-        with open(self.filename, 'rb', buffering=0) as f:
-            f.seek(self.saved_pos)
-            self.captured = f.read().decode('utf-8')
-
-
 # Topic cloud event types for audit
 TOPIC_CLOUD_EVENT_TYPES = (
     'yandex.cloud.events.ydb.topics.CreateTopic',

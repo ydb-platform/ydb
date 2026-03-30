@@ -32,7 +32,11 @@ namespace NActors {
         void Shutdown() noexcept;
 
         void CloseLine(TLineWriterState* writer) noexcept override;
-        bool AppendStoredRecord(TLineWriterState* writer, const TStoredRecord& record) noexcept override;
+        bool AppendChunkData(
+            TLineWriterState* writer,
+            std::span<const char> data,
+            NHPTimer::STime firstTs,
+            NHPTimer::STime lastTs) noexcept override;
         NHPTimer::STime CurrentTimestampTs() const noexcept override;
         TLinePublishState GetPublishState(const TLineWriterState* writer) const noexcept override;
         ui32 GetLineId(const TLineWriterState* writer) const noexcept override;

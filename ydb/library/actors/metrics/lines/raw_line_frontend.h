@@ -16,6 +16,11 @@ namespace NActors {
     struct TRawLineFrontend {
         using TValueType = TValue;
 
+        struct TStorageRecord {
+            NHPTimer::STime TimestampTs = 0;
+            ui64 Value = 0;
+        };
+
         struct TConfig {};
 
         static TValue DecodeValue(ui64 value) noexcept {
@@ -32,8 +37,8 @@ namespace NActors {
                                                TInstant endTs,
                                                TCallback&& cb) {
             snapshot.ForEachChunk([&](const TChunkSnapshotView& chunk) {
-                const auto* storedRecords = reinterpret_cast<const TStoredRecord*>(chunk.Payload.data());
-                const size_t recordsCount = chunk.Payload.size() / sizeof(TStoredRecord);
+                const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(chunk.Payload.data());
+                const size_t recordsCount = chunk.Payload.size() / sizeof(TStorageRecord);
                 for (size_t i = 0; i < recordsCount; ++i) {
                     const TRecordView record{
                         .Timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs),
@@ -69,11 +74,12 @@ namespace NActors {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
 
-        TStoredRecord record{
+        TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        if (!backend.AppendStoredRecord(writer, record)) {
+        const auto data = std::span<const char>(reinterpret_cast<const char*>(&record), sizeof(record));
+        if (!backend.AppendChunkData(writer, data, record.TimestampTs, record.TimestampTs)) {
             return false;
         }
         backend.MarkPublished(writer, encoded, nowTs);

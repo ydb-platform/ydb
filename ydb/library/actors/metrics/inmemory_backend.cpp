@@ -94,22 +94,22 @@ namespace NActors {
             return line->State.load(std::memory_order_acquire) == ELineState::Closed && line->Storage.Chunks.empty();
         }
 
-        bool TryAppendToChunk(TChunk* chunk, const TStoredRecord& record) {
+        bool TryAppendToChunk(TChunk* chunk, std::span<const char> data, NHPTimer::STime firstTs, NHPTimer::STime lastTs) {
             const ui32 offset = chunk->CommittedBytes.load(std::memory_order_relaxed);
-            if (offset + sizeof(TStoredRecord) > chunk->Payload.size()) {
+            if (offset + data.size() > chunk->Payload.size()) {
                 return false;
             }
-            memcpy(chunk->Payload.data() + offset, &record, sizeof(TStoredRecord));
+            memcpy(chunk->Payload.data() + offset, data.data(), data.size());
             if (offset == 0) {
-                chunk->FirstTs.store(record.TimestampTs, std::memory_order_relaxed);
+                chunk->FirstTs.store(firstTs, std::memory_order_relaxed);
             }
-            chunk->LastTs.store(record.TimestampTs, std::memory_order_relaxed);
-            chunk->CommittedBytes.store(offset + sizeof(TStoredRecord), std::memory_order_release);
+            chunk->LastTs.store(lastTs, std::memory_order_relaxed);
+            chunk->CommittedBytes.store(offset + data.size(), std::memory_order_release);
             return true;
         }
 
-        bool CanFitRecord(const TChunk* chunk) {
-            return sizeof(TStoredRecord) <= chunk->Payload.size();
+        bool CanFitData(const TChunk* chunk, size_t size) {
+            return size <= chunk->Payload.size();
         }
     } // namespace
 
@@ -470,7 +470,11 @@ namespace NActors {
         }
     }
 
-    bool TInMemoryMetricsBackend::AppendStoredRecord(TLineWriterState* writer, const TStoredRecord& record) noexcept {
+    bool TInMemoryMetricsBackend::AppendChunkData(
+        TLineWriterState* writer,
+        std::span<const char> data,
+        NHPTimer::STime firstTs,
+        NHPTimer::STime lastTs) noexcept {
         const auto fail = [&]() noexcept {
             Impl->AppendFailures.fetch_add(1, std::memory_order_relaxed);
             return false;
@@ -486,7 +490,7 @@ namespace NActors {
 
         while (true) {
             TChunk* chunk = line->Storage.Writable.load(std::memory_order_acquire);
-            if (chunk && TryAppendToChunk(chunk, record)) {
+            if (chunk && TryAppendToChunk(chunk, data, firstTs, lastTs)) {
                 return true;
             }
 
@@ -498,11 +502,11 @@ namespace NActors {
                 }
 
                 chunk = line->Storage.Writable.load(std::memory_order_acquire);
-                if (chunk && TryAppendToChunk(chunk, record)) {
+                if (chunk && TryAppendToChunk(chunk, data, firstTs, lastTs)) {
                     return true;
                 }
 
-                if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitRecord(chunk)) {
+                if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitData(chunk, data.size())) {
                     return fail();
                 }
 
@@ -524,7 +528,7 @@ namespace NActors {
             if (!newChunk) {
                 return fail();
             }
-            if (!CanFitRecord(newChunk)) {
+            if (!CanFitData(newChunk, data.size())) {
                 ReturnChunkToFree(newChunk);
                 return fail();
             }

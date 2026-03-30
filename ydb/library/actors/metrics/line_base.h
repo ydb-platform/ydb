@@ -71,11 +71,6 @@ namespace NActors {
         std::span<const char> Payload;
     };
 
-    struct TStoredRecord {
-        NHPTimer::STime TimestampTs = 0;
-        ui64 Value = 0;
-    };
-
     struct TLinePublishState {
         bool HasLastPublished = false;
         ui64 LastPublishedValue = 0;
@@ -97,7 +92,13 @@ namespace NActors {
         virtual ~TLineWriteBackend() = default;
 
         virtual void CloseLine(TLineWriterState* writer) noexcept = 0;
-        virtual bool AppendStoredRecord(TLineWriterState* writer, const TStoredRecord& record) noexcept = 0;
+        // Backend only manages raw chunk memory and lifetime. Physical record layout
+        // is defined by a concrete line frontend and passed here as opaque bytes.
+        virtual bool AppendChunkData(
+            TLineWriterState* writer,
+            std::span<const char> data,
+            NHPTimer::STime firstTs,
+            NHPTimer::STime lastTs) noexcept = 0;
         virtual NHPTimer::STime CurrentTimestampTs() const noexcept = 0;
         virtual TLinePublishState GetPublishState(const TLineWriterState* writer) const noexcept = 0;
         virtual ui32 GetLineId(const TLineWriterState* writer) const noexcept = 0;

@@ -631,7 +631,6 @@ void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
 
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
     TInstant createdAtValue = message.CreateTimestamp_.value_or(TInstant::Now());
-    bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
     {
         std::lock_guard guard(Lock);
@@ -658,10 +657,9 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         );
 
         FlushWriteIfRequiredImpl();
-        readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
-    }
-    if (readyToAccept) {
-        EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+        if (OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk) {
+            EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+        }
     }
 }
 
@@ -1228,7 +1226,14 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     //if (diff < 0) {
     //    Y_ABORT_UNLESS(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
     //}
-    MemoryUsage += diff;
+    if (diff >= 0) {
+        MemoryUsage += static_cast<size_t>(diff);
+    } else {
+        const size_t dec = static_cast<size_t>(-diff); // у вас безопасно, diff != INT64_MIN
+        Y_ABORT_UNLESS(MemoryUsage >= dec);
+        MemoryUsage -= dec;
+    }
+    
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
         if (wasOk) {

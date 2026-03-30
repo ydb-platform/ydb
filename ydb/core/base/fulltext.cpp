@@ -2,10 +2,6 @@
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
-#include <yql/essentials/public/udf/udf_types.h>
-#include <yql/essentials/types/binary_json/read.h>
-#include <yql/essentials/types/binary_json/write.h>
-
 #include <util/charset/utf8.h>
 #include <util/generic/xrange.h>
 
@@ -340,97 +336,6 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
     }
 
     return tokens;
-}
-
-void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens);
-
-void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix, TVector<TString>& tokens) {
-    if (element.GetType() == NBinaryJson::EEntryType::Container) {
-        TokenizeBinaryJson(element.GetContainer(), prefix, tokens);
-        return;
-    }
-    TString token = prefix;
-    token.push_back(0);
-    // Value always comes last in the token and we may want range queries on value,
-    // so we just store element type and data.
-    token.push_back((char)element.GetType());
-    switch (element.GetType()) {
-    case NBinaryJson::EEntryType::String:
-        token += element.GetString();
-        break;
-    case NBinaryJson::EEntryType::Number: {
-        double number = element.GetNumber();
-        token += TStringBuf((char*)&number, sizeof(double));
-        break;
-    }
-    case NBinaryJson::EEntryType::BoolFalse:
-    case NBinaryJson::EEntryType::BoolTrue:
-    case NBinaryJson::EEntryType::Null:
-        break;
-    case NBinaryJson::EEntryType::Container:
-        Y_ENSURE(false, "Unreachable");
-        break;
-    }
-    tokens.push_back(token);
-}
-
-TString TokenizeJsonNextPrefix(const TString& prefix, TStringBuf key) {
-    size_t size = key.size();
-    TString newPrefix = prefix;
-    // We don't need range queries on paths and keys may contain binary data,
-    // for example a zero byte, so we store keys with varint length
-    do {
-        if (size < 0x80) {
-            newPrefix.push_back((ui8)size);
-        } else {
-            newPrefix.push_back(0x80 | (ui8)(size & 0x7F));
-        }
-        size >>= 7;
-    } while (size > 0);
-    newPrefix += key;
-    return newPrefix;
-}
-
-void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString& prefix, TVector<TString>& tokens) {
-    switch (root.GetType()) {
-    case NBinaryJson::EContainerType::TopLevelScalar:
-        TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
-        break;
-    case NBinaryJson::EContainerType::Array:
-        for (ui32 pos = 0; pos < root.GetSize(); pos++) {
-            TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
-        }
-        break;
-    case NBinaryJson::EContainerType::Object:
-        auto it = root.GetObjectIterator();
-        while (it.HasNext()) {
-            auto kv = it.Next();
-            Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);
-            TokenizeBinaryJson(kv.second, TokenizeJsonNextPrefix(prefix, kv.first.GetString()), tokens);
-        }
-        break;
-    }
-}
-
-TVector<TString> TokenizeBinaryJson(const TStringBuf binaryJson) {
-    TVector<TString> tokens;
-    if (!binaryJson.size()) {
-        return tokens;
-    }
-    auto reader = NKikimr::NBinaryJson::TBinaryJsonReader::Make(binaryJson);
-    TokenizeBinaryJson(reader->GetRootCursor(), "", tokens);
-    return tokens;
-}
-
-TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
-    auto json = NKikimr::NBinaryJson::SerializeToBinaryJson(jsonStr);
-    if (std::holds_alternative<TString>(json)) {
-        error = std::get<TString>(json);
-        return TVector<TString>();
-    }
-    error = "";
-    auto buffer = std::get<NKikimr::NBinaryJson::TBinaryJson>(json);
-    return TokenizeBinaryJson(TStringBuf(buffer.data(), buffer.size()));
 }
 
 TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {

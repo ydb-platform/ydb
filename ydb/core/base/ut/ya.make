@@ -24,6 +24,7 @@ SRCS(
     statestorage_guardian_impl_ut.cpp
     statestorage_ut.cpp
     table_index_ut.cpp
+    json_index_ut.cpp
 )
 
 END()

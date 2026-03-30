@@ -1,6 +1,7 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
@@ -773,14 +774,21 @@ private:
                 auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJson);
 
-                auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
-                for(const auto& column: readColumns) {
-                    for(const auto& analyzer: desc.settings().columns()) {
-                        if (analyzer.column() == column) {
-                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
-                                searchTerms.push_back(term);
+                if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
+                    for (auto term: NJsonIndex::BuildSearchTerms(literal)) {
+                        searchTerms.emplace_back(std::move(term));
+                    }
+                } else {
+                    auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+                    for(const auto& column: readColumns) {
+                        for(const auto& analyzer: desc.settings().columns()) {
+                            if (analyzer.column() == column) {
+                                for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                                    searchTerms.push_back(term);
+                                }
                             }
                         }
                     }

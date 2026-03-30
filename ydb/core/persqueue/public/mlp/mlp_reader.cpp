@@ -164,8 +164,12 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
             .MessageDeduplicationId = messageDeduplicationId,
-            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount() ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount()) : std::nullopt,
-            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds())) : std::nullopt,
+            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount()
+                ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount())
+                : std::nullopt,
+            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() 
+                ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()))
+                : std::nullopt,
             .Attributes = std::move(attributes),
         });
     }

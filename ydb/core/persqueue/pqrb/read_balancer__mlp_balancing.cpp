@@ -130,7 +130,6 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
     auto& record = ev->Get()->Record;
     for (const auto& partitionResult : record.GetPartResult()) {
         const auto partitionId = partitionResult.GetPartition();
-        const auto endOffset = partitionResult.GetEndOffset();
         const auto generation = partitionResult.GetGeneration();
         const auto cookie = partitionResult.GetCookie();
 
@@ -144,8 +143,13 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
 
                 auto readingIsFinished = consumerResult.GetReadingFinished();
                 auto useForReading = consumerResult.GetUseForReading();
-                auto messages = std::max<i64>(0, endOffset - consumerResult.GetCommitedOffset());
-                mit->second |= consumer.SetUseForReading(partitionId, messages, readingIsFinished, useForReading, generation, cookie) || inserted;
+
+                TMLPConsumer::TMetrics metrics{
+                    .LockedMessages = consumerResult.GetMLPLockedMessageCount(),
+                    .DelayedMessages = consumerResult.GetMLPDelayedMessageCount(),
+                    .Messages = consumerResult.GetMLPMessageCount()
+                };
+                mit->second |= consumer.SetUseForReading(partitionId, readingIsFinished, useForReading, metrics, generation, cookie) || inserted;
             }
         }
     }

@@ -925,11 +925,19 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             if (requiredConsumers.contains(userInfo.User)) {
                 auto* clientInfo = result.AddConsumerResult();
                 clientInfo->SetConsumer(userInfo.User);
-                clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
+                clientInfo->SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
                 clientInfo->SetCommitedOffset(userInfo.Offset);
                 if (userInfo.CommittedMetadata.has_value()) {
                     clientInfo->SetCommittedMetadata(*userInfo.CommittedMetadata);
                 }
+
+                auto it = MLPConsumers.find(userInfo.User);
+                if (it != MLPConsumers.end()) {
+                    clientInfo->SetMLPLockedMessageCount(it->second.LockedMessageCount);
+                    clientInfo->SetMLPDelayedMessageCount(it->second.DelayedMessageCount);
+                    clientInfo->SetMLPMessageCount(it->second.MessageCount);
+                }
+
                 requiredConsumers.extract(userInfo.User);
             }
             continue;

@@ -962,8 +962,8 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
             ScheduleProcessing();
-            UpdateMetrics();
             NotifyPQRB(true);
+            UpdateMetrics();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             break;
         }
@@ -1043,8 +1043,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
     }
-    UpdateMetrics();
     NotifyPQRB(true);
+    UpdateMetrics();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
@@ -1064,8 +1064,7 @@ bool TConsumerActor::UseForReading() const {
 void TConsumerActor::NotifyPQRB(bool force) {
     auto useForReading = UseForReading();
     if (force || useForReading != LastUseForReading) {
-        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId,
-            PartitionEndOffset - LastCommittedOffset, useForReading);
+        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId, useForReading);
 
         const auto& metrics = Storage->GetMetrics();
         ev->Record.SetLockedMessages(metrics.LockedMessageCount);

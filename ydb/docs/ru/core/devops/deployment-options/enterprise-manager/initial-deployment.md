@@ -182,6 +182,16 @@ ansible_ssh_common_args: "-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecki
 ansible_ssh_private_key_file: "~/.ssh/id_ed25519"
 ```
 
+{% note warning %}
+
+Параметры `UserKnownHostsFile=/dev/null` и `StrictHostKeyChecking=no` отключают проверку ключей хостов SSH, что делает соединение уязвимым для атак типа «человек посередине» (MITM). Такая конфигурация допустима только для тестовых сред. В production-окружении рекомендуется использовать проверку ключей хостов, указав путь к реальному файлу `known_hosts`:
+
+```yaml
+ansible_ssh_common_args: "-o StrictHostKeyChecking=yes"
+```
+
+{% endnote %}
+
 {% note info %}
 
 Если для доступа к серверам используется Bastion/Jump host, раскомментируйте и настройте соответствующую строку `ansible_ssh_common_args`.

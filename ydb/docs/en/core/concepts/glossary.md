@@ -696,7 +696,7 @@ As in many other database management systems, {{ ydb-short-name }} queries can p
 
 #### Transaction lock invalidation {#tli}
 
-**Transaction lock invalidation** (TLI) is a situation where one transaction (the breaker) writes data and thereby breaks the [optimistic locks](#optimistic-locking) of another transaction (the victim). The victim detects this at commit time and receives a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+**Transaction lock invalidation** (TLI) is the standard behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the breaker) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this at the victim's commit time and rolls it back with a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 #### Prepare stage {#prepare-stage}
 

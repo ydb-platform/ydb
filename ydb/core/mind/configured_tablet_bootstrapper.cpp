@@ -23,92 +23,53 @@
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/test_tablet/test_tablet.h>
-#include <ydb/core/tablet/simple_tablet.h>
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/tablet_flat/flat_executor_recovery.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <google/protobuf/util/message_differencer.h>
-
 namespace NKikimr {
 
 class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTabletBootstrapper> {
-
-    struct TTabletState {
-        TActorId BootstrapperInstance;
-        NKikimrConfig::TBootstrap::TTablet Config;
-    };
-
-    THashMap<ui64, TTabletState> TabletStates;
-
-    void ProcessTabletsFromConfig(const NKikimrConfig::TBootstrap &bootstrapConfig) {
-        THashSet<ui64> currentTabletIds;
-        for (const auto &tablet : bootstrapConfig.GetTablet()) {
-            ui64 tabletId = tablet.GetInfo().GetTabletID();
-            currentTabletIds.insert(tabletId);
-            UpdateTablet(tablet);
-        }
-
-        // remove tablets that are no longer in config
-        for (auto it = TabletStates.begin(); it != TabletStates.end(); ) {
-            if (!currentTabletIds.contains(it->first)) {
-                StopBootstrapper(it->first, it->second);
-                TabletStates.erase(it++);
-            } else {
-                ++it;
-            }
-        }
-    }
-
-    void StopBootstrapper(ui64 tabletId, TTabletState& state) {
-        if (!state.BootstrapperInstance) {
-            return;
-        }
-
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-            "Stopping tablet " << tabletId << " bootstrapper on node " << SelfId().NodeId());
-
-        Send(state.BootstrapperInstance, new TEvents::TEvPoisonPill());
-        TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(tabletId, SelfId().NodeId()), TActorId());
-        state.BootstrapperInstance = TActorId();
-    }
+    const ui64 TabletId;
+    const ::NKikimrConfig::TBootstrap::TTablet DefaultConfig;
+    TActorId BootstrapperInstance;
+    TString CurrentConfig;
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev) {
         const auto &record = ev->Get()->Record;
 
+        NKikimrConfig::TBootstrap::TTablet tabletConfig;
         if (record.GetConfig().HasBootstrapConfig()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Received bootstrap config update on node " << SelfId().NodeId());
-            const auto &bootstrapConfig = record.GetConfig().GetBootstrapConfig();
-
-            ProcessTabletsFromConfig(bootstrapConfig);
+            for (const NKikimrConfig::TBootstrap::TTablet &x : record.GetConfig().GetBootstrapConfig().GetTablet()) {
+                if (x.GetInfo().GetTabletID() == TabletId) {
+                    tabletConfig.CopyFrom(x);
+                    break;
+                }
+            }
         }
+
+        CheckChanged(tabletConfig);
 
         Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
     }
 
-    void UpdateTablet(const NKikimrConfig::TBootstrap::TTablet &tabletConfig) {
-        ui64 tabletId = tabletConfig.GetInfo().GetTabletID();
-        auto &state = TabletStates[tabletId];
+    void CheckChanged(const NKikimrConfig::TBootstrap::TTablet &config) {
+        TString x = config.SerializeAsString();
+        if (CurrentConfig == x)
+            return;
 
-        google::protobuf::util::MessageDifferencer md;
-        if (!state.BootstrapperInstance || !md.Compare(state.Config, tabletConfig)) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Tablet " << tabletId << " config changed, recreating bootstrapper on node " << SelfId().NodeId());
-            state.Config.CopyFrom(tabletConfig);
-            RecreateBootstrapper(tabletId, tabletConfig);
+        if (BootstrapperInstance) {
+            Send(BootstrapperInstance, new TEvents::TEvPoisonPill());
+            TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), TActorId());
+            BootstrapperInstance = TActorId();
         }
-    }
 
-    void RecreateBootstrapper(ui64 tabletId, const NKikimrConfig::TBootstrap::TTablet &config) {
-        auto &state = TabletStates[tabletId];
-        const ui32 selfNode = SelfId().NodeId();
-
-        StopBootstrapper(tabletId, state);
+        CurrentConfig = x;
 
         // not apply config
+        const ui32 selfNode = SelfId().NodeId();
         if (Find(config.GetNode(), selfNode) != config.GetNode().end()) {
             TIntrusivePtr<TTabletStorageInfo> storageInfo = TabletStorageInfoFromProto(config.GetInfo());
             if (config.HasBootType()) {
@@ -135,14 +96,9 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             if (config.HasStartFollowers())
                 bi->StartFollowers = config.GetStartFollowers();
 
-            bool standby = config.GetStandBy();
-            state.BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), standby), TMailboxType::HTSwap, appData->SystemPoolId);
+            BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);
 
-            TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(tabletId, selfNode), state.BootstrapperInstance);
-
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOOTSTRAPPER,
-                "Started tablet " << tabletId << " bootstrapper on node " << selfNode);
-
+            TActivationContext::ActorSystem()->RegisterLocalService(MakeBootstrapperID(TabletId, SelfId().NodeId()), BootstrapperInstance);
         }
     }
 
@@ -151,15 +107,14 @@ public:
         return NKikimrServices::TActivity::CONFIGURED_BOOTSTRAPPER;
     }
 
-    NKikimrConfig::TBootstrap InitialBootstrapConfig;
-
-    TConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig)
-        : InitialBootstrapConfig(bootstrapConfig)
-    {
-    }
+    TConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap::TTablet &defaultConfig)
+        : TabletId(defaultConfig.GetInfo().GetTabletID())
+        , DefaultConfig(defaultConfig)
+    {}
 
     void Bootstrap() {
-        ProcessTabletsFromConfig(InitialBootstrapConfig);
+        // start with initial config (as we can start CMS itself - it could be not possible to get actual config at all)
+        CheckChanged(DefaultConfig);
 
         // and subscribe for changes
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -284,9 +239,6 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::BackupController:
         createFunc = &NBackup::CreateBackupController;
         break;
-    case TTabletTypes::Dummy:
-        createFunc = &CreateSimpleTablet;
-        break;
     default:
         return nullptr;
     }
@@ -298,8 +250,8 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     return new TTabletSetupInfo(createFunc, TMailboxType::ReadAsFilled, poolId, TMailboxType::ReadAsFilled, tabletPoolId);
 }
 
-IActor* CreateConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig) {
-    return new TConfiguredTabletBootstrapper(bootstrapConfig);
+IActor* CreateConfiguredTabletBootstrapper(const ::NKikimrConfig::TBootstrap::TTablet &defaultConfig) {
+    return new TConfiguredTabletBootstrapper(defaultConfig);
 }
 
 }

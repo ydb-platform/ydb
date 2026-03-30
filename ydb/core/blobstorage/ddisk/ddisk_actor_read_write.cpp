@@ -232,6 +232,9 @@ namespace NKikimr::NDDisk {
         }
 
         return submitted;
+#else
+        Y_UNUSED(op);
+        Y_UNUSED(flush);
 #endif
         return false;
     }
@@ -295,6 +298,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::ScheduleIoSubmitWakeup() {
+#if defined(__linux__)
         if (DirectIoQueue.empty()) {
             return;
         }
@@ -316,9 +320,13 @@ namespace NKikimr::NDDisk {
         const ui32 opsToWait = currentInflight - inDiskInflight;
         const ui32 usecWait = (opsToWait + opsInParallel - 1) * opMinLatencyUs / opsInParallel;
         Schedule(TDuration::MicroSeconds(usecWait), new TEvents::TEvWakeup(EWakeupTag::WakeupIoSubmitQueue));
+#else
+        Y_UNUSED(this);
+#endif
     }
 
     void TDDiskActor::ProcessIoSubmitQueue() {
+#if defined(__linux__)
         Y_ABORT_UNLESS(UringRouter);
 
         while (!DirectIoQueue.empty()) {
@@ -337,6 +345,9 @@ namespace NKikimr::NDDisk {
         UringRouter->Flush();
 
         ScheduleIoSubmitWakeup();
+#else
+        Y_UNUSED(this);
+#endif
     }
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {

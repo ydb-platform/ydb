@@ -1,7 +1,9 @@
 #pragma once
 
 #include <ydb/library/actors/core/subsystem.h>
-#include <ydb/library/actors/metrics/inmemory.h>
+#include <ydb/library/actors/metrics/line_base.h>
+#include <ydb/library/actors/metrics/lines/raw_line_frontend.h>
+#include <ydb/library/actors/metrics/lines/on_change_line_frontend.h>
 #include <util/generic/function.h>
 
 #include <memory>

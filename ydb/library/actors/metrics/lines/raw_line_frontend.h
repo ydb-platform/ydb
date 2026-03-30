@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../line_base.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/function.h>
 #include <util/system/hp_timer.h>
@@ -10,11 +12,7 @@ namespace NActors {
     template<class TFrontend>
     class TLine;
     class TInMemoryMetricsRegistry;
-    class TLineSnapshot;
     class TLineWriterState;
-    struct TLineFrontendOps;
-    struct TLineMeta;
-    struct TRecordView;
 
     template<class TValue = ui64>
     struct TRawLineFrontend {

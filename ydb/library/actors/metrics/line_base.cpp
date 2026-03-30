@@ -1,4 +1,5 @@
-#include "inmemory.h"
+#include "line_base.h"
+#include "lines/raw_line_frontend.h"
 
 namespace NActors {
 

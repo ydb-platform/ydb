@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    inmemory.cpp
-    inmemory.h
+    line_base.cpp
+    line_base.h
     lines/on_change_line_frontend.h
     lines/raw_line_frontend.h
 )

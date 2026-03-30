@@ -214,6 +214,3 @@ namespace NActors {
     TVector<TLabel> NormalizeCommonLabels(std::span<const TLabel> labels);
 
 } // namespace NActors
-
-#include "lines/raw_line_frontend.h"
-#include "lines/on_change_line_frontend.h"

@@ -1702,6 +1702,15 @@ TExprBase DqBuildHashJoin(
                             .Done());
                 }
 
+                for (const auto& flag : flags) {
+                    if (flag->Content() == "LeftAny" || flag->Content() == "RightAny") {
+                        joinSettings.push_back(
+                            Build<TCoNameValueTuple>(ctx, join.Pos())
+                                .Name().Build(flag->Content())
+                                .Done());
+                    }
+                }
+
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
                     .RightInput(rightInputArg)

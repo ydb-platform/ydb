@@ -513,26 +513,26 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
+        auto doLookup = [&](TTable& table, TSingleTuple tuple, auto onMatch) {
+            if (Settings_.BuildSideAny()) {
+                return table.LookupOne(tuple, onMatch);
+            } else {
+                bool found = false;
+                table.Lookup(tuple, [&](TSingleTuple t) { found = true; onMatch(t); });
+                return found;
+            }
+        };
         auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
-                if (Settings_.LeftIsBuild()) {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                } else {
-                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                    });
-                    if (!found) {
-                        consume(tuple);
-                    }
+                found = doLookup(table, tuple, [&](TSingleTuple tableMatch) {
+                    consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                });
+                if (!found && !Settings_.LeftIsBuild()) {
+                    consume(tuple);
                 }
             } else {
-                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    found = true;
+                found = doLookup(table, tuple, [&](TSingleTuple tableMatch) {
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     }

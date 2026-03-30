@@ -494,6 +494,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                     if (setting->Child(1)->Content() == "Left") {
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;
                     }
+                } else if (setting->Child(0)->Content() == "LeftAny") {
+                    settings.Any = static_cast<NMiniKQL::EAnyJoinSide>(
+                        static_cast<ui32>(settings.Any) | static_cast<ui32>(NMiniKQL::EAnyJoinSide::Left));
+                } else if (setting->Child(0)->Content() == "RightAny") {
+                    settings.Any = static_cast<NMiniKQL::EAnyJoinSide>(
+                        static_cast<ui32>(settings.Any) | static_cast<ui32>(NMiniKQL::EAnyJoinSide::Right));
                 }
             }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,

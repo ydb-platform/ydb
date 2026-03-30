@@ -116,7 +116,7 @@ struct TImportStatusData {
     int ElapsedSeconds = 0;
     int EstimatedTimeLeftMinutes = 0;
     int EstimatedTimeLeftSeconds = 0;
-    bool IsWaitingForIndices = false;
+    bool IsWaitingForPostLoadOps = false;
     bool IsLoadingTablesAndBuildingIndices = false;
 };
 

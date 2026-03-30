@@ -755,6 +755,7 @@ TOperation::TOperationId CreateAlterTableOperation(
     const char* table,
     TLog* Log,
     const TString& operationName,
+    const TOperation::TOperationId::EKind operationKind, 
     const NTable::TAlterTableSettings& settings)
 {
     TString tablePath;
@@ -763,15 +764,6 @@ TOperation::TOperationId CreateAlterTableOperation(
     } else {
         tablePath = table;
     }
-    const auto expectedOperationKind = [&settings]{
-        if (!settings.AddIndexes_.empty()) {
-            return TOperation::TOperationId::BUILD_INDEX;
-        }
-        if (settings.Compact_.has_value()) {
-            return TOperation::TOperationId::COMPACTION;
-        }
-        return TOperation::TOperationId::UNUSED;
-    } ();
 
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
@@ -779,7 +771,7 @@ TOperation::TOperationId CreateAlterTableOperation(
         if (IsOperationStarted(opResult.Status())) {
             operationId = opResult.Id();
             LOG_I("Started to " << operationName << ": " << operationId.ToString());
-            if (operationId.GetKind() == expectedOperationKind || opResult.Status().GetStatus() == EStatus::STATUS_UNDEFINED) {
+            if (operationId.GetKind() == operationKind || opResult.Status().GetStatus() == EStatus::STATUS_UNDEFINED) {
                 return TStatus(EStatus::SUCCESS, NIssue::TIssues(opResult.Status().GetIssues()));
             }
             return opResult.Status();
@@ -806,7 +798,7 @@ TOperation::TOperationId CreateIndex(
     TLog* Log)
 {
     return CreateAlterTableOperation(client, path, table, Log, TStringBuilder() << "create index " << indexName,
-        NTable::TAlterTableSettings()
+        TOperation::TOperationId::BUILD_INDEX, NTable::TAlterTableSettings()
             .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)})
     );
 }
@@ -845,7 +837,7 @@ void CompactTable(
 {
     NTable::TTableClient client(driver);
     auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
-        NTable::TAlterTableSettings()
+        TOperation::TOperationId::COMPACTION, NTable::TAlterTableSettings()
             .Compact(NTable::TCompact())
     );
     LOG_T("Compacting table " << table << ": " << id.ToString());
@@ -1264,8 +1256,9 @@ private:
         // Calculate all status data
         TImportDisplayData displayData(LoadState);
 
-        displayData.StatusData.IsWaitingForIndices =
-            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES;
+        displayData.StatusData.IsWaitingForPostLoadOps =
+            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES ||
+            !LoadState.CompactionStates.empty() && LoadState.State == TImportState::EWAIT_COMPACTION;
 
             displayData.StatusData.IsLoadingTablesAndBuildingIndices =
                 LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
@@ -1274,7 +1267,7 @@ private:
         displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
         displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
-        if (!displayData.StatusData.IsWaitingForIndices) {
+        if (!displayData.StatusData.IsWaitingForPostLoadOps) {
             displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
             displayData.StatusData.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
@@ -1327,7 +1320,7 @@ private:
     }
 
     void UpdateDisplayTextMode(const TImportStatusData& data) {
-        if (!data.IsWaitingForIndices) {
+        if (!data.IsWaitingForPostLoadOps) {
             std::stringstream ss;
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
                 << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "

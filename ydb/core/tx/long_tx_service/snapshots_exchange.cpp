@@ -548,18 +548,24 @@ private:
 
     void UpdateNodes(const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infos) {
         for (const auto& [publisherId, entry] : infos) {
-            NKikimrLongTxService::TSnapshotExchangeBoardNodeInfo nodeInfo;
-            Y_PROTOBUF_SUPPRESS_NODISCARD nodeInfo.ParseFromString(entry.Payload);
-            auto owner = ActorIdFromProto(nodeInfo.GetOwner());
-            AFL_ENSURE(owner.NodeId() == publisherId.NodeId());
-            if (owner != SelfId()) {
+            if (publisherId.NodeId() != SelfId().NodeId()) {
                 if (entry.Dropped) {
-                    ExchangeActorIdToDataCenterId.erase(owner);
+                    auto iter = PublisherIdToExchangeActorId.find(publisherId);
+                    if (iter != PublisherIdToExchangeActorId.end()) {
+                        ExchangeActorIdToDataCenterId.erase(iter->second);
+                        PublisherIdToExchangeActorId.erase(iter);
+                    }
                 } else {
+                    NKikimrLongTxService::TSnapshotExchangeBoardNodeInfo nodeInfo;
+                    Y_PROTOBUF_SUPPRESS_NODISCARD nodeInfo.ParseFromString(entry.Payload);
+                    auto owner = ActorIdFromProto(nodeInfo.GetOwner());
+                    AFL_ENSURE(owner.NodeId() == publisherId.NodeId());
                     ExchangeActorIdToDataCenterId.emplace(owner, nodeInfo.GetDataCenterId());
+                    PublisherIdToExchangeActorId.emplace(publisherId, owner);
                 }
             }
         }
+        AFL_ENSURE(PublisherIdToExchangeActorId.size() == ExchangeActorIdToDataCenterId.size());
         TXLOG_DEBUG("Finished updating nodes, now know " << ExchangeActorIdToDataCenterId.size() << " other exchange actors");
     }
 
@@ -723,6 +729,7 @@ private:
     TActorId Publisher;
     TActorId Subscriber;
     THashMap<TActorId, TString> ExchangeActorIdToDataCenterId;
+    THashMap<TActorId, TActorId> PublisherIdToExchangeActorId;
     bool ExchangeActorsReady = false;
     TString SelfDataCenterId;
     TString SelfBoardInfo;

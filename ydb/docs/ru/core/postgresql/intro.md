@@ -1,4 +1,4 @@
-## Совместимость {{ ydb-short-name }} с PostgreSQL
+# Совместимость {{ ydb-short-name }} с PostgreSQL
 
 {% include [./_includes/alert.md](./_includes/alert_preview.md) %}
 

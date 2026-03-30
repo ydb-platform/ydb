@@ -1,0 +1,211 @@
+syntax = "proto3";
+
+package yandex.cloud.events.ydb.topics;
+
+import "google/protobuf/duration.proto";
+import "google/rpc/status.proto";
+import "ydb/public/api/client/yc_public/events/common.proto";
+import "ydb/public/api/client/yc_public/common/validation.proto";
+import "ydb/public/api/client/yc_public/events/options.proto";
+
+option go_package = "topics";
+option java_package = "yandex.cloud.api.events.ydb.topics";
+
+enum AutoPartitioningStrategy {
+  AUTO_PARTITIONING_STRATEGY_UNSPECIFIED = 0;
+  AUTO_PARTITIONING_STRATEGY_DISABLED = 1;
+  AUTO_PARTITIONING_STRATEGY_SCALE_UP = 2;
+  AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN = 3;
+  AUTO_PARTITIONING_STRATEGY_PAUSED = 4;
+}
+
+message AutoPartitioningSettings {
+  AutoPartitioningStrategy strategy = 1;
+}
+
+message PartitioningSettings {
+  // Auto merge would stop working when the partitions count reaches min_active_partitions.
+  // Zero value means default - 1.
+  int64 min_active_partitions = 1;
+
+  // Auto split would stop working when the partitions count reaches max_active_partitions.
+  // Zero value means default - 1.
+  int64 max_active_partitions = 2;
+
+  // Settings for the partitions count auto partitioning.
+  AutoPartitioningSettings auto_partitioning_settings = 3;
+}
+
+message Consumer {
+  // Only consumer name is exported in events.
+  string name = 1;
+}
+
+enum MeteringMode {
+  // Use default.
+  METERING_MODE_UNSPECIFIED = 0;
+  // Metering based on resource reservation.
+  METERING_MODE_RESERVED_CAPACITY = 1;
+  // Metering based on actual consumption.
+  METERING_MODE_REQUEST_UNITS = 2;
+}
+
+message TopicDetails {
+  // Topic path.
+  string path = 1;
+
+  // Settings for partitioning.
+  PartitioningSettings partitioning_settings = 2;
+
+  // How long data in partition should be stored.
+  google.protobuf.Duration retention_period = 3;
+
+  // How much data in partition should be stored.
+  int64 retention_storage_mb = 4;
+
+  reserved 5; // supported_format.
+
+  // Partition write speed in bytes per second.
+  int64 partition_write_speed_bytes_per_second = 6;
+
+  // User and server attributes of topic.
+  map<string, string> attributes = 7;
+
+  // List of consumers for this topic (only names are exported).
+  repeated Consumer consumers = 8;
+
+  // Metering mode for the topic in a serverless database.
+  MeteringMode metering_mode = 9;
+
+  // Metrics level. If unset, database setting is used.
+  optional int64 metrics_level = 10;
+}
+
+message CreateTopic {
+  option (event_descriptor) = {
+    service: "ydb"
+    category: DATA
+    visibility: PUBLIC
+  };
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4;
+
+  EventStatus event_status = 5 [(required) = true];
+  TopicDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7;
+  google.rpc.Status error = 8;
+
+  message RequestParameters {
+    // Topic path.
+    string path = 1;
+
+    // Settings for partitioning.
+    PartitioningSettings partitioning_settings = 2;
+
+    // How long data in partition should be stored.
+    google.protobuf.Duration retention_period = 3;
+
+    // How much data in partition should be stored.
+    int64 retention_storage_mb = 4;
+
+    reserved 5; // supported_format.
+
+    // Partition write speed in bytes per second.
+    int64 partition_write_speed_bytes_per_second = 6;
+
+    // User and server attributes of topic.
+    map<string, string> attributes = 7;
+
+    // List of consumers for this topic (only names are exported).
+    repeated Consumer consumers = 8;
+
+    // Metering mode for the topic in a serverless database.
+    MeteringMode metering_mode = 9;
+
+    // Metrics level. If unset, database setting is used.
+    optional int64 metrics_level = 10;
+  }
+}
+
+message AlterTopic {
+  option (event_descriptor) = {
+    service: "ydb"
+    category: DATA
+    visibility: PUBLIC
+  };
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4;
+
+  EventStatus event_status = 5 [(required) = true];
+  TopicDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7;
+  google.rpc.Status error = 8;
+
+  message RequestParameters {
+    // Topic path.
+    string path = 1;
+
+    // Settings for partitioning.
+    optional PartitioningSettings partitioning_settings = 2;
+
+    // How long data in partition should be stored.
+    google.protobuf.Duration retention_period = 3;
+
+    // How much data in partition should be stored.
+    optional int64 retention_storage_mb = 4;
+
+    reserved 5; // supported_format.
+
+    // Partition write speed in bytes per second.
+    optional int64 partition_write_speed_bytes_per_second = 6;
+
+    // User and server attributes of topic.
+    map<string, string> attributes = 7;
+
+    // List of consumers for this topic (only names are exported).
+    repeated Consumer consumers = 8;
+
+    // Metering mode for the topic in a serverless database.
+    MeteringMode metering_mode = 9;
+
+    // Metrics level. If unset, database setting is used.
+    optional int64 metrics_level = 10;
+  }
+}
+
+message DeleteTopic {
+  option (event_descriptor) = {
+    service: "ydb"
+    category: MANAGEMENT
+    visibility: PUBLIC
+  };
+
+  Authentication authentication = 1 [(required) = true];
+  Authorization authorization = 2 [(required) = true];
+
+  EventMetadata event_metadata = 3 [(required) = true];
+  RequestMetadata request_metadata = 4;
+
+  EventStatus event_status = 5 [(required) = true];
+  EventDetails details = 6 [(required) = true];
+  RequestParameters request_parameters = 7;
+  google.rpc.Status error = 8;
+
+  message EventDetails {
+    // Topic path.
+    string path = 1;
+  }
+
+  message RequestParameters {
+    // Topic path.
+    string path = 1;
+  }
+}

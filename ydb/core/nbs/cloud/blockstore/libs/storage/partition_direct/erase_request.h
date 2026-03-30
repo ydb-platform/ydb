@@ -28,7 +28,7 @@ public:
         IDirectBlockGroupPtr directBlockGroup,
         ELocation location,
         TEraseHint hint,
-        NWilson::TTraceId traceId);
+        NWilson::TSpan span);
 
     ~TEraseRequestExecutor();
 
@@ -44,7 +44,7 @@ private:
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const NWilson::TTraceId TraceId;
+    const NWilson::TSpan Span;
     const ELocation Location;
     const TEraseHint Hint;
 

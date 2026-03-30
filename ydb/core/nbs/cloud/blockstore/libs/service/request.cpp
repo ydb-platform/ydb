@@ -12,6 +12,21 @@ TRequestHeaders TRequestHeaders::Clone(TBlockRange64 range) const
         .Timestamp = Timestamp};
 }
 
+TStringBuf ToStringBuf(EBlockStoreRequest requestType)
+{
+    switch (requestType) {
+        case EBlockStoreRequest::ReadBlocks:
+            return "ReadBlocks";
+        case EBlockStoreRequest::WriteBlocks:
+            return "WriteBlocks";
+        case EBlockStoreRequest::ZeroBlocks:
+            return "ZeroBlocks";
+        case EBlockStoreRequest::MAX:
+            break;
+    }
+    Y_ABORT_UNLESS(false);
+}
+
 ui64 CreateRequestId()
 {
     static std::atomic<ui64> RequestId(0);

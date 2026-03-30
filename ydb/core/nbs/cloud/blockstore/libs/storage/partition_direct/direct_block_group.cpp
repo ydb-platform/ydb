@@ -342,7 +342,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
         for (auto& diskId: disksIds) {
             dbgResponse.Responses.emplace_back(
-                std::move(diskId),
+                diskId,
                 MakeError(E_REJECTED, "Connections are not established"));
         }
         return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(dbgResponse);

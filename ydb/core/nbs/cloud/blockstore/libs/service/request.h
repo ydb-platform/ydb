@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -23,14 +24,10 @@ struct TRequestHeaders
     const TInstant Timestamp;
 };
 
-struct TReadBlocksLocalRequest
+struct TReadBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
-
-    // Set during execution
-    TBlockRange64 RegionRange;
-    TBlockRange64 VChunkRange;
 
     explicit TReadBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
@@ -42,14 +39,12 @@ struct TReadBlocksLocalResponse
     NProto::TError Error;
 };
 
-struct TWriteBlocksLocalRequest
+struct TWriteBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
 
     // Set during execution
-    TBlockRange64 RegionRange;
-    TBlockRange64 VChunkRange;
     ui64 Lsn = 0;
     NProto::TStorageServiceConfig::TWriteMode WriteMode{};
     ui32 PBufferReplyTimeoutMicroseconds{};
@@ -64,7 +59,7 @@ struct TWriteBlocksLocalResponse
     NProto::TError Error;
 };
 
-struct TZeroBlocksLocalRequest
+struct TZeroBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
 
@@ -108,6 +103,8 @@ enum class EBlockStoreRequest
     ZeroBlocks = 3,
     MAX
 };
+
+TStringBuf ToStringBuf(EBlockStoreRequest requestType);
 
 ui64 CreateRequestId();
 

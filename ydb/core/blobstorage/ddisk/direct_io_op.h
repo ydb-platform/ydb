@@ -31,7 +31,8 @@ public:
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept = 0;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept = 0;
 
     virtual void ClearForRecycle() noexcept;
 
@@ -99,7 +100,8 @@ public:
     {}
 
     void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
 
     void SelfRecycle() noexcept override;
 };
@@ -115,7 +117,8 @@ public:
     {}
 
     void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
 
     void ClearForRecycle() noexcept override;
     void SelfRecycle() noexcept override;
@@ -145,7 +148,8 @@ public:
     {}
 
     void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
 
     void ClearForRecycle() noexcept override;
     void SelfRecycle() noexcept override;

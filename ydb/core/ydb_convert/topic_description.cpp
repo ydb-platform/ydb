@@ -5,6 +5,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -140,7 +141,7 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
-    
+
     out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
     if (!config.GetRequireAuthWrite()) {

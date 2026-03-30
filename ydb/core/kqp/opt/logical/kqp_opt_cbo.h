@@ -21,7 +21,7 @@ struct TKqpRelOptimizerNode : public NYql::TRelOptimizerNode {
  * KQP Specific cost function and join applicability cost function
 */
 struct TKqpProviderContext : public NYql::TBaseProviderContext {
-    TKqpProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel) : KqpCtx(kqpCtx), OptLevel(optLevel) {}
+    TKqpProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool blockJoinEnabled) : KqpCtx(kqpCtx), OptLevel(optLevel), BlockJoinEnabled(blockJoinEnabled) {}
 
     virtual bool IsJoinApplicable(
         const std::shared_ptr<NYql::IBaseOptimizerNode>& left, 
@@ -42,6 +42,7 @@ struct TKqpProviderContext : public NYql::TBaseProviderContext {
 
     const TKqpOptimizeContext& KqpCtx;
     int OptLevel;
+    bool BlockJoinEnabled;
 };
 
 }

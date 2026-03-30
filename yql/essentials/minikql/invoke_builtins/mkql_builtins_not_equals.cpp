@@ -273,9 +273,7 @@ struct TCustomNotEquals: public TAggrNotEquals {
 
 struct TDecimalNotEquals {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(!NYql::NDecimal::IsComparable(r) || l != r);
+        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsNotEqual(left.GetInt128(), right.GetInt128()));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

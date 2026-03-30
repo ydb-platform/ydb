@@ -152,6 +152,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
 
     auto& Config = ctx.KqpCtx.Config;
     auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
+    auto useBlockHashJoin = Config->UseBlockHashJoin.Get().GetOrElse(false);
 
     if (optLevel <= 1) {
         return input;
@@ -191,7 +192,7 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     // Shuffle elimination is currently disabled
     //bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
 
-    auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel);
+    auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);
     auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx.ExprCtx, false, nullptr, nullptr));
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

@@ -371,8 +371,28 @@ public:
         YT_ASSERT(ReplyBus_);
         YT_ASSERT(Service_);
         YT_ASSERT(RuntimeInfo_);
+    }
 
-        Initialize();
+    void InitializeRefCounted()
+    {
+        // COMPAT(danilalexeev): legacy RPC codecs
+        RequestCodec_ = RequestHeader_->has_request_codec()
+            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
+            : NCompression::ECodec::None;
+        ResponseCodec_ = RequestHeader_->has_response_codec()
+            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
+            : NCompression::ECodec::None;
+
+        Service_->IncrementActiveRequestCount();
+        ActiveRequestCountIncremented_ = true;
+
+        BuildGlobalRequestInfo();
+
+        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
+
+        if (IsRegistrable()) {
+            Service_->RegisterRequest(this);
+        }
     }
 
     ~TServiceContext()
@@ -751,28 +771,6 @@ private:
         }
 
         return false;
-    }
-
-    void Initialize()
-    {
-        // COMPAT(danilalexeev): legacy RPC codecs
-        RequestCodec_ = RequestHeader_->has_request_codec()
-            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
-            : NCompression::ECodec::None;
-        ResponseCodec_ = RequestHeader_->has_response_codec()
-            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
-            : NCompression::ECodec::None;
-
-        Service_->IncrementActiveRequestCount();
-        ActiveRequestCountIncremented_ = true;
-
-        BuildGlobalRequestInfo();
-
-        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
-
-        if (IsRegistrable()) {
-            Service_->RegisterRequest(this);
-        }
     }
 
     void BuildGlobalRequestInfo()

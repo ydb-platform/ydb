@@ -189,10 +189,11 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
         ("type", "schedule_next")
         ("portions_count", portionsCount);
 
+    TActorId owner = context.GetOwner();
     TBuildFilterTaskContext request(std::move(context), shared_from_this(), std::move(bordersBatch));
     if (portionsCount == 0) {
         AFL_VERIFY(BordersIterator.IsDone());
-        TActorContext::AsActorContext().Send(context.GetOwner(),
+        TActorContext::AsActorContext().Send(owner,
             std::make_unique<TEvBordersConstructionResult>(std::move(request), THashMap<NGeneralCache::TGlobalColumnAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>{}, nullptr));
         return true;
     }

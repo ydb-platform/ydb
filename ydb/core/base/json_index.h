@@ -9,13 +9,10 @@ namespace NKikimr {
 
 namespace NJsonIndex {
 
-using namespace NYql::NJsonPath;
-using namespace NYql;
-
 class TResult {
 public:
     using TQueries = TVector<TString>;
-    using TError = TIssue;
+    using TError = NYql::TIssue;
 
     TResult(const TQueries& queries);
 
@@ -46,66 +43,66 @@ private:
 
 class TQueryCollector {
 public:
-    TQueryCollector(const TJsonPathPtr path);
+    TQueryCollector(const NYql::NJsonPath::TJsonPathPtr path);
 
     TResult Collect();
 
 private:
-    TResult Collect(const TJsonPathItem& item);
+    TResult Collect(const NYql::NJsonPath::TJsonPathItem& item);
 
     // Evaluates a literal node directly, without requiring a preceding ContextObject.
     // Use this for sub-expressions that are unconditionally literal by design
     // (e.g. the prefix argument of starts_with). Returns an error for non-literal nodes.
-    TResult EvaluateLiteral(const TJsonPathItem& item);
+    TResult EvaluateLiteral(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult Finalize(const TJsonPathItem& item);
+    TResult Finalize(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult FinalizeEmpty(const TJsonPathItem& item);
+    TResult FinalizeEmpty(const NYql::NJsonPath::TJsonPathItem& item);
 
     // The next methods are used to build the query step by step.
     TResult ContextObject();
 
-    TResult MemberAccess(const TJsonPathItem& item);
+    TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult ArrayAccess(const TJsonPathItem& item);
-    TResult WildcardArrayAccess(const TJsonPathItem& item);
-    TResult LastArrayIndex(const TJsonPathItem& item);
+    TResult ArrayAccess(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult WildcardArrayAccess(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult LastArrayIndex(const NYql::NJsonPath::TJsonPathItem& item);
 
     TResult NullLiteral();
-    TResult BooleanLiteral(const TJsonPathItem& item);
-    TResult NumberLiteral(const TJsonPathItem& item);
-    TResult StringLiteral(const TJsonPathItem& item);
+    TResult BooleanLiteral(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult NumberLiteral(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult StringLiteral(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult UnaryMinus(const TJsonPathItem& item);
-    TResult UnaryPlus(const TJsonPathItem& item);
-    TResult BinaryAdd(const TJsonPathItem& item);
-    TResult BinarySubstract(const TJsonPathItem& item);
-    TResult BinaryMultiply(const TJsonPathItem& item);
-    TResult BinaryDivide(const TJsonPathItem& item);
-    TResult BinaryModulo(const TJsonPathItem& item);
+    TResult UnaryMinus(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult UnaryPlus(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryAdd(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinarySubstract(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryMultiply(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryDivide(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryModulo(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult UnaryNot(const TJsonPathItem& item);
-    TResult BinaryAnd(const TJsonPathItem& item);
-    TResult BinaryOr(const TJsonPathItem& item);
-    TResult BinaryLess(const TJsonPathItem& item);
-    TResult BinaryLessEqual(const TJsonPathItem& item);
-    TResult BinaryGreater(const TJsonPathItem& item);
-    TResult BinaryGreaterEqual(const TJsonPathItem& item);
-    TResult BinaryEqual(const TJsonPathItem& item);
-    TResult BinaryNotEqual(const TJsonPathItem& item);
+    TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryLess(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult StartsWithPredicate(const TJsonPathItem& item);
-    TResult IsUnknownPredicate(const TJsonPathItem& item);
-    TResult ExistsPredicate(const TJsonPathItem& item);
-    TResult LikeRegexPredicate(const TJsonPathItem& item);
+    TResult StartsWithPredicate(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult IsUnknownPredicate(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult ExistsPredicate(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult LikeRegexPredicate(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult FilterObject(const TJsonPathItem& item);
-    TResult FilterPredicate(const TJsonPathItem& item);
+    TResult FilterObject(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult FilterPredicate(const NYql::NJsonPath::TJsonPathItem& item);
 
-    TResult Variable(const TJsonPathItem& item);
+    TResult Variable(const NYql::NJsonPath::TJsonPathItem& item);
 
 private:
-    TJsonPathReader Reader;
+    NYql::NJsonPath::TJsonPathReader Reader;
 };
 
 TVector<TString> BuildSearchTerms(const TString& jsonPathStr);

@@ -9,6 +9,10 @@ namespace NKikimr {
 
 namespace NJsonIndex {
 
+using NYql::TIssue;
+using NYql::TIssues;
+using namespace NYql::NJsonPath;
+
 namespace {
 
 NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
@@ -29,6 +33,21 @@ NBinaryJson::EEntryType GetEntryType(const TJsonPathItem& item) {
             Y_ENSURE(false, "Unexpected item type");
     }
     return NBinaryJson::EEntryType::Null;
+}
+
+// Keys may contain binary data (e.g. a zero byte), so we prefix each key with its
+// varint-encoded length (LEB128). This allows unambiguous prefix-scan queries.
+void AppendKey(TString& prefix, TStringBuf key) {
+    size_t size = key.size();
+    do {
+        if (size < 0x80) {
+            prefix.push_back((ui8)size);
+        } else {
+            prefix.push_back(0x80 | (ui8)(size & 0x7F));
+        }
+        size >>= 7;
+    } while (size > 0);
+    prefix += key;
 }
 
 }  // namespace
@@ -224,20 +243,9 @@ TResult TQueryCollector::MemberAccess(const TJsonPathItem& item) {
         return input;
     }
 
+    // TODO: Handle multiple queries
     auto& query = input.GetQueries()[0];
-    auto member = TString(item.GetString());
-    auto size = member.size();
-
-    do {
-        if (size < 0x80) {
-            query.push_back((ui8)size);
-        } else {
-            query.push_back(0x80 | (ui8)(size & 0x7F));
-        }
-        size >>= 7;
-    } while (size > 0);
-
-    query += std::move(member);
+    AppendKey(query, item.GetString());
     return input;
 }
 
@@ -373,6 +381,7 @@ TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
     return TResult(TIssue("Not implemented"));
 }
 
+// TODO: Add support for filters and JSON_VALUE
 // Do not emit specific posting keys for the predicates: JsonExists/SqlExists treats any non-empty jsonpath
 // result as true, including a single boolean false from the predicate, so index + residual
 // JSON_EXISTS would return wrong rows. We just emit an empty query to indicate that the predicate
@@ -398,8 +407,8 @@ TResult TQueryCollector::Variable(const TJsonPathItem&) {
 }
 
 TVector<TString> BuildSearchTerms(const TString& jsonPathStr) {
-    NYql::TIssues issues;
-    const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPathStr, issues, 1);
+    TIssues issues;
+    const TJsonPathPtr path = ParseJsonPath(jsonPathStr, issues, 1);
     if (!issues.Empty()) {
         return {};
     }
@@ -445,19 +454,8 @@ void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix
 }
 
 TString TokenizeJsonNextPrefix(const TString& prefix, TStringBuf key) {
-    size_t size = key.size();
     TString newPrefix = prefix;
-    // We don't need range queries on paths and keys may contain binary data,
-    // for example a zero byte, so we store keys with varint length
-    do {
-        if (size < 0x80) {
-            newPrefix.push_back((ui8)size);
-        } else {
-            newPrefix.push_back(0x80 | (ui8)(size & 0x7F));
-        }
-        size >>= 7;
-    } while (size > 0);
-    newPrefix += key;
+    AppendKey(newPrefix, key);
     return newPrefix;
 }
 
@@ -467,22 +465,12 @@ void TokenizeBinaryJson(const NBinaryJson::TContainerCursor& root, const TString
         TokenizeBinaryJson(root.GetElement(0), prefix, tokens);
         break;
     case NBinaryJson::EContainerType::Array:
-        if (root.GetSize() == 0) {
-            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
-            return;
-        }
-
         for (ui32 pos = 0; pos < root.GetSize(); pos++) {
             TokenizeBinaryJson(root.GetElement(pos), prefix, tokens);
         }
         break;
     case NBinaryJson::EContainerType::Object:
         auto it = root.GetObjectIterator();
-        if (!it.HasNext()) {
-            tokens.push_back(prefix + (char)NBinaryJson::EEntryType::Container);
-            return;
-        }
-
         while (it.HasNext()) {
             auto kv = it.Next();
             Y_ENSURE(kv.first.GetType() == NBinaryJson::EEntryType::String);

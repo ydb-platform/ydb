@@ -6,6 +6,7 @@
 namespace NKikimr::NJsonIndex {
 
 using TQueries = TVector<TString>;
+using namespace NYql::NJsonPath;
 
 namespace {
 

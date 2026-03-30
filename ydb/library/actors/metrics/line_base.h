@@ -81,9 +81,9 @@ namespace NActors {
         NHPTimer::STime LastObservedTs = 0;
     };
 
-    class TLineWriteBackend {
+    class ILineWriteBackend {
     public:
-        virtual ~TLineWriteBackend() = default;
+        virtual ~ILineWriteBackend() = default;
 
         virtual void CloseLine(TLineWriterState* writer) noexcept = 0;
         // Backend only manages raw chunk memory and lifetime. Physical record layout

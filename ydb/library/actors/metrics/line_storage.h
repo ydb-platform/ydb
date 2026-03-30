@@ -64,7 +64,7 @@ namespace NActors {
     };
 
     struct TSnapshotPinnedChunk {
-        TLineWriteBackend* Backend = nullptr;
+        ILineWriteBackend* Backend = nullptr;
         TChunk* Chunk = nullptr;
         TChunkView View;
     };

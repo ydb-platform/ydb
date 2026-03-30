@@ -11,7 +11,7 @@
 
 namespace NActors {
 
-    class TInMemoryMetricsBackend : public TLineWriteBackend {
+    class TInMemoryMetricsBackend : public ILineWriteBackend {
     public:
         explicit TInMemoryMetricsBackend(TInMemoryMetricsConfig config);
         ~TInMemoryMetricsBackend() override;

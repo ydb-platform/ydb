@@ -10,7 +10,7 @@ namespace NActors {
         using TValueType = typename TFrontend::TValueType;
 
         TLine() noexcept = default;
-        TLine(TLineWriteBackend* backend, TLineWriterState* writer) noexcept
+        TLine(ILineWriteBackend* backend, TLineWriterState* writer) noexcept
             : Backend(backend)
             , Writer(writer)
         {
@@ -73,7 +73,7 @@ namespace NActors {
         }
 
     private:
-        TLineWriteBackend* Backend = nullptr;
+        ILineWriteBackend* Backend = nullptr;
         TLineWriterState* Writer = nullptr;
     };
 

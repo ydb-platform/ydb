@@ -48,11 +48,11 @@ namespace NActors {
     private:
         friend class TLine<TOnChangeLineFrontend<TValue>>;
 
-        static bool Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
+        static bool Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
     };
 
     template<class TValue>
-    bool TOnChangeLineFrontend<TValue>::Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
+    bool TOnChangeLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
         using TStorageRecord = typename TRawLineFrontend<TValue>::TStorageRecord;
 
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);

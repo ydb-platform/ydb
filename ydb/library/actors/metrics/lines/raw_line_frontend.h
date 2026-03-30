@@ -69,11 +69,11 @@ namespace NActors {
     private:
         friend class TLine<TRawLineFrontend<TValue>>;
 
-        static bool Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
+        static bool Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValueType& value) noexcept;
     };
 
     template<class TValue>
-    bool TRawLineFrontend<TValue>::Append(TLineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
+    bool TRawLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* writer, const TValue& value) noexcept {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
 

@@ -204,10 +204,10 @@ public:
         const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
         auto canSplit = sourceIdCount > 1 || (sourceIdCount == 1 && SourceIdCounter.LastValue().empty() /* kinesis */);
         if (AppData()->FeatureFlags.GetEnableTopicPartitionSplitBasedOnKllSketch()) {
-            canSplit = KeysManager.MoreThanOneKey(now - sourceIdWindow);
+            canSplit = KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         }
 
-        // LOG_D("TPartition::CheckScaleStatus"
+        // PQ_LOG_D("TPartition::CheckScaleStatus"
         //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
         //         << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
         //         << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()

@@ -1019,59 +1019,73 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             auto keyRange = std::find_if(keyRanges.begin(), keyRanges.end(), [&](const TKeyRange& range) {
                 return range.PartitionId == partitionId;
             });
-            
-            auto middle = NKikimr::NPQ::MiddleOf(keyRange->From.value_or(""), keyRange->To.value_or(""));
-                    
-            TWriteMessage message(middle, body);
+            UNIT_ASSERT_C(keyRange != keyRanges.end(), "partition not found in keyRanges");
+
+            const TString from = keyRange->From.value_or("");
+            const TString to = keyRange->To.value_or("");
+            const TString mid = NKikimr::NPQ::MiddleOf(from, to);
+            // KLL split needs at least two distinct keys in the window; a single mid for every write is not enough.
+            const TString low = NKikimr::NPQ::MiddleOf(from, mid);
+            const TString high = NKikimr::NPQ::MiddleOf(mid, to);
+            TString key;
+            switch (seqNo % 3) {
+                case 0:
+                    key = low;
+                    break;
+                case 1:
+                    key = mid;
+                    break;
+                default:
+                    key = high;
+                    break;
+            }
+
+            TWriteMessage message(key, body);
             message.SeqNo(seqNo);
-            
+
             UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
         };
 
         auto msg = TString(1_MB, 'a');
 
         auto producer1 = makeProducer("producer-1");
-        auto producer2 = makeProducer("producer-2");
 
         {
             writeToPartition(producer1, 0, msg, 1);
             writeToPartition(producer1, 0, msg, 2);
-            flushAll({producer1, producer2});
+            flushAll({producer1});
             Sleep(TDuration::Seconds(5));
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
             addNewKeyRanges(describe);
         }
 
         {
-            writeToPartition(producer1, 0, msg, 3);
-            writeToPartition(producer1, 0, msg, 4);
-            writeToPartition(producer1, 0, msg, 5);
-            writeToPartition(producer2, 0, msg, 6);
-            flushAll({producer1, producer2});
-            Sleep(TDuration::Seconds(15));
+            writeToPartition(producer1, 1, msg, 3);
+            writeToPartition(producer1, 1, msg, 4);
+            writeToPartition(producer1, 1, msg, 5);
+            writeToPartition(producer1, 1, msg, 6);
+            flushAll({producer1});
+            Sleep(TDuration::Seconds(10));
             auto describe  = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 5);
             addNewKeyRanges(describe);
         }
 
-        auto producer3 = makeProducer("producer-3");
 
         {
-            writeToPartition(producer2, 1, msg, 7);
-            writeToPartition(producer2, 1, msg, 8);
-            writeToPartition(producer2, 1, msg, 9);
-            writeToPartition(producer3, 1, msg, 10);
-            flushAll({producer1, producer2, producer3});
+            writeToPartition(producer1, 2, msg, 7);
+            writeToPartition(producer1, 2, msg, 8);
+            writeToPartition(producer1, 2, msg, 9);
+            writeToPartition(producer1, 2, msg, 10);
+            flushAll({producer1});
             Sleep(TDuration::Seconds(5));
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 7);
             addNewKeyRanges(describe2);
         }
 
         UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
-        UNIT_ASSERT_C(producer2->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-2");
-        UNIT_ASSERT_C(producer3->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-3");
     }
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {

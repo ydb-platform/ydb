@@ -73,7 +73,7 @@ struct TImportTraits<TEvImportFromFsRequest> {
     }
 
     static bool IsEmptyItem(const TItem& item) {
-        return item.source_path().empty() && item.destination_path().empty();
+        return item.source_path().empty() && item.destination_path().empty() && item.source_path_db().empty();
     }
 };
 

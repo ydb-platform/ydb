@@ -32,6 +32,7 @@ struct TDqBlockJoinContext {
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
+    TSides<TVector<int>> ColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -44,6 +45,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
+        , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
     {}
 
     bool Finished() const {
@@ -68,6 +70,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         }
         const size_t cols = UserDataCols();
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        if (!ColumnPermutation_.empty()) {
+            TVector<arrow::Datum> permuted(cols);
+            for (size_t j = 0; j < cols; ++j) {
+                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
+            }
+            columns = std::move(permuted);
+        }
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -88,6 +97,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
+    TVector<int> ColumnPermutation_;
 };
 
 template<EJoinKind Kind>
@@ -417,6 +427,52 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
         for (auto& rename : meta.Renames) {
             rename.Side = (rename.Side == ESide::Build) ? ESide::Probe : ESide::Build;
+        }
+    }
+
+    for (ESide side : EachSide) {
+        auto& keyColumns = meta.KeyColumns.SelectSide(side);
+        int numDataCols = meta.InputTypes.SelectSide(side).size() - 1;
+        int numKeys = keyColumns.size();
+
+        bool needsReorder = false;
+        for (int i = 0; i < numKeys; ++i) {
+            if (keyColumns[i] != i) {
+                needsReorder = true;
+                break;
+            }
+        }
+        if (!needsReorder) {
+            continue;
+        }
+
+        TVector<int> perm(numDataCols);
+        std::iota(perm.begin(), perm.end(), 0);
+        for (int i = 0; i < numKeys; ++i) {
+            auto it = std::find(perm.begin(), perm.end(), keyColumns[i]);
+            std::swap(perm[i], *it);
+        }
+
+        meta.ColumnPermutation.SelectSide(side) = perm;
+
+        auto origTypes = TVector<TBlockType*>(meta.InputTypes.SelectSide(side).begin(),
+                                              meta.InputTypes.SelectSide(side).begin() + numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            meta.InputTypes.SelectSide(side)[i] = origTypes[perm[i]];
+        }
+
+        TVector<int> inv(numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            inv[perm[i]] = i;
+        }
+        for (auto& rename : meta.Renames) {
+            if (rename.Side == side) {
+                rename.Index = inv[rename.Index];
+            }
+        }
+
+        for (int i = 0; i < numKeys; ++i) {
+            keyColumns[i] = i;
         }
     }
 

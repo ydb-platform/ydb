@@ -7,7 +7,7 @@
 Строит новую колонку с указанными именем, типом и опциями для указанной таблицы.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ## Параметры запроса
@@ -46,7 +46,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 Изменяет свойства существующей колонки в указанной таблице.
 
 ```yql
-ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ### Параметры запроса
@@ -91,6 +91,19 @@ ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 
 После сброса будет использоваться сжатие по умолчанию.
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+
+{% endif %}
+
+Сброс настроек кодирования колонки
+
+```yql
+ALTER TABLE encoded_table ALTER COLUMN info SET ENCODING();
+```
+
+После сброса будет использоваться кодирование по умолчанию.
 
 ## DROP COLUMN
 

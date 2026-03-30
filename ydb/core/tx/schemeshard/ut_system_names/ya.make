@@ -2,20 +2,11 @@ UNITTEST_FOR(ydb/core/tx/schemeshard)
 
 FORK_SUBTESTS()
 
-<<<<<<< HEAD
-IF (WITH_VALGRIND)
-    SPLIT_FACTOR(40)
-ENDIF()
-=======
 SPLIT_FACTOR(20)
->>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
 
 SIZE(MEDIUM)
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
-ELSE()
-    REQUIREMENTS(cpu:2)
-ENDIF()
+
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     library/cpp/getopt

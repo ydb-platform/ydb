@@ -6,12 +6,7 @@ SPLIT_FACTOR(100)
 
 REQUIREMENTS(cpu:2)
 
-<<<<<<< HEAD
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-=======
 IF (SANITIZER_TYPE)
-
->>>>>>> 1b958331553 (Main:  Optimisation for medium and small tests cpu requirments + split factor (#35969))
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()

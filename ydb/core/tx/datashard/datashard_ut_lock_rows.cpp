@@ -1309,6 +1309,27 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         runtime.SimulateSleep(TDuration::Seconds(1));
         Cerr << "----- DEADLOCK -------" << Endl;
 
+        {
+            ui32 nodeId = *shardNodeIds.begin();
+            size_t nodeIdx = nodeId - runtime.GetFirstNodeId();
+            auto sender = runtime.AllocateEdgeActor(nodeIdx);
+            runtime.Send(
+                MakeLongTxServiceID(nodeId),
+                sender,
+                new TEvLongTxService::TEvGetLockWaitGraph,
+                nodeIdx);
+            auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+            TVector<std::pair<ui64, ui64>> edges;
+            for (const auto& edge : result->Get()->WaitEdges) {
+                edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
+            }
+            std::sort(edges.begin(), edges.end());
+            Cerr << "Wait graph:" << Endl;
+            for (const auto& [w, b] : edges) {
+                Cerr << "Edge " << w << " -> " << b << Endl;
+            }
+        }
+
         // break the wait by aborting the request belonging to the youngest lock
         waitGraph.SendDeadlock(234, 123);
 

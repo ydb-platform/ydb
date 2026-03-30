@@ -404,6 +404,7 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvWaitingLockAdd, Handle);
                 hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
                 hFunc(TEvLongTxService::TEvUpdateLockWaitEdges, Handle);
+                hFunc(TEvLongTxService::TEvGetLockWaitGraph, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -431,6 +432,7 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
         void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
         void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
+        void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -494,7 +496,6 @@ namespace NLongTxService {
         ui64 LastCookie = 0;
 
         THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
-        void PrintWaitGraph() const;
     };
 
 } // namespace NLongTxService

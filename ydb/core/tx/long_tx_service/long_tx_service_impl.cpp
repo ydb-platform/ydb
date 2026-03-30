@@ -1217,8 +1217,6 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
             << ", blocker: " << blockerInfo);
     }
 
-    PrintWaitGraph();
-
     // 2. Send notifications
 
     if (TLockState* localAwaiter = awaiter.LocalState()) {
@@ -1369,16 +1367,18 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
     UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
 }
 
-void TLongTxServiceActor::PrintWaitGraph() const {
-    TVector<std::pair<ui64, ui64>> edges;
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev) {
+    auto response = MakeHolder<TEvLongTxService::TEvGetLockWaitGraphResult>();
+    response->WaitEdges.reserve(WaitEdges.size());
     for (const auto& [id, edge] : WaitEdges) {
-        edges.emplace_back(edge.Awaiter.LockId(), edge.Blocker.LockId());
+        response->WaitEdges.push_back(TEvLongTxService::TEvGetLockWaitGraphResult::TWaitEdge{
+            .Id = id,
+            .Awaiter = edge.Awaiter.LockInfo(SelfId()),
+            .Blocker = edge.Blocker.LockInfo(SelfId()),
+        });
     }
-    std::sort(edges.begin(), edges.end());
-    TXLOG_DEBUG("Wait graph:");
-    for (const auto& [w, b] : edges) {
-        TXLOG_DEBUG("Edge " << w << " -> " << b );
-    }
+
+    Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
 
 } // namespace NLongTxService

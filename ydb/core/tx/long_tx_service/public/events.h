@@ -37,6 +37,8 @@ namespace NLongTxService {
             EvWaitingLockRemove,
             EvWaitingLockDeadlock,
             EvUpdateLockWaitEdges,
+            EvGetLockWaitGraph,
+            EvGetLockWaitGraphResult,
             EvEnd,
         };
 
@@ -358,6 +360,19 @@ namespace NLongTxService {
                 ActorIdToProto(id.OwnerId, edgeId->MutableOwner());
                 edgeId->SetRequestId(id.RequestId);
             }
+        };
+
+        struct TEvGetLockWaitGraph : TEventLocal<TEvGetLockWaitGraph, EvGetLockWaitGraph> {};
+
+        struct TEvGetLockWaitGraphResult
+            : TEventLocal<TEvGetLockWaitGraphResult, EvGetLockWaitGraphResult> {
+            struct TWaitEdge {
+                TWaitEdgeId Id;
+                TLockInfo Awaiter;
+                TLockInfo Blocker;
+            };
+
+            TVector<TWaitEdge> WaitEdges;
         };
     };
 

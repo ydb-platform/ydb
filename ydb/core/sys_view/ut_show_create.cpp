@@ -2362,6 +2362,86 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
     }
 }
 
+Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomFilterIndex = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column prefix bloom filter.
+    // Index names are not stored for DataShard bloom filters (only prefix lengths are kept),
+    // so SHOW CREATE TABLE generates names from the prefix columns: "bloom_<col1>[_col2...]".
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+
+    // Full-PK prefix bloom filter.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_2` LOCAL USING bloom_filter ON (`Key1`, `Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+
+    // Two bloom filter indexes at different prefix lengths.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`),
+                INDEX `idx_bloom_2` LOCAL USING bloom_filter ON (`Key1`, `Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+}
+
 }
 
 } // NSysView

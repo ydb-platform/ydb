@@ -1471,6 +1471,27 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             index->set_size_bytes(tableIndex.GetDataSize());
         }
     }
+
+    // Synthesize LocalBloomFilter index entries for DataShard tables.
+    // ByKeyFilterPrefixes stores prefix lengths (not index names), so names are generated
+    // as "idx_bloom_<prefixLen>".
+    if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
+        const auto& pkCols = in.GetKeyColumnNames();
+        for (auto prefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
+            if (prefix == 0 || static_cast<int>(prefix) > pkCols.size()) {
+                continue;
+            }
+            auto index = out.add_indexes();
+            index->set_name(TStringBuilder() << "idx_bloom_" << prefix);
+            for (ui32 i = 0; i < prefix; ++i) {
+                index->add_index_columns(pkCols[i]);
+            }
+            index->mutable_local_bloom_filter_index();
+            if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
+                index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
+            }
+        }
+    }
 }
 
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,

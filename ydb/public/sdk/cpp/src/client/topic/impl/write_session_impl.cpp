@@ -658,7 +658,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         );
 
         FlushWriteIfRequiredImpl();
-        readyToAccept = OnMemoryUsageChangedImpl(bufferSize).NowOk;
+        readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
     }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -1183,7 +1183,7 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     uint64_t size = 0;
     uint64_t compressedSize = 0;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
-        auto memoryUsage = OnMemoryUsageChangedImpl(-SentPackedMessage.front().Data.size());
+        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(SentPackedMessage.front().Data.size()));
         result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
         if (front.Compressed) {
@@ -1228,7 +1228,14 @@ TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
     //if (diff < 0) {
     //    Y_ABORT_UNLESS(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
     //}
-    MemoryUsage += diff;
+    if (diff >= 0) {
+        MemoryUsage += static_cast<size_t>(diff);
+    } else {
+        const size_t dec = static_cast<size_t>(-diff);
+        Y_ABORT_UNLESS(MemoryUsage >= dec);
+        MemoryUsage -= dec;
+    }
+    
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
         if (wasOk) {
@@ -1311,7 +1318,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     UpdateTimedCountersImpl();
     Y_ABORT_UNLESS(block.Valid);
-    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - block.OriginalMemoryUsage);
+    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
     (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
@@ -1320,7 +1327,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     if (!SendImplScheduled.exchange(true)) {
         CompressionExecutor->Post([cbContext = SelfContext]() {
             if (auto self = cbContext->LockShared()) {
-                self->SendImplScheduled = false;
+                self->SendImplScheduled.store(false);
                 with_lock (self->Lock) {
                     self->SendImpl();
                 }

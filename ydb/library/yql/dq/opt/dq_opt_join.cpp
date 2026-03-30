@@ -1327,7 +1327,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool scalarJoin
 ) {
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
@@ -1699,6 +1700,13 @@ TExprBase DqBuildHashJoin(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
                             .Name().Build("BuildSide")
                             .Value<TCoAtom>().Build("Left")
+                            .Done());
+                }
+                if (scalarJoin) {
+                    joinSettings.push_back(
+                        Build<TCoNameValueTuple>(ctx, join.Pos())
+                            .Name().Build("ScalarJoin")
+                            .Value<TCoAtom>().Build("true")
                             .Done());
                 }
 

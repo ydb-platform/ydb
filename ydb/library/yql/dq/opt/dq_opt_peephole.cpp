@@ -978,96 +978,103 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
         ctx, rightConvertedItems, pos);
 
-    // Convert wide flows to wide streams
-    auto leftInput = ctx.Builder(pos)
-        .Callable("FromFlow")
-            .Add(0, std::move(leftWideFlow))
-        .Seal()
-        .Build();
-
-    auto rightInput = ctx.Builder(pos)
-        .Callable("FromFlow")
-            .Add(0, std::move(rightWideFlow))
-        .Seal()
-        .Build();
-
-    // Check if we need to convert inputs to blocks
-    // For now, assume most inputs are scalar and need conversion to blocks
-    bool needsLeftToBlocks = true;  // TODO: check actual input types
-    bool needsRightToBlocks = true; // TODO: check actual input types
-    bool needsFromBlocks = true;    // TODO: check if output should be scalar
-
-    if (needsLeftToBlocks) {
-        leftInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(leftInput))
-            .Seal()
-            .Build();
+    // Check if we should use scalar join (set when inputs are row-format OLTP data)
+    bool useScalarJoin = false;
+    for (const auto& setting : blockHashJoin.Settings()) {
+        if (setting.Name().Value() == "ScalarJoin") {
+            useScalarJoin = true;
+            break;
+        }
     }
 
-    if (needsRightToBlocks) {
-        rightInput = ctx.Builder(pos)
-            .Callable("WideToBlocks")
-                .Add(0, std::move(rightInput))
-            .Seal()
-            .Build();
+    // Build settings without ScalarJoin for passing to BlockHashJoinCore
+    TExprNode::TListType blockSettings;
+    for (const auto& setting : blockHashJoin.Settings()) {
+        if (setting.Name().Value() != "ScalarJoin") {
+            blockSettings.push_back(setting.Ptr());
+        }
     }
 
-    auto blockJoinCore = ctx.Builder(pos)
-        .Callable("BlockHashJoinCore")
-            .Add(0, std::move(leftInput))
-            .Add(1, std::move(rightInput))
-            .Add(2, blockHashJoin.JoinType().Ptr())
-            .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-            .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
-            .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
-            .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
-            .Add(7, blockHashJoin.Settings().Ptr())
-        .Seal()
-        .Build();
+    TExprNode::TPtr wideResult;
+    const ui32 outputColumnCount = fullColNames.size();
 
-    // Convert blocks back to scalars if needed
-    auto wideResult = std::move(blockJoinCore);
-    if (needsFromBlocks) {
+    if (useScalarJoin) {
+        // Scalar path: use DqScalarHashJoin. Inputs stay as wide flows (no FromFlow/WideToBlocks).
+        // DqScalarHashJoin accepts wide flows and outputs a wide flow of scalar columns.
+        auto scalarJoinNode = ctx.Builder(pos)
+            .Callable("DqScalarHashJoin")
+                .Add(0, std::move(leftWideFlow))
+                .Add(1, std::move(rightWideFlow))
+                .Add(2, blockHashJoin.JoinType().Ptr())
+                .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+                .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+                .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
+                .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+                .Add(7, ctx.NewList(pos, std::move(blockSettings)))
+                .Add(8, ctx.NewList(pos, std::move(leftRenames)))
+                .Add(9, ctx.NewList(pos, std::move(rightRenames)))
+            .Seal()
+            .Build();
+        wideResult = std::move(scalarJoinNode);
+    } else {
+        // Block path: convert scalar wide flows to block streams, run BlockHashJoinCore, convert back.
+        auto leftStream = ctx.Builder(pos)
+            .Callable("FromFlow")
+                .Add(0, std::move(leftWideFlow))
+            .Seal()
+            .Build();
+        auto rightStream = ctx.Builder(pos)
+            .Callable("FromFlow")
+                .Add(0, std::move(rightWideFlow))
+            .Seal()
+            .Build();
+        auto leftBlock = ctx.Builder(pos)
+            .Callable("WideToBlocks")
+                .Add(0, std::move(leftStream))
+            .Seal()
+            .Build();
+        auto rightBlock = ctx.Builder(pos)
+            .Callable("WideToBlocks")
+                .Add(0, std::move(rightStream))
+            .Seal()
+            .Build();
+
+        auto blockJoinCore = ctx.Builder(pos)
+            .Callable("BlockHashJoinCore")
+                .Add(0, std::move(leftBlock))
+                .Add(1, std::move(rightBlock))
+                .Add(2, blockHashJoin.JoinType().Ptr())
+                .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
+                .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
+                .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
+                .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+                .Add(7, ctx.NewList(pos, std::move(blockSettings)))
+                .Add(8, ctx.NewList(pos, std::move(leftRenames)))
+                .Add(9, ctx.NewList(pos, std::move(rightRenames)))
+            .Seal()
+            .Build();
+
         wideResult = ctx.Builder(pos)
             .Callable("WideFromBlocks")
-                .Add(0, std::move(wideResult))
+                .Add(0, std::move(blockJoinCore))
             .Seal()
             .Build();
     }
 
-    // Wide row layout: [L base][L converted][R base][R converted]
-    const ui32 leftBase = itemTypeLeft->GetSize();
-    const ui32 leftConv = leftConvertedItems.size();
-    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? itemTypeRight->GetSize() : 0;
-    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? rightConvertedItems.size() : 0;
-    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
-
-    TVector<ui32> keep;
-    keep.reserve(fullColNames.size());
-    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
-    const ui32 rightStart = leftBase + leftConv;
-    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
-
-    // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", totalColumns)
+                .Params("output", outputColumnCount)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
+                        for (ui32 i = 0U; i < outputColumnCount; i++) {
                             parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", keep[i])
+                                .Atom(0, fullColNames[i])
+                                .Arg(1, "output", i)
                             .Seal();
-                            i++;
                         }
                         return parent;
                     })

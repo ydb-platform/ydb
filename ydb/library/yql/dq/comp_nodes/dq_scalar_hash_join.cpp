@@ -199,7 +199,7 @@ public:
 private:
     class TStreamState : public TComputationValue<TStreamState> {
         using TBase = TComputationValue<TStreamState>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, EJoinKind::Inner>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, Kind>;
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
@@ -376,8 +376,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));
     MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
-    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
-
     TDqUserRenames userRenames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     ValidateRenames(userRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
@@ -387,8 +385,19 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         meta.Renames.push_back({.Index = rename.Index, .Side = side});
     }
 
-    return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(meta),
-                                                        {.Build = rightFlow, .Probe = leftFlow});
+    TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
+    switch (joinKind) {
+        case EJoinKind::Inner:
+            return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(meta), flows);
+        case EJoinKind::Left:
+            return new TScalarHashJoinWrapper<EJoinKind::Left>(ctx.Mutables, std::move(meta), flows);
+        case EJoinKind::LeftSemi:
+            return new TScalarHashJoinWrapper<EJoinKind::LeftSemi>(ctx.Mutables, std::move(meta), flows);
+        case EJoinKind::LeftOnly:
+            return new TScalarHashJoinWrapper<EJoinKind::LeftOnly>(ctx.Mutables, std::move(meta), flows);
+        default:
+            MKQL_ENSURE(false, "Unsupported join kind for DqScalarHashJoin: " << static_cast<ui32>(joinKind));
+    }
 }
 
 } // namespace NKikimr::NMiniKQL

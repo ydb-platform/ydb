@@ -1196,8 +1196,7 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
-    if (!EnsureArgsCount(*node, 8, ctx)) {
+    if (!EnsureArgsCount(*node, 10, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -1206,6 +1205,8 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     const auto& joinTypeNode = *node->Child(2);
     auto& leftKeysNode = *node->Child(3);
     auto& rightKeysNode = *node->Child(4);
+    const auto& leftRenamesNode = *node->Child(8);
+    const auto& rightRenamesNode = *node->Child(9);
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -1221,14 +1222,12 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
-    // Remove length column
     leftItemTypes.pop_back();
 
     TTypeAnnotationNode::TListType rightItemTypes;
     if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
-    // Remove length column
     rightItemTypes.pop_back();
 
     if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
@@ -1237,35 +1236,156 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
+    if (!EnsureTupleOfAtoms(leftRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
 
     if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
         ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
-    std::vector<const TTypeAnnotationNode*> resultItems;
+    const ui32 totalOutputCols = (leftRenamesNode.ChildrenSize() + rightRenamesNode.ChildrenSize()) / 2;
+    std::vector<const TTypeAnnotationNode*> resultItems(totalOutputCols);
 
-    // Add left side columns
-    for (auto itemType : leftItemTypes) {
-        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    for (ui32 i = 0; i < leftRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(leftRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(leftRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < leftItemTypes.size(), "Left rename source index out of bounds");
+        YQL_ENSURE(dstIdx < totalOutputCols, "Left rename dest index out of bounds");
+        resultItems[dstIdx] = ctx.MakeType<TBlockExprType>(leftItemTypes[srcIdx]);
     }
 
-    // Add right side columns
-    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
-        for (auto itemType : rightItemTypes) {
-            if (joinType == "Left") {
-                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
-                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
-                }
+    for (ui32 i = 0; i < rightRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(rightRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(rightRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < rightItemTypes.size(), "Right rename source index out of bounds");
+        YQL_ENSURE(dstIdx < totalOutputCols, "Right rename dest index out of bounds");
+        auto itemType = rightItemTypes[srcIdx];
+        if (joinType == "Left") {
+            if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
             }
-            resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
         }
+        resultItems[dstIdx] = ctx.MakeType<TBlockExprType>(itemType);
     }
 
-    // Add scalar length column at the end
     resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
 
     node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
+}
+
+// Type annotator for DqScalarHashJoin (same 10-arg format as BlockHashJoinCore, but scalar inputs/output).
+TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 10, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+    const auto& leftRenamesNode = *node->Child(8);
+    const auto& rightRenamesNode = *node->Child(9);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder()
+            << "Unknown join kind for DqScalarHashJoin: " << joinType
+            << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    // Collect scalar item types from left input (wide flow/stream of scalar columns)
+    TTypeAnnotationNode::TListType leftItemTypes;
+    auto leftInputType = leftInputNode.GetTypeAnn();
+    if (!leftInputType) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const TTypeAnnotationNode* leftItemType = nullptr;
+    if (leftInputType->GetKind() == ETypeAnnotationKind::Stream) {
+        leftItemType = leftInputType->Cast<TStreamExprType>()->GetItemType();
+    } else if (leftInputType->GetKind() == ETypeAnnotationKind::Flow) {
+        leftItemType = leftInputType->Cast<TFlowExprType>()->GetItemType();
+    }
+    if (!leftItemType || leftItemType->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(leftInputNode.Pos()),
+            "DqScalarHashJoin: expected wide flow/stream as left input"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    leftItemTypes = leftItemType->Cast<TMultiExprType>()->GetItems();
+
+    TTypeAnnotationNode::TListType rightItemTypes;
+    auto rightInputType = rightInputNode.GetTypeAnn();
+    if (!rightInputType) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const TTypeAnnotationNode* rightItemType = nullptr;
+    if (rightInputType->GetKind() == ETypeAnnotationKind::Stream) {
+        rightItemType = rightInputType->Cast<TStreamExprType>()->GetItemType();
+    } else if (rightInputType->GetKind() == ETypeAnnotationKind::Flow) {
+        rightItemType = rightInputType->Cast<TFlowExprType>()->GetItemType();
+    }
+    if (!rightItemType || rightItemType->GetKind() != ETypeAnnotationKind::Multi) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightInputNode.Pos()),
+            "DqScalarHashJoin: expected wide flow/stream as right input"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    rightItemTypes = rightItemType->Cast<TMultiExprType>()->GetItems();
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(leftRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightRenamesNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()),
+            "DqScalarHashJoin: mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const ui32 totalOutputCols = (leftRenamesNode.ChildrenSize() + rightRenamesNode.ChildrenSize()) / 2;
+    std::vector<const TTypeAnnotationNode*> resultItems(totalOutputCols, nullptr);
+
+    for (ui32 i = 0; i < leftRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(leftRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(leftRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < leftItemTypes.size(), "DqScalarHashJoin: left rename source index out of bounds");
+        YQL_ENSURE(dstIdx < totalOutputCols, "DqScalarHashJoin: left rename dest index out of bounds");
+        resultItems[dstIdx] = leftItemTypes[srcIdx];
+    }
+
+    for (ui32 i = 0; i < rightRenamesNode.ChildrenSize(); i += 2) {
+        const auto srcIdx = FromString<ui32>(rightRenamesNode.Child(i)->Content());
+        const auto dstIdx = FromString<ui32>(rightRenamesNode.Child(i + 1)->Content());
+        YQL_ENSURE(srcIdx < rightItemTypes.size(), "DqScalarHashJoin: right rename source index out of bounds");
+        YQL_ENSURE(dstIdx < totalOutputCols, "DqScalarHashJoin: right rename dest index out of bounds");
+        auto itemType = rightItemTypes[srcIdx];
+        if (joinType == "Left") {
+            if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                itemType = ctx.MakeType<TOptionalExprType>(itemType);
+            }
+        }
+        resultItems[dstIdx] = itemType;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
 
@@ -1440,6 +1560,11 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             // Handle BlockHashJoinCore callable (from peephole)
             if (input->Content() == "BlockHashJoinCore") {
                 return AnnotateDqBlockHashJoinCore(input, ctx);
+            }
+
+            // Handle DqScalarHashJoin callable (from peephole, for scalar inputs)
+            if (input->Content() == "DqScalarHashJoin") {
+                return AnnotateDqScalarHashJoinCore(input, ctx);
             }
 
             if (TDqStage::Match(input.Get())) {

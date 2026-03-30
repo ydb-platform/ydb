@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 #include "vchunk_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
@@ -65,6 +66,8 @@ private:
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
     TDDiskIdToHostIndex DDiskIdToHostIndex;
+    NProto::TStorageServiceConfig::TWriteMode WriteMode;
+    ui32 PBufferReplyTimeoutMicroseconds{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

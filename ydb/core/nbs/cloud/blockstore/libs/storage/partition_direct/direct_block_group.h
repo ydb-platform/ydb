@@ -136,6 +136,7 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId,
         TDDiskIdToHostIndex& dDiskIdToHostIndex) = 0;
@@ -222,6 +223,7 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId,
         TDDiskIdToHostIndex& dDiskIdToHostIndex) override;

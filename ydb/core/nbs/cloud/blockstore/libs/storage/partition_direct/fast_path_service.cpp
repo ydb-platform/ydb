@@ -104,6 +104,9 @@ TFastPathService::TFastPathService(
           std::move(counters),
           storageConfig.GetDDiskPoolName(),
           tabletId))
+    , WriteMode(storageConfig.GetWriteMode())
+    , PBufferReplyTimeoutMicroseconds(
+          storageConfig.GetPBufferReplyTimeoutMicroseconds())
 {
     Y_UNUSED(ActorSystem);
 }
@@ -165,6 +168,8 @@ TFastPathService::WriteBlocksLocal(
     const auto [regionIndex, regionRange] = TranslateToRegion(request->Headers);
     request->RegionRange = regionRange;
     request->Lsn = GenerateSequenceNumber();
+    request->WriteMode = WriteMode;
+    request->PBufferReplyTimeoutMicroseconds = PBufferReplyTimeoutMicroseconds;
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),

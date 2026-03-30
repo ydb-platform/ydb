@@ -2,6 +2,7 @@
 
 #include "volume_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -50,6 +51,8 @@ struct TWriteBlocksLocalRequest
     TBlockRange64 RegionRange;
     TBlockRange64 VChunkRange;
     ui64 Lsn = 0;
+    NProto::TStorageServiceConfig::TWriteMode WriteMode{};
+    ui32 PBufferReplyTimeoutMicroseconds{};
 
     explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))

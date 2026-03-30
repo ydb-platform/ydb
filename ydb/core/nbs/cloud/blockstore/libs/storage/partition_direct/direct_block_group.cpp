@@ -313,6 +313,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     std::vector<ui8> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
+    ui32 replyTimeoutMicroseconds,
     const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId,
     TDDiskIdToHostIndex& dDiskIdToHostIndex)
@@ -357,8 +358,6 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
     auto result = promise.GetFuture();
 
-    constexpr ui32 ReplyTimeoutMicroseconds =
-        50000;   // TODO make it configurable
     auto future = StorageTransport->WriteToManyPBuffers(
         PBufferConnections[hostIndexes[0]].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
@@ -368,7 +367,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         disksIds,
-        ReplyTimeoutMicroseconds,
+        replyTimeoutMicroseconds,
         guardedSglist,
         childSpan);
 

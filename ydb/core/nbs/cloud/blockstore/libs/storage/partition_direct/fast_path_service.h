@@ -27,6 +27,8 @@ private:
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    NProto::TStorageServiceConfig::TWriteMode WriteMode{};
+    ui32 PBufferReplyTimeoutMicroseconds{};
 
 public:
     TFastPathService(

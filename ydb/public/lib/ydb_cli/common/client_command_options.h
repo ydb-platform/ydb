@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/getopt/small/completer.h>
 
 namespace YAML {
 class Node;
@@ -130,6 +131,9 @@ public:
     TClientCommandOption& AddLongName(const TString& name);
 
     TClientCommandOption& IfPresentDisableCompletion();
+    TClientCommandOption& CompletionArgHelp(const TString& help);
+    TClientCommandOption& Completer(NLastGetopt::NComp::ICompleterPtr completer);
+    TClientCommandOption& ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices);
 
     const NLastGetopt::EHasArg& GetHasArg() const;
 

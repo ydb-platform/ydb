@@ -145,6 +145,21 @@ TClientCommandOption&  TClientCommandOption::IfPresentDisableCompletion() {
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::CompletionArgHelp(const TString& help) {
+    Opt->CompletionArgHelp(help);
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::Completer(NLastGetopt::NComp::ICompleterPtr completer) {
+    Opt->Completer(std::move(completer));
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices) {
+    Opt->ChoicesWithCompletion(choices);
+    return *this;
+}
+
 const NLastGetopt::EHasArg& TClientCommandOption::GetHasArg() const {
     return Opt->GetHasArg();
 }

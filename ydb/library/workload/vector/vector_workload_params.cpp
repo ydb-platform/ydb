@@ -85,13 +85,20 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption("distance", "Distance/similarity function. Format: 'distance=<value>' or 'similarity=<value>'. "
-            "Examples: 'similarity=inner_product', 'distance=cosine', 'distance=euclidean', 'distance=manhattan'")
-        .DefaultValue("similarity=inner_product").StoreResult(&Distance);
+    opts.AddLongOption("distance", "Distance/similarity function. "
+            "Possible values: 'inner_product', 'cosine_similarity', 'cosine_distance', 'cosine', 'euclidean', 'manhattan'")
+        .DefaultValue("inner_product").StoreResult(&Distance);
     opts.AddLongOption("kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .DefaultValue(KmeansTreeLevels).StoreResult(&KmeansTreeLevels);
     opts.AddLongOption("kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .DefaultValue(KmeansTreeClusters).StoreResult(&KmeansTreeClusters);
+}
+
+TString TVectorWorkloadParams::GetDistanceDDL() const {
+    if (Distance == "inner_product" || Distance == "cosine_similarity") {
+        return "similarity=" + Distance;
+    }
+    return "distance=" + Distance;
 }
 
 TVector<TString> TVectorWorkloadParams::GetColumns() const {

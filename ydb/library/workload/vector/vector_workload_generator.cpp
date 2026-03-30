@@ -94,6 +94,27 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TVectorWorkloadGenerator::GetSup
     return result;
 }
 
+template<typename T>
+static TString GenerateEmbedding(size_t dimension, std::mt19937_64& rng, std::uniform_real_distribution<float>& dist) {
+    TStringBuilder buffer;
+    NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
+    for (size_t j = 0; j < dimension; ++j) {
+        if constexpr (std::is_same<T, float>::value) {
+            serializer.HandleElement(dist(rng));
+        } else if constexpr (std::is_same<T, uint8_t>::value) {
+            serializer.HandleElement(static_cast<uint8_t>(dist(rng) * (UINT8_MAX + 1)));
+        } else if constexpr (std::is_same<T, int8_t>::value) {
+            serializer.HandleElement(static_cast<int8_t>(dist(rng) * (INT8_MAX - INT8_MIN + 1) + INT8_MIN));
+        } else if constexpr (std::is_same<T, bool>::value) {
+            serializer.HandleElement(dist(rng) >= 0.5f);
+        } else {
+            static_assert(false, "Unsupported type");
+        }
+    }
+    serializer.Finish();
+    return buffer;
+}
+
 TQueryInfoList TVectorWorkloadGenerator::Upsert() {
     static thread_local std::mt19937_64 rng(std::random_device{}());
     static thread_local std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
@@ -101,6 +122,7 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 
     const size_t dimension = Params.VectorOpts.VectorDimension;
     const size_t batchSize = Params.UpsertBulkSize;
+    const TString& vectorType = Params.VectorOpts.VectorType;
 
     TStringBuilder query;
     query << "--!syntax_v1\n";
@@ -115,12 +137,16 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
     auto& listBuilder = paramsBuilder.AddParam("$rows").BeginList();
 
     for (size_t i = 0; i < batchSize; ++i) {
-        TStringBuilder embeddingBuffer;
-        NKnnVectorSerialization::TSerializer<float> serializer(&embeddingBuffer.Out);
-        for (size_t j = 0; j < dimension; ++j) {
-            serializer.HandleElement(dist(rng));
+        TString embeddingBuffer;
+        if (vectorType == "uint8") {
+            embeddingBuffer = GenerateEmbedding<uint8_t>(dimension, rng, dist);
+        } else if (vectorType == "int8") {
+            embeddingBuffer = GenerateEmbedding<int8_t>(dimension, rng, dist);
+        } else if (vectorType == "bit") {
+            embeddingBuffer = GenerateEmbedding<bool>(dimension, rng, dist);
+        } else {
+            embeddingBuffer = GenerateEmbedding<float>(dimension, rng, dist);
         }
-        serializer.Finish();
 
         auto& item = listBuilder.AddListItem().BeginStruct();
         item.AddMember("id").Uint64(idDist(rng));

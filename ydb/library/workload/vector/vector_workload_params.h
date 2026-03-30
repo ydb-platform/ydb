@@ -30,6 +30,7 @@ public:
     void ConfigureIndexOpts(NLastGetopt::TOpts& opts);
 
     TVector<TString> GetColumns() const;
+    TString GetDistanceDDL() const;
 
     NVector::TTableOpts TableOpts;
     NVector::TTablePartitioningOpts TablePartitioningOpts;

@@ -413,7 +413,7 @@ int TWorkloadVectorDataInitializerBase::PostImport() {
         ddlQuery << "COVER (id)\n";
     }
     ddlQuery << "WITH (\n";
-    ddlQuery << "    " << VectorParams.Distance << ",\n";
+    ddlQuery << "    " << VectorParams.GetDistanceDDL() << ",\n";
     ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
     ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
     ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";

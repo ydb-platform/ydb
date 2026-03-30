@@ -11,9 +11,6 @@
 
 #include <arrow/scalar.h>
 
-#include <algorithm>
-#include <numeric>
-
 #include "dq_join_common.h"
 
 namespace NKikimr::NMiniKQL {
@@ -35,9 +32,7 @@ struct TDqBlockJoinContext {
     // at runtime (inside DoCalculate) whose lifetime depends on the
     // TComputationContext – which may differ between iterations/retries.
     TSides<TVector<TType*>> UserTypes;
-    // Per-side column permutation that puts key pair i at position i.
-    // perm[newPos] = oldPos.  Empty when no reorder is needed.
-    TSides<TVector<ui32>> ColumnPermutation;
+    TSides<TVector<int>> ColumnPermutation;
 };
 
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
@@ -102,7 +97,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
-    TVector<ui32> ColumnPermutation_;
+    TVector<int> ColumnPermutation_;
 };
 
 template<EJoinKind Kind>
@@ -437,12 +432,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     for (ESide side : EachSide) {
         auto& keyColumns = meta.KeyColumns.SelectSide(side);
-        const ui32 numDataCols = meta.InputTypes.SelectSide(side).size() - 1;
-        const ui32 numKeys = keyColumns.size();
+        int numDataCols = meta.InputTypes.SelectSide(side).size() - 1;
+        int numKeys = keyColumns.size();
 
         bool needsReorder = false;
-        for (ui32 i = 0; i < numKeys; ++i) {
-            if (keyColumns[i] != static_cast<int>(i)) {
+        for (int i = 0; i < numKeys; ++i) {
+            if (keyColumns[i] != i) {
                 needsReorder = true;
                 break;
             }
@@ -451,10 +446,10 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
             continue;
         }
 
-        TVector<ui32> perm(numDataCols);
+        TVector<int> perm(numDataCols);
         std::iota(perm.begin(), perm.end(), 0);
-        for (ui32 i = 0; i < numKeys; ++i) {
-            auto it = std::find(perm.begin(), perm.end(), static_cast<ui32>(keyColumns[i]));
+        for (int i = 0; i < numKeys; ++i) {
+            auto it = std::find(perm.begin(), perm.end(), keyColumns[i]);
             std::swap(perm[i], *it);
         }
 
@@ -462,13 +457,13 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
         auto origTypes = TVector<TBlockType*>(meta.InputTypes.SelectSide(side).begin(),
                                               meta.InputTypes.SelectSide(side).begin() + numDataCols);
-        for (ui32 j = 0; j < numDataCols; ++j) {
-            meta.InputTypes.SelectSide(side)[j] = origTypes[perm[j]];
+        for (int i = 0; i < numDataCols; ++i) {
+            meta.InputTypes.SelectSide(side)[i] = origTypes[perm[i]];
         }
 
-        TVector<ui32> inv(numDataCols);
-        for (ui32 j = 0; j < numDataCols; ++j) {
-            inv[perm[j]] = j;
+        TVector<int> inv(numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            inv[perm[i]] = i;
         }
         for (auto& rename : meta.Renames) {
             if (rename.Side == side) {
@@ -476,7 +471,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
             }
         }
 
-        for (ui32 i = 0; i < numKeys; ++i) {
+        for (int i = 0; i < numKeys; ++i) {
             keyColumns[i] = i;
         }
     }

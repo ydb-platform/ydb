@@ -7,6 +7,7 @@
 #include <util/system/hp_timer.h>
 
 #include <cstring>
+#include <atomic>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -75,10 +76,10 @@ namespace NActors {
     class TLineWriterState {
     public:
         TLineReader* Reader = nullptr;
-        bool HasLastPublished = false;
-        ui64 LastPublishedValue = 0;
-        NHPTimer::STime LastPublishedTs = 0;
-        NHPTimer::STime LastObservedTs = 0;
+        std::atomic<bool> HasLastPublished = false;
+        std::atomic<ui64> LastPublishedValue = 0;
+        std::atomic<NHPTimer::STime> LastPublishedTs = 0;
+        std::atomic<NHPTimer::STime> LastObservedTs = 0;
     };
 
     class ILineWriteBackend {

@@ -606,8 +606,12 @@ namespace NActors {
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
             if (line->WriteState) {
-                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->WriteState->LastPublishedTs);
-                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, line->WriteState->LastObservedTs);
+                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(
+                    data->Anchor,
+                    line->WriteState->LastPublishedTs.load(std::memory_order_acquire));
+                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(
+                    data->Anchor,
+                    line->WriteState->LastObservedTs.load(std::memory_order_acquire));
             }
             lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
             lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
@@ -656,10 +660,10 @@ namespace NActors {
 
     TLinePublishState TInMemoryMetricsBackend::GetPublishState(const TLineWriterState* state) const noexcept {
         return TLinePublishState{
-            .HasLastPublished = state ? state->HasLastPublished : false,
-            .LastPublishedValue = state ? state->LastPublishedValue : 0,
-            .LastPublishedTs = state ? state->LastPublishedTs : 0,
-            .LastObservedTs = state ? state->LastObservedTs : 0,
+            .HasLastPublished = state ? state->HasLastPublished.load(std::memory_order_acquire) : false,
+            .LastPublishedValue = state ? state->LastPublishedValue.load(std::memory_order_acquire) : 0,
+            .LastPublishedTs = state ? state->LastPublishedTs.load(std::memory_order_acquire) : 0,
+            .LastObservedTs = state ? state->LastObservedTs.load(std::memory_order_acquire) : 0,
         };
     }
 
@@ -669,16 +673,16 @@ namespace NActors {
 
     void TInMemoryMetricsBackend::MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept {
         if (state) {
-            state->LastObservedTs = nowTs;
+            state->LastObservedTs.store(nowTs, std::memory_order_release);
         }
     }
 
     void TInMemoryMetricsBackend::MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept {
         if (state) {
-            state->HasLastPublished = true;
-            state->LastPublishedValue = value;
-            state->LastPublishedTs = nowTs;
-            state->LastObservedTs = nowTs;
+            state->LastPublishedValue.store(value, std::memory_order_release);
+            state->LastPublishedTs.store(nowTs, std::memory_order_release);
+            state->LastObservedTs.store(nowTs, std::memory_order_release);
+            state->HasLastPublished.store(true, std::memory_order_release);
         }
     }
 

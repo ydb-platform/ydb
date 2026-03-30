@@ -1,6 +1,7 @@
 """
-AgentWardenChecker — runs safety checks from agent_safety_runs.build_agent_safety_runs in parallel
-on the background event loop (blocking callables via run_in_executor).
+AgentWardenChecker — runs safety checks in parallel on the background event loop
+(blocking callables via run_in_executor). Each factory is invoked once per run in
+collect_agent_safety_warden_pairs.
 """
 
 from __future__ import annotations
@@ -10,14 +11,47 @@ import logging
 import socket
 import threading
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
-from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import AgentSafetyRun, build_agent_safety_runs
-from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import AgentSafetyContext
+from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import (
+    AgentSafetyRun,
+    build_agent_safety_runs_from_pairs,
+)
+from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import (
+    AgentSafetyContext,
+    collect_agent_safety_warden_pairs,
+)
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+def _safety_checks_snapshot(
+    batches: List[List[WardenCheckResult] | None],
+    slot_names: List[str],
+) -> List[WardenCheckResult]:
+    """
+    One API row per catalog slot, stable order. Finished slots use real warden rows;
+    unfinished use catalog name + status pending so polls never look like overwrites.
+    """
+    n = len(slot_names)
+    out: List[WardenCheckResult] = []
+    for j in range(n):
+        b = batches[j]
+        if b is not None:
+            out.extend(b)
+        else:
+            out.append(
+                WardenCheckResult(
+                    name=slot_names[j],
+                    category="safety",
+                    violations=[],
+                    status="pending",
+                )
+            )
+    return out
 
 
 class AgentWardenChecker:
@@ -45,23 +79,57 @@ class AgentWardenChecker:
                 logger.debug("Safety checks already running, skipping")
                 return False
             self._is_running = True
+            started = datetime.utcnow().isoformat() + "Z"
+            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
+            try:
+                pairs: List[Tuple[str, Any]] = collect_agent_safety_warden_pairs(ctx)
+            except Exception as e:
+                logger.error("Failed to collect agent safety wardens: %s", e)
+                self._is_running = False
+                self._last_report = WardenCheckReport(
+                    status="error",
+                    started_at=started,
+                    completed_at=datetime.utcnow().isoformat() + "Z",
+                    liveness_checks=[],
+                    safety_checks=[],
+                    error_message=str(e),
+                )
+                return True
+
+            slot_names = [name for name, _ in pairs]
+            initial_safety = [
+                WardenCheckResult(
+                    name=name,
+                    category="safety",
+                    violations=[],
+                    status="pending",
+                )
+                for name in slot_names
+            ]
             self._last_report = WardenCheckReport(
                 status="running",
-                started_at=datetime.utcnow().isoformat() + "Z",
+                started_at=started,
+                safety_checks=initial_safety,
             )
 
         logger.info("Starting agent safety checks")
-        self._event_loop.submit(self._run_checks_async())
+        self._event_loop.submit(self._run_checks_async(pairs, ctx.log_prefix, slot_names))
         return True
 
-    async def _run_checks_async(self):
+    async def _run_checks_async(
+        self,
+        pairs: List[Tuple[str, Any]],
+        log_prefix: str,
+        slot_names: List[str],
+    ):
         logger.info("Agent safety checks execution started")
 
         try:
-            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
-            runs = build_agent_safety_runs(ctx)
+            runs: List[AgentSafetyRun] = build_agent_safety_runs_from_pairs(pairs, log_prefix)
             loop = asyncio.get_running_loop()
             n = len(runs)
+            if n != len(slot_names):
+                raise RuntimeError("slot_names length does not match runs")
             batches: List[List[WardenCheckResult] | None] = [None] * n
 
             async def _run_at_index(i: int, run: AgentSafetyRun) -> tuple[int, List[WardenCheckResult]]:
@@ -73,10 +141,8 @@ class AgentWardenChecker:
             for finished in asyncio.as_completed(tasks):
                 i, batch = await finished
                 batches[i] = batch
-                accumulated = []
-                for j in range(n):
-                    if batches[j] is not None:
-                        accumulated.extend(batches[j])
+                logger.debug("Agent safety slot %d/%d finished (%d row(s))", i + 1, n, len(batch))
+                accumulated = _safety_checks_snapshot(batches, slot_names)
                 with self._lock:
                     self._last_report = WardenCheckReport(
                         status="running",

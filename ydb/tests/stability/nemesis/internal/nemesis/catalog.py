@@ -44,6 +44,7 @@ class MonitoredAgentActor(base.AbstractMonitoredNemesis):
     def __init__(self, scope="node"):
         base.AbstractMonitoredNemesis.__init__(self, scope=scope)
         self._logger = logging.getLogger(NEMESIS_EXECUTION_LOGGER)
+        self._logger.setLevel(logging.DEBUG)
 
     def prepare_fault(self, hosts):
         raise RuntimeError(

@@ -19,6 +19,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catal
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def liveness_check_result_dict(spec: OrchestratorLivenessCheck, cluster: ExternalKiKiMRCluster) -> Dict[str, Any]:

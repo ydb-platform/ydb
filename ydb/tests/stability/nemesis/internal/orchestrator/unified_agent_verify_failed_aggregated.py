@@ -9,6 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from ydb.tests.stability.nemesis.internal.models import WardenCheckResult
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 def deduplicate_verify_failed(violations: List[str]) -> List[str]:
@@ -61,7 +62,17 @@ class UnifiedAgentVerifyFailedAggregated:
             return False
         if name == class_name:
             return True
-        return name.split()[0] == class_name
+        first = name.split()[0]
+        if first == class_name:
+            return True
+        # Agent catalog: ``{factory}__{ClassName}_{index}`` or legacy ``{ClassName}_{index}``.
+        if first.startswith(class_name + "_"):
+            return True
+        if "__" in first:
+            _, rest = first.split("__", 1)
+            if rest == class_name or rest.startswith(class_name + "_"):
+                return True
+        return False
 
     def aggregate(
         self,

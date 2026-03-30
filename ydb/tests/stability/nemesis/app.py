@@ -1,6 +1,37 @@
 import atexit
 import logging
+import sys
 from functools import lru_cache
+
+# --- Nemesis logging (must run before other ydb.tests.stability.nemesis imports) ---------------
+#
+# Setting logger.setLevel(DEBUG) on a module logger alone often shows nothing: the LogRecord
+# still propagates toward the root logger; if the root (or an intermediate ancestor) has
+# effective level WARNING, DEBUG records are dropped there. A handler must exist on an ancestor
+# that accepts DEBUG. We attach one handler to the package logger and set propagate=False on it
+# so Nemesis output does not reach root (no flood from urllib3 / requests / etc.).
+#
+_NEMESIS_LOGGER_ROOT = "ydb.tests.stability.nemesis"
+_nemesis_stderr_handler_installed = False
+
+
+def _ensure_nemesis_logging_emits_to_stderr() -> None:
+    global _nemesis_stderr_handler_installed
+    if _nemesis_stderr_handler_installed:
+        return
+    nem = logging.getLogger(_NEMESIS_LOGGER_ROOT)
+    nem.setLevel(logging.DEBUG)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
+    )
+    nem.addHandler(handler)
+    nem.propagate = False
+    _nemesis_stderr_handler_installed = True
+
+
+_ensure_nemesis_logging_emits_to_stderr()
 
 from flask import Flask, current_app, jsonify
 
@@ -17,6 +48,9 @@ import ydb.tests.stability.nemesis.routers.orchestrator_router as orchestrator_r
 from ydb.tests.stability.nemesis.routers.agent_router import blueprint as agent_blueprint
 from ydb.tests.stability.nemesis.routers.orchestrator_router import blueprint as orchestrator_blueprint
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 
 @lru_cache
 def get_settings():
@@ -31,7 +65,7 @@ def initialize_app():
         return
 
     settings = get_settings()
-    logging.getLogger().setLevel(logging.DEBUG)
+
     agent_router.warden_checker = AgentWardenChecker(
         log_directory=AgentSettings().kikimr_logs_directory,
     )
@@ -87,6 +121,7 @@ def create_app():
         print(f"Static files NOT configured. Nemesis type: {settings.nemesis_type}")
 
     app = Flask(__name__, static_folder=static_folder, static_url_path="/static")
+    app.logger.setLevel(logging.DEBUG)
 
     atexit.register(cleanup_app)
 

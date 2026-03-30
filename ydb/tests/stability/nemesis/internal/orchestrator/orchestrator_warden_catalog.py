@@ -38,7 +38,7 @@ ORCHESTRATOR_CLUSTER_SAFETY_CHECKS: Tuple[OrchestratorClusterSafetyCheck, ...] =
 class OrchestratorAggregatedSafetyCheck:
     """
     Агрегат по safety-ответам агентов.
-    agent_source_class_name — имя класса warden на агенте (как в JSON поле name / первый токен).
+    agent_source_class_name — имя класса warden на агенте; совпадение см. UnifiedAgentVerifyFailedAggregated._row_matches_class.
     """
 
     name: str

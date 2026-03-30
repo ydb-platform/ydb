@@ -2,34 +2,20 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Any, Callable, List, Tuple
+from typing import Any, Iterable, List, Tuple
 
-from ydb.tests.library.nemesis.safety_warden import (
-    GrepDMesgForPatternsSafetyWarden,
-    GrepGzippedLogFilesForMarkersSafetyWarden,
-    GrepLogFileForMarkers,
-    UnifiedAgentVerifyFailedSafetyWarden,
+from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
+from ydb.tests.library.wardens.logs import (
+    kikimr_grep_dmesg_safety_warden_factory,
+    kikimr_start_logs_safety_warden_factory,
+    kikimr_crit_and_alert_logs_safety_warden_factory,
 )
-
-_KIKIMR_START_MARKERS: List[str] = [
-    "VERIFY",
-    "FAIL ",
-    "signal 11",
-    "signal 6",
-    "signal 15",
-    "uncaught exception",
-    "ERROR: AddressSanitizer",
-    "SIG",
-]
-
-_DMESG_MARKERS: List[str] = ["Out of memory: Kill process"]
 
 
 @dataclass(frozen=True)
 class AgentSafetyContext:
-    """Context passed to every agent safety check build."""
+    """Context passed when collecting wardens for a host."""
 
     log_directory: str
     hostname: str
@@ -43,54 +29,39 @@ class AgentSafetyContext:
         return [self.hostname]
 
 
-@dataclass(frozen=True)
-class AgentSafetyCheck:
-    """One agent safety check; build(ctx) returns a warden with list_of_safety_violations."""
-
-    name: str
-    description: str
-    build: Callable[[AgentSafetyContext], Any]
+def _agent_safety_slot_name(factory_name: str, warden: Any, index: int) -> str:
+    """Stable wire id: ``{factory}__{WardenClass}_{index}`` (double underscore separates factory from class)."""
+    return f"{factory_name}__{type(warden).__name__}_{index}"
 
 
-AGENT_SAFETY_CHECKS: Tuple[AgentSafetyCheck, ...] = (
-    AgentSafetyCheck(
-        "GrepLogFileForMarkersSafetyWarden",
-        "Check kikimr.start logs for error markers",
-        lambda ctx: GrepLogFileForMarkers(
+def _pairs_from_wardens(factory_name: str, wardens: Iterable[Any]) -> List[Tuple[str, Any]]:
+    return [
+        (_agent_safety_slot_name(factory_name, w, i), w)
+        for i, w in enumerate(wardens)
+    ]
+
+
+def collect_agent_safety_warden_pairs(ctx: AgentSafetyContext) -> List[Tuple[str, Any]]:
+    """One (slot_name, warden) per slot: log factories once each, then unified verify-failed warden."""
+    pairs = _pairs_from_wardens(
+        kikimr_start_logs_safety_warden_factory.__name__,
+        kikimr_start_logs_safety_warden_factory(
             ctx.local_hosts,
-            log_file_name=os.path.join(ctx.log_directory, "kikimr.start"),
-            list_of_markers=_KIKIMR_START_MARKERS,
-            username=None,
+            None,
+            ctx.log_directory,
             lines_after=5,
             cut=True,
-        ),
-    ),
-    AgentSafetyCheck(
-        "GrepGzippedLogFilesForMarkersSafetyWarden",
-        "Check gzipped kikimr.start logs for error markers",
-        lambda ctx: GrepGzippedLogFilesForMarkersSafetyWarden(
-            ctx.local_hosts,
-            log_file_pattern=os.path.join(ctx.log_directory, "kikimr.start.*gz"),
-            list_of_markers=_KIKIMR_START_MARKERS,
             modification_days=1,
-            username=None,
-            lines_after=5,
-            cut=True,
         ),
-    ),
-    AgentSafetyCheck(
-        "GrepDMesgForPatternsSafetyWarden",
-        "Check dmesg for OOM and other critical patterns",
-        lambda ctx: GrepDMesgForPatternsSafetyWarden(
-            ctx.local_hosts,
-            list_of_markers=_DMESG_MARKERS,
-            username=None,
-            lines_after=5,
-        ),
-    ),
-    AgentSafetyCheck(
-        "UnifiedAgentVerifyFailedSafetyWarden",
-        "Check unified_agent logs for VERIFY failed errors",
-        lambda _ctx: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
-    ),
-)
+    )
+    pairs += _pairs_from_wardens(
+        kikimr_grep_dmesg_safety_warden_factory.__name__,
+        kikimr_grep_dmesg_safety_warden_factory(ctx.local_hosts, None, lines_after=5),
+    )
+    pairs += _pairs_from_wardens(
+        kikimr_crit_and_alert_logs_safety_warden_factory.__name__,
+        kikimr_crit_and_alert_logs_safety_warden_factory(ctx.local_hosts, None),
+    )
+    unified = UnifiedAgentVerifyFailedSafetyWarden(hours_back=24)
+    pairs.append((_agent_safety_slot_name("unified_agent_verify_failed", unified, 0), unified))
+    return pairs

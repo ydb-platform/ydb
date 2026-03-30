@@ -10,7 +10,6 @@ from ydb.tests.stability.nemesis.internal.config import Settings
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
-from ydb.tests.stability.nemesis.internal.warden_catalog import get_all_warden_definitions
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     nemesis_types_flat_for_api,
@@ -20,6 +19,7 @@ import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 blueprint = Blueprint('orchestrator', __name__)
@@ -374,16 +374,3 @@ def get_warden_results_from_all_hosts():
         }
 
     return jsonify(combined_results)
-
-
-@blueprint.route("/api/warden/checks", methods=["GET"])
-def get_all_available_warden_checks():
-    """
-    Get list of all available warden checks across the system.
-
-    Returns checks from:
-    - Agent safety wardens (run on each agent)
-    - Orchestrator liveness wardens (run centrally)
-    - Orchestrator safety wardens (run centrally via HTTP)
-    """
-    return jsonify(get_all_warden_definitions())

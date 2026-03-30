@@ -19,6 +19,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_TYPES
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 HISTORY_LIMIT = 50
 

@@ -128,7 +128,7 @@
 
 ## Расширение: liveness и safety checks
 
-Каталоги: **`internal/agent/agent_warden_catalog.py`** (агент), **`internal/orchestrator/orchestrator_warden_catalog.py`** (оркестратор). Сводка для API — **`internal/warden_catalog.py`** (`SAFETY_CHECK_ROWS`, **`get_all_warden_definitions()`**). Список проверок: **`GET /api/warden/checks`**.
+Каталоги: **`internal/agent/agent_warden_catalog.py`** (агент: **`collect_agent_safety_warden_pairs`**, фабрики в **`ydb/tests/library/wardens/logs.py`** и т.п.), **`internal/orchestrator/orchestrator_warden_catalog.py`** (оркестратор). Список проверок до запуска в UI/API не отдаётся — строки появляются в **`GET /api/hosts/warden/results`** после **`Run Checks`**.
 
 ### Где что выполняется
 
@@ -151,11 +151,9 @@
 
 Зависит от **location** (`agent` / `orchestrator`).
 
-**Общее для API:** **`internal/warden_catalog.py`** строит **`SAFETY_CHECK_ROWS`** из **`AGENT_SAFETY_CHECKS`** и **`ORCHESTRATOR_SAFETY_CHECKS`**.
-
 **Agent (`location: "agent"`)** — проверка с доступом к **локальным** логам / dmesg и т.п.:
 
-1. В **`internal/agent/agent_warden_catalog.py`** добавьте элемент в **`AGENT_SAFETY_CHECKS`**: **`name`** (совпадает с классом/первым токеном **`str(warden)`** в JSON), **`description`**, **`build(ctx: AgentSafetyContext)`**. Отдельных wire-id нет.
+1. В **`internal/agent/agent_warden_catalog.py`** расширьте **`collect_agent_safety_warden_pairs`**: добавляйте пары **`(slot_name, warden)`** с уникальной строкой **`slot_name`** (см. **`_agent_safety_slot_name`**). Либо добавьте вызов новой фабрики по образцу **`kikimr_start_logs_safety_warden_factory`** / **`kikimr_grep_dmesg_safety_warden_factory`**.
 
 **Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер и/или агрегация по агентам):
 

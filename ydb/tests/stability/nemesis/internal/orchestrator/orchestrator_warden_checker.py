@@ -26,6 +26,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catal
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Agents run several heavy greps in parallel; PDisk scans the whole cluster (per-node timeout in warden).
 _AGENT_SAFETY_WAIT_MAX_SECONDS = 900

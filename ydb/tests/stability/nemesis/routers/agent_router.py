@@ -9,6 +9,7 @@ from ydb.tests.stability.nemesis.internal.agent.nemesis.runner import NemesisMan
 
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 manager = NemesisManager()

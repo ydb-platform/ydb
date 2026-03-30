@@ -7328,6 +7328,21 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx,
                     .Add(0, ctx.ChangeChildren(input, std::move(children)))
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
+        } else if (input.IsCallable("BlockHashJoinCore")) {
+            auto actualUnused = unused;
+            if (!actualUnused.empty() && actualUnused.back() + 1U == node->Tail().Head().ChildrenSize())
+                actualUnused.pop_back();
+            if (!actualUnused.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << actualUnused.size() << " unused fields.";
+                auto children = input.ChildrenList();
+                DropUnusedRenames(children[8U], actualUnused, ctx);
+                DropUnusedRenames(children[9U], actualUnused, ctx);
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, ctx.ChangeChildren(input, std::move(children)))
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal().Build();
+            }
         } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
@@ -7580,6 +7595,44 @@ TExprNode::TPtr OptimizeGraceSelfJoinCore(const TExprNode::TPtr& node, TExprCont
         UpdateInputIndexes<false>(children[TCoGraceSelfJoinCore::idx_RightKeysColumns], vector, ctx);
         UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_LeftRenames], vector, ctx);
         UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_RightRenames], vector, ctx);
+        return ctx.ChangeChildren(*node, std::move(children));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    constexpr ui32 idxLeftInput = 0;
+    constexpr ui32 idxRightInput = 1;
+    constexpr ui32 idxLeftKeysColumns = 3;
+    constexpr ui32 idxRightKeysColumns = 4;
+    constexpr ui32 idxLeftRenames = 8;
+    constexpr ui32 idxRightRenames = 9;
+
+    auto leftUnused = FillAllIndexes(GetSeqItemType(*node->Child(idxLeftInput)->GetTypeAnn()));
+    auto rightUnused = FillAllIndexes(GetSeqItemType(*node->Child(idxRightInput)->GetTypeAnn()));
+
+    RemoveUsedIndexes<false>(node->Child(idxLeftKeysColumns)->Ref(), leftUnused);
+    RemoveUsedIndexes<false>(node->Child(idxRightKeysColumns)->Ref(), rightUnused);
+    RemoveUsedIndexes<true>(node->Child(idxLeftRenames)->Ref(), leftUnused);
+    RemoveUsedIndexes<true>(node->Child(idxRightRenames)->Ref(), rightUnused);
+
+    if (!(leftUnused.empty() && rightUnused.empty())) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " with " << leftUnused.size() << " left and " << rightUnused.size() << " right unused columns.";
+
+        auto children = node->ChildrenList();
+        if (!leftUnused.empty()) {
+            const std::vector<ui32> unused(leftUnused.cbegin(), leftUnused.cend());
+            children[idxLeftInput] = MakeWideMapForDropUnused(std::move(children[idxLeftInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[idxLeftKeysColumns], unused, ctx);
+            UpdateInputIndexes<true>(children[idxLeftRenames], unused, ctx);
+        }
+        if (!rightUnused.empty()) {
+            const std::vector<ui32> unused(rightUnused.cbegin(), rightUnused.cend());
+            children[idxRightInput] = MakeWideMapForDropUnused(std::move(children[idxRightInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[idxRightKeysColumns], unused, ctx);
+            UpdateInputIndexes<true>(children[idxRightRenames], unused, ctx);
+        }
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
@@ -9375,6 +9428,7 @@ struct TPeepHoleRules {
         {"MapJoinCore", &OptimizeMapJoinCore},
         {"GraceJoinCore", &OptimizeGraceJoinCore},
         {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
+        {"BlockHashJoinCore", &OptimizeBlockHashJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
         {"Unordered", &DropAssume},

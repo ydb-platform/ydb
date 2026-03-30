@@ -76,6 +76,9 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 
     CreateTables(session, "schema/sortings.sql", useColumnStore);
 
+    CreateTables(session, "schema/const_folding.sql", useColumnStore);
+
+
     {
         CreateTables(session, "schema/different_join_predicate_key_types.sql", false /* olap params are already set in schema */);
         const TString upsert =
@@ -708,6 +711,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);
+    }
+
+    Y_UNIT_TEST(ConstantFoldingBug) {
+        ExecuteJoinOrderTestGenericQueryWithStats("queries/constant_folding_bug.sql", "stats/tpch1000s.json", false, false);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS16, ColumnStore) {

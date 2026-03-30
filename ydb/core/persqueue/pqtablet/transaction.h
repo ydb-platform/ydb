@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>

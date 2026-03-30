@@ -52,12 +52,14 @@ private:
 
     void DoReadBlocksLocal(
         NThreading::TPromise<TReadBlocksLocalResponse> promise,
+        TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
 
     void DoWriteBlocksLocal(
         NThreading::TPromise<TWriteBlocksLocalResponse> promise,
+        TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         NWilson::TTraceId traceId);

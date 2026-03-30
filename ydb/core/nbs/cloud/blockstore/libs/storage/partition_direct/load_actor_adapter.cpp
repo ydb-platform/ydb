@@ -61,6 +61,7 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
     auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
         .Range = TBlockRange64::WithLength(
             startIndex,
             totalSize / DefaultBlockSize)});
@@ -104,6 +105,7 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
     TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
 
     auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
         .Range = TBlockRange64::WithLength(
             msg->Record.GetStartIndex(),
             blocksCount)});

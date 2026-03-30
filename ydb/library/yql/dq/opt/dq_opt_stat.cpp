@@ -16,14 +16,14 @@ namespace {
      * We maintain a white list of callables that we consider part of constant expressions
      * All other callables will not be evaluated
      */
-    THashSet<TString> ConstantFoldingWhiteList = {
+    const THashSet<TString> ConstantFoldingWhiteList = {
         "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
         "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
-    THashSet<TString> PgConstantFoldingWhiteList = {
+    const THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};
 
-    TVector<TString> UdfBlackList = {
+    const TVector<TString> UdfBlackList = {
         "RandomNumber",
         "Random",
         "RandomUuid",
@@ -45,7 +45,7 @@ namespace {
             auto udf = TCoUdf(input->Child(0));
             auto udfName = udf.MethodName().StringValue();
 
-            for (auto blck : UdfBlackList) {
+            for (const auto& blck : UdfBlackList) {
                 if (udfName.find(blck) != TString::npos) {
                     return false;
                 }
@@ -270,9 +270,12 @@ bool IsSuitableToFoldFlatMap(const TExprNode::TPtr& input) {
         return false;
     }
 
-    if (auto maybeApply = TMaybeNode<TCoApply>(input->Child(0))) {
-        auto apply = maybeApply.Cast();
-        return IsConstantUdf(apply.Callable().Ptr());
+    if (TCoApply::Match(input->Child(0))) {
+        auto apply = input->Child(0);
+        if (apply->ChildrenSize() != 2)  {
+            return false;
+        }
+        return IsConstantUdf(apply->Child(0)) && IsConstantExpr(apply->Child(1));
     }
 
     return false;

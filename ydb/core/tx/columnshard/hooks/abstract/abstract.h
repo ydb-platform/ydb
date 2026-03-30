@@ -326,6 +326,14 @@ public:
     // count indicates guards are leaking across pages.
     virtual void OnStreamingPageResult(const ui64 /*resourceGuardsCount*/, const ui64 /*resourceGuardsMemory*/) {
     }
+
+    // Called from DoStartReserveMemory (NSSA path) each time a memory reservation
+    // is requested for a streaming page.  sizeToReserve is the number of bytes
+    // passed to the grouped memory manager.  In a correct implementation this
+    // should be roughly constant per page (≈ 1 page worth of data); if it grows
+    // linearly with the page number the whole-portion over-accounting bug is present.
+    virtual void OnStreamingMemoryReserved(const ui64 /*sizeToReserve*/) {
+    }
     TDuration GetMaxReadStaleness() const {
         const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetMaxReadStaleness_ms());
         return DoGetMaxReadStaleness(defaultValue);

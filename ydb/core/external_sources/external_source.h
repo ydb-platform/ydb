@@ -35,9 +35,9 @@ struct TAws {
 struct TServiceAccount {
     static constexpr std::string_view Method = "SERVICE_ACCOUNT";
 
-    TServiceAccount(TString serviceAccountId, TString serviceAccountIdSignature)
-        : ServiceAccountId{std::move(serviceAccountId)}
-        , ServiceAccountIdSignature{std::move(serviceAccountIdSignature)}
+    TServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature)
+        : ServiceAccountId{serviceAccountId}
+        , ServiceAccountIdSignature{serviceAccountIdSignature}
     {}
 
     TString ServiceAccountId;
@@ -47,9 +47,9 @@ struct TServiceAccount {
 struct TIamImpersonate {
     static constexpr std::string_view Method = "IAM";
 
-    TIamImpersonate(TString serviceAccountId, TString resourceId)
-        : ServiceAccountId{std::move(serviceAccountId)}
-        , ResourceId{std::move(resourceId)}
+    TIamImpersonate(const TString& serviceAccountId, const TString& resourceId)
+        : ServiceAccountId{serviceAccountId}
+        , ResourceId{resourceId}
     {}
 
     TString ServiceAccountId;

@@ -12,8 +12,10 @@ IF (SANITIZER_TYPE != "memory" AND SANITIZER_TYPE != "thread")
 ENDIF()
 
 SIZE(LARGE)
+
+REQUIREMENTS(ram:16 cpu:2)
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-REQUIREMENTS(ram:16)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)

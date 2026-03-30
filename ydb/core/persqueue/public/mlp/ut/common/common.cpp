@@ -15,6 +15,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
             NKikimrServices::PQ_MLP_CONSUMER,
             NKikimrServices::PQ_MLP_ENRICHER,
             NKikimrServices::PQ_MLP_DLQ_MOVER,
+            NKikimrServices::PQ_MLP_DESCRIBER,
         },
         NActors::NLog::PRI_DEBUG
     );
@@ -145,6 +146,15 @@ TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&
     return readerId;
 }
 
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, TDescribeSettings&& settings) {
+    auto edgeId = runtime.AllocateEdgeActor();
+    auto readerId = runtime.Register(CreateDescriber(edgeId, std::move(settings)));
+    runtime.EnableScheduleForActor(readerId);
+    runtime.DispatchEvents();
+
+    return readerId;
+}
+
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
     auto edgeId = runtime.AllocateEdgeActor();
     auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
@@ -164,6 +174,10 @@ THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TD
 
 THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     return runtime.GrabEdgeEvent<TEvPurgeResponse>(timeout);
+}
+
+THolder<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+    return runtime.GrabEdgeEvent<TEvDescribeResponse>(timeout);
 }
 
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {

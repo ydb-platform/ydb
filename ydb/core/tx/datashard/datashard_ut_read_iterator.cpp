@@ -3974,53 +3974,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(HandleMvccGoneInContinue) {
         // TODO
     }
-<<<<<<< HEAD
-=======
-
-
-    Y_UNIT_TEST(TliReadIteratorLocksBroken) {
-        // This test verifies TLI logging when read iterator operations break locks
-        TStringStream ss;
-        TPortManager pm;
-        TServerSettings serverSettings(pm.GetPort(2134));
-        serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetLogBackend(new TStreamLogBackend(&ss));
-
-        TTestHelper helper(serverSettings);
-
-        auto runtime = helper.Server->GetRuntime();
-        runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
-
-        const TString tableName = "table-1";
-        const ui64 lockTxId = 1011121314;
-        const ui64 nodeId = runtime->GetNodeId();
-        const ui64 querySpanId = 12345;
-
-        // Create a read lock
-        NLongTxService::TLockHandle lockHandle(lockTxId, runtime->GetActorSystem(0));
-
-        auto readRequest1 = helper.GetBaseReadRequest(tableName, 1);
-        readRequest1->Record.SetLockTxId(lockTxId);
-        readRequest1->Record.SetLockNodeId(nodeId);
-        readRequest1->Record.SetQuerySpanId(querySpanId);
-        AddKeyQuery(*readRequest1, {1});
-
-        auto readResult1 = helper.SendRead(tableName, readRequest1.release());
-        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
-
-        // Write to break the lock
-        helper.WriteRow(tableName, {1, 1, 1, 999});
-
-        // The TLI logging should have occurred when the lock was broken
-        // Check for the TLI log entry (the write broke the read lock)
-        TVector<std::pair<TString, ui64>> regexToMatchCount{
-            {NTestTli::ConstructRegexToCheckLogs("INFO", "DataShard", "broke.*?locks"), 1},
-        };
-
-        NKikimr::NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
-    }
 
     Y_UNIT_TEST(ShouldAbortInCheckReadWhenTableIsDropped) {
         // Regression test for https://github.com/ydb-platform/ydb/issues/36147
@@ -4078,7 +4031,6 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto readResult = helper.WaitReadResult(TDuration::Seconds(5));
         UNIT_ASSERT_C(readResult, "The read should not deadlock with the drop table op");
     }
->>>>>>> 71a1dfc2c5e (datashard: add drop absence check to the CheckRead unit (#36897))
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {

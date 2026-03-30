@@ -90,7 +90,6 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
-    , MergeContext()
     , BordersFlowController(std::make_shared<TMergeContext>(
         std::make_unique<NArrow::NMerger::TMergePartialStream>(PKSchema, nullptr, context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), IIndexInfo::GetSnapshotColumnNames(), GetVersionBatch(context.GetCommonContext()->GetReadMetadata()->GetRequestSnapshot(), std::numeric_limits<ui64>::max()), GetVersionBatch(TSnapshot::Max(), 0)),
         Counters,
@@ -109,7 +108,7 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     if (BordersFlowController.ExtractExclusiveInterval(mainPortion->GetPortionId())) {
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, mainPortion->GetRecordsCount());
-        constructor->AddFilter(std::move(std::move(filter)));
+        constructor->AddFilter(std::move(filter));
         AFL_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
         LOCAL_LOG_TRACE("event", "TEvRequestFilter")

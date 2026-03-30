@@ -18,7 +18,7 @@ TDuplicateFilteringCounters::TDuplicateFilteringCounters()
     , RequestLatency(TBase::GetHistogram("DuplicateFiltering/Request/LatencyMs", NMonitoring::ExponentialHistogram(18, 2, 1)))
     , ExclusiveFilters(TBase::GetValue("DuplicateFiltering/Filters/Exclusive"))
     , ReadyFiltersCount(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersCount"))
-    , ReadyFiltersSize(TBase::GetValue("DuplicateFiltering/Fitlers/ReadyFiltersSize"))
+    , ReadyFiltersSize(TBase::GetValue("DuplicateFiltering/Filters/ReadyFiltersSize"))
 {
 }
 }   // namespace NKikimr::NColumnShard

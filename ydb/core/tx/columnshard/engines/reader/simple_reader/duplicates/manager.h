@@ -37,7 +37,6 @@ private:
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;
 
-    std::shared_ptr<TMergeContext> MergeContext;
     TBordersFlowController BordersFlowController;
     TFiltersStore FiltersStore;
     std::shared_ptr<TAtomicCounter> AbortionFlag;

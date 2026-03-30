@@ -227,24 +227,24 @@ public:
 
     TUserContextBuilder() {}
 
-    TUserContextBuilder WithUserSID(const TString& userSID) {
+    TUserContextBuilder& WithUserSID(const TString& userSID) {
         UserSID = userSID;
         return *this;
     }
 
-    TUserContextBuilder WithUserTraceId(const NWilson::TTraceId& userTraceId) {
+    TUserContextBuilder& WithUserTraceId(const NWilson::TTraceId& userTraceId) {
         UserTraceId = userTraceId ? userTraceId.Clone() : NWilson::TTraceId();
         return *this;
     }
 
     template <typename TEvent>
-    TUserContextBuilder DeserializeFromEvent(TEvent& event, const NWilson::TTraceId& traceId) {
+    TUserContextBuilder& DeserializeFromEvent(TEvent& event, const NWilson::TTraceId& traceId) {
         return WithUserSID(event.Record.GetUserSID())
             .WithUserTraceId(traceId);
     }
 
     template <typename TEventHandle>
-    TUserContextBuilder DeserializeFromEventHandle(TEventHandle& eventHandle) {
+    TUserContextBuilder& DeserializeFromEventHandle(TEventHandle& eventHandle) {
         return DeserializeFromEvent(*eventHandle.Get(), eventHandle.TraceId);
     }
 

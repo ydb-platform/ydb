@@ -1177,7 +1177,9 @@ private:
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
-                UserCtx->SerializeToEvent(ev->Record);
+                if (UserCtx != nullptr) {
+                    UserCtx->SerializeToEvent(ev->Record);
+                }
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 if (keyRange->TableId.SchemaVersion) {

@@ -6,6 +6,7 @@ PY_SRCS(
     internal/agent/agent_warden_catalog.py
     internal/orchestrator/orchestrator_warden_catalog.py
     internal/models.py
+    internal/safety_warden_execution.py
     internal/event_loop.py
     internal/nemesis/catalog.py
     internal/nemesis/chaos_dispatch.py

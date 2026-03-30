@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Tuple, Union
+from typing import Any, Callable, List, Tuple, Union
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
@@ -32,6 +32,32 @@ ORCHESTRATOR_CLUSTER_SAFETY_CHECKS: Tuple[OrchestratorClusterSafetyCheck, ...] =
         build=lambda c: AllPDisksAreInValidStateSafetyWarden(c, timeout_seconds=30),
     ),
 )
+
+
+class _BuildFailedSafetyWarden:
+    """Placeholder so a failed spec.build still goes through safety_warden_to_result (error row)."""
+
+    __slots__ = ("_exc",)
+
+    def __init__(self, exc: Exception):
+        self._exc = exc
+
+    def list_of_safety_violations(self):
+        raise self._exc
+
+
+def collect_orchestrator_cluster_safety_warden_pairs(
+    cluster: ExternalKiKiMRCluster,
+) -> List[Tuple[str, Any]]:
+    """Same shape as agent: ``(slot_name, warden)`` for each catalog entry; ``spec.name`` is the slot name."""
+    out: List[Tuple[str, Any]] = []
+    for spec in ORCHESTRATOR_CLUSTER_SAFETY_CHECKS:
+        try:
+            warden = spec.build(cluster)
+        except Exception as e:
+            warden = _BuildFailedSafetyWarden(e)
+        out.append((spec.name, warden))
+    return out
 
 
 @dataclass(frozen=True)

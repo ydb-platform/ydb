@@ -6,14 +6,13 @@ import json
 import logging
 import subprocess
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.stability.nemesis.internal.models import WardenCheckResult
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import (
     ORCHESTRATOR_LIVENESS_CHECKS,
     OrchestratorAggregatedSafetyCheck,
-    OrchestratorClusterSafetyCheck,
     OrchestratorLivenessCheck,
 )
 
@@ -45,55 +44,6 @@ def liveness_check_result_dict(spec: OrchestratorLivenessCheck, cluster: Externa
 
 def run_orchestrator_liveness_cli_batch(cluster: ExternalKiKiMRCluster) -> List[Dict[str, Any]]:
     return [liveness_check_result_dict(spec, cluster) for spec in ORCHESTRATOR_LIVENESS_CHECKS]
-
-
-def orchestrator_cluster_safety_warden_to_result(warden: Any, spec: OrchestratorClusterSafetyCheck) -> WardenCheckResult:
-    warden_name = str(warden)
-    try:
-        violations = warden.list_of_safety_violations()
-        status = "violation" if violations else "ok"
-        if violations:
-            logger.info("%s: %d violation(s) found", warden_name, len(violations))
-        return WardenCheckResult(
-            name=warden_name,
-            category="safety",
-            violations=violations if violations else [],
-            status=status,
-        )
-    except Exception as e:
-        logger.error("%s: error - %s", warden_name, e)
-        return WardenCheckResult(
-            name=warden_name,
-            category="safety",
-            violations=[],
-            status="error",
-            error_message=str(e),
-        )
-
-
-def orchestrator_cluster_safety_build_error_result(
-    spec: OrchestratorClusterSafetyCheck,
-    exc: Exception,
-) -> WardenCheckResult:
-    logger.error("%s: build failed - %s", spec.name, exc)
-    return WardenCheckResult(
-        name=spec.name,
-        category="safety",
-        violations=[],
-        status="error",
-        error_message=str(exc),
-    )
-
-
-def run_orchestrator_cluster_safety_sync(
-    cluster: ExternalKiKiMRCluster,
-    spec: OrchestratorClusterSafetyCheck,
-) -> List[WardenCheckResult]:
-    try:
-        warden = spec.build(cluster)
-    except Exception as e:
-        return [orchestrator_cluster_safety_build_error_result(spec, e)]
-    return [orchestrator_cluster_safety_warden_to_result(warden, spec)]
 
 
 def run_orchestrator_aggregated_safety(

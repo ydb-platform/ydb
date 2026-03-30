@@ -16,13 +16,15 @@ from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_runs import (
     run_orchestrator_aggregated_safety,
-    run_orchestrator_cluster_safety_sync,
     run_orchestrator_liveness_subprocess_sync,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import (
     ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS,
-    ORCHESTRATOR_CLUSTER_SAFETY_CHECKS,
-    OrchestratorClusterSafetyCheck,
+    collect_orchestrator_cluster_safety_warden_pairs,
+)
+from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
+    SafetyWardenRun,
+    build_safety_runs_from_pairs,
 )
 
 logger = logging.getLogger(__name__)
@@ -168,19 +170,17 @@ class OrchestratorWardenChecker:
                 )
                 self._publish_running(liveness_results, safety_results)
 
-                local_specs = list(ORCHESTRATOR_CLUSTER_SAFETY_CHECKS)
                 agg_specs = list(ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS)
+                cluster_pairs = collect_orchestrator_cluster_safety_warden_pairs(cluster)
+                local_runs: List[SafetyWardenRun] = build_safety_runs_from_pairs(cluster_pairs, log_prefix="")
 
-                async def _run_local(spec: OrchestratorClusterSafetyCheck) -> List[WardenCheckResult]:
-                    return await loop.run_in_executor(
-                        None,
-                        partial(run_orchestrator_cluster_safety_sync, cluster, spec),
-                    )
+                async def _run_local_run(run: SafetyWardenRun) -> List[WardenCheckResult]:
+                    return await loop.run_in_executor(None, run)
 
                 async def _all_local() -> List[List[WardenCheckResult]]:
-                    if not local_specs:
+                    if not local_runs:
                         return []
-                    return list(await asyncio.gather(*[_run_local(s) for s in local_specs]))
+                    return list(await asyncio.gather(*[_run_local_run(r) for r in local_runs]))
 
                 # Do not use asyncio.gather for (local, wait): PDisk can take sum(per-node timeouts)
                 # across the cluster while agent wait caps at _AGENT_SAFETY_WAIT_MAX_SECONDS. Until *both*

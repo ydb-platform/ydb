@@ -157,7 +157,7 @@
 
 **Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер и/или агрегация по агентам):
 
-1. Локальная по кластеру: в **`orchestrator_warden_catalog.py`** — элемент в кортеже **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** с **`build=lambda c: ...`**. Запуск — **`run_orchestrator_cluster_safety_sync`** / **`OrchestratorWardenChecker`**.
+1. Локальная по кластеру: в **`orchestrator_warden_catalog.py`** — элемент в кортеже **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** с **`build=lambda c: ...`**. Сбор пар **`collect_orchestrator_cluster_safety_warden_pairs`** и запуск через **`build_safety_runs_from_pairs`** (**`internal/safety_warden_execution.py`**, тот же путь, что на агенте).
 2. Агрегированная: элемент в **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** с **`agent_source_class_name`** и **`impl`** (**`aggregate(...)`**; ожидание — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**). Вызов — **`run_orchestrator_aggregated_safety`**.
 
 Для новых агрегаторов: в **`safety_checks`** ищите строку по **`name`** (точное совпадение или первый токен — см. **`UnifiedAgentVerifyFailedAggregated._row_matches_class`**).

@@ -44,7 +44,16 @@ def do(args):
         'Usage',
         'UsedSize',
         'AvailableSize',
+<<<<<<< HEAD
         'TotalSize',
+=======
+        'Limit',
+        'TotalSize',  # legacy
+        'VDiskSlotUsage',
+        'VDiskRawUsage',
+        'NormalizedOccupancy',
+        'CapacityAlert',
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
         'VirtualGroupState',
         'VirtualGroupName',
         'BlobDepotId',
@@ -65,6 +74,7 @@ def do(args):
         'Usage': '%',
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
+        'Limit': 'bytes',
         'TotalSize': 'bytes',
     }
 
@@ -72,7 +82,11 @@ def do(args):
         visible_columns.extend(['VDisks_READY', 'VDisks_ERROR', 'VDisks_REPLICATING', 'VDisks_INIT_PENDING'])
 
     if args.show_vdisk_usage or args.all_columns:
+<<<<<<< HEAD
         visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+=======
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'Limit', 'TotalSize', 'VDiskSlotUsage'])
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
 
     if args.virtual_groups_only:
         visible_columns.extend(['VirtualGroupState', 'VirtualGroupName', 'BlobDepotId', 'ErrorReason', 'DecommitStatus'])
@@ -101,6 +115,7 @@ def do(args):
             group_stat['DecommitStatus'] = common.TGroupDecommitStatus.E.Name(group.VirtualGroupInfo.DecommitStatus)
 
         group_stat['UsedSize'] = 0
+        group_stat['Limit'] = 0
         group_stat['TotalSize'] = 0
         group_stat['AvailableSize'] = 0
 
@@ -122,6 +137,42 @@ def do(args):
         group_stat['AvailableSize'] += vslot.VDiskMetrics.AvailableSize
         group_stat['TotalSize'] += vslot.VDiskMetrics.AvailableSize
 
+<<<<<<< HEAD
+=======
+        pdisk = pdisk_map.get(common.get_pdisk_id(vslot.VSlotId))
+        vdisk_slot_size = 0
+        if pdisk is not None and pdisk.PDiskMetrics.EnforcedDynamicSlotSize > 0:
+            _, pdisk_slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
+            weight = common.get_vslot_owner_weight(group.GroupSizeInUnits, pdisk_slot_size_in_units)
+            vdisk_slot_size = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            group_stat['Limit'] += vdisk_slot_size
+
+        # Aggregate capacity metrics - use max values
+        if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
+            group_stat['VDiskSlotUsage'] = max(group_stat['VDiskSlotUsage'] or 0, vslot.VDiskMetrics.VDiskSlotUsage / 100)
+
+        if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vslot.VDiskMetrics.VDiskRawUsage / 100)
+        elif vdisk_slot_size > 0:
+            # VDiskRawUsage metric was added in 26.1.1
+            # For older versions we calculate it on client side
+            #
+            # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+            #   VDiskRawUsage = 100.0 * (used / hardLimit)
+            # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+            #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+            #
+            vdisk_raw_usage = vslot.VDiskMetrics.AllocatedSize / vdisk_slot_size
+            group_stat['VDiskRawUsage'] = max(group_stat['VDiskRawUsage'] or 0, vdisk_raw_usage)
+
+        if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
+            group_stat['NormalizedOccupancy'] = max(group_stat['NormalizedOccupancy'] or 0, vslot.VDiskMetrics.NormalizedOccupancy)
+
+        if vslot.VDiskMetrics.HasField('CapacityAlert'):
+            # Take the worst (maximum) alert level across all VDisks
+            group_stat['CapacityAlert'] = max(group_stat['CapacityAlert'] or 0, vslot.VDiskMetrics.CapacityAlert)
+
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
         for key in ['VDisks_TOTAL', 'VDisks_' + vslot.Status]:
             group_stat[key] += 1
 

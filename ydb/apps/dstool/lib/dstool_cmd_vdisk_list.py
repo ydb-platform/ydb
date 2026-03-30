@@ -54,7 +54,16 @@ def do(args):
         'Usage',
         'UsedSize',
         'AvailableSize',
+<<<<<<< HEAD
         'TotalSize',
+=======
+        'SlotSize',
+        'TotalSize',  # legacy
+        'VDiskSlotUsage',
+        'VDiskRawUsage',
+        'NormalizedOccupancy',
+        'CapacityAlert',
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
         'SatisfactionRank',
         'PoolName',
         'BoxId',
@@ -75,14 +84,25 @@ def do(args):
         'Usage': '%',
         'UsedSize': 'bytes',
         'AvailableSize': 'bytes',
+<<<<<<< HEAD
         'TotalSize': 'bytes'
+=======
+        'SlotSize': 'bytes',
+        'TotalSize': 'bytes',
+        'VDiskSlotUsage': '%',
+        'VDiskRawUsage': '%',
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
     }
 
     if args.show_pdisk_status:
         visible_columns.extend(['PDiskDriveStatus', 'PDiskDecommitStatus'])
 
     if args.show_vdisk_usage:
+<<<<<<< HEAD
         visible_columns.extend(['Usage', 'UsedSize', 'AvailableSize', 'TotalSize'])
+=======
+        visible_columns.extend(['UsedSize', 'AvailableSize', 'SlotSize', 'TotalSize', 'VDiskSlotUsage'])
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
 
     table_output = table.TableOutput(all_columns, col_units=col_units, default_visible_columns=visible_columns)
 
@@ -116,8 +136,40 @@ def do(args):
             _, row['PDiskSlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
+            weight = common.get_vslot_owner_weight(row['GroupSizeInUnits'], row['PDiskSlotSizeInUnits'])
+            row['SlotSize'] = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
+<<<<<<< HEAD
             row['Usage'] = row['UsedSize'] / row['TotalSize'] if row['TotalSize'] > 0 else 0.0
+=======
+            row['VDiskSlotUsage'] = None
+            row['VDiskRawUsage'] = None
+            row['NormalizedOccupancy'] = None
+            row['CapacityAlert'] = None
+
+            if vslot.VDiskMetrics.HasField('VDiskSlotUsage'):
+                row['VDiskSlotUsage'] = vslot.VDiskMetrics.VDiskSlotUsage / 100
+
+            if vslot.VDiskMetrics.HasField('VDiskRawUsage'):
+                row['VDiskRawUsage'] = vslot.VDiskMetrics.VDiskRawUsage / 100
+            elif row['SlotSize'] > 0:
+                # VDiskRawUsage metric was added in 26.1.1
+                # For older versions we calculate it on client side
+                #
+                # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
+                #   VDiskRawUsage = 100.0 * (used / hardLimit)
+                # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+                #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+                #
+                row['VDiskRawUsage'] = row['UsedSize'] / row['SlotSize']
+
+            if vslot.VDiskMetrics.HasField('NormalizedOccupancy'):
+                row['NormalizedOccupancy'] = vslot.VDiskMetrics.NormalizedOccupancy
+
+            if vslot.VDiskMetrics.HasField('CapacityAlert'):
+                row['CapacityAlert'] = kikimr_disk_color.TPDiskSpaceColor.E.Name(vslot.VDiskMetrics.CapacityAlert)
+
+>>>>>>> f156bf5241e (Improve dstool capacity metrics for vdisk, group, and pool (#36526))
             row['PDiskPage'] = 'actors/pdisks/pdisk%09u' % (vslot_data.PDiskId)
             row['VDiskPage'] = 'actors/vdisks/vdisk%09u_%09u' % (vslot_data.PDiskId, vslot_data.VSlotId)
             rows.append(row)

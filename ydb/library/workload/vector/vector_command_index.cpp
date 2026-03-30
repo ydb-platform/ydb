@@ -54,7 +54,7 @@ int TWorkloadCommandBuildIndex::DoRun() {
             GLOBAL USING vector_kmeans_tree
             ON (embedding)
             WITH (
-                distance={3},
+                {3},
                 vector_type={4},
                 vector_dimension={5},
                 levels={6},

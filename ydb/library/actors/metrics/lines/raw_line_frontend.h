@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../line_base.h"
+#include "../line_storage.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/function.h>

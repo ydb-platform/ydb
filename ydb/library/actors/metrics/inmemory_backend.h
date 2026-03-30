@@ -6,6 +6,7 @@
 #include "lines/on_change_line_frontend.h"
 #include "lines/raw_line_frontend.h"
 
+#include <functional>
 #include <memory>
 
 namespace NActors {
@@ -25,7 +26,13 @@ namespace NActors {
         TVector<TLabel> GetCommonLabels() const;
         TInMemoryMetricsStats GetStats() const;
         void UpdateSelfMetrics();
-        TSnapshot Snapshot() const;
+        // Snapshot and line views are borrowing objects and are valid only during cb().
+        template<class TCallback>
+        void ReadSnapshot(TCallback&& cb) const {
+            ReadSnapshotImpl([&](const TSnapshot& snapshot) {
+                cb(snapshot);
+            });
+        }
 
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;
@@ -55,6 +62,7 @@ namespace NActors {
         void ReturnChunkToFree(TChunk* chunk);
         void MaybeDropClosedLine(TLineReader* line);
         bool IsMetricAllowed(TStringBuf name) const noexcept;
+        void ReadSnapshotImpl(const std::function<void(const TSnapshot&)>& cb) const;
 
     private:
         std::unique_ptr<TImpl> Impl;

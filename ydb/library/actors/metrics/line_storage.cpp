@@ -29,38 +29,15 @@ namespace NActors {
     }
 
     TLineSnapshot::TLineSnapshot() = default;
-    TLineSnapshot::TLineSnapshot(const TLineSnapshot&) = default;
     TLineSnapshot::TLineSnapshot(TLineSnapshot&&) noexcept = default;
-    TLineSnapshot& TLineSnapshot::operator=(const TLineSnapshot&) = default;
     TLineSnapshot& TLineSnapshot::operator=(TLineSnapshot&&) noexcept = default;
     TLineSnapshot::~TLineSnapshot() = default;
-
-    void TLineSnapshot::ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const {
-        if (!Data) {
-            return;
-        }
-        for (size_t chunkIndex : ChunkIndexes) {
-            const auto& pinned = Data->Chunks[chunkIndex];
-            cb(TChunkSnapshotView{
-                .Meta = pinned.View,
-                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.View.CommittedBytes),
-            });
-        }
-    }
 
     TInstant TLineSnapshot::DecodeTimestampTs(NHPTimer::STime ts) const noexcept {
         return Data ? NInMemoryMetricsPrivate::DecodeTs(Data->Anchor, ts) : TInstant::Zero();
     }
 
     TSnapshot::TSnapshot() = default;
-    TSnapshot::TSnapshot(const TSnapshot&) = default;
-    TSnapshot::TSnapshot(TSnapshot&&) noexcept = default;
-    TSnapshot& TSnapshot::operator=(const TSnapshot&) = default;
-    TSnapshot& TSnapshot::operator=(TSnapshot&&) noexcept = default;
     TSnapshot::~TSnapshot() = default;
-
-    TVector<TLineSnapshot> TSnapshot::Lines() const {
-        return SnapshotLines;
-    }
 
 } // namespace NActors

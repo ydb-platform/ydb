@@ -24,17 +24,23 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         return line.Name.StartsWith("inmemory_metrics.");
     }
 
-    TVector<TLineSnapshot> FilterUserLines(TVector<TLineSnapshot> lines) {
-        lines.erase(std::remove_if(lines.begin(), lines.end(), [](const TLineSnapshot& line) {
-            return IsSystemLine(line);
-        }), lines.end());
-        return lines;
+    template<class TCallback>
+    void ReadUserLines(const TInMemoryMetricsRegistry& registry, TCallback&& cb) {
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                if (!IsSystemLine(line)) {
+                    lines.push_back(&line);
+                }
+            });
+            cb(snapshot, lines);
+        });
     }
 
-    const TLineSnapshot* FindLineByName(const TVector<TLineSnapshot>& lines, TStringBuf name) {
-        for (const auto& line : lines) {
-            if (line.Name == name) {
-                return &line;
+    const TLineSnapshot* FindLineByName(const TVector<const TLineSnapshot*>& lines, TStringBuf name) {
+        for (const auto* line : lines) {
+            if (line->Name == name) {
+                return line;
             }
         }
         return nullptr;
@@ -68,19 +74,20 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(1.5));
         UNIT_ASSERT(writer.Append(2.25));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "double_line");
-        UNIT_ASSERT(line);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "double_line");
+            UNIT_ASSERT(line);
 
-        TVector<double> values;
-        line->ForEachRecordAs<double>([&](const TGenericRecordView<double>& record) {
-            values.push_back(record.Value);
+            TVector<double> values;
+            line->ForEachRecordAs<double>([&](const TGenericRecordView<double>& record) {
+                values.push_back(record.Value);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+            UNIT_ASSERT_DOUBLES_EQUAL(values[0], 1.5, 1e-12);
+            UNIT_ASSERT_DOUBLES_EQUAL(values[1], 2.25, 1e-12);
+            UNIT_ASSERT_VALUES_EQUAL(line->Meta.FrontendName(), "raw");
         });
-
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
-        UNIT_ASSERT_DOUBLES_EQUAL(values[0], 1.5, 1e-12);
-        UNIT_ASSERT_DOUBLES_EQUAL(values[1], 2.25, 1e-12);
-        UNIT_ASSERT_VALUES_EQUAL(line->Meta.FrontendName(), "raw");
     }
 
     Y_UNIT_TEST(SubsystemAccessor) {
@@ -120,9 +127,14 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(allowed);
         UNIT_ASSERT(allowed.Append(1));
 
-        const auto lines = registry.Snapshot().Lines();
-        UNIT_ASSERT(!FindLineByName(lines, "line"));
-        UNIT_ASSERT(FindLineByName(lines, "harmonizer.budget"));
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                lines.push_back(&line);
+            });
+            UNIT_ASSERT(!FindLineByName(lines, "line"));
+            UNIT_ASSERT(FindLineByName(lines, "harmonizer.budget"));
+        });
     }
 
     Y_UNIT_TEST(AppendAndSnapshot) {
@@ -139,24 +151,24 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
         UNIT_ASSERT(writer.Append(20));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Name, "line");
-        UNIT_ASSERT(!lines[0].Closed);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Chunks.size(), 1);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "line");
+            UNIT_ASSERT(!lines[0]->Closed);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 1);
 
-        TVector<ui64> values;
-        TVector<TInstant> timestamps;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            timestamps.push_back(record.Timestamp);
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            TVector<TInstant> timestamps;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                timestamps.push_back(record.Timestamp);
+                values.push_back(record.Value);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
+            UNIT_ASSERT_VALUES_EQUAL(values[1], 20);
+            UNIT_ASSERT(timestamps[0] <= timestamps[1]);
         });
-
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
-        UNIT_ASSERT_VALUES_EQUAL(values[1], 20);
-        UNIT_ASSERT(timestamps[0] <= timestamps[1]);
     }
 
     Y_UNIT_TEST(CommonLabelsAreStoredSeparately) {
@@ -174,15 +186,15 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer);
         UNIT_ASSERT(writer.Append(10));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "42");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "kind");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "basic");
+        ReadUserLines(registry, [&](const TSnapshot& snapshot, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "42");
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Name, "kind");
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Value, "basic");
+        });
     }
 
     Y_UNIT_TEST(CommonLabelsCanBeUpdatedAfterLineCreation) {
@@ -206,17 +218,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         };
         registry.SetCommonLabels(updatedLabels);
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "43");
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Name, "host");
-        UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Value, "slot-1");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Name, "kind");
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Labels[0].Value, "basic");
+        ReadUserLines(registry, [&](const TSnapshot& snapshot, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "43");
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Name, "host");
+            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Value, "slot-1");
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Name, "kind");
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Value, "basic");
+        });
 
         auto duplicate = registry.CreateLine("line", std::span<const TLabel>(&label, 1));
         UNIT_ASSERT(!duplicate);
@@ -233,10 +245,10 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer);
         UNIT_ASSERT(writer.Append(10));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Meta.FrontendName(), "on_change");
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Meta.FrontendName(), "on_change");
+        });
     }
 
     Y_UNIT_TEST(DifferentLinesCanUseDifferentMeta) {
@@ -253,13 +265,14 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(rawWriter.Append(1));
         UNIT_ASSERT(encodedWriter.Append(2));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* rawLine = FindLineByName(lines, "raw");
-        const TLineSnapshot* encodedLine = FindLineByName(lines, "encoded");
-        UNIT_ASSERT(rawLine);
-        UNIT_ASSERT(encodedLine);
-        UNIT_ASSERT_VALUES_EQUAL(rawLine->Meta.FrontendName(), "raw");
-        UNIT_ASSERT_VALUES_EQUAL(encodedLine->Meta.FrontendName(), "on_change");
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* rawLine = FindLineByName(lines, "raw");
+            const TLineSnapshot* encodedLine = FindLineByName(lines, "encoded");
+            UNIT_ASSERT(rawLine);
+            UNIT_ASSERT(encodedLine);
+            UNIT_ASSERT_VALUES_EQUAL(rawLine->Meta.FrontendName(), "raw");
+            UNIT_ASSERT_VALUES_EQUAL(encodedLine->Meta.FrontendName(), "on_change");
+        });
     }
 
     Y_UNIT_TEST(OnChangeBackfillsPreviousValueAfterRepeatedValues) {
@@ -277,10 +290,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(20));
         UNIT_ASSERT(writer.Append(20));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "line");
-        UNIT_ASSERT(line);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10, 20}));
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10, 20}));
+        });
     }
 
     Y_UNIT_TEST(OnChangeDoesNotRepublishRepeatedValuesAfterInterval) {
@@ -297,10 +311,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(10));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "line");
-        UNIT_ASSERT(line);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+        });
     }
 
     Y_UNIT_TEST(OnChangeDoesNotEmitObservedTailOnRepeatedValue) {
@@ -316,19 +331,20 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(10));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "line");
-        UNIT_ASSERT(line);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
 
-        TVector<ui64> values;
-        TVector<TInstant> timestamps;
-        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
-            timestamps.push_back(record.Timestamp);
+            TVector<ui64> values;
+            TVector<TInstant> timestamps;
+            line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+                timestamps.push_back(record.Timestamp);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10}));
+            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 1);
         });
-
-        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10}));
-        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 1);
     }
 
     Y_UNIT_TEST(OnChangeBackfillsPreviousValueOnChange) {
@@ -346,21 +362,22 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(20));
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "line");
-        UNIT_ASSERT(line);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
 
-        TVector<ui64> values;
-        TVector<TInstant> timestamps;
-        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
-            timestamps.push_back(record.Timestamp);
+            TVector<ui64> values;
+            TVector<TInstant> timestamps;
+            line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+                timestamps.push_back(record.Timestamp);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20}));
+            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(timestamps[0], timestamps[1]);
+            UNIT_ASSERT(timestamps[1] < timestamps[2]);
         });
-
-        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20}));
-        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(timestamps[0], timestamps[1]);
-        UNIT_ASSERT(timestamps[1] < timestamps[2]);
     }
 
     Y_UNIT_TEST(OnChangeDoesNotBackfillOnCloseWithoutChange) {
@@ -377,11 +394,12 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
         writer.Close();
 
-        const auto lines = FilterUserLines(registry.Snapshot().Lines());
-        const TLineSnapshot* line = FindLineByName(lines, "line");
-        UNIT_ASSERT(line);
-        UNIT_ASSERT(line->Closed);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
+            UNIT_ASSERT(line->Closed);
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+        });
     }
 
     Y_UNIT_TEST(SelfMetricsAreStoredAsRegularLinesWithHistory) {
@@ -403,45 +421,50 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto beforeSecondUpdate = registry.GetStats();
         registry.UpdateSelfMetrics();
 
-        const auto lines = registry.Snapshot().Lines();
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                lines.push_back(&line);
+            });
 
-        const TLineSnapshot* memoryUsed = FindLineByName(lines, "inmemory_metrics.memory_used_bytes");
-        const TLineSnapshot* committedBytes = FindLineByName(lines, "inmemory_metrics.committed_bytes");
-        const TLineSnapshot* freeChunks = FindLineByName(lines, "inmemory_metrics.free_chunks");
-        const TLineSnapshot* usedChunks = FindLineByName(lines, "inmemory_metrics.used_chunks");
-        const TLineSnapshot* sealedChunks = FindLineByName(lines, "inmemory_metrics.sealed_chunks");
-        const TLineSnapshot* writableChunks = FindLineByName(lines, "inmemory_metrics.writable_chunks");
-        const TLineSnapshot* retiringChunks = FindLineByName(lines, "inmemory_metrics.retiring_chunks");
-        const TLineSnapshot* lineCount = FindLineByName(lines, "inmemory_metrics.lines");
-        const TLineSnapshot* closedLines = FindLineByName(lines, "inmemory_metrics.closed_lines");
-        const TLineSnapshot* reuseWatermark = FindLineByName(lines, "inmemory_metrics.reuse_watermark");
-        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+            const TLineSnapshot* memoryUsed = FindLineByName(lines, "inmemory_metrics.memory_used_bytes");
+            const TLineSnapshot* committedBytes = FindLineByName(lines, "inmemory_metrics.committed_bytes");
+            const TLineSnapshot* freeChunks = FindLineByName(lines, "inmemory_metrics.free_chunks");
+            const TLineSnapshot* usedChunks = FindLineByName(lines, "inmemory_metrics.used_chunks");
+            const TLineSnapshot* sealedChunks = FindLineByName(lines, "inmemory_metrics.sealed_chunks");
+            const TLineSnapshot* writableChunks = FindLineByName(lines, "inmemory_metrics.writable_chunks");
+            const TLineSnapshot* retiringChunks = FindLineByName(lines, "inmemory_metrics.retiring_chunks");
+            const TLineSnapshot* lineCount = FindLineByName(lines, "inmemory_metrics.lines");
+            const TLineSnapshot* closedLines = FindLineByName(lines, "inmemory_metrics.closed_lines");
+            const TLineSnapshot* reuseWatermark = FindLineByName(lines, "inmemory_metrics.reuse_watermark");
+            const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
 
-        UNIT_ASSERT(memoryUsed);
-        UNIT_ASSERT(committedBytes);
-        UNIT_ASSERT(freeChunks);
-        UNIT_ASSERT(usedChunks);
-        UNIT_ASSERT(sealedChunks);
-        UNIT_ASSERT(writableChunks);
-        UNIT_ASSERT(retiringChunks);
-        UNIT_ASSERT(lineCount);
-        UNIT_ASSERT(closedLines);
-        UNIT_ASSERT(reuseWatermark);
-        UNIT_ASSERT(appendFailures);
+            UNIT_ASSERT(memoryUsed);
+            UNIT_ASSERT(committedBytes);
+            UNIT_ASSERT(freeChunks);
+            UNIT_ASSERT(usedChunks);
+            UNIT_ASSERT(sealedChunks);
+            UNIT_ASSERT(writableChunks);
+            UNIT_ASSERT(retiringChunks);
+            UNIT_ASSERT(lineCount);
+            UNIT_ASSERT(closedLines);
+            UNIT_ASSERT(reuseWatermark);
+            UNIT_ASSERT(appendFailures);
 
-        UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Labels.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Meta.FrontendName(), "on_change");
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*memoryUsed), ExpectedOnChangeRead(beforeFirstUpdate.MemoryUsedBytes, beforeSecondUpdate.MemoryUsedBytes));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*committedBytes), ExpectedOnChangeRead(beforeFirstUpdate.CommittedBytes, beforeSecondUpdate.CommittedBytes));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*freeChunks), ExpectedOnChangeRead(beforeFirstUpdate.FreeChunks, beforeSecondUpdate.FreeChunks));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*usedChunks), ExpectedOnChangeRead(beforeFirstUpdate.UsedChunks, beforeSecondUpdate.UsedChunks));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*sealedChunks), ExpectedOnChangeRead(beforeFirstUpdate.SealedChunks, beforeSecondUpdate.SealedChunks));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*writableChunks), ExpectedOnChangeRead(beforeFirstUpdate.WritableChunks, beforeSecondUpdate.WritableChunks));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*retiringChunks), ExpectedOnChangeRead(beforeFirstUpdate.RetiringChunks, beforeSecondUpdate.RetiringChunks));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*lineCount), ExpectedOnChangeRead(beforeFirstUpdate.Lines, beforeSecondUpdate.Lines));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), ExpectedOnChangeRead(beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), ExpectedOnChangeRead(beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark));
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), ExpectedOnChangeRead(beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal));
+            UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Labels.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(memoryUsed->Meta.FrontendName(), "on_change");
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*memoryUsed), ExpectedOnChangeRead(beforeFirstUpdate.MemoryUsedBytes, beforeSecondUpdate.MemoryUsedBytes));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*committedBytes), ExpectedOnChangeRead(beforeFirstUpdate.CommittedBytes, beforeSecondUpdate.CommittedBytes));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*freeChunks), ExpectedOnChangeRead(beforeFirstUpdate.FreeChunks, beforeSecondUpdate.FreeChunks));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*usedChunks), ExpectedOnChangeRead(beforeFirstUpdate.UsedChunks, beforeSecondUpdate.UsedChunks));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*sealedChunks), ExpectedOnChangeRead(beforeFirstUpdate.SealedChunks, beforeSecondUpdate.SealedChunks));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*writableChunks), ExpectedOnChangeRead(beforeFirstUpdate.WritableChunks, beforeSecondUpdate.WritableChunks));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*retiringChunks), ExpectedOnChangeRead(beforeFirstUpdate.RetiringChunks, beforeSecondUpdate.RetiringChunks));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*lineCount), ExpectedOnChangeRead(beforeFirstUpdate.Lines, beforeSecondUpdate.Lines));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*closedLines), ExpectedOnChangeRead(beforeFirstUpdate.ClosedLines, beforeSecondUpdate.ClosedLines));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*reuseWatermark), ExpectedOnChangeRead(beforeFirstUpdate.ReuseWatermark, beforeSecondUpdate.ReuseWatermark));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), ExpectedOnChangeRead(beforeFirstUpdate.AppendFailuresTotal, beforeSecondUpdate.AppendFailuresTotal));
+        });
     }
 
     Y_UNIT_TEST(SelfMetricsKeepSinglePointForRepeatedStableValues) {
@@ -456,28 +479,36 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(1));
 
         registry.UpdateSelfMetrics();
-        auto lines = registry.Snapshot().Lines();
-        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
-        UNIT_ASSERT(appendFailures);
-
         TVector<TInstant> firstReadTimestamps;
-        appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            firstReadTimestamps.push_back(record.Timestamp);
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                lines.push_back(&line);
+            });
+            const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+            UNIT_ASSERT(appendFailures);
+            appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                firstReadTimestamps.push_back(record.Timestamp);
+            });
         });
         UNIT_ASSERT_VALUES_EQUAL(firstReadTimestamps.size(), 1);
 
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         registry.UpdateSelfMetrics();
 
-        lines = registry.Snapshot().Lines();
-        appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
-        UNIT_ASSERT(appendFailures);
-
         TVector<ui64> values;
         TVector<TInstant> secondReadTimestamps;
-        appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
-            secondReadTimestamps.push_back(record.Timestamp);
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                lines.push_back(&line);
+            });
+            const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+            UNIT_ASSERT(appendFailures);
+            appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+                secondReadTimestamps.push_back(record.Timestamp);
+            });
         });
 
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
@@ -499,10 +530,15 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto stats = registry.GetStats();
         registry.UpdateSelfMetrics();
 
-        const auto lines = registry.Snapshot().Lines();
-        const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
-        UNIT_ASSERT(appendFailures);
-        UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
+        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+            TVector<const TLineSnapshot*> lines;
+            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                lines.push_back(&line);
+            });
+            const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
+            UNIT_ASSERT(appendFailures);
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
+        });
     }
 
     Y_UNIT_TEST(ClosePreservesHistory) {
@@ -517,17 +553,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         writer.Close();
         UNIT_ASSERT(!writer.Append(43));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT(lines[0].Closed);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT(lines[0]->Closed);
 
-        TVector<ui64> values;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 42);
         });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 42);
     }
 
     Y_UNIT_TEST(LineLimitReturnsNoopWriter) {
@@ -557,20 +593,20 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT(writer.Append(value));
         }
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Chunks.size(), 2);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 2);
 
-        TVector<ui64> values;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 5);
+            for (ui64 value = 1; value <= 5; ++value) {
+                UNIT_ASSERT_VALUES_EQUAL(values[value - 1], value);
+            }
         });
-
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 5);
-        for (ui64 value = 1; value <= 5; ++value) {
-            UNIT_ASSERT_VALUES_EQUAL(values[value - 1], value);
-        }
     }
 
     Y_UNIT_TEST(DuplicateKeyReturnsNoopWriter) {
@@ -588,17 +624,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate.Append(20));
         UNIT_ASSERT(first.Append(10));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT(!lines[0].Closed);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT(!lines[0]->Closed);
 
-        TVector<ui64> values;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
         });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
     }
 
     Y_UNIT_TEST(DuplicateKeyIgnoresLabelOrder) {
@@ -624,8 +660,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate);
         UNIT_ASSERT(first.Append(10));
 
-        auto lines = FilterUserLines(registry.Snapshot().Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        });
     }
 
     Y_UNIT_TEST(ZeroMemoryWriterDrops) {
@@ -638,7 +675,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        UNIT_ASSERT_VALUES_EQUAL(FilterUserLines(registry.Snapshot().Lines()).size(), 0);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 0);
+        });
     }
 
     Y_UNIT_TEST(TooSmallChunkAlwaysDrops) {
@@ -651,7 +690,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        UNIT_ASSERT_VALUES_EQUAL(FilterUserLines(registry.Snapshot().Lines()).size(), 0);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 0);
+        });
     }
 
     Y_UNIT_TEST(StealOldestSealedChunk) {
@@ -670,28 +711,28 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second.Append(100));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
 
-        TVector<ui64> firstValues;
-        TVector<ui64> secondValues;
-        for (const auto& line : lines) {
-            if (line.Name == "first") {
-                line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                    firstValues.push_back(record.Value);
-                });
-            } else if (line.Name == "second") {
-                line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                    secondValues.push_back(record.Value);
-                });
+            TVector<ui64> firstValues;
+            TVector<ui64> secondValues;
+            for (const auto* line : lines) {
+                if (line->Name == "first") {
+                    line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                        firstValues.push_back(record.Value);
+                    });
+                } else if (line->Name == "second") {
+                    line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                        secondValues.push_back(record.Value);
+                    });
+                }
             }
-        }
 
-        UNIT_ASSERT_VALUES_EQUAL(firstValues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(firstValues[0], 5);
-        UNIT_ASSERT_VALUES_EQUAL(secondValues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(secondValues[0], 100);
+            UNIT_ASSERT_VALUES_EQUAL(firstValues.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(firstValues[0], 5);
+            UNIT_ASSERT_VALUES_EQUAL(secondValues.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(secondValues[0], 100);
+        });
     }
 
     Y_UNIT_TEST(ClosedWritableChunkBecomesReusable) {
@@ -711,16 +752,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second.Append(2));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
-        auto lines = FilterUserLines(registry.Snapshot().Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lines[0].Name, "second");
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "second");
 
-        TVector<ui64> values;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
         });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
     }
 
     Y_UNIT_TEST(ConcurrentAppendAndSnapshot) {
@@ -739,14 +781,15 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         std::thread snapshotter([&] {
             while (!stop.load(std::memory_order_acquire)) {
-                auto snapshot = registry.Snapshot();
-                for (const auto& line : FilterUserLines(snapshot.Lines())) {
-                    line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                        if (record.Value >= writes) {
-                            ok.store(false, std::memory_order_release);
-                        }
-                    });
-                }
+                ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+                    for (const auto* line : lines) {
+                        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                            if (record.Value >= writes) {
+                                ok.store(false, std::memory_order_release);
+                            }
+                        });
+                    }
+                });
                 std::this_thread::yield();
             }
         });
@@ -762,18 +805,18 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
 
-        TVector<ui64> values;
-        lines[0].ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
+            TVector<ui64> values;
+            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                values.push_back(record.Value);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), writes);
+            for (ui64 i = 0; i < writes; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(values[i], i);
+            }
         });
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), writes);
-        for (ui64 i = 0; i < writes; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(values[i], i);
-        }
     }
 
     Y_UNIT_TEST(ConcurrentWritersWithRandomSnapshots) {
@@ -798,16 +841,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::thread snapshotter([&] {
             std::mt19937_64 rng(42);
             while (!stop.load(std::memory_order_acquire)) {
-                auto snapshot = registry.Snapshot();
-                for (const auto& line : FilterUserLines(snapshot.Lines())) {
-                    line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                        const ui64 lineIndex = record.Value >> 32;
-                        const ui64 seq = record.Value & 0xffffffffull;
-                        if (lineIndex >= writersCount || seq >= writesPerLine) {
-                            ok.store(false, std::memory_order_release);
-                        }
-                    });
-                }
+                ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+                    for (const auto* line : lines) {
+                        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                            const ui64 lineIndex = record.Value >> 32;
+                            const ui64 seq = record.Value & 0xffffffffull;
+                            if (lineIndex >= writersCount || seq >= writesPerLine) {
+                                ok.store(false, std::memory_order_release);
+                            }
+                        });
+                    }
+                });
                 for (ui64 spins = rng() % 16; spins; --spins) {
                     std::this_thread::yield();
                 }
@@ -839,19 +883,19 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
-        auto snapshot = registry.Snapshot();
-        auto lines = FilterUserLines(snapshot.Lines());
-        UNIT_ASSERT_VALUES_EQUAL(lines.size(), writersCount);
+        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+            UNIT_ASSERT_VALUES_EQUAL(lines.size(), writersCount);
 
-        TVector<ui64> counts(writersCount, 0);
-        for (const auto& line : lines) {
-            line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                ++counts[record.Value >> 32];
-            });
-        }
+            TVector<ui64> counts(writersCount, 0);
+            for (const auto* line : lines) {
+                line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+                    ++counts[record.Value >> 32];
+                });
+            }
 
-        for (ui32 i = 0; i < writersCount; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(counts[i], writesPerLine);
-        }
+            for (ui32 i = 0; i < writersCount; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(counts[i], writesPerLine);
+            }
+        });
     }
 }

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <util/datetime/base.h>
-#include <util/generic/function.h>
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -11,6 +10,7 @@
 #include <memory>
 #include <span>
 #include <type_traits>
+#include <utility>
 namespace NActors {
     class TLineReader;
     struct TChunk;
@@ -140,16 +140,19 @@ namespace NActors {
         TStringBuf FrontendName() const noexcept;
     };
 
+    // Borrowing snapshot view of a single line. Instances are owned by TSnapshot
+    // and must only be used during the enclosing ReadSnapshot() callback.
     class TLineSnapshot {
     public:
         TLineSnapshot();
-        TLineSnapshot(const TLineSnapshot&);
+        TLineSnapshot(const TLineSnapshot&) = delete;
         TLineSnapshot(TLineSnapshot&&) noexcept;
-        TLineSnapshot& operator=(const TLineSnapshot&);
+        TLineSnapshot& operator=(const TLineSnapshot&) = delete;
         TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
         ~TLineSnapshot();
 
-        void ForEachChunk(const std::function<void(const TChunkSnapshotView&)>& cb) const;
+        template<class TCallback>
+        void ForEachChunk(TCallback&& cb) const;
         TInstant DecodeTimestampTs(NHPTimer::STime ts) const noexcept;
         template<class TValueType, class TCallback>
         void ForEachRecordAs(TCallback&& cb) const {
@@ -198,16 +201,21 @@ namespace NActors {
         TInstant LastObservedTimestamp;
     };
 
+    // Borrowing snapshot view owned by ReadSnapshot(). It cannot be created or
+    // stored by value outside backend internals and is only valid during cb().
     class TSnapshot {
     public:
-        TSnapshot();
-        TSnapshot(const TSnapshot&);
-        TSnapshot(TSnapshot&&) noexcept;
-        TSnapshot& operator=(const TSnapshot&);
-        TSnapshot& operator=(TSnapshot&&) noexcept;
-        ~TSnapshot();
+        TSnapshot(const TSnapshot&) = delete;
+        TSnapshot(TSnapshot&&) = delete;
+        TSnapshot& operator=(const TSnapshot&) = delete;
+        TSnapshot& operator=(TSnapshot&&) = delete;
 
-        TVector<TLineSnapshot> Lines() const;
+        template<class TCallback>
+        void ForEachLine(TCallback&& cb) const {
+            for (const auto& line : SnapshotLines) {
+                cb(line);
+            }
+        }
 
     public:
         TVector<TLabel> CommonLabels;
@@ -215,6 +223,8 @@ namespace NActors {
     private:
         friend class TInMemoryMetricsBackend;
         friend class TInMemoryMetricsRegistry;
+        TSnapshot();
+        ~TSnapshot();
         TVector<TLineSnapshot> SnapshotLines;
     };
 

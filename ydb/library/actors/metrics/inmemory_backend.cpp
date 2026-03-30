@@ -585,7 +585,7 @@ namespace NActors {
         }
     }
 
-    TSnapshot TInMemoryMetricsBackend::Snapshot() const {
+    void TInMemoryMetricsBackend::ReadSnapshotImpl(const std::function<void(const TSnapshot&)>& cb) const {
         TSnapshot snapshot;
         auto data = std::make_shared<TSnapshotData>();
         data->Anchor = Impl->TimeAnchor;
@@ -635,8 +635,7 @@ namespace NActors {
                 snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
             }
         }
-
-        return snapshot;
+        cb(snapshot);
     }
 
     ui64 TInMemoryMetricsBackend::GetReuseWatermark() const noexcept {

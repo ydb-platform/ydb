@@ -81,4 +81,18 @@ namespace NActors {
         bool TryPinChunk(TChunk* chunk) noexcept;
     } // namespace NInMemoryMetricsPrivate
 
+    template<class TCallback>
+    void TLineSnapshot::ForEachChunk(TCallback&& cb) const {
+        if (!Data) {
+            return;
+        }
+        for (size_t chunkIndex : ChunkIndexes) {
+            const auto& pinned = Data->Chunks[chunkIndex];
+            cb(TChunkSnapshotView{
+                .Meta = pinned.View,
+                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.View.CommittedBytes),
+            });
+        }
+    }
+
 } // namespace NActors

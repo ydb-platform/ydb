@@ -1629,7 +1629,8 @@ private:
             },
             [&ev](const IWmQueryClassifier::TBypass&) {
                 KQP_PROXY_LOG_D("Proxy Classify returns: bypass");
-                ev->Get()->SetPoolId("");
+                // This pool ID is only needed for legacy tests to run
+                ev->Get()->SetPoolId(DEFAULT_POOL_ID);
                 ev->Get()->SetPoolConfig(IWmQueryClassifier::EMPTY_POOL);
                 return true;
             },

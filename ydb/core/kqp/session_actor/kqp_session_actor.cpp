@@ -610,7 +610,8 @@ public:
         STLOG_W("Failed to deliver request to workload service, bypassing WLM",
             (trace_id, TraceId()));
 
-        QueryState->UserRequestContext->PoolId.clear();
+        // This pool ID is only needed for legacy tests to run
+        QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
         QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
 
         CompileOrExecuteQuery();
@@ -624,7 +625,8 @@ public:
             STLOG_T("Failed to place request in resource pool, feature flag is disabled",
                 (trace_id, TraceId()));
 
-            QueryState->UserRequestContext->PoolId.clear();
+            // This pool ID is only needed for legacy tests to run
+            QueryState->UserRequestContext->PoolId = DEFAULT_POOL_ID;
             QueryState->UserRequestContext->PoolConfig = IWmQueryClassifier::EMPTY_POOL;
 
             CompileOrExecuteQuery();

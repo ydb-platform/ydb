@@ -344,31 +344,6 @@ struct TPersistentBufferFormat {
         }
     };
 
-    struct TPersistentBufferId {
-        TPersistentBufferId(ui32 nodeId, ui32 pDiskId, ui32 dDiskSlotId):
-            NodeId(nodeId), PDiskId(pDiskId), DDiskSlotId(dDiskSlotId) {}
-        TPersistentBufferId(const TPersistentBufferId& o) = default;
-        TPersistentBufferId() = default;
-        bool operator==(const TPersistentBufferId& o) const {
-            return NodeId==o.NodeId && PDiskId==o.PDiskId && DDiskSlotId==o.DDiskSlotId;
-        }
-
-        struct Hash
-        {
-            size_t operator()(const TPersistentBufferId& key) const
-            {
-                size_t h1 = std::hash<ui32>{}(key.NodeId);
-                size_t h2 = std::hash<ui32>{}(key.PDiskId);
-                size_t h3 = std::hash<ui32>{}(key.DDiskSlotId);
-                return h1 ^ (h2 << 1) ^ (h3 << 2);
-            }
-        };
-
-        ui32 NodeId{};
-        ui32 PDiskId{};
-        ui32 DDiskSlotId{};
-    };
-
     DECLARE_DDISK_EVENT(WritePersistentBuffers) {
         using TResult = TEvWritePersistentBuffersResult;
 
@@ -391,7 +366,7 @@ struct TPersistentBufferFormat {
         }
 
         TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
-                const TWriteInstruction& instruction, const std::vector<TPersistentBufferId>& persistentBufferIds,
+                const TWriteInstruction& instruction, const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
                 ui32 replyTimeoutMicroseconds) {
             creds.Serialize(Record.MutableCredentials());
             selector.Serialize(Record.MutableSelector());
@@ -400,9 +375,7 @@ struct TPersistentBufferFormat {
             instruction.Serialize(Record.MutableInstruction());
             for (auto id : persistentBufferIds) {
                 auto* pbId = Record.AddPersistentBufferIds();
-                pbId->SetNodeId(id.NodeId);
-                pbId->SetPDiskId(id.PDiskId);
-                pbId->SetDDiskSlotId(id.DDiskSlotId);
+                *pbId = id;
             }
         }
     };

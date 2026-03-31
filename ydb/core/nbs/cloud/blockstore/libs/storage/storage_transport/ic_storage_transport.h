@@ -45,9 +45,8 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
-        const TVector<NKikimr::NDDisk::TPersistentBufferId>&
-            persistentBufferIds,
-        const ui32 replyTimeoutMicroseconds,
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 

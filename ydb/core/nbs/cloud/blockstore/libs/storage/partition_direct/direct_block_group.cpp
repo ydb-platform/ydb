@@ -43,6 +43,23 @@ TListPBufferResponse MakeListPBufferResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+size_t TDDiskIdHash::operator()(
+    const NKikimrBlobStorage::NDDisk::TDDiskId& key) const
+{
+    size_t h1 = std::hash<ui32>{}(key.GetNodeId());
+    size_t h2 = std::hash<ui32>{}(key.GetPDiskId());
+    size_t h3 = std::hash<ui32>{}(key.GetDDiskSlotId());
+    return h1 ^ (h2 << 1) ^ (h3 << 2);
+}
+
+bool TDDiskIdIdEqual::operator()(
+    const NKikimrBlobStorage::NDDisk::TDDiskId& a,
+    const NKikimrBlobStorage::NDDisk::TDDiskId& b) const
+{
+    return a.GetNodeId() == b.GetNodeId() && a.GetPDiskId() == b.GetPDiskId() &&
+           a.GetDDiskSlotId() == b.GetDDiskSlotId();
+}
+
 const TFuture<NProto::TError>&
 TDirectBlockGroup::TDDiskConnection::GetFuture() const
 {
@@ -71,7 +88,8 @@ TDirectBlockGroup::TDirectBlockGroup(
                                    TVector<TDDiskConnection>& connections,
                                    EConnectionType type)
     {
-        for (const auto& ddiskId: ids) {
+        for (ui8 i = 0; i < ids.size(); ++i) {
+            const auto& ddiskId = ids[i];
             connections.push_back(TDDiskConnection{
                 .HostConnection = NTransport::THostConnection{
                     .ConnectionType = type,
@@ -81,6 +99,12 @@ TDirectBlockGroup::TDirectBlockGroup(
                         generation,
                         std::nullopt,
                         type == EConnectionType::PBuffer)}});
+
+            if (type == EConnectionType::PBuffer) {
+                NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;
+                ddiskId.Serialize(&pbufferId);
+                PBufferIdToHostIndex.insert({pbufferId, i});
+            }
         }
     };
 
@@ -315,8 +339,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TBlockRange64 range,
     ui32 replyTimeoutMicroseconds,
     const TGuardedSgList& guardedSglist,
-    NWilson::TTraceId traceId,
-    TDDiskIdToHostIndex& dDiskIdToHostIndex)
+    NWilson::TTraceId traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
@@ -324,24 +347,20 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
         NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
-    TVector<NKikimr::NDDisk::TPersistentBufferId> disksIds(hostIndexes.size());
+    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds(hostIndexes.size());
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
             PBufferConnections[hostIndex].HostConnection.DDiskId;
 
-        NKikimr::NDDisk::TPersistentBufferId pbufferId{
-            ddiskId.NodeId,
-            ddiskId.PDiskId,
-            ddiskId.DDiskSlotId};
-        disksIds.push_back(pbufferId);
-        dDiskIdToHostIndex.insert({pbufferId, hostIndex});
+        disksIds.push_back({});
+        ddiskId.Serialize(&disksIds.back());
     }
 
     if (!Initialized) {
         TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
         for (auto& diskId: disksIds) {
             dbgResponse.Responses.emplace_back(
-                diskId,
+                PBufferIdToHostIndex[diskId],
                 MakeError(E_REJECTED, "Connections are not established"));
         }
         return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(dbgResponse);
@@ -365,7 +384,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
             range.Size() * DefaultBlockSize),
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
-        disksIds,
+        std::move(disksIds),
         replyTimeoutMicroseconds,
         guardedSglist,
         childSpan);
@@ -373,43 +392,66 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     future.Subscribe(
         [promise = std::move(promise),
          executor = Executor,
-         threadChecker = ExecutorThreadChecker.CreateDelegate()](
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         weakSelf = weak_from_this()](
             const TEvWriteToManyPersistentBuffersResultFuture& f) mutable
         {
             // ActorSystem thread
 
             executor->ExecuteSimple(
-                [promise = std::move(promise), threadChecker, f]() mutable
+                [promise = std::move(promise),
+                 threadChecker,
+                 f,
+                 weakSelf = std::move(weakSelf)]() mutable
                 {
                     Y_ABORT_UNLESS(threadChecker.Check());
-
-                    const auto& response = f.GetValue();
-
-                    TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
-                    for (const auto& singlePBufferResponse:
-                         response.GetResult()) {
-                        NProto::TError error =
-                            singlePBufferResponse.GetResult().GetStatus() ==
-                                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                                ? MakeError(S_OK)
-                                : MakeError(
-                                      E_FAIL,
-                                      singlePBufferResponse.GetResult()
-                                          .GetErrorReason());
-
-                        const auto& pbufferId =
-                            singlePBufferResponse.GetPersistentBufferId();
-                        dbgResponse.Responses.emplace_back(
-                            NKikimr::NDDisk::TPersistentBufferId(
-                                pbufferId.GetNodeId(),
-                                pbufferId.GetPDiskId(),
-                                pbufferId.GetDDiskSlotId()),
-                            error);
+                    if (auto self = weakSelf.lock()) {
+                        self->OnWriteBlocksToManyPBuffersResponse(
+                            f.GetValue(),
+                            std::move(promise));
+                    } else {
+                        promise.SetValue(
+                            TDBGWriteBlocksToManyPBuffersResponse());
                     }
-                    promise.SetValue(std::move(dbgResponse));
                 });
         });
     return result;
+}
+
+void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
+    const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
+    TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise)
+{
+    TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
+    for (const auto& singlePBufferResponse: response.GetResult()) {
+        auto hostIndex = PBufferIdToHostIndex.find(
+            singlePBufferResponse.GetPersistentBufferId());
+        if (hostIndex == PBufferIdToHostIndex.end()) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TDBGWriteBlocksToManyPBuffersResponse: unexpected "
+                "pbufferDiskId: %s",
+                singlePBufferResponse.GetPersistentBufferId()
+                    .ShortUtf8DebugString()
+                    .c_str());
+            continue;
+        }
+        Y_ABORT_UNLESS(
+            PBufferConnections[hostIndex->second].HostConnection.DDiskId ==
+            singlePBufferResponse.GetPersistentBufferId());
+
+        NProto::TError error =
+            singlePBufferResponse.GetResult().GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                ? MakeError(S_OK)
+                : MakeError(
+                      E_FAIL,
+                      singlePBufferResponse.GetResult().GetErrorReason());
+
+        dbgResponse.Responses.emplace_back(hostIndex->second, error);
+    }
+    promise.SetValue(std::move(dbgResponse));
 }
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(

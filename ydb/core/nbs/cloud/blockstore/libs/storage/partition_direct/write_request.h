@@ -76,7 +76,6 @@ private:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
-    TDDiskIdToHostIndex DDiskIdToHostIndex;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

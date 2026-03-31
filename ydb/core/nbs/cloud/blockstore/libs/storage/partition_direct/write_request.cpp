@@ -110,8 +110,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
         VChunkRange,
         pbufferReplyTimeoutMicroseconds,
         Request->Sglist,
-        NWilson::TTraceId(TraceId),
-        DDiskIdToHostIndex);
+        NWilson::TTraceId(TraceId));
 
     future.Subscribe(
         [self = shared_from_this()](
@@ -123,17 +122,7 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
     for (const auto& pbufferResponse: response.Responses) {
-        const auto& pbufferDiskId = pbufferResponse.PersistentBufferId;
-        auto hostId = DDiskIdToHostIndex.find(pbufferDiskId);
-        if (hostId == DDiskIdToHostIndex.end()) {
-            LOG_ERROR(
-                *ActorSystem,
-                NKikimrServices::NBS_PARTITION,
-                "TWriteRequestExecutor. Unexpected pbufferDiskId.");
-
-            continue;
-        }
-        auto location = VChunkConfig.GetPBufferLocation(hostId->second);
+        auto location = VChunkConfig.GetPBufferLocation(pbufferResponse.HostId);
         if (!HasError(pbufferResponse.Error)) {
             CompletedWrites.Set(location);
         }

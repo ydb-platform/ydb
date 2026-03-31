@@ -31,14 +31,12 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        TSinglePersistentBufferResult(
-            NKikimr::NDDisk::TPersistentBufferId persistentBufferId,
-            NProto::TError error)
-            : PersistentBufferId(persistentBufferId)
+        TSinglePersistentBufferResult(ui8 hostId, NProto::TError error)
+            : HostId(hostId)
             , Error(std::move(error))
         {}
 
-        NKikimr::NDDisk::TPersistentBufferId PersistentBufferId;
+        ui8 HostId{};
         NProto::TError Error;
     };
 
@@ -90,10 +88,23 @@ struct TAggregatedListPBufferResponse
     TMap<ui8, TListPBufferMetaVector> Meta;
 };
 
+struct TDDiskIdHash
+{
+    size_t operator()(const NKikimrBlobStorage::NDDisk::TDDiskId& key) const;
+};
+
+struct TDDiskIdIdEqual
+{
+    bool operator()(
+        const NKikimrBlobStorage::NDDisk::TDDiskId& a,
+        const NKikimrBlobStorage::NDDisk::TDDiskId& b) const;
+};
+
 using TDDiskIdToHostIndex = THashMap<
-    NKikimr::NDDisk::TPersistentBufferId,
+    NKikimrBlobStorage::NDDisk::TDDiskId,
     ui8,
-    NKikimr::NDDisk::TPersistentBufferId::Hash>;
+    TDDiskIdHash,
+    TDDiskIdIdEqual>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -138,8 +149,7 @@ public:
         TBlockRange64 range,
         ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId,
-        TDDiskIdToHostIndex& dDiskIdToHostIndex) = 0;
+        NWilson::TTraceId traceId) = 0;
 
     // Batch operation to flush a list of PBuffer entries. It can be executed in
     // two modes - when the source and destination are the same host, and when
@@ -225,8 +235,7 @@ public:
         TBlockRange64 range,
         ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
-        NWilson::TTraceId traceId,
-        TDDiskIdToHostIndex& dDiskIdToHostIndex) override;
+        NWilson::TTraceId traceId) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
@@ -274,6 +283,11 @@ private:
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
 
+    void OnWriteBlocksToManyPBuffersResponse(
+        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
+            response,
+        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise);
+
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
@@ -286,6 +300,7 @@ private:
 
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
+    TDDiskIdToHostIndex PBufferIdToHostIndex;
 
     bool Initialized = false;
     NThreading::TPromise<void> ConnectionEstablishedPromise =

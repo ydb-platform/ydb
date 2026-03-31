@@ -1116,6 +1116,11 @@ public:
 
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
+<<<<<<< HEAD
+=======
+    friend class TDirectReadSessionControlCallbacks;
+    friend class TDataDecompressionInfo<UseMigrationProtocol>;
+>>>>>>> efd90337b5a (LOGBROKER-10348 Fix data race in read session C++ SDK (#36963))
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,

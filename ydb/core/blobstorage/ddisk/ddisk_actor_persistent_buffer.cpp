@@ -13,9 +13,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPersistentBuffer() {
-        if (!IsPersistentBufferActor()) {
-            return;
-        }
+        Y_ABORT_UNLESS(IsPersistentBufferActor());
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
@@ -63,10 +61,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
-        if (!IsPersistentBufferActor()) {
-            return;
-        }
-        
+        Y_ABORT_UNLESS(IsPersistentBufferActor());
         if (PersistentBufferReady) {
             return;
         }
@@ -427,7 +422,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvWritePersistentBuffer::TPtr ev) {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.WritePersistentBuffer)) {
             return;
         }
@@ -450,7 +444,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvReadPersistentBuffer::TPtr ev) {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
         if ((!creds.FromPersistentBuffer || record.HasSelector()) &&
@@ -677,7 +670,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvBatchErasePersistentBuffer::TPtr ev) {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.ErasePersistentBuffer)) {
             return;
         }
@@ -709,7 +701,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvErasePersistentBuffer::TPtr ev) {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.ErasePersistentBuffer)) {
             return;
         }
@@ -748,7 +739,6 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
         if (!CheckQuery(*ev, &Counters.Interface.ListPersistentBuffer)) {
             return;
         }

@@ -1160,5 +1160,7 @@ message TActivity {
         BS_LOAD_PERSISTENT_BUFFER_WRITE = 682;
         BS_LOAD_PERSISTENT_BUFFER_READ = 683;
         BS_COMP_BROKER_ACTOR = 684;
+        BS_DDISK = 685;
+        BS_PERSISTENT_BUFFER = 686;
     };
 };

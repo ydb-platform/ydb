@@ -1,14 +1,53 @@
 #include "ddisk_actor.h"
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPDiskInterface() {
+        Y_ABORT_UNLESS(!IsPersistentBufferActor());
         STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
-
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
             0 /*groupSizeInUnits*/, true /*getDiskFd*/));
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvInitPersistentBufferChunkMap::TPtr ev) {
+        if (!CanHandleQuery(ev)) {
+            return;
+        }
+
+        auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
+            delete ptr;
+        });
+        Send(ev->Sender, new TEvPrivate::TEvInitPersistentBufferChunkMapResult(
+            new TPDiskParams(
+                PDiskParams->Owner, PDiskParams->OwnerRound, PDiskParams->SlotSizeInUnits,
+                PDiskParams->ChunkSize, PDiskParams->AppendBlockSize, PDiskParams->SeekTimeUs,
+                PDiskParams->ReadSpeedBps, PDiskParams->WriteSpeedBps, PDiskParams->ReadBlockSize,
+                PDiskParams->WriteBlockSize, PDiskParams->BulkWriteBlockSize, PDiskParams->TrueMediaType,
+                PDiskParams->IsTinyDisk, PDiskParams->RawSectorSize),
+            std::move(format),
+            DiskFd.Duplicate(),
+            InitPersistentBufferChunks));
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvInitPersistentBufferChunkMapResult::TPtr ev) {
+        auto& msg = *ev->Get();
+        PDiskParams = std::move(msg.PDiskParams);
+        DiskFormat = std::move(msg.DiskFormat);
+        DiskFd = std::move(msg.DiskFd);
+        InitPersistentBuffer();
+        for (auto idx : ev->Get()->ChunkIdxs) {
+            PersistentBufferSpaceAllocator.AddNewChunk(idx);
+            auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
+            it->second.resize(SectorInChunk);
+            if (!inserted) {
+                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvInitPersistentBufferChunkMapResult) persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+            }
+            ++*Counters.Chunks.ChunksOwned;
+        }
+        StartRestorePersistentBuffer();
     }
 
     void TDDiskActor::Handle(NPDisk::TEvYardInitResult::TPtr ev) {
@@ -28,41 +67,31 @@ namespace NKikimr::NDDisk {
                 (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         }
 
-        InitPersistentBuffer();
-
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             ChunkMapSnapshotLsn = record.Lsn;
-
-            if (!IsPersistentBufferActor()) {
-                NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
-                const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
-                Y_ABORT_UNLESS(success);
-                Y_ABORT_UNLESS(chunkMap.HasSnapshot());
-                const auto& snapshot = chunkMap.GetSnapshot();
-                for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
-                    auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
-                    for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
-                        tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
-                        ++*Counters.Chunks.ChunksOwned;
-                    }
+            NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord chunkMap;
+            const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
+            Y_ABORT_UNLESS(success);
+            Y_ABORT_UNLESS(chunkMap.HasSnapshot());
+            const auto& snapshot = chunkMap.GetSnapshot();
+            for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
+                auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
+                for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
+                    tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                    ++*Counters.Chunks.ChunksOwned;
                 }
             }
         }
-        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); IsPersistentBufferActor() && it != msg.StartingPoints.end()) {
+        if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             PersistentBufferChunkMapSnapshotLsn = record.Lsn;
             NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
             const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
             Y_ABORT_UNLESS(success);
+
             for (auto idx : chunkMap.GetChunkIdxs()) {
-                PersistentBufferSpaceAllocator.AddNewChunk(idx);
-                auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
-                it->second.resize(SectorInChunk);
-                if (!inserted) {
-                    STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvYardInitResult) persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
-                }
-                ++*Counters.Chunks.ChunksOwned;
+                InitPersistentBufferChunks.emplace_back(idx);
             }
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
@@ -106,11 +135,19 @@ namespace NKikimr::NDDisk {
 
         if (msg.IsEndOfLog) {
             StartHandlingQueries();
-            StartRestorePersistentBuffer();
+            CreatePersistentBuffer();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));
         }
+    }
+
+    void TDDiskActor::CreatePersistentBuffer() {
+        auto pbActor = std::make_unique(new TDDiskActor<NKikimrServices::TActivity::BS_PERSISTENT_BUFFER>(std::move(baseInfo), std::move(info), std::move(pbFormat),
+            std::move(ddiskConfig), AppData()->Counters));
+        const TActorId pbActorId = Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
+        auto pbServiceId = MakeBlobStoragePersistentBufferId(SelfId().NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
+        RegisterLocalService(pbServiceId, pbActorId);
     }
 
     void TDDiskActor::StartHandlingQueries() {

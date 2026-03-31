@@ -11,6 +11,15 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
+        Y_ABORT_UNLESS(IsPersistentBufferActor());
+        auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+        Send(ddiskActorId, new TEvPrivate::TEvIssuePersistentBufferChunkAllocation());
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev) {
+        if (!CanHandleQuery(ev)) {
+            return;
+        }
         if (!IssuePersistentBufferChunkAllocationInflight) {
             IssuePersistentBufferChunkAllocationInflight = true;
             ChunkAllocateQueue.emplace(TChunkForPersistentBuffer{});
@@ -73,7 +82,8 @@ namespace NKikimr::NDDisk {
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot({chunkIdx}), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
                         IssuePersistentBufferChunkAllocationInflight = false;
-                        Send(SelfId(), new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+                        auto pbActorId = MakeBlobStoragePersistentBufferId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+                        Send(pbActorId, new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
                 }

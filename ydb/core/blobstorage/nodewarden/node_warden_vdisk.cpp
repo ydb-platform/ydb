@@ -190,16 +190,8 @@ namespace NKikimr::NStorage {
         auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
-            TVDiskConfig::TBaseInfo baseInfoDDisk(baseInfo);
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfoDDisk), groupInfo, {},
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
                 NDDisk::TDDiskConfig{}, AppData()->Counters));
-
-            TVDiskConfig::TBaseInfo baseInfoPB(baseInfo);
-            auto pbServiceId = MakeBlobStoragePersistentBufferId(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
-            const TActorId pbActorId = as->Register(NDDisk::CreatePersistentBufferActor(std::move(baseInfoPB), groupInfo, {},
-                NDDisk::TDDiskConfig{}, AppData()->Counters), TMailboxType::Revolving, AppData()->SystemPoolId);
-            as->RegisterLocalService(pbServiceId, pbActorId);
-            VDiskIdByActor.try_emplace(pbActorId, vslotId);
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;

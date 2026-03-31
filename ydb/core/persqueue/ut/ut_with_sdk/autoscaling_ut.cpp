@@ -10,6 +10,8 @@
 
 #include <util/stream/output.h>
 
+#include <array>
+
 namespace NKikimr {
 
 using namespace NYdb::NTopic;
@@ -957,10 +959,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
         TTopicClient client = setup.MakeClient();
 
-        struct TKeyRange {
-            std::optional<std::string> From;
-            std::optional<std::string> To;
-            ui32 PartitionId;
+        static constexpr std::array<const char*, 3> PartitionKeys = {
+            "kll-sketch-key-a",
+            "kll-sketch-key-b",
+            "kll-sketch-key-c",
         };
 
         TCreateTopicSettings createSettings;
@@ -979,19 +981,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
         auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
-
-        std::vector<TKeyRange> keyRanges;
-        auto addNewKeyRanges = [&keyRanges](const auto& describeResult) {
-            for (const auto& partition : describeResult.GetTopicDescription().GetPartitions()) {
-                TKeyRange keyRange;
-                keyRange.From = partition.GetFromBound();
-                keyRange.To = partition.GetToBound();
-                keyRange.PartitionId = partition.GetPartitionId();
-                keyRanges.push_back(keyRange);
-            }
-        };
-
-        addNewKeyRanges(describeResult);
 
         auto makeProducer = [&](const TString& idPrefix) {
             TProducerSettings settings;
@@ -1014,35 +1003,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             }
         };
 
-        auto writeToPartition = [&keyRanges](const std::shared_ptr<IProducer>& producer, ui32 partitionId,
-                                   const TString& body, ui64 seqNo) {
-            auto keyRange = std::find_if(keyRanges.begin(), keyRanges.end(), [&](const TKeyRange& range) {
-                return range.PartitionId == partitionId;
-            });
-            UNIT_ASSERT_C(keyRange != keyRanges.end(), "partition not found in keyRanges");
-
-            const TString from = keyRange->From.value_or("");
-            const TString to = keyRange->To.value_or("");
-            const TString mid = NKikimr::NPQ::MiddleOf(from, to);
-            // KLL split needs at least two distinct keys in the window; a single mid for every write is not enough.
-            const TString low = NKikimr::NPQ::MiddleOf(from, mid);
-            const TString high = NKikimr::NPQ::MiddleOf(mid, to);
-            TString key;
-            switch (seqNo % 3) {
-                case 0:
-                    key = low;
-                    break;
-                case 1:
-                    key = mid;
-                    break;
-                default:
-                    key = high;
-                    break;
-            }
-
+        auto writeMessage = [&](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo) {
+            TString key(PartitionKeys[seqNo % PartitionKeys.size()]);
             TWriteMessage message(key, body);
             message.SeqNo(seqNo);
-
             UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
         };
 
@@ -1051,41 +1015,129 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto producer1 = makeProducer("producer-1");
 
         {
-            writeToPartition(producer1, 0, msg, 1);
-            writeToPartition(producer1, 0, msg, 2);
+            writeMessage(producer1, msg, 1);
+            writeMessage(producer1, msg, 2);
             flushAll({producer1});
             Sleep(TDuration::Seconds(5));
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
-            addNewKeyRanges(describe);
         }
 
         {
-            writeToPartition(producer1, 1, msg, 3);
-            writeToPartition(producer1, 1, msg, 4);
-            writeToPartition(producer1, 1, msg, 5);
-            writeToPartition(producer1, 1, msg, 6);
+            writeMessage(producer1, msg, 3);
+            writeMessage(producer1, msg, 4);
+            writeMessage(producer1, msg, 5);
+            writeMessage(producer1, msg, 6);
             flushAll({producer1});
             Sleep(TDuration::Seconds(10));
-            auto describe  = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+            auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 5);
-            addNewKeyRanges(describe);
         }
 
-
         {
-            writeToPartition(producer1, 2, msg, 7);
-            writeToPartition(producer1, 2, msg, 8);
-            writeToPartition(producer1, 2, msg, 9);
-            writeToPartition(producer1, 2, msg, 10);
+            writeMessage(producer1, msg, 7);
+            writeMessage(producer1, msg, 8);
+            writeMessage(producer1, msg, 9);
+            writeMessage(producer1, msg, 10);
             flushAll({producer1});
             Sleep(TDuration::Seconds(5));
             auto describe2 = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(describe2.GetTopicDescription().GetPartitions().size(), 7);
-            addNewKeyRanges(describe2);
         }
 
         UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+    }
+
+    Y_UNIT_TEST(PartitionSplit_KllSketchBasedSplit_CheckBoundaries) {
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_DEBUG, true);
+        TTopicClient client = setup.MakeClient();
+
+        static constexpr size_t NumKeys = 10000;
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < NumKeys; ++i) {
+            auto key = "kll-sketch-key-" + ToString(i);
+            auto hashed = std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(key)));
+            keys.push_back(hashed);
+        }
+
+        TCreateTopicSettings createSettings;
+        createSettings
+            .BeginConfigurePartitioningSettings()
+            .MinActivePartitions(1)
+            .MaxActivePartitions(100)
+                .BeginConfigureAutoPartitioningSettings()
+                .UpUtilizationPercent(2)
+                .DownUtilizationPercent(1)
+                .StabilizationWindow(TDuration::Seconds(2))
+                .Strategy(EAutoPartitioningStrategy::ScaleUp)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings();
+        client.CreateTopic(TEST_TOPIC, createSettings).Wait();
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        auto makeProducer = [&](const TString& idPrefix) {
+            TProducerSettings settings;
+            settings
+                .Path(TString{TEST_TOPIC})
+                .Codec(ECodec::RAW);
+            settings.ProducerIdPrefix(idPrefix);
+            settings.SubSessionIdleTimeout(TDuration::Seconds(30));
+            settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::Bound);
+            settings.MaxBlockTimeout(TDuration::Seconds(30));
+            settings.PartitioningKeyHasher([](const std::string_view& key) {
+                return std::string(NKikimr::NPQ::AsKeyBound(NKikimr::NPQ::Hash(TString{key})));
+            });
+            return client.CreateProducer(settings);
+        };
+
+        auto flushAll = [](std::initializer_list<std::shared_ptr<IProducer>> producers) {
+            for (const auto& p : producers) {
+                UNIT_ASSERT_C(p->Flush().GetValueSync().IsSuccess(), "failed to flush producer");
+            }
+        };
+
+        auto writeMessage = [&](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo) {
+            TString key(keys[seqNo % keys.size()]);
+            TWriteMessage message(key, body);
+            message.SeqNo(seqNo);
+            UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
+        };
+
+        auto msg = TString(64, 'a');
+        auto producer1 = makeProducer("producer-1");
+
+        for (ui64 seqNo = 1; seqNo <= 1_MB / 64; ++seqNo) {
+            writeMessage(producer1, msg, seqNo);
+        }
+
+        flushAll({producer1});
+        Sleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(producer1->Close(TDuration::Seconds(10)).IsSuccess(), "failed to close producer-1");
+
+        auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        UNIT_ASSERT(describe.GetTopicDescription().GetPartitions().size() >= 3);
+
+        auto partitions = describe.GetTopicDescription().GetPartitions();
+        std::string midKey;
+        for (const auto& partition : partitions) {
+            if (partition.GetPartitionId() == 1) {
+                UNIT_ASSERT_C(partition.GetToBound().has_value(), "to bound is not set");
+                midKey = *partition.GetToBound();
+            }
+        }
+
+        std::sort(keys.begin(), keys.end());
+
+        size_t num = 0;
+        for (size_t i = 0; i < NumKeys; ++i) {
+            if (keys[i] > midKey) {
+                ++num;
+            }
+        }
+        UNIT_ASSERT(num >= NumKeys / 2 - NumKeys / 10 && num <= NumKeys / 2 + NumKeys / 10);
     }
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad_AfterAlter) {

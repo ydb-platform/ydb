@@ -80,6 +80,7 @@ public:
         bool EnableMetering : 1 = false;
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);
@@ -233,7 +234,7 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement);
+    void InitKikimr(const TInitParameters& initParameters);
 
     void InitAccessServiceService();
 
@@ -287,6 +288,16 @@ class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(TInitParameters{
             .EnableSqsTopic = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForSQSTopicWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
         });
     }
 };

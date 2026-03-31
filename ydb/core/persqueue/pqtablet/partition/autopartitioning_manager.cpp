@@ -207,20 +207,21 @@ public:
             canSplit = KeysManager.MoreThanOneKey(now - TDuration::Seconds(Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         }
 
-        // PQ_LOG_D("TPartition::CheckScaleStatus"
-        //         << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
-        //         << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
-        //         << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-        //         << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
-        //         << " sourceIdCount=" << sourceIdCount
-        //         << " canSplit=" << canSplit
-        // );
-
         auto splitEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
+        PQ_LOG_D("TPartition::CheckScaleStatus"
+            << " splitMergeAvgWriteBytes# " << SumWrittenBytes->GetValue()
+            << " writeSpeedUsagePercent# " << writeSpeedUsagePercent
+            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
+            << " totalPartitionWriteSpeed# " << Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond()
+            << " sourceIdCount=" << sourceIdCount
+            << " canSplit=" << canSplit
+            << " verdict=" << (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
+        );
+        
         if (splitEnabled && canSplit && writeSpeedUsagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent()) {
             // LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;

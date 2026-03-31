@@ -1263,7 +1263,7 @@ void TProducer::TMessagesWorker::ScheduleResendMessages(std::uint32_t partition,
     auto currentSeqNo = resendIt != list.end() ? (*resendIt)->SeqNo.value_or(0) : 0;
     for (auto iter = resendIt; iter != list.end(); ++iter) {
         if (iter != resendIt && currentSeqNo != 0) {
-            Y_ABORT_UNLESS((*iter)->SeqNo.value_or(0) > currentSeqNo, "SeqNo is not increasing for partition %d", partition);
+            Y_ABORT_UNLESS((*iter)->SeqNo.value_or(0) > currentSeqNo, "SeqNo is not increasing for partition %d, currentSeqNo: %llu, iterSeqNo: %llu", partition, currentSeqNo, (*iter)->SeqNo.value_or(0));
         }
 
         auto [newPartition, _] = Producer->PartitionChooser->ChoosePartition((*iter)->Key);

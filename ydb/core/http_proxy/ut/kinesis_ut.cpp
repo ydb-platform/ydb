@@ -431,7 +431,6 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
         }
     }
 
-    // Kinesis ExplicitHashKey selects the partition directly (unlike SQS MessageGroupId, which is hashed first).
     Y_UNIT_TEST_F(PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_ExplicitHashKey,
                   THttpProxyTestMockForKinesisWithKllAutosplit) {
         static constexpr std::array<const char*, 7> ExplicitHashKeys = {
@@ -522,19 +521,22 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             for (ui64 seq = 1; seq <= 2; ++seq) {
                 putRecord(seq);
             }
-            UNIT_ASSERT_VALUES_EQUAL(waitAtLeastPartitions(3, TDuration::Seconds(45)), 3);
+            auto partitionsCount = waitAtLeastPartitions(3, TDuration::Seconds(45));
+            UNIT_ASSERT_C(partitionsCount >= 3, "partitions: " << partitionsCount << " expected: >= 3");
         }
         {
             for (ui64 seq = 3; seq <= 6; ++seq) {
                 putRecord(seq);
             }
-            UNIT_ASSERT_VALUES_EQUAL(waitAtLeastPartitions(5, TDuration::Seconds(60)), 5);
+            auto partitionsCount = waitAtLeastPartitions(5, TDuration::Seconds(60));
+            UNIT_ASSERT_C(partitionsCount >= 5, "partitions: " << partitionsCount << " expected: >= 5");
         }
         {
             for (ui64 seq = 7; seq <= 10; ++seq) {
                 putRecord(seq);
             }
-            UNIT_ASSERT_VALUES_EQUAL(waitAtLeastPartitions(7, TDuration::Seconds(60)), 7);
+            auto partitionsCount = waitAtLeastPartitions(7, TDuration::Seconds(60));
+            UNIT_ASSERT_C(partitionsCount >= 7, "partitions: " << partitionsCount << " expected: >= 7");
         }
     }
 

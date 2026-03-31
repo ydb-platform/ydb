@@ -3500,6 +3500,51 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(getGroup(tabletA), getGroup(tabletB));
     }
 
+    Y_UNIT_TEST(TestStorageBalancerDeleteTablet) {
+        static constexpr ui64 NUM_TABLETS = 3;
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 1, [](TAppPrepare& app) {
+            app.HiveConfig.SetMinPeriodBetweenReassign(0);
+            app.HiveConfig.SetStorageInfoRefreshFrequency(200);
+        });
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<ui64> tablets;
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> block(runtime);
+
+        runtime.SendToPipe(hiveTablet, sender, new NHive::TEvPrivate::TEvStartStorageBalancer({.NumReassigns = NUM_TABLETS, .MaxInFlight = 1}), 0, GetPipeConfigWithRetries());
+
+        while (block.empty()) {
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+
+
+        for (ui64 i = 0; i < NUM_TABLETS; ++i) {
+            SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 100500 + i, 0), 0, std::nullopt);
+        }
+
+        block.Stop().Unblock();
+
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NHive::TEvPrivate::EvStorageBalancerOut);
+            runtime.DispatchEvents(options, TDuration::Minutes(1));
+        }
+
+    }
+
 //    Y_UNIT_TEST(TestCreateTabletAndChangeProfiles) {
 //        TTestBasicRuntime runtime(1, false);
 //        Setup(runtime, true);

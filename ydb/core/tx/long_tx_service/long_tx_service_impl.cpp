@@ -629,7 +629,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
         lock.RemoteSubscribers[ev->InterconnectSession][ev->Sender] = ev->Cookie;
 
         for (const auto& edge : lock.WaitNode.Blockers) {
-            if (edge.Blocker.LockNodeId(SelfId()) != ev->Sender.NodeId()) {
+            if (edge.Id.OwnerId.NodeId() != ev->Sender.NodeId()) {
                 // Send edges that are not local to the requester.
                 statusEv->AddWaitEdge(
                     edge.Id, edge.Blocker.LockInfo(SelfId()));
@@ -1225,13 +1225,20 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                 for (const auto& [subscriber, _] : subscribers) {
                     auto updateEv = MakeHolder<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
                     for (const auto& edge : actuallyAdded) {
-                        updateEv->AddAddedEdge(edge.Id, edge.Blocker);
+                        if (edge.Id.OwnerId.NodeId() != subscriber.NodeId()) {
+                            updateEv->AddAddedEdge(edge.Id, edge.Blocker);
+                        }
                     }
                     for (const auto& edgeId : actuallyRemoved) {
-                        updateEv->AddRemovedEdge(edgeId);
+                        if (edgeId.OwnerId.NodeId() != subscriber.NodeId()) {
+                            updateEv->AddRemovedEdge(edgeId);
+                        }
                     }
-                    SendViaSession(
-                        sessionId, subscriber, updateEv.Release(), IEventHandle::FlagTrackDelivery);
+
+                    if (!updateEv->Empty()) {
+                        SendViaSession(
+                            sessionId, subscriber, updateEv.Release(), IEventHandle::FlagTrackDelivery);
+                    }
                 }
             }
         }
@@ -1252,7 +1259,7 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
                 }
             }
 
-            if (!updateEv->Record.GetAdded().empty() || !updateEv->Record.GetRemoved().empty()) {
+            if (!updateEv->Empty()) {
                 SendViaSession(
                     node.Session, MakeLongTxServiceID(node.NodeId),
                     updateEv.Release(), IEventHandle::FlagTrackDelivery);
@@ -1339,7 +1346,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr&
     const auto& record = ev->Get()->Record;
     TLockInfo awaiterInfo(record.GetLockId(), record.GetLockNode());
 
-    TXLOG_DEBUG("Received TEvUpdateLockWaitEdges for awaiter: " << awaiterInfo
+    TXLOG_DEBUG("Received TEvUpdateLockWaitEdges from " << ev->Sender
+        << " for awaiter: " << awaiterInfo
         << ", added count: " << record.GetAdded().size()
         << ", removed count: " << record.GetRemoved().size());
 

@@ -360,6 +360,10 @@ namespace NLongTxService {
                 ActorIdToProto(id.OwnerId, edgeId->MutableOwner());
                 edgeId->SetRequestId(id.RequestId);
             }
+
+            bool Empty() const {
+                return Record.GetAdded().empty() && Record.GetRemoved().empty();
+            }
         };
 
         struct TEvGetLockWaitGraph : TEventLocal<TEvGetLockWaitGraph, EvGetLockWaitGraph> {};

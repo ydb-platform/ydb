@@ -1307,10 +1307,9 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             "234 -> 123\n");
 
         runtime.SimulateSleep(TDuration::Seconds(1));
-        for (ui32 nodeId : shardNodeIds) {
-            // Check that the wait cycle is instantiated in the LongTxService
-            // on both datashard nodes.
-            size_t nodeIdx = nodeId - runtime.GetFirstNodeId();
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            // Check that the wait cycle is instantiated in the LongTxService on all nodes.
+            ui32 nodeId = runtime.GetNodeId(nodeIdx);
             auto sender = runtime.AllocateEdgeActor(nodeIdx);
             runtime.Send(
                 MakeLongTxServiceID(nodeId), sender,
@@ -1330,7 +1329,7 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
                 wgStr,
                 "123 -> 234\n"
                 "234 -> 123\n",
-                "With nodeIdx: " << nodeIdx);
+                "with nodeIdx: " << nodeIdx);
         }
 
         // break the wait by aborting the request belonging to the youngest lock

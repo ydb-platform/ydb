@@ -566,24 +566,24 @@ Y_UNIT_TEST_SUITE(LockWaitGraph) {
         ds2.AddLock(lock1.Info);
         const auto reqId = ds2.AddWait(lock1.Info, lock2.Info);
 
-        // Check that the wait graph is correctly instantiated on the datashard nodes.
+        // Check that the wait graph is correctly instantiated on all nodes.
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
-        for (size_t dsNodeIdx : {2, 3}) {
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             UNIT_ASSERT_VALUES_EQUAL_C(
-                GetWaitGraphString(runtime, dsNodeIdx),
+                GetWaitGraphString(runtime, nodeIdx),
                 "123 -> 234\n"
                 "234 -> 123\n",
-                "With nodeIdx: " << dsNodeIdx);
+                "with nodeIdx: " << nodeIdx);
         }
 
         // Break the deadlock and check that the removal is correctly propagated.
         ds2.RemoveWait(lock1.Info, reqId);
         runtime.SimulateSleep(TDuration::MilliSeconds(50));
-        for (size_t dsNodeIdx : {2, 3}) {
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
             UNIT_ASSERT_VALUES_EQUAL_C(
-                GetWaitGraphString(runtime, dsNodeIdx),
+                GetWaitGraphString(runtime, nodeIdx),
                 "234 -> 123\n",
-                "With nodeIdx: " << dsNodeIdx);
+                "with nodeIdx: " << nodeIdx);
         }
     }
 } // Y_UNIT_TEST_SUITE(LockWaitGraph)

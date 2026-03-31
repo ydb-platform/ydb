@@ -4,7 +4,7 @@
 
 ### Version 25.3.1 {#25-3-1}
 
-Release date: September 25, 2025.
+Release date: April 3, 2025.
 
 #### Functionality
 

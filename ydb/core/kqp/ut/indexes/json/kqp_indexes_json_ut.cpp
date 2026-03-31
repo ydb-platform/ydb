@@ -464,6 +464,25 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
+    Y_UNIT_TEST(DisabledFlagRejectCreate) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ false);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Text Json,
+                    Data Utf8,
+                    PRIMARY KEY (Key),
+                    INDEX `json_idx` GLOBAL USING json ON (Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_QUAD(UpsertJsonIndex, IsJsonDocument, WithReturning) {
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
@@ -1173,25 +1192,6 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST(DisabledFlagRejectCreate) {
-        auto kikimr = Kikimr(/* enableJsonIndex */ false);
-        auto db = kikimr.GetQueryClient();
-
-        {
-            std::string query = R"(
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64,
-                    Text Json,
-                    Data Utf8,
-                    PRIMARY KEY (Key),
-                    INDEX `json_idx` GLOBAL USING json ON (Text)
-                );
-            )";
-            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
     }
 

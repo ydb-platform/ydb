@@ -405,6 +405,7 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TW
     , Type(type)
 {
     if (const auto desc = Params.GetDescription(CommandType, Type)) {
+        CompletionDescription = Description;
         Description = desc;
     }
 }

@@ -31,6 +31,7 @@ TCommandToolsInferCsv::TCommandToolsInferCsv()
         " (i.e., if the values meet the requirements for column names and do not match data types in the other rows)."
         " Otherwise, column names will be generated automatically.")
 {
+    CompletionDescription = "Generate CREATE TABLE SQL from CSV file";
     Args[0] = "<input files...>";
 }
 

@@ -113,3 +113,7 @@ RECURSE(
     sqs_workload
 )
 ENDIF()
+
+RECURSE_FOR_TESTS(
+    ut
+)

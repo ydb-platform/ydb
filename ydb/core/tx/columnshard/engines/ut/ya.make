@@ -31,6 +31,7 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_minmax_index.cpp
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_script.cpp

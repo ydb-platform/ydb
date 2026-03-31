@@ -14,7 +14,9 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
 }
 
 std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
-    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
+    auto v = NArrow::MinMax(Array);
+    // v->field(arrow::FieldRef{"min"})
+    // auto minMaxPos = NArrow::FindMinMaxPosition(Array);
     return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
 }
 

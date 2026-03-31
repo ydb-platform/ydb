@@ -41,8 +41,25 @@ public:
 };
 
 struct TMinMax {
-    std::shared_ptr<arrow::Scalar> Min;
-    std::shared_ptr<arrow::Scalar> Max;
+    arrow::StructScalar MinMax;
+    bool IsNull() const {
+        auto min = Min();
+        return min->Equals(arrow::MakeNullScalar(min->type));
+    }
+    std::shared_ptr<arrow::Scalar> Min() const {
+        return MinMax.field(arrow::FieldRef{"min"}).ValueOrDie();
+    }
+
+    std::shared_ptr<arrow::Scalar> Max() const {
+        return MinMax.field(arrow::FieldRef{"max"}).ValueOrDie();
+    }
+
+    static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
+
+    std::string ToBinaryString() const;
+
+    NJson::TJsonValue Json() const;
+    
 };
 
 class IChunkedArray {

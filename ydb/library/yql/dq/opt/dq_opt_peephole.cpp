@@ -1023,6 +1023,8 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
             .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
             .Add(7, blockHashJoin.Settings().Ptr())
+            .Add(8, ctx.NewList(pos, std::move(leftRenames)))
+            .Add(9, ctx.NewList(pos, std::move(rightRenames)))
         .Seal()
         .Build();
 
@@ -1036,38 +1038,24 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Build();
     }
 
-    // Wide row layout: [L base][L converted][R base][R converted]
-    const ui32 leftBase = itemTypeLeft->GetSize();
-    const ui32 leftConv = leftConvertedItems.size();
-    const ui32 rightBase = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? itemTypeRight->GetSize() : 0;
-    const ui32 rightConv = (blockHashJoin.JoinType().Value() != "LeftOnly" && blockHashJoin.JoinType().Value() != "LeftSemi")
-        ? rightConvertedItems.size() : 0;
-    const ui32 totalColumns = leftBase + leftConv + rightBase + rightConv;
+    // With renames, BlockHashJoinCore output has only the renamed columns (no converted keys).
+    // After WideFromBlocks the layout is [renamed_col0, ..., renamed_colN].
+    const ui32 outputColumns = fullColNames.size();
 
-    TVector<ui32> keep;
-    keep.reserve(fullColNames.size());
-    for (ui32 i = 0; i < leftBase; ++i) keep.push_back(i);
-    const ui32 rightStart = leftBase + leftConv;
-    for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
-
-    // Structure the result using NarrowMap (complete processing)
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
             .Callable(0, "ToFlow")
                 .Add(0, std::move(wideResult))
             .Seal()
             .Lambda(1)
-                .Params("output", totalColumns)
+                .Params("output", outputColumns)
                 .Callable("AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        ui32 i = 0U;
-                        for (const auto& colName : fullColNames) {
+                        for (ui32 i = 0U; i < outputColumns; ++i) {
                             parent.List(i)
-                                .Atom(0, colName)
-                                .Arg(1, "output", keep[i])
+                                .Atom(0, fullColNames[i])
+                                .Arg(1, "output", i)
                             .Seal();
-                            i++;
                         }
                         return parent;
                     })

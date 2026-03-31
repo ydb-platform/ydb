@@ -15,6 +15,8 @@ SRCS(
     kqp_partitioned_executer.cpp
 
     tasks_graph/kqp_partition_helper.cpp
+    tasks_graph/kqp_tasks_graph_new.cpp
+    tasks_graph/kqp_tasks_graph_old.cpp
     tasks_graph/kqp_tasks_graph.cpp
     tasks_graph/max_tasks_graph.cpp
     tasks_graph/shard_key_ranges.cpp

@@ -494,4 +494,6 @@ message TTableServiceConfig {
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
 
     optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool UseNewKqpTasksGraph = 125 [default = false, (InvalidateCompileCache) = true];
 };

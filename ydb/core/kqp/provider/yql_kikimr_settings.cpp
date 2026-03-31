@@ -155,6 +155,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
             }
         });
 
+    REGISTER_SETTING(*this, UseNewKqpTasksGraph);
+
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }
@@ -301,6 +303,10 @@ bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
 
 bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
+}
+
+bool TKikimrConfiguration::GetUseNewKqpTasksGraph() const {
+    return UseNewKqpTasksGraph.Get().GetOrElse(TTableServiceConfig::GetUseNewKqpTasksGraph());
 }
 
 }

@@ -662,16 +662,18 @@ public:
     }
 
     TKqpExecLiteralRequestHandler(IKqpGateway::TExecPhysicalRequest&& request,
-        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params, ui32 txIndex)
+        TKqpRequestCounters::TPtr counters, TPromise<TResult> promise, TQueryData::TPtr params, ui32 txIndex,
+        bool useNewKqpTasksGraph)
         : Request(std::move(request))
         , TxIndex(txIndex)
         , Parameters(params)
         , Counters(counters)
         , Promise(promise)
+        , UseNewKqpTasksGraph(useNewKqpTasksGraph)
     {}
 
     void Bootstrap() {
-        auto result = ::NKikimr::NKqp::ExecuteLiteral(std::move(Request), Counters, SelfId(), MakeIntrusive<TUserRequestContext>());
+        auto result = ::NKikimr::NKqp::ExecuteLiteral(std::move(Request), Counters, SelfId(), MakeIntrusive<TUserRequestContext>(), UseNewKqpTasksGraph);
         ProcessPureExecution(result);
         Become(&TThis::DieState);
         Send(SelfId(), new TEvents::TEvPoisonPill());
@@ -698,6 +700,7 @@ private:
     TQueryData::TPtr Parameters;
     TKqpRequestCounters::TPtr Counters;
     TPromise<TResult> Promise;
+    const bool UseNewKqpTasksGraph;
 };
 
 template<typename TResult>
@@ -1896,7 +1899,7 @@ public:
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
 
-        auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>());
+        auto ev = ::NKikimr::NKqp::ExecuteLiteral(std::move(request), Counters, TActorId{}, MakeIntrusive<TUserRequestContext>(), false);
         TExecPhysicalResult result;
         result.ExpectBinaryResults = true;
         FillPhysicalResult(ev, result, params, 0);
@@ -1906,12 +1909,12 @@ public:
         return literalResult;
     }
 
-    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
+    TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex, bool useNewKqpTasksGraph) override {
         YQL_ENSURE(!request.Transactions.empty());
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();
-        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex);
+        IActor* requestHandler = new TKqpExecLiteralRequestHandler(std::move(request), Counters, promise, params, txIndex, useNewKqpTasksGraph);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }

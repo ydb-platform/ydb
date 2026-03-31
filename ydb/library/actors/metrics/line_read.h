@@ -23,7 +23,6 @@ namespace NActors {
         static void ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb);
 
         static TInstant DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept;
-        static TInstant GetCurrentTimestamp(const TLineSnapshot& snapshot) noexcept;
     };
 
     template<class TValue>
@@ -142,7 +141,6 @@ namespace NActors {
         const TSnapshot* Owner = nullptr;
         size_t ChunkBegin = 0;
         size_t ChunkCount = 0;
-        TInstant CurrentTimestamp;
     };
 
     // Borrowing snapshot view owned by ReadSnapshot(). It cannot be created or

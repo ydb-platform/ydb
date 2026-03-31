@@ -13,9 +13,8 @@ namespace NActors {
     class TLineWriterState {
     public:
         TLineReader* Reader = nullptr;
-        std::atomic<bool> HasLastPublished = false;
-        std::atomic<ui64> LastPublishedValue = 0;
-        std::atomic<NHPTimer::STime> LastPublishedTs = 0;
+        std::atomic<bool> HasLastMaterialized = false;
+        std::atomic<ui64> LastMaterializedValue = 0;
     };
 
     struct TWritableChunkMemory {

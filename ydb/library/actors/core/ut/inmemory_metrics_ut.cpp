@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     TVector<ui64> ExpectedOnChangeRead(ui64 first, ui64 second) {
         if (first == second) {
-            return {first, first};
+            return {first};
         }
         return {first, second};
     }
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 20, 20}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 20}));
         });
     }
 
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
         });
     }
 
@@ -345,9 +345,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
                 timestamps.push_back(record.Timestamp);
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10}));
-            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 2);
-            UNIT_ASSERT(timestamps[0] < timestamps[1]);
+            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10}));
+            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 1);
         });
     }
 
@@ -404,7 +403,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
             UNIT_ASSERT(line->Closed);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
         });
     }
 
@@ -517,10 +516,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             }
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({0, 0}));
-        UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({0}));
+        UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps[0], firstReadTimestamps[0]);
-        UNIT_ASSERT(secondReadTimestamps[0] < secondReadTimestamps[1]);
     }
 
     Y_UNIT_TEST(AppendFailuresAreReportedInSelfMetricLine) {

@@ -7,6 +7,7 @@
 #include <util/system/hp_timer.h>
 
 #include <cstring>
+#include <optional>
 #include <span>
 #include <type_traits>
 
@@ -44,12 +45,6 @@ namespace NActors {
         ui32 ChunkId = 0;
         TInstant FirstTs;
         TInstant LastTs;
-    };
-
-    struct TLinePublishState {
-        bool HasLastPublished = false;
-        ui64 LastPublishedValue = 0;
-        NHPTimer::STime LastPublishedTs = 0;
     };
 
     struct TInMemoryMetricsStats {

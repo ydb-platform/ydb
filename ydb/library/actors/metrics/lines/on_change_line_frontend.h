@@ -33,9 +33,8 @@ namespace NActors {
                               void* opaque,
                               TLineFrontendOps::TInvokeValue invoke) {
             // on_change reuses the same physical chunk format as raw; only write
-            // semantics differ. Reader appends a synthetic tail point for the
-            // current value at min(CurrentTimestamp, endTs) when it differs from
-            // the last materialized point.
+            // semantics differ. For explicit finite intervals reader appends a
+            // synthetic tail point for the current value at interval end.
             bool hasLastValue = false;
             TInstant lastTimestamp;
             TValue lastValue{};
@@ -50,12 +49,15 @@ namespace NActors {
                 return;
             }
 
-            const TInstant tailTimestamp = std::min(TLineSnapshotAccess::GetCurrentTimestamp(snapshot), endTs);
-            if (tailTimestamp <= lastTimestamp || tailTimestamp < beginTs) {
+            if (snapshot.Closed || endTs == TInstant::Max()) {
                 return;
             }
 
-            invoke(opaque, tailTimestamp, &lastValue);
+            if (endTs <= lastTimestamp || endTs < beginTs) {
+                return;
+            }
+
+            invoke(opaque, endTs, &lastValue);
         }
 
         static const TLineFrontendOps& Descriptor() noexcept {
@@ -81,13 +83,13 @@ namespace NActors {
     template<class TValue>
     bool TOnChangeLineFrontend<TValue>::Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
-        const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
-        const TLinePublishState publishState = backend.GetPublishState(state);
+        const std::optional<ui64> lastMaterialized = backend.GetLastMaterializedValue(state);
 
-        if (publishState.HasLastPublished && publishState.LastPublishedValue == encoded) {
-            backend.MarkObserved(state, nowTs);
+        if (lastMaterialized && *lastMaterialized == encoded) {
             return true;
         }
+
+        const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
 
         typename TRawLineFrontend<TValue>::TStorageRecord record{
             .TimestampTs = nowTs,
@@ -96,7 +98,7 @@ namespace NActors {
         if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
             return false;
         }
-        backend.MarkPublished(state, encoded, nowTs);
+        backend.MarkMaterialized(state, encoded);
         return true;
     }
 

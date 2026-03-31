@@ -116,7 +116,7 @@ namespace NActors {
         if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
             return false;
         }
-        backend.MarkPublished(state, encoded, nowTs);
+        backend.MarkMaterialized(state, encoded);
         return true;
     }
 

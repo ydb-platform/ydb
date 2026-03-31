@@ -127,8 +127,4 @@ namespace NActors {
         return snapshot.DecodeTimestampTs(ts);
     }
 
-    inline TInstant TLineSnapshotAccess::GetCurrentTimestamp(const TLineSnapshot& snapshot) noexcept {
-        return snapshot.CurrentTimestamp;
-    }
-
 } // namespace NActors

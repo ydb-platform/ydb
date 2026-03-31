@@ -41,10 +41,9 @@ namespace NActors {
             void* opaque,
             TAccessChunkMemoryFn accessChunkMemory) noexcept;
         NHPTimer::STime CurrentTimestampTs() const noexcept;
-        TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept;
+        std::optional<ui64> GetLastMaterializedValue(const TLineWriterState* state) const noexcept;
         ui32 GetLineId(const TLineWriterState* state) const noexcept;
-        void MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept;
-        void MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept;
+        void MarkMaterialized(TLineWriterState* state, ui64 value) noexcept;
         void ReleasePinnedChunk(TChunk* chunk) noexcept;
 
     private:

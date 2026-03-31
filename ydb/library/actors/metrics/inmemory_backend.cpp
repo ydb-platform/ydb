@@ -124,18 +124,20 @@ namespace NActors {
 
     class TInMemoryMetricsBackend::TImpl {
     public:
+        using TSelfMetricLine = TLine<TOnChangeLineFrontend<>>;
+
         struct TSelfMetricsLines {
-            TLineWriterState* MemoryUsedBytes = nullptr;
-            TLineWriterState* CommittedBytes = nullptr;
-            TLineWriterState* FreeChunks = nullptr;
-            TLineWriterState* UsedChunks = nullptr;
-            TLineWriterState* SealedChunks = nullptr;
-            TLineWriterState* WritableChunks = nullptr;
-            TLineWriterState* RetiringChunks = nullptr;
-            TLineWriterState* Lines = nullptr;
-            TLineWriterState* ClosedLines = nullptr;
-            TLineWriterState* ReuseWatermark = nullptr;
-            TLineWriterState* AppendFailuresTotal = nullptr;
+            TSelfMetricLine MemoryUsedBytes;
+            TSelfMetricLine CommittedBytes;
+            TSelfMetricLine FreeChunks;
+            TSelfMetricLine UsedChunks;
+            TSelfMetricLine SealedChunks;
+            TSelfMetricLine WritableChunks;
+            TSelfMetricLine RetiringChunks;
+            TSelfMetricLine Lines;
+            TSelfMetricLine ClosedLines;
+            TSelfMetricLine ReuseWatermark;
+            TSelfMetricLine AppendFailuresTotal;
         };
 
         explicit TImpl(TInMemoryMetricsConfig cfg)
@@ -188,7 +190,15 @@ namespace NActors {
     {
     }
 
-    TInMemoryMetricsBackend::~TInMemoryMetricsBackend() = default;
+    TInMemoryMetricsBackend::~TInMemoryMetricsBackend() {
+        if (!Impl) {
+            return;
+        }
+
+        TGuard<TMutex> guard(Impl->SelfMetricsLock);
+        Impl->SelfMetrics = TImpl::TSelfMetricsLines{};
+        Impl->SelfMetricsInitialized = false;
+    }
 
     TLineWriterState* TInMemoryMetricsBackend::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
         if (!IsMetricAllowed(name)) {
@@ -294,26 +304,25 @@ namespace NActors {
         TGuard<TMutex> guard(Impl->SelfMetricsLock);
         if (!Impl->SelfMetricsInitialized) {
             const std::span<const TLabel> noLabels;
-            const TLineMeta meta = TOnChangeLineFrontend<>::MakeMeta();
-            Impl->SelfMetrics.MemoryUsedBytes = CreateLineWithMeta(RegistryMemoryUsedBytesMetric, noLabels, meta);
-            Impl->SelfMetrics.CommittedBytes = CreateLineWithMeta(RegistryCommittedBytesMetric, noLabels, meta);
-            Impl->SelfMetrics.FreeChunks = CreateLineWithMeta(RegistryFreeChunksMetric, noLabels, meta);
-            Impl->SelfMetrics.UsedChunks = CreateLineWithMeta(RegistryUsedChunksMetric, noLabels, meta);
-            Impl->SelfMetrics.SealedChunks = CreateLineWithMeta(RegistrySealedChunksMetric, noLabels, meta);
-            Impl->SelfMetrics.WritableChunks = CreateLineWithMeta(RegistryWritableChunksMetric, noLabels, meta);
-            Impl->SelfMetrics.RetiringChunks = CreateLineWithMeta(RegistryRetiringChunksMetric, noLabels, meta);
-            Impl->SelfMetrics.Lines = CreateLineWithMeta(RegistryLinesMetric, noLabels, meta);
-            Impl->SelfMetrics.ClosedLines = CreateLineWithMeta(RegistryClosedLinesMetric, noLabels, meta);
-            Impl->SelfMetrics.ReuseWatermark = CreateLineWithMeta(RegistryReuseWatermarkMetric, noLabels, meta);
-            Impl->SelfMetrics.AppendFailuresTotal = CreateLineWithMeta(RegistryAppendFailuresTotalMetric, noLabels, meta);
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels);
+            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryCommittedBytesMetric, noLabels);
+            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryFreeChunksMetric, noLabels);
+            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryUsedChunksMetric, noLabels);
+            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistrySealedChunksMetric, noLabels);
+            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryWritableChunksMetric, noLabels);
+            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryRetiringChunksMetric, noLabels);
+            Impl->SelfMetrics.Lines = CreateLine<TOnChangeLineFrontend<>>(RegistryLinesMetric, noLabels);
+            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeLineFrontend<>>(RegistryClosedLinesMetric, noLabels);
+            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels);
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels);
             Impl->SelfMetricsInitialized = true;
         }
 
-        auto appendIfPresent = [&](TLineWriterState* state, ui64 value) {
-            if (!state) {
+        auto appendIfPresent = [&](TImpl::TSelfMetricLine& line, ui64 value) {
+            if (!line) {
                 return;
             }
-            TOnChangeLineFrontend<>::Append(*this, state, value);
+            line.Append(value);
         };
 
         appendIfPresent(Impl->SelfMetrics.MemoryUsedBytes, stats.MemoryUsedBytes);
@@ -595,10 +604,6 @@ namespace NActors {
             lineSnapshot.Name = line->Key.Name;
             lineSnapshot.Labels = line->Key.Labels;
             lineSnapshot.Meta = line->Meta;
-            lineSnapshot.CurrentTimestamp = line->WriteState
-                ? NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, line->WriteState->LastPublishedTs.load(std::memory_order_acquire))
-                : TInstant::Zero();
-
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
             lineSnapshot.ChunkBegin = snapshot.SnapshotChunks.size();
@@ -640,29 +645,21 @@ namespace NActors {
         return static_cast<NHPTimer::STime>(GetCycleCountFast());
     }
 
-    TLinePublishState TInMemoryMetricsBackend::GetPublishState(const TLineWriterState* state) const noexcept {
-        return TLinePublishState{
-            .HasLastPublished = state ? state->HasLastPublished.load(std::memory_order_acquire) : false,
-            .LastPublishedValue = state ? state->LastPublishedValue.load(std::memory_order_acquire) : 0,
-            .LastPublishedTs = state ? state->LastPublishedTs.load(std::memory_order_acquire) : 0,
-        };
+    std::optional<ui64> TInMemoryMetricsBackend::GetLastMaterializedValue(const TLineWriterState* state) const noexcept {
+        if (!state || !state->HasLastMaterialized.load(std::memory_order_acquire)) {
+            return std::nullopt;
+        }
+        return state->LastMaterializedValue.load(std::memory_order_acquire);
     }
 
     ui32 TInMemoryMetricsBackend::GetLineId(const TLineWriterState* state) const noexcept {
         return state && state->Reader ? state->Reader->LineId : 0;
     }
 
-    void TInMemoryMetricsBackend::MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept {
+    void TInMemoryMetricsBackend::MarkMaterialized(TLineWriterState* state, ui64 value) noexcept {
         if (state) {
-            state->LastPublishedTs.store(nowTs, std::memory_order_release);
-        }
-    }
-
-    void TInMemoryMetricsBackend::MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept {
-        if (state) {
-            state->LastPublishedValue.store(value, std::memory_order_release);
-            state->LastPublishedTs.store(nowTs, std::memory_order_release);
-            state->HasLastPublished.store(true, std::memory_order_release);
+            state->LastMaterializedValue.store(value, std::memory_order_release);
+            state->HasLastMaterialized.store(true, std::memory_order_release);
         }
     }
 

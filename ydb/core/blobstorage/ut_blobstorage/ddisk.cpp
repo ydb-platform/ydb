@@ -77,21 +77,18 @@ Y_UNIT_TEST_SUITE(DDisk) {
         void GreetDDisks() {
             Creds.TabletId = 1;
             Creds.Generation = 1;
-Cerr << "!!!!!! 0 " << ServiceId.ToString() << Endl;
             {
                 Env.Runtime->Send(new IEventHandle(ServiceId, Edge, new NDDisk::TEvConnect(Creds)), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
-Cerr << "!!!!!! 1 " << PBServiceId.ToString() << Endl;
             PBCreds = Creds;
             {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
                 auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvConnectResult>(Edge, false);
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 PBCreds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
-Cerr << "!!!!!! 2" << Endl;
             }
         }
 
@@ -103,8 +100,6 @@ Cerr << "!!!!!! 2" << Endl;
 
             PersId = node.GetPersistentBufferDDiskId();
             PBServiceId = MakeBlobStoragePersistentBufferId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
-Cerr << "!!!!!! ddisk: " << ddiskId.GetNodeId()<< " "<< ddiskId.GetPDiskId() << " " << ddiskId.GetDDiskSlotId() << ServiceId.ToString() <<
-" pb: " << PersId.GetNodeId() << " " << PersId.GetPDiskId() << " "<<PersId.GetDDiskSlotId() << " " << PBServiceId.ToString() << Endl;
 
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
 

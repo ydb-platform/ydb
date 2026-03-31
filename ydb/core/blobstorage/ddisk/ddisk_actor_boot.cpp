@@ -5,7 +5,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPDiskInterface() {
-        Y_ABORT_UNLESS(!IsPersistentBufferActor());
+        Y_ABORT_UNLESS(!IsPersistentBufferActor);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
@@ -143,11 +143,13 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::CreatePersistentBuffer() {
-        auto pbActor = std::make_unique(new TDDiskActor<NKikimrServices::TActivity::BS_PERSISTENT_BUFFER>(std::move(baseInfo), std::move(info), std::move(pbFormat),
-            std::move(ddiskConfig), AppData()->Counters));
-        const TActorId pbActorId = Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
-        auto pbServiceId = MakeBlobStoragePersistentBufferId(SelfId().NodeId, vslotId.PDiskId, vslotId.VDiskSlotId);
-        RegisterLocalService(pbServiceId, pbActorId);
+        TVDiskConfig::TBaseInfo baseInfo(BaseInfo);
+        auto pbActor = std::make_unique<TDDiskActor>(std::move(baseInfo), Info, TPersistentBufferFormat(PersistentBufferFormat),
+            TDDiskConfig(Config), AppData()->Counters, true);
+        auto *as = TActivationContext::ActorSystem();
+        const TActorId pbActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
+        auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+        as->RegisterLocalService(pbServiceId, pbActorId);
     }
 
     void TDDiskActor::StartHandlingQueries() {

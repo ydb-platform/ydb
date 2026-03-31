@@ -41,11 +41,7 @@ namespace NKikimrBlobStorage::NDDisk::NInternal {
     /**/
 
 namespace NKikimr::NDDisk {
-    class TDirectIoOpBase;
-    class TDDiskIoOp;
-    class TPersistentBufferPartIoOp;
-    class TInternalSyncWriteOp;
-    
+
     namespace NPrivate {
         template<typename TRecord>
         struct THasSelectorField {
@@ -72,8 +68,7 @@ namespace NKikimr::NDDisk {
         };
     }
 
-    template<NKikimrServices::TActivity::EType ActivityType>
-    class TDDiskActor : public TActorBootstrapped<TDDiskActor<ActivityType>> {
+    class TDDiskActor : public TActorBootstrapped<TDDiskActor> {
         TString DDiskId;
         TVDiskConfig::TBaseInfo BaseInfo;
         TDDiskConfig Config;
@@ -89,6 +84,11 @@ namespace NKikimr::NDDisk {
 #endif
 
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
+
+        class TDirectIoOpBase;
+        class TDDiskIoOp;
+        class TPersistentBufferPartIoOp;
+        class TInternalSyncWriteOp;
 
         std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
 
@@ -323,19 +323,12 @@ namespace NKikimr::NDDisk {
             WakeupUpdateFreeSpaceInfo = 2,
         };
 
-    protected:
-        static constexpr bool IsPersistentBufferActor() {
-            return ActivityType == NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
-        }
+        const bool IsPersistentBufferActor;
 
     public:
-        static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-            return ActivityType;
-        }
-
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor);
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFuncDDisk);

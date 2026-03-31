@@ -33,11 +33,12 @@ namespace {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor)
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
         , Info(std::move(info))
         , CountersBase(GetServiceCounters(counters, "ddisks"))
+        , IsPersistentBufferActor(isPersistentBufferActor)
         , PersistentBufferFormat(std::move(pbFormat))
     {
         TVector<double> latencyHistBounds;
@@ -153,7 +154,7 @@ namespace {
         FillPool(InternalSyncWriteOpPool);
 
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
-        if (IsPersistentBufferActor()) {
+        if (IsPersistentBufferActor) {
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
             auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
@@ -300,8 +301,8 @@ namespace {
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TDDiskActor<NKikimrServices::TActivity::BS_DDISK>(std::move(baseInfo), std::move(info), std::move(pbFormat),
-            std::move(ddiskConfig), std::move(counters));
+        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat),
+            std::move(ddiskConfig), std::move(counters), false);
     }
 
 } // NKikimr::NDDisk

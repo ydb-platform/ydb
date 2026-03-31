@@ -13,7 +13,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPersistentBuffer() {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
@@ -61,7 +61,7 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
-        Y_ABORT_UNLESS(IsPersistentBufferActor());
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
         if (PersistentBufferReady) {
             return;
         }

@@ -1,5 +1,4 @@
-#include "line_base.h"
-#include "lines/raw_line_frontend.h"
+#include "line_types.h"
 
 #include <util/generic/algorithm.h>
 
@@ -20,20 +19,6 @@ namespace NActors {
             hash = CombineHashes(hash, THash<TString>()(label.Value));
         }
         return hash;
-    }
-
-    TLineMeta::TLineMeta() noexcept
-        : Frontend(&TRawLineFrontend<>::Descriptor())
-    {
-    }
-
-    TLineMeta::TLineMeta(const TLineFrontendOps* frontend) noexcept
-        : Frontend(frontend ? frontend : &TRawLineFrontend<>::Descriptor())
-    {
-    }
-
-    TStringBuf TLineMeta::FrontendName() const noexcept {
-        return Frontend ? Frontend->Name : TStringBuf();
     }
 
     TLineKey MakeLineKey(TStringBuf name, std::span<const TLabel> labels) {

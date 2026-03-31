@@ -1,6 +1,8 @@
 #pragma once
 
-#include "line_base.h"
+#include "line_read.h"
+#include "line_types.h"
+#include "line_write.h"
 #include "line.h"
 #include "line_storage.h"
 #include "lines/on_change_line_frontend.h"
@@ -31,14 +33,12 @@ namespace NActors {
 
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;
-        void Shutdown() noexcept;
 
         void CloseLine(TLineWriterState* state) noexcept override;
-        bool AppendChunkData(
+        bool AccessChunkMemory(
             TLineWriterState* state,
-            std::span<const char> data,
-            NHPTimer::STime firstTs,
-            NHPTimer::STime lastTs) noexcept override;
+            void* opaque,
+            TAccessChunkMemoryFn accessChunkMemory) noexcept override;
         NHPTimer::STime CurrentTimestampTs() const noexcept override;
         TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept override;
         ui32 GetLineId(const TLineWriterState* state) const noexcept override;

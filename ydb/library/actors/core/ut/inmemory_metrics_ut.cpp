@@ -48,16 +48,14 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
     }
 
     TVector<ui64> ReadValues(const TLineSnapshot& line) {
-        TVector<ui64> values;
-        line.ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-            values.push_back(record.Value);
-        });
+        auto deque = line.ReadValuesAs<ui64>();
+        TVector<ui64> values(deque.begin(), deque.end());
         return values;
     }
 
     TVector<ui64> ExpectedOnChangeRead(ui64 first, ui64 second) {
         if (first == second) {
-            return {first};
+            return {first, first};
         }
         return {first, second};
     }
@@ -79,10 +77,8 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             const TLineSnapshot* line = FindLineByName(lines, "double_line");
             UNIT_ASSERT(line);
 
-            TVector<double> values;
-            line->ForEachRecordAs<double>([&](const TGenericRecordView<double>& record) {
-                values.push_back(record.Value);
-            });
+            auto deque = line->ReadValuesAs<double>();
+            TVector<double> values(deque.begin(), deque.end());
 
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
             UNIT_ASSERT_DOUBLES_EQUAL(values[0], 1.5, 1e-12);
@@ -156,44 +152,21 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "line");
             UNIT_ASSERT(!lines[0]->Closed);
-            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 1);
 
+            auto records = lines[0]->ReadRecordsAs<ui64>();
             TVector<ui64> values;
             TVector<TInstant> timestamps;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+            values.reserve(records.size());
+            timestamps.reserve(records.size());
+            for (const auto& record : records) {
                 timestamps.push_back(record.Timestamp);
                 values.push_back(record.Value);
-            });
+            }
 
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
             UNIT_ASSERT_VALUES_EQUAL(values[1], 20);
             UNIT_ASSERT(timestamps[0] <= timestamps[1]);
-        });
-    }
-
-    Y_UNIT_TEST(SnapshotPayloadIsPageAligned) {
-        TInMemoryMetricsRegistry registry({
-            .MemoryBytes = 1024,
-            .ChunkSizeBytes = 64,
-            .MaxLines = 4,
-        });
-
-        auto writer = registry.CreateLine("line", NoLabels());
-        UNIT_ASSERT(writer);
-        UNIT_ASSERT(writer.Append(10));
-
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
-            UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 1);
-
-            size_t chunkCount = 0;
-            lines[0]->ForEachChunk([&](const TChunkSnapshotView& chunk) {
-                ++chunkCount;
-                UNIT_ASSERT_EQUAL(reinterpret_cast<uintptr_t>(chunk.Payload.data()) % TChunk::PayloadAlignment, 0);
-            });
-
-            UNIT_ASSERT_VALUES_EQUAL(chunkCount, 1);
         });
     }
 
@@ -314,12 +287,13 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
         UNIT_ASSERT(writer.Append(10));
         UNIT_ASSERT(writer.Append(20));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(20));
 
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10, 20}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 20, 20}));
         });
     }
 
@@ -340,7 +314,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10}));
         });
     }
 
@@ -361,15 +335,19 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
 
+            auto records = line->ReadRecordsAs<ui64>();
             TVector<ui64> values;
             TVector<TInstant> timestamps;
-            line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+            values.reserve(records.size());
+            timestamps.reserve(records.size());
+            for (const auto& record : records) {
                 values.push_back(record.Value);
                 timestamps.push_back(record.Timestamp);
-            });
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10}));
-            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10}));
+            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 2);
+            UNIT_ASSERT(timestamps[0] < timestamps[1]);
         });
     }
 
@@ -392,17 +370,19 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
 
+            auto records = line->ReadRecordsAs<ui64>();
             TVector<ui64> values;
             TVector<TInstant> timestamps;
-            line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+            values.reserve(records.size());
+            timestamps.reserve(records.size());
+            for (const auto& record : records) {
                 values.push_back(record.Value);
                 timestamps.push_back(record.Timestamp);
-            });
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 10, 20}));
-            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(timestamps[0], timestamps[1]);
-            UNIT_ASSERT(timestamps[1] < timestamps[2]);
+            UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({10, 20}));
+            UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), 2);
+            UNIT_ASSERT(timestamps[0] < timestamps[1]);
         });
     }
 
@@ -424,7 +404,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
             UNIT_ASSERT(line->Closed);
-            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
+            UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 10}));
         });
     }
 
@@ -513,9 +493,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             });
             const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
             UNIT_ASSERT(appendFailures);
-            appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+            for (const auto& record : appendFailures->ReadRecordsAs<ui64>()) {
                 firstReadTimestamps.push_back(record.Timestamp);
-            });
+            }
         });
         UNIT_ASSERT_VALUES_EQUAL(firstReadTimestamps.size(), 1);
 
@@ -531,15 +511,16 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             });
             const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
             UNIT_ASSERT(appendFailures);
-            appendFailures->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
+            for (const auto& record : appendFailures->ReadRecordsAs<ui64>()) {
                 values.push_back(record.Value);
                 secondReadTimestamps.push_back(record.Timestamp);
-            });
+            }
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values, TVector<ui64>({0, 0}));
+        UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(secondReadTimestamps[0], firstReadTimestamps[0]);
+        UNIT_ASSERT(secondReadTimestamps[0] < secondReadTimestamps[1]);
     }
 
     Y_UNIT_TEST(AppendFailuresAreReportedInSelfMetricLine) {
@@ -583,10 +564,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT(lines[0]->Closed);
 
-            TVector<ui64> values;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                values.push_back(record.Value);
-            });
+            TVector<ui64> values = ReadValues(*lines[0]);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(values[0], 42);
         });
@@ -621,12 +599,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(lines[0]->Chunks.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetStats().UsedChunks, 2);
 
-            TVector<ui64> values;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                values.push_back(record.Value);
-            });
+            TVector<ui64> values = ReadValues(*lines[0]);
 
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 5);
             for (ui64 value = 1; value <= 5; ++value) {
@@ -654,10 +629,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT(!lines[0]->Closed);
 
-            TVector<ui64> values;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                values.push_back(record.Value);
-            });
+            TVector<ui64> values = ReadValues(*lines[0]);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(values[0], 10);
         });
@@ -744,18 +716,17 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             TVector<ui64> secondValues;
             for (const auto* line : lines) {
                 if (line->Name == "first") {
-                    line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                        firstValues.push_back(record.Value);
-                    });
+                    for (const auto& value : line->ReadValuesAs<ui64>()) {
+                        firstValues.push_back(value);
+                    }
                 } else if (line->Name == "second") {
-                    line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                        secondValues.push_back(record.Value);
-                    });
+                    for (const auto& value : line->ReadValuesAs<ui64>()) {
+                        secondValues.push_back(value);
+                    }
                 }
             }
 
-            UNIT_ASSERT_VALUES_EQUAL(firstValues.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(firstValues[0], 5);
+            UNIT_ASSERT_VALUES_EQUAL(firstValues, TVector<ui64>({4, 5}));
             UNIT_ASSERT_VALUES_EQUAL(secondValues.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(secondValues[0], 100);
         });
@@ -782,10 +753,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "second");
 
-            TVector<ui64> values;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                values.push_back(record.Value);
-            });
+            TVector<ui64> values = ReadValues(*lines[0]);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(values[0], 2);
         });
@@ -809,11 +777,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             while (!stop.load(std::memory_order_acquire)) {
                 ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
                     for (const auto* line : lines) {
-                        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                            if (record.Value >= writes) {
+                        for (const auto& value : line->ReadValuesAs<ui64>()) {
+                            if (value >= writes) {
                                 ok.store(false, std::memory_order_release);
                             }
-                        });
+                        }
                     }
                 });
                 std::this_thread::yield();
@@ -834,10 +802,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
 
-            TVector<ui64> values;
-            lines[0]->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                values.push_back(record.Value);
-            });
+            TVector<ui64> values = ReadValues(*lines[0]);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), writes);
             for (ui64 i = 0; i < writes; ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(values[i], i);
@@ -869,13 +834,13 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             while (!stop.load(std::memory_order_acquire)) {
                 ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
                     for (const auto* line : lines) {
-                        line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                            const ui64 lineIndex = record.Value >> 32;
-                            const ui64 seq = record.Value & 0xffffffffull;
+                        for (const auto& value : line->ReadValuesAs<ui64>()) {
+                            const ui64 lineIndex = value >> 32;
+                            const ui64 seq = value & 0xffffffffull;
                             if (lineIndex >= writersCount || seq >= writesPerLine) {
                                 ok.store(false, std::memory_order_release);
                             }
-                        });
+                        }
                     }
                 });
                 for (ui64 spins = rng() % 16; spins; --spins) {
@@ -914,9 +879,9 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
             TVector<ui64> counts(writersCount, 0);
             for (const auto* line : lines) {
-                line->ForEachRecordAs<ui64>([&](const TGenericRecordView<ui64>& record) {
-                    ++counts[record.Value >> 32];
-                });
+                for (const auto& value : line->ReadValuesAs<ui64>()) {
+                    ++counts[value >> 32];
+                }
             }
 
             for (ui32 i = 0; i < writersCount; ++i) {

@@ -58,7 +58,6 @@ namespace NActors {
     }
 
     void TInMemoryMetricsRegistry::OnBeforeStop(TActorSystem&) {
-        Backend.Shutdown();
     }
 
     TInMemoryMetricsRegistry* GetInMemoryMetrics(TActorSystem& actorSystem) {

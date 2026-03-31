@@ -3,14 +3,17 @@
 #include "../line_storage.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/function.h>
 #include <util/system/hp_timer.h>
 #include <util/system/types.h>
+
+#include <algorithm>
 
 namespace NActors {
 
     template<class TFrontend>
     class TLine;
+    template<class TValue>
+    struct TOnChangeLineFrontend;
 
     template<class TValue = ui64>
     struct TRawLineFrontend {
@@ -19,6 +22,11 @@ namespace NActors {
         struct TStorageRecord {
             NHPTimer::STime TimestampTs = 0;
             ui64 Value = 0;
+        };
+
+        struct alignas(TStorageRecord) TChunkHeader {
+            ui32 RecordsCount = 0;
+            ui32 Reserved = 0;
         };
 
         struct TConfig {};
@@ -43,8 +51,16 @@ namespace NActors {
                                                TInstant endTs,
                                                TCallback&& cb) {
             snapshot.ForEachChunk([&](const TChunkSnapshotView& chunk) {
-                const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(chunk.Payload.data());
-                const size_t recordsCount = chunk.Payload.size() / sizeof(TStorageRecord);
+                if (chunk.Payload.size() < sizeof(TChunkHeader)) {
+                    return;
+                }
+
+                const auto* header = reinterpret_cast<const TChunkHeader*>(chunk.Payload.data());
+                const char* recordsBegin = chunk.Payload.data() + sizeof(TChunkHeader);
+                const size_t recordsBytes = chunk.Payload.size() - sizeof(TChunkHeader);
+                const size_t maxRecordsCount = recordsBytes / sizeof(TStorageRecord);
+                const size_t recordsCount = std::min<size_t>(header->RecordsCount, maxRecordsCount);
+                const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(recordsBegin);
                 for (size_t i = 0; i < recordsCount; ++i) {
                     const TInstant timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs);
                     if (beginTs <= timestamp && timestamp <= endTs) {
@@ -54,10 +70,23 @@ namespace NActors {
             });
         }
 
+        static ui32 GetUsedPayloadBytes(std::span<const char> payload) noexcept {
+            if (payload.size() < sizeof(TChunkHeader)) {
+                return 0;
+            }
+
+            const auto* header = reinterpret_cast<const TChunkHeader*>(payload.data());
+            const size_t recordsBytes = payload.size() - sizeof(TChunkHeader);
+            const size_t maxRecordsCount = recordsBytes / sizeof(TStorageRecord);
+            const size_t recordsCount = std::min<size_t>(header->RecordsCount, maxRecordsCount);
+            return sizeof(TChunkHeader) + recordsCount * sizeof(TStorageRecord);
+        }
+
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "raw",
                 .ReadRange = &TRawLineFrontend<TValue>::ReadRange,
+                .GetUsedPayloadBytes = &TRawLineFrontend<TValue>::GetUsedPayloadBytes,
             };
             return descriptor;
         }
@@ -68,8 +97,10 @@ namespace NActors {
 
     private:
         friend class TLine<TRawLineFrontend<TValue>>;
+        friend struct TOnChangeLineFrontend<TValue>;
 
         static bool Append(ILineWriteBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
+        static bool WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept;
     };
 
     template<class TValue>
@@ -81,11 +112,41 @@ namespace NActors {
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        const auto data = std::span<const char>(reinterpret_cast<const char*>(&record), sizeof(record));
-        if (!backend.AppendChunkData(state, data, record.TimestampTs, record.TimestampTs)) {
+        if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
             return false;
         }
         backend.MarkPublished(state, encoded, nowTs);
+        return true;
+    }
+
+    template<class TValue>
+    bool TRawLineFrontend<TValue>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
+        const auto& record = *static_cast<const TStorageRecord*>(opaque);
+        const ui32 oldCommittedBytes = GetUsedPayloadBytes(std::span<const char>(chunkMemory.Payload.data(), chunkMemory.Payload.size()));
+        const ui32 requiredBytes = oldCommittedBytes == 0
+            ? sizeof(TChunkHeader) + sizeof(TStorageRecord)
+            : oldCommittedBytes + sizeof(TStorageRecord);
+        if (requiredBytes > chunkMemory.Payload.size()) {
+            return false;
+        }
+
+        auto* header = reinterpret_cast<TChunkHeader*>(chunkMemory.Payload.data());
+        char* recordsBegin = chunkMemory.Payload.data() + sizeof(TChunkHeader);
+        auto* storedRecords = reinterpret_cast<TStorageRecord*>(recordsBegin);
+        if (oldCommittedBytes == 0) {
+            *header = TChunkHeader{
+                .RecordsCount = 1,
+            };
+            storedRecords[0] = record;
+            chunkMemory.FirstTs = record.TimestampTs;
+            chunkMemory.LastTs = record.TimestampTs;
+            return true;
+        }
+
+        const ui32 recordsCount = header->RecordsCount;
+        storedRecords[recordsCount] = record;
+        header->RecordsCount = recordsCount + 1;
+        chunkMemory.LastTs = record.TimestampTs;
         return true;
     }
 

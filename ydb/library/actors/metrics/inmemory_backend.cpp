@@ -68,6 +68,7 @@ namespace NActors {
             chunk->Readers.store(0, std::memory_order_release);
             chunk->FirstTs.store(0, std::memory_order_release);
             chunk->LastTs.store(0, std::memory_order_release);
+            std::memset(chunk->Payload.data(), 0, chunk->Payload.size());
             chunk->Generation.fetch_add(1, std::memory_order_acq_rel);
             chunk->State.store(EChunkState::Writable, std::memory_order_release);
         }
@@ -94,41 +95,45 @@ namespace NActors {
             return line->State.load(std::memory_order_acquire) == ELineState::Closed && line->Storage.Chunks.empty();
         }
 
-        bool TryAppendToChunk(TChunk* chunk, std::span<const char> data, NHPTimer::STime firstTs, NHPTimer::STime lastTs) {
-            const ui32 offset = chunk->CommittedBytes.load(std::memory_order_relaxed);
-            if (offset + data.size() > chunk->Payload.size()) {
+        bool TryAccessChunkMemory(TChunk* chunk, void* opaque, ILineWriteBackend::TAccessChunkMemoryFn accessChunkMemory) {
+            TWritableChunkMemory chunkMemory{
+                .Payload = std::span<char>(chunk->Payload.data(), chunk->Payload.size()),
+                .FirstTs = chunk->FirstTs.load(std::memory_order_relaxed),
+                .LastTs = chunk->LastTs.load(std::memory_order_relaxed),
+            };
+            if (!accessChunkMemory(opaque, chunkMemory)) {
                 return false;
             }
-            memcpy(chunk->Payload.data() + offset, data.data(), data.size());
-            if (offset == 0) {
-                chunk->FirstTs.store(firstTs, std::memory_order_relaxed);
-            }
-            chunk->LastTs.store(lastTs, std::memory_order_relaxed);
-            chunk->CommittedBytes.store(offset + data.size(), std::memory_order_release);
-            return true;
-        }
 
-        bool CanFitData(const TChunk* chunk, size_t size) {
-            return size <= chunk->Payload.size();
+            const TLineReader* owner = chunk->Owner.load(std::memory_order_acquire);
+            const TLineFrontendOps* frontend = owner ? owner->Meta.Frontend : nullptr;
+            const ui32 usedPayloadBytes = frontend && frontend->GetUsedPayloadBytes
+                ? frontend->GetUsedPayloadBytes(std::span<const char>(chunk->Payload.data(), chunk->Payload.size()))
+                : 0;
+            Y_ABORT_UNLESS(usedPayloadBytes <= chunk->Payload.size());
+            if (usedPayloadBytes != 0) {
+                chunk->FirstTs.store(chunkMemory.FirstTs, std::memory_order_relaxed);
+                chunk->LastTs.store(chunkMemory.LastTs, std::memory_order_relaxed);
+            }
+            chunk->CommittedBytes.store(usedPayloadBytes, std::memory_order_release);
+            return true;
         }
     } // namespace
 
     class TInMemoryMetricsBackend::TImpl {
     public:
-        using TSelfMetricLine = TLine<TOnChangeLineFrontend<>>;
-
         struct TSelfMetricsLines {
-            TSelfMetricLine MemoryUsedBytes;
-            TSelfMetricLine CommittedBytes;
-            TSelfMetricLine FreeChunks;
-            TSelfMetricLine UsedChunks;
-            TSelfMetricLine SealedChunks;
-            TSelfMetricLine WritableChunks;
-            TSelfMetricLine RetiringChunks;
-            TSelfMetricLine Lines;
-            TSelfMetricLine ClosedLines;
-            TSelfMetricLine ReuseWatermark;
-            TSelfMetricLine AppendFailuresTotal;
+            TLineWriterState* MemoryUsedBytes = nullptr;
+            TLineWriterState* CommittedBytes = nullptr;
+            TLineWriterState* FreeChunks = nullptr;
+            TLineWriterState* UsedChunks = nullptr;
+            TLineWriterState* SealedChunks = nullptr;
+            TLineWriterState* WritableChunks = nullptr;
+            TLineWriterState* RetiringChunks = nullptr;
+            TLineWriterState* Lines = nullptr;
+            TLineWriterState* ClosedLines = nullptr;
+            TLineWriterState* ReuseWatermark = nullptr;
+            TLineWriterState* AppendFailuresTotal = nullptr;
         };
 
         explicit TImpl(TInMemoryMetricsConfig cfg)
@@ -157,7 +162,6 @@ namespace NActors {
         std::atomic<ui32> NextLineId = 1;
         std::atomic<ui64> ReuseWatermark = 0;
         std::atomic<ui64> AppendFailures = 0;
-        std::atomic<bool> ShuttingDown = false;
 
         TTimeAnchor TimeAnchor;
 
@@ -292,25 +296,26 @@ namespace NActors {
         TGuard<TMutex> guard(Impl->SelfMetricsLock);
         if (!Impl->SelfMetricsInitialized) {
             const std::span<const TLabel> noLabels;
-            Impl->SelfMetrics.MemoryUsedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryMemoryUsedBytesMetric, noLabels);
-            Impl->SelfMetrics.CommittedBytes = CreateLine<TOnChangeLineFrontend<>>(RegistryCommittedBytesMetric, noLabels);
-            Impl->SelfMetrics.FreeChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryFreeChunksMetric, noLabels);
-            Impl->SelfMetrics.UsedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryUsedChunksMetric, noLabels);
-            Impl->SelfMetrics.SealedChunks = CreateLine<TOnChangeLineFrontend<>>(RegistrySealedChunksMetric, noLabels);
-            Impl->SelfMetrics.WritableChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryWritableChunksMetric, noLabels);
-            Impl->SelfMetrics.RetiringChunks = CreateLine<TOnChangeLineFrontend<>>(RegistryRetiringChunksMetric, noLabels);
-            Impl->SelfMetrics.Lines = CreateLine<TOnChangeLineFrontend<>>(RegistryLinesMetric, noLabels);
-            Impl->SelfMetrics.ClosedLines = CreateLine<TOnChangeLineFrontend<>>(RegistryClosedLinesMetric, noLabels);
-            Impl->SelfMetrics.ReuseWatermark = CreateLine<TOnChangeLineFrontend<>>(RegistryReuseWatermarkMetric, noLabels);
-            Impl->SelfMetrics.AppendFailuresTotal = CreateLine<TOnChangeLineFrontend<>>(RegistryAppendFailuresTotalMetric, noLabels);
+            const TLineMeta meta = TOnChangeLineFrontend<>::MakeMeta();
+            Impl->SelfMetrics.MemoryUsedBytes = CreateLineWithMeta(RegistryMemoryUsedBytesMetric, noLabels, meta);
+            Impl->SelfMetrics.CommittedBytes = CreateLineWithMeta(RegistryCommittedBytesMetric, noLabels, meta);
+            Impl->SelfMetrics.FreeChunks = CreateLineWithMeta(RegistryFreeChunksMetric, noLabels, meta);
+            Impl->SelfMetrics.UsedChunks = CreateLineWithMeta(RegistryUsedChunksMetric, noLabels, meta);
+            Impl->SelfMetrics.SealedChunks = CreateLineWithMeta(RegistrySealedChunksMetric, noLabels, meta);
+            Impl->SelfMetrics.WritableChunks = CreateLineWithMeta(RegistryWritableChunksMetric, noLabels, meta);
+            Impl->SelfMetrics.RetiringChunks = CreateLineWithMeta(RegistryRetiringChunksMetric, noLabels, meta);
+            Impl->SelfMetrics.Lines = CreateLineWithMeta(RegistryLinesMetric, noLabels, meta);
+            Impl->SelfMetrics.ClosedLines = CreateLineWithMeta(RegistryClosedLinesMetric, noLabels, meta);
+            Impl->SelfMetrics.ReuseWatermark = CreateLineWithMeta(RegistryReuseWatermarkMetric, noLabels, meta);
+            Impl->SelfMetrics.AppendFailuresTotal = CreateLineWithMeta(RegistryAppendFailuresTotalMetric, noLabels, meta);
             Impl->SelfMetricsInitialized = true;
         }
 
-        auto appendIfPresent = [&](TImpl::TSelfMetricLine& line, ui64 value) {
-            if (!line) {
+        auto appendIfPresent = [&](TLineWriterState* state, ui64 value) {
+            if (!state) {
                 return;
             }
-            line.Append(value);
+            TOnChangeLineFrontend<>::Append(*this, state, value);
         };
 
         appendIfPresent(Impl->SelfMetrics.MemoryUsedBytes, stats.MemoryUsedBytes);
@@ -460,17 +465,16 @@ namespace NActors {
         }
     }
 
-    bool TInMemoryMetricsBackend::AppendChunkData(
+    bool TInMemoryMetricsBackend::AccessChunkMemory(
         TLineWriterState* state,
-        std::span<const char> data,
-        NHPTimer::STime firstTs,
-        NHPTimer::STime lastTs) noexcept {
+        void* opaque,
+        TAccessChunkMemoryFn accessChunkMemory) noexcept {
         const auto fail = [&]() noexcept {
             Impl->AppendFailures.fetch_add(1, std::memory_order_relaxed);
             return false;
         };
 
-        if (!state || !state->Reader || Impl->ShuttingDown.load(std::memory_order_acquire)) {
+        if (!state || !state->Reader) {
             return fail();
         }
         TLineReader* line = state->Reader;
@@ -480,11 +484,12 @@ namespace NActors {
 
         while (true) {
             TChunk* chunk = line->Storage.Writable.load(std::memory_order_acquire);
-            if (chunk && TryAppendToChunk(chunk, data, firstTs, lastTs)) {
+            if (chunk && TryAccessChunkMemory(chunk, opaque, accessChunkMemory)) {
                 return true;
             }
 
             TChunk* sealedChunk = nullptr;
+            TChunk* emptyUnusableChunk = nullptr;
             {
                 TGuard<TMutex> lineGuard(line->Storage.Lock);
                 if (line->State.load(std::memory_order_acquire) != ELineState::Open) {
@@ -492,19 +497,24 @@ namespace NActors {
                 }
 
                 chunk = line->Storage.Writable.load(std::memory_order_acquire);
-                if (chunk && TryAppendToChunk(chunk, data, firstTs, lastTs)) {
+                if (chunk && TryAccessChunkMemory(chunk, opaque, accessChunkMemory)) {
                     return true;
                 }
 
-                if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0 && !CanFitData(chunk, data.size())) {
-                    return fail();
+                if (chunk && chunk->CommittedBytes.load(std::memory_order_acquire) == 0) {
+                    RemoveChunkFromLineLocked(line, chunk);
+                    emptyUnusableChunk = chunk;
                 }
-
-                if (chunk) {
+                if (chunk && !emptyUnusableChunk) {
                     chunk->State.store(EChunkState::Sealed, std::memory_order_release);
                     line->Storage.Writable.store(nullptr, std::memory_order_release);
                     sealedChunk = chunk;
                 }
+            }
+
+            if (emptyUnusableChunk) {
+                ReturnChunkToFree(emptyUnusableChunk);
+                return fail();
             }
 
             if (sealedChunk) {
@@ -516,10 +526,6 @@ namespace NActors {
                 newChunk = TryStealOldestChunk();
             }
             if (!newChunk) {
-                return fail();
-            }
-            if (!CanFitData(newChunk, data.size())) {
-                ReturnChunkToFree(newChunk);
                 return fail();
             }
 
@@ -577,8 +583,7 @@ namespace NActors {
 
     void TInMemoryMetricsBackend::ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const {
         TSnapshot snapshot;
-        auto data = std::make_shared<TSnapshotData>();
-        data->Anchor = Impl->TimeAnchor;
+        snapshot.Anchor = Impl->TimeAnchor;
         snapshot.CommonLabels = GetCommonLabels();
 
         TGuard<TMutex> registryGuard(Impl->RegistryLock);
@@ -587,45 +592,38 @@ namespace NActors {
         for (const auto& [lineId, line] : Impl->LinesById) {
             Y_UNUSED(lineId);
             TLineSnapshot lineSnapshot;
-            lineSnapshot.Data = data;
+            lineSnapshot.Owner = &snapshot;
             lineSnapshot.LineId = line->LineId;
             lineSnapshot.Name = line->Key.Name;
             lineSnapshot.Labels = line->Key.Labels;
             lineSnapshot.Meta = line->Meta;
+            lineSnapshot.CurrentTimestamp = line->WriteState
+                ? NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, line->WriteState->LastPublishedTs.load(std::memory_order_acquire))
+                : TInstant::Zero();
 
             TGuard<TMutex> lineGuard(line->Storage.Lock);
             lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
-            if (line->WriteState) {
-                lineSnapshot.LastPublishedTimestamp = NInMemoryMetricsPrivate::DecodeTs(
-                    data->Anchor,
-                    line->WriteState->LastPublishedTs.load(std::memory_order_acquire));
-                lineSnapshot.LastObservedTimestamp = NInMemoryMetricsPrivate::DecodeTs(
-                    data->Anchor,
-                    line->WriteState->LastObservedTs.load(std::memory_order_acquire));
-            }
-            lineSnapshot.Chunks.reserve(line->Storage.Chunks.size());
-            lineSnapshot.ChunkIndexes.reserve(line->Storage.Chunks.size());
+            lineSnapshot.ChunkBegin = snapshot.SnapshotChunks.size();
 
             for (TChunk* chunk : line->Storage.Chunks) {
                 if (!NInMemoryMetricsPrivate::TryPinChunk(chunk)) {
                     continue;
                 }
 
-                lineSnapshot.ChunkIndexes.push_back(data->Chunks.size());
-                lineSnapshot.Chunks.push_back(TChunkView{
+                const TChunkView view{
                     .ChunkId = chunk->ChunkId,
-                    .FirstTs = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
-                    .LastTs = NInMemoryMetricsPrivate::DecodeTs(data->Anchor, chunk->LastTs.load(std::memory_order_acquire)),
-                    .CommittedBytes = chunk->CommittedBytes.load(std::memory_order_acquire),
-                });
-                data->Chunks.push_back(TSnapshotPinnedChunk{
+                    .FirstTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
+                    .LastTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->LastTs.load(std::memory_order_acquire)),
+                };
+                snapshot.SnapshotChunks.push_back(TSnapshotPinnedChunk{
                     .Backend = const_cast<TInMemoryMetricsBackend*>(this),
                     .Chunk = chunk,
-                    .View = lineSnapshot.Chunks.back(),
+                    .View = view,
                 });
+                ++lineSnapshot.ChunkCount;
             }
 
-            if (!lineSnapshot.Chunks.empty() || lineSnapshot.Closed) {
+            if (lineSnapshot.ChunkCount != 0 || lineSnapshot.Closed) {
                 snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
             }
         }
@@ -640,10 +638,6 @@ namespace NActors {
         return Impl->Config;
     }
 
-    void TInMemoryMetricsBackend::Shutdown() noexcept {
-        Impl->ShuttingDown.store(true, std::memory_order_release);
-    }
-
     NHPTimer::STime TInMemoryMetricsBackend::CurrentTimestampTs() const noexcept {
         return static_cast<NHPTimer::STime>(GetCycleCountFast());
     }
@@ -653,7 +647,6 @@ namespace NActors {
             .HasLastPublished = state ? state->HasLastPublished.load(std::memory_order_acquire) : false,
             .LastPublishedValue = state ? state->LastPublishedValue.load(std::memory_order_acquire) : 0,
             .LastPublishedTs = state ? state->LastPublishedTs.load(std::memory_order_acquire) : 0,
-            .LastObservedTs = state ? state->LastObservedTs.load(std::memory_order_acquire) : 0,
         };
     }
 
@@ -663,7 +656,7 @@ namespace NActors {
 
     void TInMemoryMetricsBackend::MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept {
         if (state) {
-            state->LastObservedTs.store(nowTs, std::memory_order_release);
+            state->LastPublishedTs.store(nowTs, std::memory_order_release);
         }
     }
 
@@ -671,7 +664,6 @@ namespace NActors {
         if (state) {
             state->LastPublishedValue.store(value, std::memory_order_release);
             state->LastPublishedTs.store(nowTs, std::memory_order_release);
-            state->LastObservedTs.store(nowTs, std::memory_order_release);
             state->HasLastPublished.store(true, std::memory_order_release);
         }
     }

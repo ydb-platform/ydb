@@ -20,24 +20,23 @@ namespace NActors {
         }
     } // namespace NInMemoryMetricsPrivate
 
-    TSnapshotData::~TSnapshotData() {
-        for (const auto& chunk : Chunks) {
-            if (chunk.Backend && chunk.Chunk) {
-                chunk.Backend->ReleasePinnedChunk(chunk.Chunk);
-            }
-        }
-    }
-
     TLineSnapshot::TLineSnapshot() = default;
     TLineSnapshot::TLineSnapshot(TLineSnapshot&&) noexcept = default;
     TLineSnapshot& TLineSnapshot::operator=(TLineSnapshot&&) noexcept = default;
     TLineSnapshot::~TLineSnapshot() = default;
 
     TInstant TLineSnapshot::DecodeTimestampTs(NHPTimer::STime ts) const noexcept {
-        return Data ? NInMemoryMetricsPrivate::DecodeTs(Data->Anchor, ts) : TInstant::Zero();
+        return Owner ? NInMemoryMetricsPrivate::DecodeTs(Owner->Anchor, ts) : TInstant::Zero();
     }
 
     TSnapshot::TSnapshot() = default;
-    TSnapshot::~TSnapshot() = default;
+
+    TSnapshot::~TSnapshot() {
+        for (const auto& chunk : SnapshotChunks) {
+            if (chunk.Backend && chunk.Chunk) {
+                chunk.Backend->ReleasePinnedChunk(chunk.Chunk);
+            }
+        }
+    }
 
 } // namespace NActors

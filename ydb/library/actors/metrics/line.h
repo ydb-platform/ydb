@@ -1,8 +1,9 @@
 #pragma once
 
-#include "line_base.h"
+#include "line_write.h"
 
 namespace NActors {
+    class TInMemoryMetricsBackend;
 
     template<class TFrontend>
     class TLine {
@@ -10,7 +11,7 @@ namespace NActors {
         using TValueType = typename TFrontend::TValueType;
 
         TLine() noexcept = default;
-        TLine(ILineWriteBackend* backend, TLineWriterState* state) noexcept
+        TLine(TInMemoryMetricsBackend* backend, TLineWriterState* state) noexcept
             : Backend(backend)
             , State(state)
         {
@@ -66,7 +67,7 @@ namespace NActors {
         }
 
     private:
-        ILineWriteBackend* Backend = nullptr;
+        TInMemoryMetricsBackend* Backend = nullptr;
         TLineWriterState* State = nullptr;
     };
 

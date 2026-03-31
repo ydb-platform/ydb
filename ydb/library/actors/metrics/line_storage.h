@@ -1,6 +1,7 @@
 #pragma once
 
-#include "line_base.h"
+#include "line_read.h"
+#include "line_write.h"
 
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
@@ -11,11 +12,6 @@
 #include <new>
 
 namespace NActors {
-
-    struct TTimeAnchor {
-        NHPTimer::STime BaseCycles = 0;
-        TInstant BaseWallClock;
-    };
 
     enum class ELineState : ui8 {
         Open,
@@ -103,19 +99,6 @@ namespace NActors {
         std::unique_ptr<TLineWriterState> WriteState;
     };
 
-    struct TSnapshotPinnedChunk {
-        ILineWriteBackend* Backend = nullptr;
-        TChunk* Chunk = nullptr;
-        TChunkView View;
-    };
-
-    struct TSnapshotData {
-        ~TSnapshotData();
-
-        TTimeAnchor Anchor;
-        TVector<TSnapshotPinnedChunk> Chunks;
-    };
-
     namespace NInMemoryMetricsPrivate {
         TInstant DecodeTs(const TTimeAnchor& anchor, NHPTimer::STime ts) noexcept;
         bool TryPinChunk(TChunk* chunk) noexcept;
@@ -123,14 +106,14 @@ namespace NActors {
 
     template<class TCallback>
     void TLineSnapshot::ForEachChunk(TCallback&& cb) const {
-        if (!Data) {
+        if (!Owner) {
             return;
         }
-        for (size_t chunkIndex : ChunkIndexes) {
-            const auto& pinned = Data->Chunks[chunkIndex];
+        for (size_t i = 0; i < ChunkCount; ++i) {
+            const auto& pinned = Owner->SnapshotChunks[ChunkBegin + i];
             cb(TChunkSnapshotView{
                 .Meta = pinned.View,
-                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.View.CommittedBytes),
+                .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.Chunk->Payload.size()),
             });
         }
     }

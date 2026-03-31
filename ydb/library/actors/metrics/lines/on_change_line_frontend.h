@@ -1,14 +1,18 @@
 #pragma once
 
-#include "../line_base.h"
+#include "../line_read.h"
+#include "../line_write.h"
 #include "raw_line_frontend.h"
 
 #include <util/datetime/base.h>
-#include <util/generic/function.h>
 #include <util/system/hp_timer.h>
 #include <util/system/types.h>
 
+#include <algorithm>
+
 namespace NActors {
+
+    class TInMemoryMetricsBackend;
 
     template<class TFrontend>
     class TLine;
@@ -29,16 +33,36 @@ namespace NActors {
                               void* opaque,
                               TLineFrontendOps::TInvokeValue invoke) {
             // on_change reuses the same physical chunk format as raw; only write
-            // semantics differ.
+            // semantics differ. Reader appends a synthetic tail point for the
+            // current value at min(CurrentTimestamp, endTs) when it differs from
+            // the last materialized point.
+            bool hasLastValue = false;
+            TInstant lastTimestamp;
+            TValue lastValue{};
             TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
+                hasLastValue = true;
+                lastTimestamp = timestamp;
+                lastValue = value;
                 invoke(opaque, timestamp, &value);
             });
+
+            if (!hasLastValue) {
+                return;
+            }
+
+            const TInstant tailTimestamp = std::min(snapshot.CurrentTimestamp, endTs);
+            if (tailTimestamp <= lastTimestamp || tailTimestamp < beginTs) {
+                return;
+            }
+
+            invoke(opaque, tailTimestamp, &lastValue);
         }
 
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "on_change",
                 .ReadRange = &TOnChangeLineFrontend<TValue>::ReadRange,
+                .GetUsedPayloadBytes = &TRawLineFrontend<TValue>::GetUsedPayloadBytes,
             };
             return descriptor;
         }
@@ -49,14 +73,13 @@ namespace NActors {
 
     private:
         friend class TLine<TOnChangeLineFrontend<TValue>>;
+        friend class TInMemoryMetricsBackend;
 
         static bool Append(ILineWriteBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
     };
 
     template<class TValue>
     bool TOnChangeLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
-        using TStorageRecord = typename TRawLineFrontend<TValue>::TStorageRecord;
-
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
         const TLinePublishState publishState = backend.GetPublishState(state);
@@ -64,24 +87,13 @@ namespace NActors {
         if (publishState.HasLastPublished && publishState.LastPublishedValue == encoded) {
             backend.MarkObserved(state, nowTs);
             return true;
-        } else if (publishState.HasLastPublished && publishState.LastObservedTs > publishState.LastPublishedTs) {
-            TStorageRecord previousRecord{
-                .TimestampTs = publishState.LastPublishedTs,
-                .Value = publishState.LastPublishedValue,
-            };
-            const auto previousData = std::span<const char>(reinterpret_cast<const char*>(&previousRecord), sizeof(previousRecord));
-            if (!backend.AppendChunkData(state, previousData, previousRecord.TimestampTs, previousRecord.TimestampTs)) {
-                return false;
-            }
-            backend.MarkPublished(state, publishState.LastPublishedValue, previousRecord.TimestampTs);
         }
 
-        TStorageRecord record{
+        typename TRawLineFrontend<TValue>::TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        const auto data = std::span<const char>(reinterpret_cast<const char*>(&record), sizeof(record));
-        if (!backend.AppendChunkData(state, data, record.TimestampTs, record.TimestampTs)) {
+        if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
             return false;
         }
         backend.MarkPublished(state, encoded, nowTs);

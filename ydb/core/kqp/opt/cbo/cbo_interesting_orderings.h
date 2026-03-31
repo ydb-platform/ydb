@@ -1,9 +1,5 @@
 #pragma once
 
-// KQP-owned independent copy of yql/essentials/core/cbo/cbo_interesting_orderings.h
-// All types live in NKikimr::NKqp — no aliases to NYql::NDq.
-// The YQL original is unchanged; edits here do NOT affect YQL/YT.
-
 #include <util/generic/hash.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
@@ -24,9 +20,6 @@
 
 namespace NKikimr::NKqp {
 
-// -------------------------------------------------------------------------
-// TJoinColumn — forked from yql/essentials/core/yql_cost_function.h (NYql::NDq)
-// -------------------------------------------------------------------------
 struct TJoinColumn {
     TString RelName{};
     TString AttributeName{};
@@ -58,10 +51,6 @@ struct TJoinColumn {
 };
 
 bool operator<(const TJoinColumn& c1, const TJoinColumn& c2);
-
-// -------------------------------------------------------------------------
-// Ordering types — forked from yql/essentials/core/cbo/cbo_interesting_orderings.h
-// -------------------------------------------------------------------------
 
 struct TOrdering {
     enum EType: uint32_t {

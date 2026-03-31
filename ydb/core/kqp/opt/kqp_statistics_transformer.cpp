@@ -21,10 +21,6 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NYql::NDq;
 
-// Boundary conversion: NYql::TOptimizerStatistics::TColumnStatMap -> KQP-owned copy.
-// Lives here rather than in kqp_statistics.h because yql_statistics.h (needed for the
-// NYql argument type) transitively includes yql/essentials/core/cbo, which kqp/opt/cbo
-// explicitly denies via CHECK_DEPENDENT_DIRS.
 static TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
     const TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>& src)
 {

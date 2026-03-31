@@ -1,15 +1,5 @@
 #pragma once
 
-// ydb/core/kqp/opt/cbo/kqp_statistics.h
-//
-// KQP-owned independent copy of TOptimizerStatistics and related types.
-// The YQL copy lives in yql/essentials/core/yql_statistics.h and is unchanged.
-// Different namespaces (NKikimr::NKqp vs NYql) avoid ODR conflicts.
-//
-// TKqpStatsStore provides a KQP-owned per-node statistics map, parallel to
-// TTypeAnnotationContext::StatisticsMap, allowing KQP optimizer passes to
-// own their stats without modifying the shared YQL annotation context.
-
 #include "cbo_interesting_orderings.h"
 
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
@@ -32,9 +22,6 @@ namespace NYql { class TExprNode; }
 
 namespace NKikimr::NKqp {
 
-// -------------------------------------------------------------------------
-// Statistics-type enums — independent copies (same integer values as NYql)
-// -------------------------------------------------------------------------
 enum EStatisticsType : ui32 {
     BaseTable,
     FilteredFactTable,
@@ -47,17 +34,11 @@ enum EStorageType : ui32 {
     ColumnStorage
 };
 
-// -------------------------------------------------------------------------
-// IProviderStatistics — independent base
-// -------------------------------------------------------------------------
 class IProviderStatistics {
 public:
     virtual ~IProviderStatistics() {}
 };
 
-// -------------------------------------------------------------------------
-// TColumnStatistics — independent copy
-// -------------------------------------------------------------------------
 struct TColumnStatistics {
     std::optional<double> NumUniqueVals;
     std::optional<double> HyperLogLog;
@@ -68,9 +49,6 @@ struct TColumnStatistics {
     TColumnStatistics() {}
 };
 
-// -------------------------------------------------------------------------
-// TShufflingOrderingsByJoinLabels — independent copy
-// -------------------------------------------------------------------------
 class TShufflingOrderingsByJoinLabels {
 public:
     void Add(TVector<TString> joinLabels, TOrderingsStateMachine::TLogicalOrderings shufflings) {
@@ -96,9 +74,6 @@ private:
     TVector<std::pair<TVector<TString>, TOrderingsStateMachine::TLogicalOrderings>> Entries_;
 };
 
-// -------------------------------------------------------------------------
-// TOptimizerStatistics — independent copy
-// -------------------------------------------------------------------------
 struct TOptimizerStatistics {
     struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
@@ -207,9 +182,6 @@ std::shared_ptr<TOptimizerStatistics> OverrideStatistics(
     const TStringBuf& tablePath,
     const std::shared_ptr<NJson::TJsonValue>& stats);
 
-// -------------------------------------------------------------------------
-// TKqpStatsStore — KQP-owned per-node statistics map.
-// -------------------------------------------------------------------------
 class TKqpStatsStore {
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> Map_;
 public:
@@ -217,9 +189,7 @@ public:
     std::shared_ptr<TOptimizerStatistics> GetStats(const NYql::TExprNode* input) const;
     void SetStats(const NYql::TExprNode* input, std::shared_ptr<TOptimizerStatistics> stats);
 
-    // KQP-owned FSMs: built alongside the YQL TypeCtx FSMs from the same data,
-    // but typed as NKikimr::NKqp::TOrderingsStateMachine so KQP stats can hold
-    // NKikimr::NKqp::TOrderingsStateMachine::TLogicalOrderings without boundary conversion.
+    // Parallel to TypeCtx FSMs; NKqp types avoid conversion at the KQP/YQL stats boundary.
     TSimpleSharedPtr<TOrderingsStateMachine> ShufflingsFSM;
     TSimpleSharedPtr<TOrderingsStateMachine> SortingsFSM;
 };

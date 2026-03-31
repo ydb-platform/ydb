@@ -1,10 +1,3 @@
-// NKikimr::NKqp::IProviderContext overloads of the three join-stat inference functions.
-// The provider-independent functions (InferStatisticsForFilter etc.) and their
-// helpers live in ydb/library/yql/dq/opt/dq_opt_stat.cpp.  Only the three functions
-// that call ctx.ComputeJoinStatsV2() need to be provided here, because after
-// the independence refactoring NKikimr::NKqp::IProviderContext is a separate type
-// from NYql::IProviderContext, so the library overloads are not callable.
-
 #include "kqp_opt_stat.h"
 
 #include <yql/essentials/utils/log/log.h>

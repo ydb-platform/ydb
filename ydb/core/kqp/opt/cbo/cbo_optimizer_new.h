@@ -1,9 +1,5 @@
 #pragma once
 
-// YDB-owned independent copy of the CBO optimizer interface.
-// The frozen YQL copy lives in yql/essentials/core/cbo/cbo_optimizer_new.h.
-// These two are intentionally separate: edits here do NOT affect YQL/YT.
-
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include "kqp_statistics.h"
@@ -21,9 +17,8 @@ namespace NYql { struct TExprContext; }
 
 namespace NKikimr::NKqp {
 
-// Independent fork of NYql::EJoinAlgoType (yql/essentials/core/yql_cost_function.h).
-// Enumerator NAMES must match for FromString/ToString compatibility.
-// Integer values need NOT match — boundary conversions use switch/case (see kqp_opt_join.cpp).
+// Enumerator names must match NYql for FromString/ToString compatibility.
+// Boundary conversions use switch/case (see kqp_opt_join.cpp).
 enum class EJoinAlgoType {
     Undefined,
     LookupJoin,

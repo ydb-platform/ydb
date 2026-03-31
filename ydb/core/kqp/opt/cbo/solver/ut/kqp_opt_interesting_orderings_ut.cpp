@@ -3,8 +3,6 @@
 #include <ydb/core/kqp/opt/cbo/cbo_interesting_orderings.h>
 #include <yql/essentials/utils/log/log.h>
 
-// using namespace NYql;
-// using namespace NNodes;
 using namespace NKikimr::NKqp;
 
 

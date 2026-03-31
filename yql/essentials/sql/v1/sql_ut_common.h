@@ -2890,6 +2890,32 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
         "PARALLEL FOR is not available before language version 2026.01");
 }
 
+Y_UNIT_TEST(FunctionLangVer) {
+    {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT FormatType(AsOptionalType(Int32));
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            Err2Str(res),
+            "AsOptionalType is not available before language version 2026.01");
+    }
+    {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2026, 1);
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT FormatType(AsOptionalType(Int32));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+    {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT FormatType(OptionalType(Int32));
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+}
+
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
     NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");

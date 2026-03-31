@@ -2,6 +2,9 @@
 
 #include <ydb/library/actors/protos/actors.pb.h>
 
+#include <library/cpp/string_utils/base64/base64.h>
+#include <util/generic/guid.h>
+
 namespace NActors::NMon {
 
     TEvRemoteHttpInfo::TEvRemoteHttpInfo()
@@ -53,6 +56,33 @@ namespace NActors::NMon {
         return ExtendedQuery ? static_cast<HTTP_METHOD>(ExtendedQuery->GetMethod()) : Method;
     }
 
+    TString TEvRemoteHttpInfo::GetHeader(TStringBuf name) const {
+        if (ExtendedQuery) {
+            for (const auto& header : ExtendedQuery->GetHeaders()) {
+                if (AsciiEqualsIgnoreCase(header.GetName(), name)) {
+                    return header.GetValue();
+                }
+            }
+        }
+        return {};
+    }
+
+    TString TEvRemoteHttpInfo::GetCookie(TStringBuf name) const {
+        TString cookieHeader = GetHeader("Cookie");
+        TStringBuf buf(cookieHeader);
+        while (buf) {
+            TStringBuf token = buf.NextTok(';');
+            while (token.StartsWith(' ')) {
+                token.Skip(1);
+            }
+            TStringBuf key = token.NextTok('=');
+            if (key == name) {
+                return TString(token);
+            }
+        }
+        return {};
+    }
+
     TEvRemoteHttpInfo* TEvRemoteHttpInfo::Load(const TEventSerializedData* bufs) {
         TString s = bufs->GetString();
         if (s.size() && s[0] == '\0') {
@@ -70,6 +100,47 @@ namespace NActors::NMon {
         } else {
             return new TEvRemoteHttpInfo(s);
         }
+    }
+
+    bool TEvRemoteHttpInfoRes::SerializeToArcadiaStream(TChunkSerializer *serializer) const {
+        if (Nonce) {
+            // Extended format: \0 + 4-byte nonce length + nonce + html
+            TString packed;
+            packed.reserve(1 + sizeof(ui32) + Nonce.size() + Html.size());
+            packed.append('\0');
+            ui32 nonceLen = Nonce.size();
+            packed.append(reinterpret_cast<const char*>(&nonceLen), sizeof(nonceLen));
+            packed.append(Nonce);
+            packed.append(Html);
+            return serializer->WriteString(&packed);
+        }
+        return serializer->WriteString(&Html);
+    }
+
+    ui32 TEvRemoteHttpInfoRes::CalculateSerializedSize() const {
+        if (Nonce) {
+            return 1 + sizeof(ui32) + Nonce.size() + Html.size();
+        }
+        return Html.size();
+    }
+
+    TEvRemoteHttpInfoRes* TEvRemoteHttpInfoRes::Load(const TEventSerializedData* bufs) {
+        TString s = bufs->GetString();
+        if (s.size() && s[0] == '\0') {
+            TStringBuf buf(s);
+            buf.Skip(1); // skip marker
+            if (buf.size() >= sizeof(ui32)) {
+                ui32 nonceLen;
+                memcpy(&nonceLen, buf.data(), sizeof(nonceLen));
+                buf.Skip(sizeof(nonceLen));
+                if (buf.size() >= nonceLen) {
+                    auto* res = new TEvRemoteHttpInfoRes(TString(buf.SubStr(nonceLen)));
+                    res->Nonce = TString(buf.Head(nonceLen));
+                    return res;
+                }
+            }
+        }
+        return new TEvRemoteHttpInfoRes(s);
     }
 
     TString BuildActorsLink(const TString& path, const TCgiParameters& currentParams, const std::initializer_list<std::pair<TString, TString>> newParams) {
@@ -92,6 +163,12 @@ namespace NActors::NMon {
         } else {
             return TStringBuilder() << path << '?' << mergedParams.Print();
         }
+    }
+
+    TString GenerateCspNonce() {
+        TGUID guid;
+        CreateGuid(&guid);
+        return Base64Encode(TStringBuf(reinterpret_cast<const char*>(&guid), sizeof(guid)));
     }
 
 } // NActors::NMon

@@ -118,6 +118,7 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
+    library/cpp/string_utils/base64
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future

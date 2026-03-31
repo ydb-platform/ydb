@@ -615,7 +615,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         root_token = self.root_token or self.__configurator.default_clusteradmin
 
         if not root_token and self.__configurator.enable_static_auth:
-            root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
+            root_token = 'Login ' + requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
                 "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
                 "password": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["password"]
             }).cookies.get('ydb_session_id')

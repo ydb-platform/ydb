@@ -594,7 +594,7 @@ def test_set_secret_value_with_param(db_fixture, ydb_cluster, secret_setup):
         run_with_assert(config, f"CREATE SECRET `{name}` WITH (value = '');")
 
     def alter_secret_with_param(config, name, value):
-        query = f"DECLARE $value AS Utf8; ALTER SECRET `{name}` WITH (value = $value);"
+        query = f"ALTER SECRET `{name}` WITH (value = $value);"
         run_query_with_param(config, query, value)
 
     def prepare_secret(config, name, value, setup_kind):

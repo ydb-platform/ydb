@@ -192,14 +192,40 @@ void ReassignGroupDisk(TTestBasicRuntime& runtime, ui64 groupId, ui32 groupGener
     UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 }
 
-TMaybe<ui32> QueryNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex, ui32 nodeId, ui32 groupId) {
+TMaybe<ui32> QueryNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex, ui32 nodeId, ui32 groupId,
+        TDuration simTimeout = TDuration::Seconds(1)) {
     const TActorId edge = runtime.AllocateEdgeActor(nodeIndex);
     runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge, new TEvNodeWardenQueryGroupInfo(groupId)), nodeIndex);
-    auto resp = runtime.GrabEdgeEvent<TEvNodeWardenGroupInfo>(edge);
+    auto resp = runtime.GrabEdgeEvent<TEvNodeWardenGroupInfo>(edge, simTimeout);
+    if (!resp) {
+        return Nothing();
+    }
     if (resp->Get()->Record.HasGroup()) {
         return resp->Get()->Record.GetGroup().GetGroupGeneration();
     }
     return Nothing();
+}
+
+void WaitForNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex, ui32 nodeId, ui32 groupId,
+        ui32 expectedGeneration) {
+    TDuration simTimeout = TDuration::Seconds(10);
+    TDuration queryTimeout = TDuration::MilliSeconds(50);
+    const TInstant deadline = runtime.GetCurrentTime() + simTimeout;
+    TMaybe<ui32> generation;
+    while (runtime.GetCurrentTime() < deadline) {
+        generation = QueryNodeWardenGroupGeneration(runtime, nodeIndex, nodeId, groupId, queryTimeout);
+        if (generation && *generation == expectedGeneration) {
+            return;
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+    }
+
+    generation = QueryNodeWardenGroupGeneration(runtime, nodeIndex, nodeId, groupId, queryTimeout);
+    UNIT_ASSERT_C(false, TStringBuilder() << "Timeout while waiting for owner local group info update"
+        << " NodeId# " << nodeId
+        << " GroupId# " << groupId
+        << " ExpectedGeneration# " << expectedGeneration
+        << " ActualGeneration# " << (generation ? TStringBuilder() << *generation : TString("<none>")));
 }
 
 Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
@@ -393,10 +419,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
 
         moveVDisk();
 
-        runtime.WaitFor("update local group info", [&] {
-            auto ownerGeneration = QueryNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId);
-            return ownerGeneration && *ownerGeneration == newGeneration;
-        }, TDuration::Seconds(1));
+        WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, newGeneration);
 
         // Reconnect owner nodewarden several times while the group is already moved out from it.
         // Then move the VDisk again and verify owner still gets fresh generation updates.
@@ -414,10 +437,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
 
             moveVDisk();
 
-            runtime.WaitFor("update local group info", [&] {
-                auto ownerGeneration = QueryNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId);
-                return ownerGeneration && *ownerGeneration == newGeneration;
-            }, TDuration::Seconds(1));
+            WaitForNodeWardenGroupGeneration(runtime, ownerNodeIndex, ownerNodeId, groupId, newGeneration);
         }
     }
 

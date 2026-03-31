@@ -15,6 +15,7 @@ PEERDIR(
 IF (NOT OS_WINDOWS)
 SRCS(
     http_ut.cpp
+    http_proxy_ut.cpp
     tls_client_connection.cpp
 )
 ELSE()

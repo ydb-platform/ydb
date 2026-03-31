@@ -5,6 +5,125 @@
 
 namespace NHttp {
 
+namespace {
+
+// https://fuchsia.googlesource.com/third_party/grpc/+/HEAD/doc/naming.md
+enum class EURIScheme : uint8_t {
+    NONE,
+    IPV6, // ipv6:
+    IPV4, // ipv4:
+    UNIX_ABSTRACT, // unix-abstract:
+    UNIX, // unix:
+    VSOCK, // vsock:
+    DNS,  // dns:
+};
+
+inline EURIScheme GetScheme(const TString& uri) {
+    if (uri.StartsWith("ipv6:")) {
+        return EURIScheme::IPV6;
+    } else if (uri.StartsWith("ipv4:")) {
+        return EURIScheme::IPV4;
+    } else if (uri.StartsWith("unix-abstract:")) {
+        return EURIScheme::UNIX_ABSTRACT;
+    } else if (uri.StartsWith("unix:")) {
+        return EURIScheme::UNIX;
+    } else if (uri.StartsWith("vsock:")) {
+        return EURIScheme::VSOCK;
+    } else if (uri.StartsWith("dns:")) {
+        return EURIScheme::DNS;
+    } else {
+        return EURIScheme::NONE;
+    }
+}
+
+// format: ipv6:address[:port]
+bool CrackIPv6Address(const TString& address, TString& hostname, TIpPort& port) {
+    const size_t first_colon_pos = address.find(':');
+    const size_t last_colon_pos = address.rfind(':');
+
+    if (last_colon_pos == TString::npos) {
+        // WTF format: just return!
+        return false;
+    }
+
+    const size_t first_bracket_pos = address.find('[');
+    const size_t last_bracket_pos = address.rfind(']');
+
+    if (first_bracket_pos == TString::npos || last_bracket_pos == TString::npos || first_bracket_pos >= last_bracket_pos) {
+        // format: ipv6:address
+        hostname = address.substr(first_colon_pos + 1);
+    } else {
+        // format: ipv6:[address]:port
+        port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
+        hostname = address.substr(first_bracket_pos + 1, last_bracket_pos - first_bracket_pos - 1);
+    }
+
+    if (!IsIPv6(hostname)) {
+        hostname.clear();
+        port = 0;
+        return false;
+    } else {
+        return true;
+    }
+}
+
+// format: ipv4:address[:port]
+bool CrackIPv4Address(const TString& address, TString& hostname, TIpPort& port) {
+    const size_t first_colon_pos = address.find(':');
+    const size_t last_colon_pos = address.rfind(':');
+
+    if (last_colon_pos == TString::npos) {
+        // WTF format: just return!
+        return false;
+    }
+
+    if (last_colon_pos != first_colon_pos) {
+        // format: ipv4:address:port
+        port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
+        hostname = address.substr(first_colon_pos + 1, last_colon_pos - first_colon_pos - 1);
+    } else {
+        // format: ipv4:address
+        hostname = address.substr(first_colon_pos + 1);
+    }
+
+    if (!IsIPv4(hostname)) {
+        hostname.clear();
+        port = 0;
+        return false;
+    } else {
+        return true;
+    }
+}
+
+// Fallback to old impl
+void CrackAddressLegacy(const TString& address, TString& hostname, TIpPort& port) {
+    size_t first_colon_pos = address.find(':');
+    if (first_colon_pos != TString::npos) {
+        size_t last_colon_pos = address.rfind(':');
+        if (last_colon_pos == first_colon_pos) {
+            // only one colon, simple case
+            port = FromStringWithDefault<TIpPort>(address.substr(first_colon_pos + 1), 0);
+            hostname = address.substr(0, first_colon_pos);
+        } else {
+            size_t closing_bracket_pos = address.rfind(']');
+            if (closing_bracket_pos == TString::npos || closing_bracket_pos > last_colon_pos) {
+                // whole address is ipv6 host
+                hostname = address;
+            } else {
+                port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
+                hostname = address.substr(0, last_colon_pos);
+            }
+            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
+                hostname = hostname.substr(1, hostname.size() - 2);
+            }
+        }
+    } else {
+        hostname = address;
+    }
+}
+
+} // namespace
+
 class THttpProxy : public NActors::TActorBootstrapped<THttpProxy>, public THttpConfig {
 public:
     using TBase = NActors::TActorBootstrapped<THttpProxy>;
@@ -370,29 +489,19 @@ bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& 
 }
 
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
-    size_t first_colon_pos = address.find(':');
-    if (first_colon_pos != TString::npos) {
-        size_t last_colon_pos = address.rfind(':');
-        if (last_colon_pos == first_colon_pos) {
-            // only one colon, simple case
-            port = FromStringWithDefault<TIpPort>(address.substr(first_colon_pos + 1), 0);
-            hostname = address.substr(0, first_colon_pos);
-        } else {
-            // ipv6?
-            size_t closing_bracket_pos = address.rfind(']');
-            if (closing_bracket_pos == TString::npos || closing_bracket_pos > last_colon_pos) {
-                // whole address is ipv6 host
-                hostname = address;
-            } else {
-                port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
-                hostname = address.substr(0, last_colon_pos);
-            }
-            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
-                hostname = hostname.substr(1, hostname.size() - 2);
-            }
+    hostname.clear();
+    port = 0;
+
+    switch (GetScheme(address)) {
+        case EURIScheme::IPV6: {
+            CrackIPv6Address(address, hostname, port);
+            return;
         }
-    } else {
-        hostname = address;
+        case EURIScheme::IPV4: {
+            CrackIPv4Address(address, hostname, port);
+            return;
+        }
+        default: return CrackAddressLegacy(address, hostname, port);
     }
 }
 

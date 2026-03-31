@@ -36,7 +36,7 @@ TMaybeNode<TKqlKeyInc> GetRightTableKeyPrefix(const TKqlKeyRange& range) {
 /**
  * KQP specific rule to check if a LookupJoin is applicable
 */
-bool IsLookupJoinApplicableDetailed(const std::shared_ptr<NYql::TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
+bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& node, const TVector<TJoinColumn>& joinColumns, const TKqpProviderContext& ctx) {
 
     auto rel = std::static_pointer_cast<TKqpRelOptimizerNode>(node);
     auto expr = TExprBase(rel->Node);

@@ -25,7 +25,7 @@ NYql::NNodes::TExprBase KqpTopSortSelectIndex(NYql::NNodes::TExprBase node, NYql
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpJoinToIndexLookup(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, bool useCBO, const NYql::TOptimizerHints& hints);
+    const TKqpOptimizeContext& kqpCtx, bool useCBO, const NKikimr::NKqp::TOptimizerHints& hints);
 
 NYql::NNodes::TExprBase KqpRewriteSqlInToEquiJoin(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const NYql::TKikimrConfiguration::TPtr& config);

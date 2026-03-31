@@ -71,16 +71,14 @@ public:
     TProgramPtr Create(
         const TFile& file,
         const TString& sessionId = TString(),
-        const TQContext& qContext = {},
-        TMaybe<TString> gatewaysForMerge = {});
+        const TQContext& qContext = {});
 
     TProgramPtr Create(
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId = TString(),
         EHiddenMode hiddenMode = EHiddenMode::Disable,
-        const TQContext& qContext = {},
-        TMaybe<TString> gatewaysForMerge = {});
+        const TQContext& qContext = {});
 
     void UnrepeatableRandom();
 
@@ -402,7 +400,6 @@ private:
         IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge,
         THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
@@ -466,7 +463,6 @@ private:
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
-    TGatewaysConfig LoadedGatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;
@@ -506,7 +502,6 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
-    TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
     bool EnableLineage_ = false;
@@ -516,6 +511,7 @@ private:
 };
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);
+THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context);
 
 bool HasFullCapture(const IQReaderPtr& reader);
 

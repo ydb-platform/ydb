@@ -161,32 +161,34 @@ TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
     };
 }
 
-TGatewaySQLFlags SQLFlagsFromGatewaysPatch(TStringBuf patch) {
-    TGatewaysConfig config;
-    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(patch, &config));
-
-    // Gateways Patch is used for experimental features
-    return TGatewaySQLFlags::FromTesting(config);
-}
-
 } // namespace
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
-    if (!context.CanRead()) {
-        return {};
-    }
+    YQL_ENSURE(context.CanRead());
 
     TMaybe<NYql::TQItem> loaded =
         context
             .GetReader()
             ->Get({.Component = FacadeComponent, .Label = TranslationLabel})
             .GetValueSync();
-
-    if (!loaded) {
-        return {};
-    }
+    YQL_ENSURE(loaded);
 
     return SQLFlagsFromYson(NYT::NodeFromYsonString(loaded->Value));
+}
+
+THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context) {
+    YQL_ENSURE(context.CanRead());
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({.Component = FacadeComponent, .Label = GatewaysLabel})
+            .GetValueSync();
+    YQL_ENSURE(loaded);
+
+    auto config = MakeHolder<TGatewaysConfig>();
+    YQL_ENSURE(config->ParseFromString(loaded->Value));
+    return config;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -289,11 +291,10 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 TProgramPtr TProgramFactory::Create(
     const TFile& file,
     const TString& sessionId,
-    const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    const TQContext& qContext)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
 }
 
 TProgramPtr TProgramFactory::Create(
@@ -301,8 +302,7 @@ TProgramPtr TProgramFactory::Create(
     const TString& sourceCode,
     const TString& sessionId,
     EHiddenMode hiddenMode,
-    const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    const TQContext& qContext)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ? CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ? CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -327,7 +327,7 @@ TProgramPtr TProgramFactory::Create(
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, gatewaysForMerge, RemoteLayersProviders_);
+                        qContext, RemoteLayersProviders_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -361,7 +361,6 @@ TProgram::TProgram(
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
@@ -395,7 +394,6 @@ TProgram::TProgram(
     , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
-    , GatewaysForMerge_(std::move(gatewaysForMerge))
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
@@ -474,28 +472,7 @@ TProgram::TProgram(
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
-        if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = GatewaysLabel}).GetValueSync();
-            if (item) {
-                YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
-
-                if (GatewaysForMerge_) {
-                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
-                }
-
-                THashMap<TString, TString> clusterMapping;
-                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
-
-                THashSet<TString> sqlFlags = TGatewaySQLFlags::FromTesting(LoadedGatewaysConfig_).All();
-
-                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-                    modules->SetClusterMapping(clusterMapping);
-                    modules->SetSqlFlags(sqlFlags);
-                }
-
-                GatewaysConfig_ = &LoadedGatewaysConfig_;
-            }
-        } else if (QContext_.CanWrite() && GatewaysConfig_) {
+        if (QContext_.CanWrite() && GatewaysConfig_) {
             TGatewaysConfig cleaned;
             if (GatewaysConfig_->HasYt()) {
                 cleaned.MutableYt()->CopyFrom(GatewaysConfig_->GetYt());
@@ -830,12 +807,6 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
             loadedSettings.ClusterMapping[c.first] = c.second.AsString();
         }
-
-        TGatewaySQLFlags flags = SQLFlagsFromYson(dataNode);
-        if (GatewaysForMerge_) {
-            flags.ExtendWith(SQLFlagsFromGatewaysPatch(*GatewaysForMerge_));
-        }
-        loadedSettings.Flags = flags.All();
 
         loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());

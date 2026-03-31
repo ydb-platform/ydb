@@ -706,4 +706,16 @@ enum ETxTypes {
     TXTYPE_GET_BACKUP_COLLECTION_RESTORE = 107 [(TxTypeOpts) = {Name: "TxGetBackupCollectionRestore"}];
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108 [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109 [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
+<<<<<<< HEAD
+=======
+
+    TXTYPE_CANCEL_FORCED_COMPACTION = 110   [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
+    TXTYPE_CREATE_FORCED_COMPACTION = 111   [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
+    TXTYPE_FORGET_FORCED_COMPACTION = 112   [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
+    TXTYPE_GET_FORCED_COMPACTION = 113      [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
+    TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
+    TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
+
+    TXTYPE_USER_HASHES_MIGRATION = 116 [(TxTypeOpts) = {Name: "TTxUserHashesMigration"}];
+>>>>>>> 885c824303a (Implemented users' password hashes migration on SchemeShard initialization (#36701))
 }

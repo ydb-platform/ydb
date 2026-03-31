@@ -102,7 +102,7 @@
 /ydb/services/keyvalue/ut @ydb-platform/blobstorage
 /ydb/tests/functional/bridge @ydb-platform/blobstorage
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
-/ydb/tests/compatibility/distconfig @ydb-platform/blobstorage
+/ydb/tests/compatibility/distconf @ydb-platform/blobstorage
 /ydb/tests/stress/testshard_workload @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core

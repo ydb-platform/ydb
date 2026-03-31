@@ -394,19 +394,8 @@ private:
     bool SetRequestDone(bool ok) {
         OnAfterCall();
 
-        auto makeRequestString = [&] {
-            TString resp;
-            if (ok) {
-                TInProtoPrinter printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(*Request_, &resp);
-            } else {
-                resp = "<not ok>";
-            }
-            return resp;
-        };
         GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, GetRpcMethodName().c_str(),
-            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
+            ok ? "true" : "false", FormatMessage(*Request_, ok).data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
             Y_ABORT_UNLESS(!ok);
@@ -447,7 +436,7 @@ private:
                 Counters_->CountRequestsWithoutToken();
                 GRPC_LOG_DEBUG(Logger_, "[%p] received request without user token "
                     "Name# %s data# %s peer# %s database# %s", this, GetRpcMethodName().c_str(),
-                    makeRequestString().data(), this->Context.peer().c_str(), db.c_str());
+                    FormatMessage(*Request_).data(), this->Context.peer().c_str(), db.c_str());
             }
 
             // Handle current request.

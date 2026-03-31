@@ -277,7 +277,7 @@ public:
             } else if (group->Generation > generation) {
                 groupIDsToRead.insert(groupId);
             }
-        }
+        };
         for (ui32 groupIdProto : record.GetGroups()) {
             // Keep backward-compatible behavior: every group requested explicitly by NodeWarden
             // must remain in GroupsRequested.

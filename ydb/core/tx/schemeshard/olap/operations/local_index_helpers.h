@@ -50,40 +50,48 @@ inline bool ConvertRequestedIndexToCreationConfig(
     config.SetName(indexProto.GetName());
     config.SetState(NKikimrSchemeOp::EIndexStateReady);
 
-    if (indexProto.HasBloomFilter()) {
-        config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
-        const auto& bf = indexProto.GetBloomFilter();
-        for (const auto& colName : bf.GetColumnNames()) {
-            config.AddKeyColumnNames(colName);
+    switch (indexProto.GetImplementationCase()) {
+        case NKikimrSchemeOp::TOlapIndexRequested::kBloomFilter: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            const auto& bf = indexProto.GetBloomFilter();
+            for (const auto& colName : bf.GetColumnNames()) {
+                config.AddKeyColumnNames(colName);
+            }
+            auto* desc = config.MutableBloomFilterDescription();
+            desc->SetFalsePositiveProbability(bf.GetFalsePositiveProbability());
+            if (bf.HasDataExtractor()) {
+                *desc->MutableDataExtractor() = bf.GetDataExtractor();
+            }
+            if (bf.HasBitsStorage()) {
+                *desc->MutableBitsStorage() = bf.GetBitsStorage();
+            }
+            return true;
         }
-        auto* desc = config.MutableBloomFilterDescription();
-        desc->SetFalsePositiveProbability(bf.GetFalsePositiveProbability());
-        if (bf.HasDataExtractor()) {
-            *desc->MutableDataExtractor() = bf.GetDataExtractor();
+        case NKikimrSchemeOp::TOlapIndexRequested::kBloomNGrammFilter: {
+            config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
+            const auto& nf = indexProto.GetBloomNGrammFilter();
+            if (!nf.GetColumnName().empty()) {
+                config.AddKeyColumnNames(nf.GetColumnName());
+            }
+            auto* desc = config.MutableBloomNGrammFilterDescription();
+            if (nf.HasNGrammSize()) desc->SetNGrammSize(nf.GetNGrammSize());
+            if (nf.HasFilterSizeBytes()) desc->SetFilterSizeBytes(nf.GetFilterSizeBytes());
+            if (nf.HasHashesCount()) desc->SetHashesCount(nf.GetHashesCount());
+            if (nf.HasRecordsCount()) desc->SetRecordsCount(nf.GetRecordsCount());
+            if (nf.HasCaseSensitive()) desc->SetCaseSensitive(nf.GetCaseSensitive());
+            if (nf.HasDataExtractor()) {
+                *desc->MutableDataExtractor() = nf.GetDataExtractor();
+            }
+            if (nf.HasBitsStorage()) {
+                *desc->MutableBitsStorage() = nf.GetBitsStorage();
+            }
+            return true;
         }
-        if (bf.HasBitsStorage()) {
-            *desc->MutableBitsStorage() = bf.GetBitsStorage();
-        }
-        return true;
-    } else if (indexProto.HasBloomNGrammFilter()) {
-        config.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter);
-        const auto& nf = indexProto.GetBloomNGrammFilter();
-        if (!nf.GetColumnName().empty()) {
-            config.AddKeyColumnNames(nf.GetColumnName());
-        }
-        auto* desc = config.MutableBloomNGrammFilterDescription();
-        if (nf.HasNGrammSize()) desc->SetNGrammSize(nf.GetNGrammSize());
-        if (nf.HasFilterSizeBytes()) desc->SetFilterSizeBytes(nf.GetFilterSizeBytes());
-        if (nf.HasHashesCount()) desc->SetHashesCount(nf.GetHashesCount());
-        if (nf.HasRecordsCount()) desc->SetRecordsCount(nf.GetRecordsCount());
-        if (nf.HasCaseSensitive()) desc->SetCaseSensitive(nf.GetCaseSensitive());
-        if (nf.HasDataExtractor()) {
-            *desc->MutableDataExtractor() = nf.GetDataExtractor();
-        }
-        if (nf.HasBitsStorage()) {
-            *desc->MutableBitsStorage() = nf.GetBitsStorage();
-        }
-        return true;
+        case NKikimrSchemeOp::TOlapIndexRequested::IMPLEMENTATION_NOT_SET:
+        case NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex:
+        case NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch:
+        case NKikimrSchemeOp::TOlapIndexRequested::kMinMaxIndex:
+            return false;
     }
 
     return false;

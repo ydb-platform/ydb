@@ -154,34 +154,48 @@ private:
             auto* olapIndex = schema->AddIndexes();
             olapIndex->SetId(nextIndexId++);
             olapIndex->SetName(index.name());
-            if (index.has_local_bloom_filter_index()) {
-                olapIndex->SetClassName("BLOOM_FILTER");
-                auto* bloom = olapIndex->MutableBloomFilter();
-                if (index.local_bloom_filter_index().has_false_positive_probability()) {
-                    bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
-                }
-                for (const auto& colName : index.index_columns()) {
-                    auto it = colNameToId.find(colName);
-                    if (it != colNameToId.end()) {
-                        bloom->AddColumnIds(it->second);
+            switch (index.type_case()) {
+                case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                    olapIndex->SetClassName("BLOOM_FILTER");
+                    auto* bloom = olapIndex->MutableBloomFilter();
+                    if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                        bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                     }
-                }
-            } else if (index.has_local_bloom_ngram_filter_index()) {
-                olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
-                auto* ngram = olapIndex->MutableBloomNGrammFilter();
-                const auto& idxProto = index.local_bloom_ngram_filter_index();
-                if (idxProto.ngram_size()) ngram->SetNGrammSize(idxProto.ngram_size());
-                if (idxProto.hashes_count()) ngram->SetHashesCount(idxProto.hashes_count());
-                if (idxProto.filter_size_bytes()) ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
-                if (idxProto.records_count()) ngram->SetRecordsCount(idxProto.records_count());
-                if (idxProto.has_case_sensitive()) ngram->SetCaseSensitive(idxProto.case_sensitive());
-                for (const auto& colName : index.index_columns()) {
-                    auto it = colNameToId.find(colName);
-                    if (it != colNameToId.end()) {
-                        ngram->SetColumnId(it->second);
-                        break; // only one column supported
+                    for (const auto& colName : index.index_columns()) {
+                        auto it = colNameToId.find(colName);
+                        if (it != colNameToId.end()) {
+                            bloom->AddColumnIds(it->second);
+                        }
                     }
+                    break;
                 }
+                case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                    olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                    auto* ngram = olapIndex->MutableBloomNGrammFilter();
+                    const auto& idxProto = index.local_bloom_ngram_filter_index();
+                    if (idxProto.ngram_size()) ngram->SetNGrammSize(idxProto.ngram_size());
+                    if (idxProto.hashes_count()) ngram->SetHashesCount(idxProto.hashes_count());
+                    if (idxProto.filter_size_bytes()) ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
+                    if (idxProto.records_count()) ngram->SetRecordsCount(idxProto.records_count());
+                    if (idxProto.has_case_sensitive()) ngram->SetCaseSensitive(idxProto.case_sensitive());
+                    for (const auto& colName : index.index_columns()) {
+                        auto it = colNameToId.find(colName);
+                        if (it != colNameToId.end()) {
+                            ngram->SetColumnId(it->second);
+                            break; // only one column supported
+                        }
+                    }
+                    break;
+                }
+                case Ydb::Table::TableIndex::TYPE_NOT_SET:
+                case Ydb::Table::TableIndex::kGlobalIndex:
+                case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+                case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+                case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+                case Ydb::Table::TableIndex::kGlobalJsonIndex:
+                    Y_FAIL("This index is not supported for column tables");
             }
         }
 

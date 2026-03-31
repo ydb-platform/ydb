@@ -12,7 +12,8 @@ using namespace NYdb::NTable;
 
 const TString UserName = "user0@builtin";
 
-void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject, const std::vector<std::string>& permissionNames) {
+NYdb::TStatus AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject,
+                              const std::vector<std::string>& permissionNames, bool assertSuccess = true) {
     auto driver = NYdb::TDriver(NYdb::TDriverConfig()
     .SetEndpoint(kikimr.GetEndpoint())
     .SetDatabase("/Root")
@@ -21,10 +22,13 @@ void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TStr
     auto result = schemeClient.ModifyPermissions(path,
         NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(NYdb::NScheme::TPermissions(subject, permissionNames))
     ).ExtractValueSync();
-    AssertSuccessResult(result);
-
-    Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+    if (assertSuccess) {
+        AssertSuccessResult(result);
+        Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), path);
+    }
+    return result;
 }
+
 
 void AddConnectPermission(const TKikimrRunner& kikimr, const TString& subject) {
     AddPermissions(kikimr, "/Root", subject, {"ydb.database.connect"});
@@ -2185,6 +2189,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         struct TIndexTestCase {
             TString Name;
             TString PlainTablePath;
+            TString IndexPath;
             TString CreateWithIndex;
             TString CreatePlain;
             TString Alter;
@@ -2194,6 +2199,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             {
                 "bloom",
                 "/Root/test_bloom_plain",
+                "/Root/test_bloom/idx",
                 R"(--!syntax_v1
                 CREATE TABLE `/Root/test_bloom` (
                     Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid),
@@ -2209,6 +2215,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             {
                 "global_sync",
                 "/Root/test_sync_plain",
+                "/Root/test_sync/idx",
                 R"(--!syntax_v1
                 CREATE TABLE `/Root/test_sync` (
                     Key Uint64, Val Utf8, PRIMARY KEY (Key),
@@ -2224,6 +2231,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             {
                 "vector",
                 "/Root/test_vector_plain",
+                "/Root/test_vector/idx",
                 R"(--!syntax_v1
                 CREATE TABLE `/Root/test_vector` (
                     Key Uint64, Embedding String, PRIMARY KEY (Key),
@@ -2241,6 +2249,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             {
                 "fulltext",
                 "/Root/test_fulltext_plain",
+                "/Root/test_fulltext/idx",
                 R"(--!syntax_v1
                 CREATE TABLE `/Root/test_fulltext` (
                     Key Uint64, Text String, PRIMARY KEY (Key),
@@ -2313,6 +2322,14 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 auto result = executeQueryAsUser(tc.Alter);
                 UNIT_ASSERT_C(result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
             }
+        }
+
+        // Verify that permissions cannot be granted directly on index paths
+        for (const auto& tc : testCases) {
+            auto result = AddPermissions(kikimr, tc.IndexPath, UserName,
+                {"ydb.deprecated.select_row"}, false);
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                tc.Name << ": AddPermissions on index path should fail, but succeeded");
         }
     }
 }

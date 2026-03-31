@@ -12,6 +12,11 @@ TRequestHeaders TRequestHeaders::Clone(TBlockRange64 range) const
         .Timestamp = Timestamp};
 }
 
+size_t TRequestHeaders::GetRequestSize() const
+{
+    return Range.Size() * VolumeConfig->BlockSize;
+}
+
 TStringBuf ToStringBuf(EBlockStoreRequest requestType)
 {
     switch (requestType) {

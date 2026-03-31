@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             };
 
             auto sendMessage = [&](const TString& body, ui64 seqNo) {
-                SendMessage({
+                SendMessageWithRetries({
                     {"QueueUrl", path.QueueUrl},
                     {"MessageBody", body},
                     {"MessageGroupId", TString(MessageGroupKeys[seqNo % MessageGroupKeys.size()])},

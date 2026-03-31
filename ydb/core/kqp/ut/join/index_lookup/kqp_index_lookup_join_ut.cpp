@@ -230,6 +230,7 @@ public:
 
     TTester& Run() {
         auto settings = TKikimrSettings();
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1_KB);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();

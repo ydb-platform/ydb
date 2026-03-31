@@ -41,17 +41,23 @@ struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
     EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
-    ui64 ExternalMemory = 0;
+    ui64 PrechargedMemory = 0;
+    ui64 DefaultMemory = 0;
     bool ReleaseAllResources = false;
 
+    ui64 TotalMemory() const {
+        return Memory + PrechargedMemory;
+    }
+
     void MoveToFreeTier() {
-        ExternalMemory += Memory;
+        DefaultMemory += Memory;
         Memory = 0;
     }
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-            << "ExternalMemory: " << ExternalMemory << " }";
+            << ", PrechargedMemory: " << PrechargedMemory
+            << ", DefaultMemory: " << DefaultMemory << " }";
     }
 };
 
@@ -68,8 +74,9 @@ class TTaskState : public TAtomicRefCount<TTaskState> {
 public:
     const ui64 TaskId = 0;
     const TInstant CreatedAt;
-    ui64 ScanQueryMemory = 0;
-    ui64 ExternalDataQueryMemory = 0;
+    ui64 Memory = 0;
+    ui64 PrechargedMemory = 0;
+    ui64 DefaultMemory = 0;
     ui64 ResourceBrokerTaskId = 0;
     ui32 ExecutionUnits = 0;
     TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
@@ -80,12 +87,19 @@ public:
     // compute actor wants to release some memory.
     // we distribute that memory across granted resources
     TKqpResourcesRequest FitRequest(TKqpResourcesRequest& resources) {
-        ui64 releaseScanQueryMemory = std::min(ScanQueryMemory, resources.Memory);
-        ui64 leftToRelease = resources.Memory - releaseScanQueryMemory;
-        ui64 releaseExternalDataQueryMemory = std::min(ExternalDataQueryMemory, resources.ExternalMemory + leftToRelease);
+        ui64 left = resources.Memory;
+        ui64 memory = std::min(left, Memory);
+        left -= memory;
 
-        resources.Memory = releaseScanQueryMemory;
-        resources.ExternalMemory = releaseExternalDataQueryMemory;
+        ui64 precharged = std::min(left, PrechargedMemory);
+        left -= precharged;
+
+        ui64 defaultMemory = std::min(left, DefaultMemory);
+        left -= defaultMemory;
+
+        resources.PrechargedMemory = precharged;
+        resources.Memory = memory;
+        resources.DefaultMemory = defaultMemory;
         return resources;
     }
 
@@ -98,8 +112,9 @@ public:
         return TKqpResourcesRequest{
             .ExecutionUnits=ExecutionUnits,
             .MemoryPool=EKqpMemoryPool::Unspecified,
-            .Memory=ScanQueryMemory,
-            .ExternalMemory=ExternalDataQueryMemory};
+            .Memory=Memory,
+            .PrechargedMemory=PrechargedMemory,
+            .DefaultMemory=DefaultMemory};
     }
 
     explicit TTaskState(ui64 taskId, TInstant createdAt)
@@ -121,8 +136,11 @@ public:
     const bool CollectBacktrace;
 
 private:
-    std::atomic<ui64> TxScanQueryMemory = 0;
-    std::atomic<ui64> TxExternalDataQueryMemory = 0;
+    // total extra memory granted to the query from the available pools
+    std::atomic<ui64> TxMemory = 0;
+    // memory granted to the query for free without
+    // any allocations from the available memory pools
+    std::atomic<ui64> TxDefaultMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
     std::atomic<ui64> TxMaxAllocationSize = 0;
 
@@ -173,8 +191,8 @@ public:
             backtraceLock.lock();
         }
 
-        res << ", tx initially granted memory: " << HumanReadableSize(TxExternalDataQueryMemory.load(), SF_BYTES)
-            << ", tx total memory allocations: " << HumanReadableSize(TxScanQueryMemory.load(), SF_BYTES)
+        res << ", tx initially granted memory: " << HumanReadableSize(TxDefaultMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(TxMemory.load(), SF_BYTES)
             << ", tx largest successful memory allocation: " << HumanReadableSize(TxMaxAllocationSize.load(), SF_BYTES)
             << ", tx last failed memory allocation: " << HumanReadableSize(TxFailedAllocationSize.load(), SF_BYTES)
             << ", tx total execution units: " << TxExecutionUnits.load()
@@ -194,10 +212,6 @@ public:
         }
 
         return res;
-    }
-
-    ui64 GetExtraMemoryAllocatedSize() {
-        return TxScanQueryMemory.load();
     }
 
     void AckFailedMemoryAlloc(ui64 memory) {
@@ -224,13 +238,14 @@ public:
             Counters->RmExtraMemFree->Inc();
         }
 
-        Counters->RmExternalMemory->Sub(resources.ExternalMemory);
-        TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-        taskState->ExternalDataQueryMemory -= resources.ExternalMemory;
+        Counters->RmExternalMemory->Sub(resources.DefaultMemory);
+        TxDefaultMemory.fetch_sub(resources.DefaultMemory);
+        taskState->DefaultMemory -= resources.DefaultMemory;
 
-        TxScanQueryMemory.fetch_sub(resources.Memory);
-        taskState->ScanQueryMemory -= resources.Memory;
-        Counters->RmMemory->Sub(resources.Memory);
+        TxMemory.fetch_sub(resources.TotalMemory());
+        taskState->Memory -= resources.Memory;
+        taskState->PrechargedMemory -= resources.PrechargedMemory;
+        Counters->RmMemory->Sub(resources.TotalMemory());
 
         TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
         taskState->ExecutionUnits -= resources.ExecutionUnits;
@@ -242,14 +257,15 @@ public:
             Counters->RmOnStartAllocs->Inc();
         }
 
-        Counters->RmExternalMemory->Add(resources.ExternalMemory);
-        TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
-        taskState->ExternalDataQueryMemory += resources.ExternalMemory;
+        Counters->RmExternalMemory->Add(resources.DefaultMemory);
+        TxDefaultMemory.fetch_add(resources.DefaultMemory);
+        taskState->DefaultMemory += resources.DefaultMemory;
 
-        TxScanQueryMemory.fetch_add(resources.Memory);
-        taskState->ScanQueryMemory += resources.Memory;
-        Counters->RmMemory->Add(resources.Memory);
-        if (resources.Memory) {
+        TxMemory.fetch_add(resources.TotalMemory());
+        taskState->Memory += resources.Memory;
+        taskState->PrechargedMemory += resources.PrechargedMemory;
+        Counters->RmMemory->Add(resources.TotalMemory());
+        if (resources.TotalMemory()) {
             Counters->RmExtraMemAllocs->Inc();
         }
 
@@ -257,8 +273,8 @@ public:
         ui64 maxAlloc = TxMaxAllocationSize.load();
         bool exchanged = false;
 
-        while(maxAlloc < resources.Memory && !exchanged) {
-            exchanged = TxMaxAllocationSize.compare_exchange_weak(maxAlloc, resources.Memory);
+        while(maxAlloc < resources.TotalMemory() && !exchanged) {
+            exchanged = TxMaxAllocationSize.compare_exchange_weak(maxAlloc, resources.TotalMemory());
         }
 
         if (exchanged) {

@@ -49,6 +49,7 @@ using namespace NResourceBroker;
 namespace {
 
 static constexpr double MYEPS = 1e-9;
+static constexpr int PrechargedMaxCASAttempts = 4;
 
 ui64 OverPercentage(ui64 limit, double percent) {
     return static_cast<double>(limit) / 100 * (100 - percent) + MYEPS;
@@ -149,6 +150,8 @@ struct TEvPrivate {
         EvSchedulePublishResources,
         EvTakeResourcesSnapshot,
         EvWarmupDeadline,
+        EvPrechargeRefill,
+        EvPrechargeDrain,
     };
 
     struct TEvPublishResources : public TEventLocal<TEvPublishResources, EEv::EvPublishResources> {
@@ -158,6 +161,12 @@ struct TEvPrivate {
     };
 
     struct TEvWarmupDeadline : public TEventLocal<TEvWarmupDeadline, EEv::EvWarmupDeadline> {
+    };
+
+    struct TEvPrechargeRefill : public TEventLocal<TEvPrechargeRefill, EEv::EvPrechargeRefill> {
+    };
+
+    struct TEvPrechargeDrain : public TEventLocal<TEvPrechargeDrain, EEv::EvPrechargeDrain> {
     };
 };
 
@@ -173,6 +182,8 @@ public:
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
         PublishAfterBootstrap.clear();
+        PrechargeRefillScheduled.clear();
+        PrechargeDrainScheduled.clear();
         SetConfigValues(config);
     }
 
@@ -232,6 +243,24 @@ public:
         ExecutionUnitsResource.fetch_add(cnt);
     }
 
+    bool TryAllocateFromPrecharged(i64 requested) {
+        i64 current = PrechargedAvailableMemory.load(std::memory_order_relaxed);
+        for (int attempt = 0; attempt < PrechargedMaxCASAttempts; ++attempt) {
+            if (current < requested) {
+                return false;
+            }
+            if (PrechargedAvailableMemory.compare_exchange_weak(current, current - requested,
+                    std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void FreeToPrecharged(i64 released) {
+        PrechargedAvailableMemory.fetch_add(released, std::memory_order_release);
+    }
+
     TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override
     {
         const ui64 txId = tx->TxId;
@@ -259,15 +288,35 @@ public:
             return result;
         }
 
-        bool hasScanQueryMemory = true;
+        bool hasMemory = true;
 
         bool isFirstAllocationRequest = (resources.ExecutionUnits > 0 && resources.MemoryPool == EKqpMemoryPool::DataQuery);
         if (isFirstAllocationRequest) {
             TKqpResourcesRequest newRequest = resources;
             newRequest.MoveToFreeTier();
             tx->Allocated(task, newRequest);
-            ExternalDataQueryMemory.fetch_add(newRequest.ExternalMemory);
+            DefaultMemory.fetch_add(newRequest.DefaultMemory);
             return result;
+        }
+
+        if (tx->PoolId == NResourcePool::DEFAULT_POOL_ID) {
+            if (PrechargedAvailableMemory.load(std::memory_order_relaxed) < PrechargedBatchSize.load(std::memory_order_relaxed) / 2
+                && PrechargedCapacity.load(std::memory_order_relaxed) < PrechargedHighWatermark.load(std::memory_order_relaxed))
+            {
+                if (!PrechargeRefillScheduled.test_and_set()) {
+                    ActorSystem->Send(SelfId, new TEvPrivate::TEvPrechargeRefill);
+                }
+            }
+
+            if (TryAllocateFromPrecharged(resources.Memory)) {
+                TKqpResourcesRequest prechargedRequest = resources;
+                prechargedRequest.PrechargedMemory = prechargedRequest.Memory;
+                prechargedRequest.Memory = 0;
+                task->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
+                tx->Allocated(task, prechargedRequest);
+                LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated from precharged pool " << resources.ToString());
+                return result;
+            }
         }
 
         with_lock (Lock) {
@@ -278,10 +327,10 @@ public:
                 return result;
             }
 
-            hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
+            hasMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
             task->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
 
-            if (hasScanQueryMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
+            if (hasMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
                 auto [it, success] = MemoryNamedPools.emplace(tx->MakePoolId(), nullptr);
 
                 if (success) {
@@ -292,7 +341,7 @@ public:
 
                 auto& poolMemory = it->second;
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
-                    hasScanQueryMemory = false;
+                    hasMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
                 }
 
@@ -300,7 +349,7 @@ public:
             }
         }
 
-        if (!hasScanQueryMemory) {
+        if (!hasMemory) {
             Counters->RmNotEnoughMemory->Inc();
             tx->AckFailedMemoryAlloc(resources.Memory);
             TStringBuilder reason;
@@ -367,10 +416,20 @@ public:
             FreeExecutionUnits(resources.ExecutionUnits);
         }
 
-        Y_ABORT_UNLESS(resources.Memory <= task->ScanQueryMemory);
+        Y_ABORT_UNLESS(resources.Memory <= task->Memory);
+        Y_ABORT_UNLESS(resources.PrechargedMemory <= task->PrechargedMemory);
+
+        if (resources.PrechargedMemory > 0) {
+            FreeToPrecharged(resources.PrechargedMemory);
+            if (PrechargedAvailableMemory.load(std::memory_order_relaxed) > 2 * PrechargedBatchSize.load(std::memory_order_relaxed)) {
+                if (!PrechargeDrainScheduled.test_and_set()) {
+                    ActorSystem->Send(SelfId, new TEvPrivate::TEvPrechargeDrain);
+                }
+            }
+        }
 
         if (resources.Memory > 0 && task->ResourceBrokerTaskId) {
-            if (resources.Memory == task->ScanQueryMemory) {
+            if (resources.Memory == task->Memory) {
                 bool finished = ResourceBroker->FinishTaskInstant(
                     TEvResourceBroker::TEvFinishTask(task->ResourceBrokerTaskId), SelfId);
                 Y_DEBUG_ABORT_UNLESS(finished);
@@ -383,7 +442,7 @@ public:
         }
 
         tx->Released(task, resources);
-        i64 prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        i64 prev = DefaultMemory.fetch_sub(resources.DefaultMemory);
         Y_DEBUG_ABORT_UNLESS(prev >= 0);
 
         if (resources.Memory > 0) {
@@ -403,10 +462,7 @@ public:
         }
 
         LOG_AS_D("TxId: " << tx->TxId << ", taskId: " << task->TaskId
-            << ". Released resources, "
-            << "Memory: " << resources.Memory << ", "
-            << "Free Tier: " << resources.ExternalMemory << ", "
-            << "ExecutionUnits: " << resources.ExecutionUnits << ".");
+            << ". Released resources, " << resources.ToString());
 
         FireResourcesPublishing();
     }
@@ -493,6 +549,8 @@ public:
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
         MaxNonParallelDataQueryTasksLimit.store(config.GetMaxNonParallelDataQueryTasksLimit());
+        PrechargedBatchSize.store(static_cast<i64>(config.GetPrechargedMBytesPerBatch()) * 1024 * 1024);
+        PrechargedHighWatermark.store(static_cast<i64>(config.GetPrechargedHighWatermarkMBytes()) * 1024 * 1024);
     }
 
     ui32 GetNodeId() override {
@@ -543,7 +601,7 @@ public:
     std::atomic<i32> ExecutionUnitsLimit;
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
-    std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<i64> DefaultMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
     std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
     std::atomic<bool> PreferLocalDatacenterExecution = true;
@@ -551,6 +609,17 @@ public:
 
     // current state
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
+
+    // precharged memory pool for lock-free scan query allocations
+    // PrechargedAvailableMemory: actual available precharged memory for fast-path allocation
+    // PrechargedBatchSize: how much to grow capacity by on each refill
+    // PrechargedHighWatermark: maximum capacity the pool can grow to
+    std::atomic<i64> PrechargedAvailableMemory{0};
+    std::atomic<i64> PrechargedBatchSize;
+    std::atomic<i64> PrechargedHighWatermark;
+    std::atomic_flag PrechargeRefillScheduled;
+    std::atomic_flag PrechargeDrainScheduled;
+    std::atomic<i64> PrechargedCapacity{0};
 
     std::atomic_flag PublishAfterBootstrap;
     std::atomic_flag PublishScheduled;
@@ -604,6 +673,8 @@ public:
         TActorBootstrapped::Registered(sys, owner);
 
         ResourceManager->Registered(Config, sys, SelfId());
+
+        sys->Send(SelfId(), new TEvPrivate::TEvPrechargeRefill);
 
         with_lock (ResourceManagers.Lock) {
             if (ResourceManagers.Default.expired()) { // There can be several managers in tests
@@ -691,6 +762,8 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleWork);
             hFunc(TEvKqpWarmupComplete, HandleWarmupComplete);
             cFunc(TEvPrivate::EvWarmupDeadline, HandleWarmupDeadline);
+            cFunc(TEvPrivate::EvPrechargeRefill, HandlePrechargeRefill);
+            cFunc(TEvPrivate::EvPrechargeDrain, HandlePrechargeDrain);
             hFunc(TEvents::TEvUndelivered, HandleWork);
             hFunc(TEvents::TEvPoison, HandleWork);
             hFunc(NMon::TEvHttpInfo, HandleWork);
@@ -802,6 +875,8 @@ private:
         FORCE_VALUE(PublishStatisticsIntervalSec);
         FORCE_VALUE(MaxTotalChannelBuffersSize);
         FORCE_VALUE(MinChannelBufferSize);
+        FORCE_VALUE(PrechargedMBytesPerBatch);
+        FORCE_VALUE(PrechargedHighWatermarkMBytes);
 #undef FORCE_VALUE
 
         LOG_I("Updated table service config: " << config.DebugString());
@@ -846,9 +921,11 @@ private:
                 str << "State storage key: " << WbState.Tenant << Endl;
                 with_lock (ResourceManager->Lock) {
                     str << "ScanQuery memory resource: " << ResourceManager->TotalMemoryResource->ToString() << Endl;
-                    str << "External DataQuery memory: " << ResourceManager->ExternalDataQueryMemory.load() << Endl;
+                    str << "External DataQuery memory: " << ResourceManager->DefaultMemory.load() << Endl;
                     str << "ExecutionUnits resource: " << ResourceManager->ExecutionUnitsResource.load() << Endl;
                 }
+                str << "Precharged available memory: " << ResourceManager->PrechargedAvailableMemory.load() << Endl;
+                str << "Precharged capacity: " << ResourceManager->PrechargedCapacity.load() << Endl;
                 str << "Last resource broker task id: " << ResourceManager->LastResourceBrokerTaskId.load() << Endl;
                 if (WbState.LastPublishTime) {
                     str << "Last publish time: " << *WbState.LastPublishTime << Endl;
@@ -883,6 +960,94 @@ private:
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
+    }
+
+    void HandlePrechargeRefill() {
+        ResourceManager->PrechargeRefillScheduled.clear();
+
+        i64 batchSize = ResourceManager->PrechargedBatchSize.load(std::memory_order_relaxed);
+        i64 highWatermark = ResourceManager->PrechargedHighWatermark.load(std::memory_order_relaxed);
+        i64 capacity = ResourceManager->PrechargedCapacity.load(std::memory_order_relaxed);
+
+        if (capacity >= highWatermark) {
+            return;
+        }
+
+        i64 toGrow = std::min(batchSize, highWatermark - capacity);
+
+        bool acquired = false;
+        with_lock (ResourceManager->Lock) {
+            if (!ResourceManager->ResourceBroker) {
+                return;
+            }
+            acquired = ResourceManager->TotalMemoryResource->AcquireIfAvailable(toGrow);
+        }
+
+        if (!acquired) {
+            return;
+        }
+
+        ui64 rbTaskId = ResourceManager->LastResourceBrokerTaskId.fetch_add(1) + 1;
+        TString rbTaskName = TStringBuilder() << "kqp-precharge-" << rbTaskId;
+
+        bool submitted = ResourceManager->ResourceBroker->SubmitTaskInstant(
+            TEvResourceBroker::TEvSubmitTask(rbTaskId, rbTaskName, {0, (ui64)toGrow}, "kqp_query", 0, {}),
+            ResourceManager->SelfId);
+
+        if (!submitted) {
+            with_lock (ResourceManager->Lock) {
+                ResourceManager->TotalMemoryResource->Release(toGrow);
+            }
+            LOG_W("Precharge refill failed: broker rejected task");
+            return;
+        }
+
+        if (PrechargedBrokerTaskId) {
+            bool merged = ResourceManager->ResourceBroker->MergeTasksInstant(
+                PrechargedBrokerTaskId, rbTaskId, ResourceManager->SelfId);
+            Y_ABORT_UNLESS(merged);
+        } else {
+            PrechargedBrokerTaskId = rbTaskId;
+        }
+
+        ResourceManager->PrechargedCapacity.fetch_add(toGrow);
+        ResourceManager->PrechargedAvailableMemory.fetch_add(toGrow, std::memory_order_release);
+        LOG_D("Precharge refill: capacity " << capacity + toGrow << ", available: "
+            << ResourceManager->PrechargedAvailableMemory.load());
+    }
+
+    void HandlePrechargeDrain() {
+        ResourceManager->PrechargeDrainScheduled.clear();
+
+        i64 batchSize = ResourceManager->PrechargedBatchSize.load(std::memory_order_relaxed);
+        i64 available = ResourceManager->PrechargedAvailableMemory.load(std::memory_order_relaxed);
+
+        if (available <= 2 * batchSize) {
+            return;
+        }
+
+        i64 excess = available - batchSize;
+        i64 target = available - excess;
+        if (!ResourceManager->PrechargedAvailableMemory.compare_exchange_strong(available, target,
+                std::memory_order_acq_rel, std::memory_order_relaxed)) {
+            return;
+        }
+
+        ResourceManager->PrechargedCapacity.fetch_sub(excess);
+
+        with_lock (ResourceManager->Lock) {
+            ResourceManager->TotalMemoryResource->Release(excess);
+        }
+
+        if (PrechargedBrokerTaskId) {
+            ResourceManager->ResourceBroker->ReduceTaskResourcesInstant(
+                PrechargedBrokerTaskId, {0, (ui64)excess}, ResourceManager->SelfId);
+        }
+
+        ResourceManager->PrechargeRefillScheduled.clear();
+
+        LOG_D("Precharge drain: capacity " << ResourceManager->PrechargedCapacity.load() << ", available: "
+            << ResourceManager->PrechargedAvailableMemory.load());
     }
 
 private:
@@ -1016,6 +1181,8 @@ private:
 
     bool WarmupInProgress = false;
     TDuration WarmupDeadline;
+
+    ui64 PrechargedBrokerTaskId = 0;
 };
 
 } // namespace NRm

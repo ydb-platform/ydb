@@ -59,6 +59,9 @@ message TTableServiceConfig {
         optional uint64 MaxNonParallelDataQueryTasksLimit = 28 [default = 1000];
 
         optional bool VerboseMemoryLimitException = 29 [default = false];
+
+        optional uint64 PrechargedMBytesPerBatch = 31 [default = 64];       // 64 MB growth per refill
+        optional uint64 PrechargedHighWatermarkMBytes = 32 [default = 128]; // max precharged pool capacity
     }
 
     message TSpillingServiceConfig {

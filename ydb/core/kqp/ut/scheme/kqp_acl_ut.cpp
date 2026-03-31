@@ -2172,6 +2172,91 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
 
         driver.Stop(true);
     }
+
+    Y_UNIT_TEST(LocalBloomFilterGrantForCreateAndAlterTable) {
+        auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        AddConnectPermission(kikimr, UserName);
+
+        const TString createQuery = R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/test_acl_bloom` (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom_create LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);
+        )";
+
+        const TString createPlainQuery = R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/test_acl_bloom_plain` (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);
+        )";
+
+        const TString alterQuery = R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/test_acl_bloom_plain`
+                ADD INDEX idx_bloom_alter LOCAL USING bloom_filter
+                ON (resource_id)
+                WITH (false_positive_probability = 0.01);
+        )";
+
+        auto executeQueryAsUser = [&](const TString& query) {
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
+                .SetAuthToken(UserName);
+            auto driver = TDriver(driverConfig);
+            auto client = NYdb::NQuery::TQueryClient(driver);
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            driver.Stop(true);
+            return result;
+        };
+
+        {
+            auto result = executeQueryAsUser(createQuery);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Access denied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root", UserName, {"ydb.deprecated.create_table"});
+
+        {
+            auto result = executeQueryAsUser(createQuery);
+            AssertSuccessResult(result);
+        }
+
+        AssertSuccessResult(kikimr.GetQueryClient().ExecuteQuery(createPlainQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+        AddPermissions(kikimr, "/Root/test_acl_bloom_plain", UserName, {"ydb.deprecated.describe_schema"});
+
+        {
+            auto result = executeQueryAsUser(alterQuery);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Access denied"),
+                result.GetIssues().ToString());
+        }
+
+        AddPermissions(kikimr, "/Root/test_acl_bloom_plain", UserName, {"ydb.deprecated.alter_schema"});
+
+        {
+            auto result = executeQueryAsUser(alterQuery);
+            AssertSuccessResult(result);
+        }
+    }
 }
 
 } // namespace NKqp

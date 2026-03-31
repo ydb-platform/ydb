@@ -499,76 +499,80 @@ public:                       \
     } while (false)
 
 #define UNIT_ASSERT(A) UNIT_ASSERT_C(A, "")
+
 template<typename T>
 TString TryFormat(const T& value) {
     if constexpr (std::is_signed_v<T> || std::is_unsigned_v<T>) {
         return Sprintf("%i", value);
-    } else if constexpr(requires (T v) {
-        {v.c_str()};
-    }) {
+    } else if constexpr( requires (T v) { {v.c_str()}; } ) {
         return Sprintf("%s", value.c_str());
-    }else {
+    } else {
         return TString("NOT_FORMATTABLE");
     }
 }
 
 //general
-#define UNIT_ASSERT_EQUAL_C(A, B, C)                                                                                  \
-    do {                                                                                                              \
-        if (!((A) == (B))) { /* NOLINT(readability-container-size-empty) */                                           \
-            UNIT_FAIL_IMPL("equal assertion failed",                                                                  \
-                Sprintf("%s == %s (values: %s == %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                             \
-        }                                                                                                             \
+#define UNIT_ASSERT_EQUAL_C(A, B, C)                                                                                        \
+    do {                                                                                                                    \
+        if (!((A) == (B))) { /* NOLINT(readability-container-size-empty) */                                                 \
+            UNIT_FAIL_IMPL("equal assertion failed", Sprintf("%s == %s (values: %s == %s) %s",                              \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
+        }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_EQUAL(A, B) UNIT_ASSERT_EQUAL_C(A, B, "")
 
-#define UNIT_ASSERT_UNEQUAL_C(A, B, C)                                                                                 \
-    do {                                                                                                               \
-        if ((A) == (B)) {  /* NOLINT(readability-container-size-empty) */                                              \
-            UNIT_FAIL_IMPL("unequal assertion failed", Sprintf("%s != %s (values: %s != %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));\
-        }                                                                                                              \
+#define UNIT_ASSERT_UNEQUAL_C(A, B, C)                                                                                      \
+    do {                                                                                                                    \
+        if ((A) == (B)) {  /* NOLINT(readability-container-size-empty) */                                                   \
+            UNIT_FAIL_IMPL("unequal assertion failed", Sprintf("%s != %s (values: %s != %s) %s",                            \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
+        }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_UNEQUAL(A, B) UNIT_ASSERT_UNEQUAL_C(A, B, "")
 
-#define UNIT_ASSERT_LT_C(A, B, C)                                                                                        \
-    do {                                                                                                                 \
-        if (!((A) < (B))) {                                                                                              \
-            UNIT_FAIL_IMPL("less-than assertion failed", Sprintf("%s < %s (values: %s < %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data())); \
-        }                                                                                                                \
+#define UNIT_ASSERT_LT_C(A, B, C)                                                                                           \
+    do {                                                                                                                    \
+        if (!((A) < (B))) {                                                                                                 \
+            UNIT_FAIL_IMPL("less-than assertion failed", Sprintf("%s < %s (values: %s < %s) %s",                            \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
+        }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_LT(A, B) UNIT_ASSERT_LT_C(A, B, "")
 
-#define UNIT_ASSERT_LE_C(A, B, C)                                                                                             \
-    do {                                                                                                                      \
-        if (!((A) <= (B))) {                                                                                                  \
-            UNIT_FAIL_IMPL("less-or-equal assertion failed", Sprintf("%s <= %s (values: %s <= %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data())); \
-        }                                                                                                                     \
+#define UNIT_ASSERT_LE_C(A, B, C)                                                                                           \
+    do {                                                                                                                    \
+        if (!((A) <= (B))) {                                                                                                \
+            UNIT_FAIL_IMPL("less-or-equal assertion failed", Sprintf("%s <= %s (values: %s <= %s) %s",                      \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
+        }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_LE(A, B) UNIT_ASSERT_LE_C(A, B, "")
 #define UNIT_ASSERT_GT_C(A, B, C)                                                                                           \
     do {                                                                                                                    \
         if (!((A) > (B))) {                                                                                                 \
-            UNIT_FAIL_IMPL("greater-than assertion failed", Sprintf("%s > %s (values: %s > %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data())); \
+            UNIT_FAIL_IMPL("greater-than assertion failed", Sprintf("%s > %s (values: %s > %s) %s",                         \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
         }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_GT(A, B) UNIT_ASSERT_GT_C(A, B, "")
 
-#define UNIT_ASSERT_GE_C(A, B, C)                                                                        \
-    do { \
-        if (!((A) >= (B))) {                                                                                    \
-            UNIT_FAIL_IMPL("greater-or-equal assertion failed", Sprintf("%s >= %s (values: %s >= %s) %s", #A, #B, NUnitTest::TryFormat(A).c_str(),                               \
-                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data())); \
-        } \
+#define UNIT_ASSERT_GE_C(A, B, C)                                                                                           \
+    do {                                                                                                                    \
+        if (!((A) >= (B))) {                                                                                                \
+            UNIT_FAIL_IMPL("greater-or-equal assertion failed", Sprintf("%s >= %s (values: %s >= %s) %s",                   \
+                #A, #B, NUnitTest::TryFormat(A).c_str(),                                                                    \
+                NUnitTest::TryFormat(B).c_str(), (::TStringBuilder() << C).data()));                                        \
+        }                                                                                                                   \
     } while (false)
 
 #define UNIT_ASSERT_GE(A, B) UNIT_ASSERT_GE_C(A, B, "")

@@ -34,7 +34,7 @@ namespace NActors {
         Backend.UpdateSelfMetrics();
     }
 
-    void TInMemoryMetricsRegistry::ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const {
+    void TInMemoryMetricsRegistry::ReadSnapshot(const TReadSnapshotCallback& cb) const {
         Backend.ReadSnapshot(cb);
     }
 

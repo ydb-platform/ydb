@@ -100,6 +100,33 @@ namespace NActors {
     };
 
     namespace NInMemoryMetricsPrivate {
+        struct TChunkSnapshotView {
+            TChunkView Meta;
+            std::span<const char> Payload;
+        };
+
+        struct TSnapshotPinnedChunk {
+            TInMemoryMetricsBackend* Backend = nullptr;
+            TChunk* Chunk = nullptr;
+            TChunkView View;
+        };
+
+        class TSnapshot {
+        public:
+            TSnapshot(const TSnapshot&) = delete;
+            TSnapshot(TSnapshot&&) = delete;
+            TSnapshot& operator=(const TSnapshot&) = delete;
+            TSnapshot& operator=(TSnapshot&&) = delete;
+
+            TSnapshot();
+            ~TSnapshot();
+
+            TTimeAnchor Anchor;
+            TVector<TSnapshotPinnedChunk> SnapshotChunks;
+            TVector<TLineSnapshot> SnapshotLines;
+            TVector<TLabel> CommonLabels;
+        };
+
         TInstant DecodeTs(const TTimeAnchor& anchor, NHPTimer::STime ts) noexcept;
         bool TryPinChunk(TChunk* chunk) noexcept;
     } // namespace NInMemoryMetricsPrivate
@@ -111,7 +138,7 @@ namespace NActors {
         }
         for (size_t i = 0; i < ChunkCount; ++i) {
             const auto& pinned = Owner->SnapshotChunks[ChunkBegin + i];
-            cb(TChunkSnapshotView{
+            cb(NInMemoryMetricsPrivate::TChunkSnapshotView{
                 .Meta = pinned.View,
                 .Payload = std::span<const char>(pinned.Chunk->Payload.data(), pinned.Chunk->Payload.size()),
             });
@@ -119,11 +146,11 @@ namespace NActors {
     }
 
     template<class TCallback>
-    void TLineSnapshotAccess::ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb) {
+    void NInMemoryMetricsPrivate::TLineSnapshotAccess::ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb) {
         snapshot.ForEachChunk(std::forward<TCallback>(cb));
     }
 
-    inline TInstant TLineSnapshotAccess::DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept {
+    inline TInstant NInMemoryMetricsPrivate::TLineSnapshotAccess::DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept {
         return snapshot.DecodeTimestampTs(ts);
     }
 

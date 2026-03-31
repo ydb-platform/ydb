@@ -585,8 +585,8 @@ namespace NActors {
         }
     }
 
-    void TInMemoryMetricsBackend::ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const {
-        TSnapshot snapshot;
+    void TInMemoryMetricsBackend::ReadSnapshot(const TReadSnapshotCallback& cb) const {
+        NInMemoryMetricsPrivate::TSnapshot snapshot;
         snapshot.Anchor = Impl->TimeAnchor;
         snapshot.CommonLabels = GetCommonLabels();
 
@@ -615,7 +615,7 @@ namespace NActors {
                     .FirstTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
                     .LastTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->LastTs.load(std::memory_order_acquire)),
                 };
-                snapshot.SnapshotChunks.push_back(TSnapshotPinnedChunk{
+                snapshot.SnapshotChunks.push_back(NInMemoryMetricsPrivate::TSnapshotPinnedChunk{
                     .Backend = const_cast<TInMemoryMetricsBackend*>(this),
                     .Chunk = chunk,
                     .View = view,
@@ -627,7 +627,9 @@ namespace NActors {
                 snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
             }
         }
-        cb(snapshot);
+        cb(
+            std::span<const TLabel>(snapshot.CommonLabels.data(), snapshot.CommonLabels.size()),
+            std::span<const TLineSnapshot>(snapshot.SnapshotLines.data(), snapshot.SnapshotLines.size()));
     }
 
     ui64 TInMemoryMetricsBackend::GetReuseWatermark() const noexcept {

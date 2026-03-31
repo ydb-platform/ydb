@@ -30,9 +30,9 @@ namespace NActors {
         return Owner ? NInMemoryMetricsPrivate::DecodeTs(Owner->Anchor, ts) : TInstant::Zero();
     }
 
-    TSnapshot::TSnapshot() = default;
+    NInMemoryMetricsPrivate::TSnapshot::TSnapshot() = default;
 
-    TSnapshot::~TSnapshot() {
+    NInMemoryMetricsPrivate::TSnapshot::~TSnapshot() {
         for (const auto& chunk : SnapshotChunks) {
             if (chunk.Backend && chunk.Chunk) {
                 chunk.Backend->ReleasePinnedChunk(chunk.Chunk);

@@ -27,14 +27,14 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
     template<class TCallback>
     void ReadUserLines(const TInMemoryMetricsRegistry& registry, TCallback&& cb) {
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel> commonLabels, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 if (!IsSystemLine(line)) {
                     lines.push_back(&line);
                 }
-            });
-            cb(snapshot, lines);
+            }
+            cb(commonLabels, lines);
         });
     }
 
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(1.5));
         UNIT_ASSERT(writer.Append(2.25));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "double_line");
             UNIT_ASSERT(line);
 
@@ -124,11 +124,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(allowed);
         UNIT_ASSERT(allowed.Append(1));
 
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel>, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 lines.push_back(&line);
-            });
+            }
             UNIT_ASSERT(!FindLineByName(lines, "line"));
             UNIT_ASSERT(FindLineByName(lines, "harmonizer.budget"));
         });
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
         UNIT_ASSERT(writer.Append(20));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "line");
             UNIT_ASSERT(!lines[0]->Closed);
@@ -185,11 +185,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer);
         UNIT_ASSERT(writer.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot& snapshot, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel> commonLabels, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "42");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[0].Name, "node_id");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[0].Value, "42");
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Name, "kind");
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Value, "basic");
@@ -217,13 +217,13 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         };
         registry.SetCommonLabels(updatedLabels);
 
-        ReadUserLines(registry, [&](const TSnapshot& snapshot, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel> commonLabels, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Name, "node_id");
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[0].Value, "43");
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Name, "host");
-            UNIT_ASSERT_VALUES_EQUAL(snapshot.CommonLabels[1].Value, "slot-1");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[0].Name, "node_id");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[0].Value, "43");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[1].Name, "host");
+            UNIT_ASSERT_VALUES_EQUAL(commonLabels[1].Value, "slot-1");
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Name, "kind");
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Labels[0].Value, "basic");
@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer);
         UNIT_ASSERT(writer.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Meta.FrontendName(), "on_change");
         });
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(rawWriter.Append(1));
         UNIT_ASSERT(encodedWriter.Append(2));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* rawLine = FindLineByName(lines, "raw");
             const TLineSnapshot* encodedLine = FindLineByName(lines, "encoded");
             UNIT_ASSERT(rawLine);
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(20));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
             UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10, 20}));
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
             UNIT_ASSERT_VALUES_EQUAL(ReadValues(*line), TVector<ui64>({10}));
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
 
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         UNIT_ASSERT(writer.Append(20));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
 
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(writer.Append(10));
         writer.Close();
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             const TLineSnapshot* line = FindLineByName(lines, "line");
             UNIT_ASSERT(line);
             UNIT_ASSERT(line->Closed);
@@ -426,11 +426,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto beforeSecondUpdate = registry.GetStats();
         registry.UpdateSelfMetrics();
 
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel>, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 lines.push_back(&line);
-            });
+            }
 
             const TLineSnapshot* memoryUsed = FindLineByName(lines, "inmemory_metrics.memory_used_bytes");
             const TLineSnapshot* committedBytes = FindLineByName(lines, "inmemory_metrics.committed_bytes");
@@ -485,11 +485,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         registry.UpdateSelfMetrics();
         TVector<TInstant> firstReadTimestamps;
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel>, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 lines.push_back(&line);
-            });
+            }
             const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
             UNIT_ASSERT(appendFailures);
             for (const auto& record : appendFailures->ReadRecordsAs<ui64>()) {
@@ -503,11 +503,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         TVector<ui64> values;
         TVector<TInstant> secondReadTimestamps;
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel>, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 lines.push_back(&line);
-            });
+            }
             const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
             UNIT_ASSERT(appendFailures);
             for (const auto& record : appendFailures->ReadRecordsAs<ui64>()) {
@@ -535,11 +535,11 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         const auto stats = registry.GetStats();
         registry.UpdateSelfMetrics();
 
-        registry.ReadSnapshot([&](const TSnapshot& snapshot) {
+        registry.ReadSnapshot([&](std::span<const TLabel>, std::span<const TLineSnapshot> snapshotLines) {
             TVector<const TLineSnapshot*> lines;
-            snapshot.ForEachLine([&](const TLineSnapshot& line) {
+            for (const auto& line : snapshotLines) {
                 lines.push_back(&line);
-            });
+            }
             const TLineSnapshot* appendFailures = FindLineByName(lines, "inmemory_metrics.append_failures_total");
             UNIT_ASSERT(appendFailures);
             UNIT_ASSERT_VALUES_EQUAL(ReadValues(*appendFailures), TVector<ui64>({stats.AppendFailuresTotal}));
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         writer.Close();
         UNIT_ASSERT(!writer.Append(43));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT(lines[0]->Closed);
 
@@ -595,7 +595,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
             UNIT_ASSERT(writer.Append(value));
         }
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(registry.GetStats().UsedChunks, 2);
 
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate.Append(20));
         UNIT_ASSERT(first.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT(!lines[0]->Closed);
 
@@ -656,7 +656,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(!duplicate);
         UNIT_ASSERT(first.Append(10));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
         });
     }
@@ -671,7 +671,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 0);
         });
     }
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         auto writer = registry.CreateLine("line", NoLabels());
         UNIT_ASSERT(writer);
         UNIT_ASSERT(!writer.Append(1));
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 0);
         });
     }
@@ -707,7 +707,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second.Append(100));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
 
             TVector<ui64> firstValues;
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         UNIT_ASSERT(second.Append(2));
         UNIT_ASSERT(registry.GetReuseWatermark() > 0);
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(lines[0]->Name, "second");
 
@@ -773,7 +773,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         std::thread snapshotter([&] {
             while (!stop.load(std::memory_order_acquire)) {
-                ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+                ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
                     for (const auto* line : lines) {
                         for (const auto& value : line->ReadValuesAs<ui64>()) {
                             if (value >= writes) {
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), 1);
 
             TVector<ui64> values = ReadValues(*lines[0]);
@@ -830,7 +830,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         std::thread snapshotter([&] {
             std::mt19937_64 rng(42);
             while (!stop.load(std::memory_order_acquire)) {
-                ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+                ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
                     for (const auto* line : lines) {
                         for (const auto& value : line->ReadValuesAs<ui64>()) {
                             const ui64 lineIndex = value >> 32;
@@ -872,7 +872,7 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
 
         UNIT_ASSERT(ok.load(std::memory_order_acquire));
 
-        ReadUserLines(registry, [&](const TSnapshot&, const TVector<const TLineSnapshot*>& lines) {
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
             UNIT_ASSERT_VALUES_EQUAL(lines.size(), writersCount);
 
             TVector<ui64> counts(writersCount, 0);

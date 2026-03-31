@@ -33,8 +33,8 @@ namespace NActors {
         TVector<TLabel> GetCommonLabels() const;
         TInMemoryMetricsStats GetStats() const;
         void UpdateSelfMetrics();
-        // Snapshot and line views are borrowing objects and are valid only during cb().
-        void ReadSnapshot(const std::function<void(const TSnapshot&)>& cb) const;
+        // Common labels and line views are borrowing objects and are valid only during cb().
+        void ReadSnapshot(const TReadSnapshotCallback& cb) const;
 
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;

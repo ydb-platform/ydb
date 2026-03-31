@@ -5,6 +5,7 @@
 #include <util/generic/deque.h>
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -14,16 +15,22 @@ namespace NActors {
     struct TChunk;
     template<class TFrontend> class TLine;
     class TLineSnapshot;
-    class TSnapshot;
     class TInMemoryMetricsBackend;
     class TInMemoryMetricsRegistry;
 
-    struct TLineSnapshotAccess {
-        template<class TCallback>
-        static void ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb);
+    using TReadSnapshotCallback = std::function<void(std::span<const TLabel>, std::span<const TLineSnapshot>)>;
 
-        static TInstant DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept;
-    };
+    namespace NInMemoryMetricsPrivate {
+        struct TChunkSnapshotView;
+        class TSnapshot;
+
+        struct TLineSnapshotAccess {
+            template<class TCallback>
+            static void ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb);
+
+            static TInstant DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept;
+        };
+    } // namespace NInMemoryMetricsPrivate
 
     template<class TValue>
     struct TGenericRecordView {
@@ -34,17 +41,6 @@ namespace NActors {
     struct TTimeAnchor {
         NHPTimer::STime BaseCycles = 0;
         TInstant BaseWallClock;
-    };
-
-    struct TChunkSnapshotView {
-        TChunkView Meta;
-        std::span<const char> Payload;
-    };
-
-    struct TSnapshotPinnedChunk {
-        TInMemoryMetricsBackend* Backend = nullptr;
-        TChunk* Chunk = nullptr;
-        TChunkView View;
     };
 
     struct TLineFrontendOps {
@@ -64,8 +60,8 @@ namespace NActors {
         TStringBuf FrontendName() const noexcept;
     };
 
-    // Borrowing snapshot view of a single line. Instances are owned by TSnapshot
-    // and must only be used during the enclosing ReadSnapshot() callback.
+    // Borrowing snapshot view of a single line. Instances are owned by backend
+    // internals and must only be used during the enclosing ReadSnapshot() callback.
     class TLineSnapshot {
     public:
         TLineSnapshot();
@@ -128,7 +124,7 @@ namespace NActors {
     private:
         template<class TFrontend>
         friend class TLine;
-        friend struct TLineSnapshotAccess;
+        friend struct NInMemoryMetricsPrivate::TLineSnapshotAccess;
         friend class TInMemoryMetricsBackend;
         friend class TInMemoryMetricsRegistry;
 
@@ -136,41 +132,9 @@ namespace NActors {
         void ForEachChunk(TCallback&& cb) const;
         TInstant DecodeTimestampTs(NHPTimer::STime ts) const noexcept;
 
-        const TSnapshot* Owner = nullptr;
+        const NInMemoryMetricsPrivate::TSnapshot* Owner = nullptr;
         size_t ChunkBegin = 0;
         size_t ChunkCount = 0;
-    };
-
-    // Borrowing snapshot view owned by ReadSnapshot(). It cannot be created or
-    // stored by value outside backend internals and is only valid during cb().
-    class TSnapshot {
-    public:
-        TSnapshot(const TSnapshot&) = delete;
-        TSnapshot(TSnapshot&&) = delete;
-        TSnapshot& operator=(const TSnapshot&) = delete;
-        TSnapshot& operator=(TSnapshot&&) = delete;
-
-        template<class TCallback>
-        void ForEachLine(TCallback&& cb) const {
-            for (const auto& line : SnapshotLines) {
-                cb(line);
-            }
-        }
-
-    public:
-        TVector<TLabel> CommonLabels;
-
-    private:
-        friend class TInMemoryMetricsBackend;
-        friend class TInMemoryMetricsRegistry;
-        friend class TLineSnapshot;
-
-        TSnapshot();
-        ~TSnapshot();
-
-        TTimeAnchor Anchor;
-        TVector<TSnapshotPinnedChunk> SnapshotChunks;
-        TVector<TLineSnapshot> SnapshotLines;
     };
 
 } // namespace NActors

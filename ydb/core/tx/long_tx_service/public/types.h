@@ -68,6 +68,14 @@ namespace NLongTxService {
             : LockId(lockId)
             , LockNodeId(lockNodeId)
         {}
+
+        bool operator==(const TLockInfo& other) const noexcept {
+            return LockId == other.LockId && LockNodeId == other.LockNodeId;
+        }
+
+        bool operator!=(const TLockInfo& other) const noexcept {
+            return !(*this == other);
+        }
     };
 
     struct TWaitEdgeId {

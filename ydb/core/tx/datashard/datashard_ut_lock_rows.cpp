@@ -1307,30 +1307,34 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             "234 -> 123\n");
 
         runtime.SimulateSleep(TDuration::Seconds(1));
-        Cerr << "----- DEADLOCK -------" << Endl;
-
-        {
-            ui32 nodeId = *shardNodeIds.begin();
+        for (ui32 nodeId : shardNodeIds) {
+            // Check that the wait cycle is instantiated in the LongTxService
+            // on both datashard nodes.
             size_t nodeIdx = nodeId - runtime.GetFirstNodeId();
             auto sender = runtime.AllocateEdgeActor(nodeIdx);
             runtime.Send(
-                MakeLongTxServiceID(nodeId),
-                sender,
-                new TEvLongTxService::TEvGetLockWaitGraph,
-                nodeIdx);
+                MakeLongTxServiceID(nodeId), sender,
+                new TEvLongTxService::TEvGetLockWaitGraph, nodeIdx, true);
             auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+
             TVector<std::pair<ui64, ui64>> edges;
             for (const auto& edge : result->Get()->WaitEdges) {
                 edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
             }
             std::sort(edges.begin(), edges.end());
-            Cerr << "Wait graph:" << Endl;
-            for (const auto& [w, b] : edges) {
-                Cerr << "Edge " << w << " -> " << b << Endl;
+            TStringBuilder wgStr;
+            for (auto& [a, b] : edges) {
+                wgStr << a << " -> " << b << "\n";
             }
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                wgStr,
+                "123 -> 234\n"
+                "234 -> 123\n",
+                "With nodeIdx: " << nodeIdx);
         }
 
         // break the wait by aborting the request belonging to the youngest lock
+        // TODO: LongTxService should detect the cycle and break it itself.
         waitGraph.SendDeadlock(234, 123);
 
         // The third operation should reply with the STATUS_DEADLOCK

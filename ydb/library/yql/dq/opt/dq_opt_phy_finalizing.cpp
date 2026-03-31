@@ -618,4 +618,4 @@ IGraphTransformer::TStatus DqExtractPrecomputeToStageInput(const TExprNode::TPtr
     return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
 }
 
-} // NKikimr::NKqp
+} // namespace NYql::NDq

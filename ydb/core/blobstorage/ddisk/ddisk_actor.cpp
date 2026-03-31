@@ -3,6 +3,7 @@
 #include "write_persistent_buffers_request_actor.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/stlog.h>
 
@@ -12,13 +13,40 @@
 
 namespace NKikimr::NDDisk {
 
+namespace {
+
+    const TVector<double> NvmeLatencyHistBoundsMs = {
+        0.01, 0.02, 0.03, 0.04, 0.05,                   // 10th us
+        0.1, 0.25, 0.5, 0.75,                           // 100th us
+        1, 2, 4, 8, 32, 128,                            // ms
+        1'024,                                          // s
+        65'536                                          // minutes
+    };
+
+    const TVector<double> RequestSizeBoundsKiB = {
+        4, 8, 16, 32, 64, 128, 256, 512,                // KiB
+        1024, 2048, 4096,                               // MiB
+        1048576,                                        // GiB
+    };
+
+} // anonymous
+
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
         : BaseInfo(std::move(baseInfo))
+        , Config(std::move(ddiskConfig))
         , Info(std::move(info))
         , CountersBase(GetServiceCounters(counters, "ddisks"))
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        TVector<double> latencyHistBounds;
+        if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+            latencyHistBounds = NvmeLatencyHistBoundsMs;
+        } else {
+            latencyHistBounds = GetCommonLatencyHistBounds(BaseInfo.DeviceType);
+        }
+
         CountersChain.emplace_back("ddiskPool", BaseInfo.StoragePoolName);
         CountersChain.emplace_back("group", Sprintf("%09" PRIu32, Info->GroupID));
         CountersChain.emplace_back("orderNumber", Sprintf("%02" PRIu32, Info->GetOrderNumber(BaseInfo.VDiskIdShort)));
@@ -41,18 +69,28 @@ namespace NKikimr::NDDisk {
         auto cChunks = counters->GetSubgroup("subsystem", "chunks");
 
         auto cDirectIO = counters->GetSubgroup("subsystem", "direct_io");
+        auto cDirectIOWrite = cDirectIO->GetSubgroup("operation", "Write");
+        auto cDirectIORead = cDirectIO->GetSubgroup("operation", "Read");
 
 #define COUNTER(GROUP, NAME, DERIV) .NAME = c##GROUP->GetCounter(#NAME, DERIV),
+#define HISTOGRAM(GROUP, NAME, BUCKETS) .NAME = c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS)),
+#define COUNTER_VALUE(GROUP, NAME, DERIV) c##GROUP->GetCounter(#NAME, DERIV)
+#define HISTOGRAM_VALUE(GROUP, NAME, BUCKETS) c##GROUP->GetHistogram(#NAME, NMonitoring::ExplicitHistogram(BUCKETS))
 
-        Counters = {
+        Counters = TCounters{
             .Interface = {
 #define XX(OP) \
-                .OP = { \
-                    COUNTER(Interface##OP, Requests, true) \
-                    COUNTER(Interface##OP, ReplyOk, true) \
-                    COUNTER(Interface##OP, ReplyErr, true) \
-                    COUNTER(Interface##OP, Bytes, true) \
-                },
+                .OP = [&] { \
+                    TInterfaceOpCounters c; \
+                    c.Requests = COUNTER_VALUE(Interface##OP, Requests, true); \
+                    c.ReplyOk = COUNTER_VALUE(Interface##OP, ReplyOk, true); \
+                    c.ReplyErr = COUNTER_VALUE(Interface##OP, ReplyErr, true); \
+                    c.Bytes = COUNTER_VALUE(Interface##OP, Bytes, true); \
+                    c.BytesInFlight = COUNTER_VALUE(Interface##OP, BytesInFlight, false); \
+                    c.RequestSizeKiB = HISTOGRAM_VALUE(Interface##OP, RequestSizeKiB, RequestSizeBoundsKiB); \
+                    c.ResponseTime = HISTOGRAM_VALUE(Interface##OP, ResponseTime, latencyHistBounds); \
+                    return c; \
+                }(),
                 LIST_COUNTERS_INTERFACE_OPS(XX)
 #undef XX
             },
@@ -69,16 +107,40 @@ namespace NKikimr::NDDisk {
                 COUNTER(Chunks, ChunksOwned, false)
             },
             .DirectIO = {
+#define XX(OP) \
+                .OP = { \
+                    COUNTER(DirectIO##OP, Requests, true) \
+                    COUNTER(DirectIO##OP, Bytes, true) \
+                    COUNTER(DirectIO##OP, BytesInFlight, false) \
+                    HISTOGRAM(DirectIO##OP, RequestSizeKiB, RequestSizeBoundsKiB) \
+                    HISTOGRAM(DirectIO##OP, ResponseTime, latencyHistBounds) \
+                },
+                XX(Write)
+                XX(Read)
+#undef XX
+
                 COUNTER(DirectIO, ShortReads, true)
                 COUNTER(DirectIO, ShortWrites, true)
+
                 COUNTER(DirectIO, RegularUringCount, false)
                 COUNTER(DirectIO, FallbackUringCount, false)
                 COUNTER(DirectIO, FallbackPDiskCount, false)
+
+                COUNTER(DirectIO, QueueSize, false)
+                COUNTER(DirectIO, RunningCount, false)
+                HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
         };
 
+#undef COUNTER_VALUE
+#undef HISTOGRAM_VALUE
+
         DDiskId = TStringBuilder() << '[' << BaseInfo.PDiskActorID.NodeId() << ':' << BaseInfo.PDiskId
             << ':' << BaseInfo.VDiskSlotId << ']';
+
+        DdiskIoOpPool.Resize(IoOpPoolCapacity);
+        PersistentBufferPartIoOpPool.Resize(IoOpPoolCapacity);
+        InternalSyncWriteOpPool.Resize(IoOpPoolCapacity);
     }
 
     TDDiskActor::~TDDiskActor() {
@@ -86,6 +148,12 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::Bootstrap() {
+        WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
+
+        FillPool(DdiskIoOpPool);
+        FillPool(PersistentBufferPartIoOpPool);
+        FillPool(InternalSyncWriteOpPool);
+
         Become(&TThis::StateFunc);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD09, "TDDiskActor::Bootstrap", (DDiskId, DDiskId));
         InitPDiskInterface();
@@ -170,14 +238,16 @@ namespace NKikimr::NDDisk {
             hFunc(TEvents::TEvWakeup, HandleWakeup);
             cFunc(TEvents::TSystem::Poison, PassAway)
 
+            case TEvReadThenWritePersistentBuffers::EventType:
             case TEvWritePersistentBuffers::EventType: {
-                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor()));
+                TActivationContext::Forward(ev, WritePersistentBuffersActor);
                 break;
             }
         )
     }
 
     void TDDiskActor::PassAway() {
+        Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
 #if defined(__linux__)
         if (UringRouter) {
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
@@ -192,8 +262,10 @@ namespace NKikimr::NDDisk {
     }
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TPersistentBufferFormat&& pbFormat, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
-        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(counters));
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat),
+            std::move(ddiskConfig), std::move(counters));
     }
 
 } // NKikimr::NDDisk

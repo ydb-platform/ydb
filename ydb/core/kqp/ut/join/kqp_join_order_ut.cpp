@@ -846,6 +846,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, false, ColumnStore);
     }
 
+    Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
+    }
+
     Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
     }
@@ -1000,6 +1004,33 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["R","S"])") != TString::npos, joinOrder);
         UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
     }
+
+    Y_UNIT_TEST(JoinOrderHintsNestedEdgesBug) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_nested_edges_bug.sql", "stats/tpcds1000s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        UNIT_ASSERT_C(joinOrder.find(R"([["item","warehouse"],"store"])") != TString::npos, joinOrder);
+    }
+
+    Y_UNIT_TEST(JoinOrderHintsReversedOrder) {
+        // Verifies that a hint can force the join order to be the reverse of what the cost
+        // model would choose. R is much larger than S, so the optimizer naturally puts R
+        // first; JoinOrder((S R)) must override that to produce ["S","R"].
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_reversed.sql", "stats/basic.json", false, true);
+        UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["S","R"])");
+    }
+
+    Y_UNIT_TEST(JoinOrderHintsComplexEdgeBoundary) {
+        // Two hints (item,ship_mode) and (warehouse,date_dim) both partially overlap
+        // with the complex edge {item,warehouse}->store created by the dual-condition
+        // LEFT JOIN on store.
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/join_order_hints_complex_edge_boundary.sql",
+            "stats/tpcds1000s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        UNIT_ASSERT_C(joinOrder.find(R"(["item","ship_mode"])") != TString::npos, joinOrder);
+        UNIT_ASSERT_C(joinOrder.find(R"(["warehouse","date_dim"])") != TString::npos, joinOrder);
+    }
+
 
     void CanonizedJoinOrderTest(
         const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
@@ -1249,6 +1280,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS14) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds14.sql", "stats/tpcds1000s.json", "join_order/tpcds14_1000s.json", false, true
+        );
+    }
+
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS64) {
         CanonizedJoinOrderTest(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", false, true
@@ -1276,6 +1313,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(CanonizedJoinOrderLookupBug) {
         CanonizedJoinOrderTest(
             "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false, false
+        );
+    }
+
+    Y_UNIT_TEST(CanonizedJoinOrderReuseShuffleWithWrongOrderBug) {
+        CanonizedJoinOrderTest(
+            "queries/reuse_shuffle_with_wrong_order_bug.sql",
+            "stats/tpcc.json",
+            "join_order/reuse_shuffle_with_wrong_order_bug.json", false, true
         );
     }
 

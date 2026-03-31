@@ -1750,7 +1750,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
             Ctx_.Error(argPtr->GetPos()) << "Duplicate lambda argument parametr: '" << *contentPtr << "'.";
             return false;
         }
-        args.push_back(TSymbolNameWithPos{*contentPtr, argPtr->GetPos()});
+        args.push_back(TSymbolNameWithPos{.Name = *contentPtr, .Pos = argPtr->GetPos()});
     }
     return true;
 }
@@ -2764,6 +2764,7 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
             Ctx_.Error() << "Unexpected trailing comma in grouping elements list";
             return std::unexpected(ESQLError::Basic);
         }
+
         Ctx_.IncrementMonCounter("sql_features", "ListOfNamedNode");
         return Wrap(BuildListOfNamedNodes(pos, std::move(exprs)));
     }

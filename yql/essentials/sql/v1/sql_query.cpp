@@ -2684,6 +2684,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction23: {
+            // ALTER COLUMN id SET ENCODING(...)
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_encoding1();
+
+            if (!AlterTableAlterColumnSetEncoding(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
             Y_UNREACHABLE();
     }
@@ -3089,6 +3099,23 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
     return true;
 }
 
+bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+    auto encoding = ColumnEncoding(node.GetRule_encoding5(), *this);
+    if (!encoding) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
+        .ColumnEncoding = std::move(encoding),
+    });
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
     TSqlExpression expr(*this);
     return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
@@ -3171,7 +3198,7 @@ THashMap<TString, TPragmaDescr>::value_type TableElemExt(TString name, PragmaSta
     TString normalizedName(name);
     TMaybe<TIssue> err = NormalizeName({}, normalizedName);
     Y_ABORT_UNLESS(err.Empty(), "%s", err->GetMessage().c_str());
-    return {std::move(normalizedName), TPragmaDescr{std::move(name), std::move(cb)}};
+    return {std::move(normalizedName), TPragmaDescr{.CanonicalName = std::move(name), .Cb = std::move(cb)}};
 }
 
 #define TABLE_ELEM(name, param, value) TableElemExt(name, SetCtxField((&TContext::param), (value)))
@@ -3814,7 +3841,6 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
         return TNodePtr();
     }),
-
     TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
@@ -3853,6 +3879,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
     PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
     PAIRED_TABLE_ELEM("WindowNewPipeline", WindowNewPipeline),
+    PAIRED_TABLE_ELEM("YqlSelectAllowUnnamedGroupByExpr", YqlSelectAllowUnnamedGroupByExpr),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),

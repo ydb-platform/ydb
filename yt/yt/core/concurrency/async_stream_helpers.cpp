@@ -178,14 +178,6 @@ public:
         Reset();
     }
 
-    virtual ~TSyncBufferedOutputStreamAdapter()
-    {
-        try {
-            Finish();
-        } catch (...) {
-        }
-    }
-
 private:
     const IAsyncOutputStreamPtr UnderlyingStream_;
     const EWaitForStrategy Strategy_;

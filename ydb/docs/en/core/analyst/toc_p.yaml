@@ -10,3 +10,5 @@ items:
     include:
       mode: link
       path: practical-guides/toc_p.yaml
+  - name: Limitations
+    href: limitations.md

@@ -1023,7 +1023,8 @@
             "Base": "TKqpBooleanSublink",
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
-                {"Index": 2, "Name": "InTuple", "Type": "TExprBase"}
+                {"Index": 2, "Name": "OuterType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "InLambda", "Type": "TExprBase"}
             ]
         },
         {

@@ -455,7 +455,7 @@ private:
                 continue;
             }
 
-            if (Y_UNLIKELY(!Pollables_.contains(pollable))) {
+            if (!Pollables_.contains(pollable)) [[unlikely]] {
                 // A stranded event from an unregistered pollable.
                 continue;
             }

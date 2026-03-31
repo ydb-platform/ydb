@@ -171,7 +171,9 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel())))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, 
+            Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
+            Config->UseBlockHashJoin.Get().GetOrElse(false)))
         , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
@@ -229,16 +231,20 @@ public:
         const auto dataQueryBlocks = TKiDataQueryBlocks(query);
 
         if (IsOlapQuery(dataQueryBlocks)) {
-            switch (TransformCtx->Config->GetBlockChannelsMode()) {
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
-                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
-                    break;
-                case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
-                    TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
-                    break;
-                default:
-                    YQL_ENSURE(false);
+            if (TransformCtx->Config->DisableBlockExecution.Get().GetOrElse(false)) {
+                TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+            } else {
+                switch (TransformCtx->Config->GetBlockChannelsMode()) {
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Auto;
+                        break;
+                    case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE:
+                        TypesCtx.BlockEngineMode = NYql::EBlockEngineMode::Force;
+                        break;
+                    default:
+                        YQL_ENSURE(false);
+                }
             }
         }
 
@@ -498,7 +504,7 @@ private:
                     // TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                     // LogStage("NewRBOPhysicalPeephole"),
                     TTransformStage{newRBOCompilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR},
-                    // TTransformStage{ newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or
+                    TTransformStage{newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR}, // TODO(sk): only on stats mode or
                     // if explain-only
                 },
                 false);

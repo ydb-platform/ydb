@@ -231,6 +231,14 @@ namespace NKikimr::NGRpcProxy::V1 {
                 type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
             }
 
+            if (alterType.has_set_receive_message_delay()) {
+                type->mutable_receive_message_delay()->CopyFrom(alterType.set_receive_message_delay());
+            }
+
+            if (alterType.has_set_receive_message_wait_time()) {
+                type->mutable_receive_message_wait_time()->CopyFrom(alterType.set_receive_message_wait_time());
+            }
+
             if (alterType.has_alter_dead_letter_policy()) {
                 auto& alterPolicy = alterType.alter_dead_letter_policy();
                 auto* policy = type->mutable_dead_letter_policy();
@@ -301,6 +309,9 @@ namespace NKikimr::NGRpcProxy::V1 {
 
                 consumer->SetDeadLetterPolicyEnabled(rr.shared_consumer_type().dead_letter_policy().enabled());
                 consumer->SetMaxProcessingAttempts(rr.shared_consumer_type().dead_letter_policy().condition().max_processing_attempts());
+
+                consumer->SetDefaultDelayMessageTimeMs(rr.shared_consumer_type().receive_message_delay().seconds() * 1'000 + rr.shared_consumer_type().receive_message_delay().nanos() / 1'000'000);
+                consumer->SetDefaultReceiveMessageWaitTimeMs(rr.shared_consumer_type().receive_message_wait_time().seconds() * 1'000 + rr.shared_consumer_type().receive_message_wait_time().nanos() / 1'000'000);
 
                 if (rr.shared_consumer_type().dead_letter_policy().has_move_action()) {
                     consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
@@ -1268,6 +1279,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
         pqTabletConfig->SetFormatVersion(0);
+        pqTabletConfig->SetContentBasedDeduplication(request.content_based_deduplication());
 
         auto ct = pqTabletConfig->MutableCodecs();
         for(const auto& codec : request.supported_codecs().codecs()) {
@@ -1353,6 +1365,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             partConfig->ClearStorageLimitBytes();
             if (request.set_retention_storage_mb())
                 partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
+        }
+
+        if (request.has_set_content_based_deduplication()) {
+            pqTabletConfig->SetContentBasedDeduplication(request.set_content_based_deduplication());
         }
 
         if (request.has_alter_partitioning_settings()) {

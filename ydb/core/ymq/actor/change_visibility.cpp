@@ -4,6 +4,7 @@
 #include "log.h"
 #include "params.h"
 
+#include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/proto/records.pb.h>
@@ -41,47 +42,64 @@ protected:
 
             const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
             RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
-            if (receipt.GetShard() >= Shards_) {
-                throw yexception() << "Invalid shard: " << receipt.GetShard();
-            }
+            if (receipt.GetSource() == TReceipt::Table) {
+                if (receipt.GetShard() >= Shards_) {
+                    throw yexception() << "Invalid shard: " << receipt.GetShard();
+                }
 
-            const bool isFifo = IsFifoQueue();
-            if (isFifo && !receipt.GetMessageGroupId()) {
-                throw yexception() << "No message group id";
-            }
+                const bool isFifo = IsFifoQueue();
+                if (isFifo && !receipt.GetMessageGroupId()) {
+                    throw yexception() << "No message group id";
+                }
 
-            auto& shardInfo = ShardInfo_[receipt.GetShard()];
-            // Create request
-            if (!shardInfo.Request_) {
-                ++RequestsToLeader_;
-                shardInfo.Request_ = MakeHolder<TSqsEvents::TEvChangeMessageVisibilityBatch>();
-                shardInfo.Request_->Shard = receipt.GetShard();
-                shardInfo.Request_->RequestId = RequestId_;
-                shardInfo.Request_->NowTimestamp = NowTimestamp_;
-            }
+                auto& shardInfo = ShardInfo_[receipt.GetShard()];
+                // Create request
+                if (!shardInfo.Request_) {
+                    ++RequestsToLeader_;
+                    shardInfo.Request_ = MakeHolder<TSqsEvents::TEvChangeMessageVisibilityBatch>();
+                    shardInfo.Request_->Shard = receipt.GetShard();
+                    shardInfo.Request_->RequestId = RequestId_;
+                    shardInfo.Request_->NowTimestamp = NowTimestamp_;
+                }
 
-            // Add new message to shard request
-            if (IsBatch_) {
-                shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch);
-            }
-            shardInfo.Request_->Messages.emplace_back();
-            auto& msgReq = shardInfo.Request_->Messages.back();
-            msgReq.Offset = receipt.GetOffset();
-            msgReq.LockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp());
-            if (isFifo) {
-                msgReq.MessageGroupId = receipt.GetMessageGroupId();
-                msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId();
-            }
+                // Add new message to shard request
+                if (IsBatch_) {
+                    shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch);
+                }
+                shardInfo.Request_->Messages.emplace_back();
+                auto& msgReq = shardInfo.Request_->Messages.back();
+                msgReq.Offset = receipt.GetOffset();
+                msgReq.LockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp());
+                if (isFifo) {
+                    msgReq.MessageGroupId = receipt.GetMessageGroupId();
+                    msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId();
+                }
 
-            msgReq.VisibilityDeadline = NowTimestamp_ + newVisibilityTimeout;
+                msgReq.VisibilityDeadline = NowTimestamp_ + newVisibilityTimeout;
+            } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
+                if (IsBatch_) {
+                    MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
+                }
+
+                MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
+                MLPRequest_.Deadlines.emplace_back(NowTimestamp_ + newVisibilityTimeout);
+            } else {
+                if (IsBatch_) {
+                    ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(requestIndexInBatch),
+                        TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed);
+                } else {
+                    ProcessAnswer(Response_.MutableChangeMessageVisibility(),
+                        TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed);
+                }
+            }
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
             MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
         }
     }
 
-    void ProcessAnswer(TChangeMessageVisibilityResponse* resp, const TSqsEvents::TEvChangeMessageVisibilityBatchResponse::TMessageResult& answer) {
-        switch (answer.Status) {
+    void ProcessAnswer(TChangeMessageVisibilityResponse* resp, const TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus& status) {
+        switch (status) {
         case TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK: {
             break;
         }
@@ -141,7 +159,19 @@ protected:
                     Send(QueueLeader_, shardInfo.Request_.Release());
                 }
             }
-        } else {
+        }
+
+        if (!MLPRequest_.Messages.empty()) {
+            MLPRequest_.DatabasePath = GetDatabaseName();
+            MLPRequest_.TopicName = GetTopicName();
+            MLPRequest_.Consumer = ConsumerName;
+
+            Register(NPQ::NMLP::CreateMessageDeadlineChanger(SelfId(), std::move(MLPRequest_)));
+
+            ++RequestsToLeader_;
+        }
+
+        if (!RequestsToLeader_) {
             SendReplyAndDie();
         }
     }
@@ -155,6 +185,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvChangeMessageVisibilityBatchResponse, HandleChangeMessageVisibilityBatchResponse);
+            hFunc(NPQ::NMLP::TEvChangeResponse, Handle);
         }
     }
 
@@ -166,12 +197,44 @@ private:
             for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
                 const size_t entryIndex = shardInfo.RequestToReplyIndexMapping_[i];
                 Y_ABORT_UNLESS(entryIndex < Response_.GetChangeMessageVisibilityBatch().EntriesSize());
-                ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i]);
+                ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i].Status);
             }
         } else {
             Y_ABORT_UNLESS(RequestsToLeader_ == 1);
             Y_ABORT_UNLESS(ev->Get()->Statuses.size() == 1);
-            ProcessAnswer(Response_.MutableChangeMessageVisibility(), ev->Get()->Statuses[0]);
+            ProcessAnswer(Response_.MutableChangeMessageVisibility(), ev->Get()->Statuses[0].Status);
+        }
+
+        --RequestsToLeader_;
+        if (RequestsToLeader_ == 0) {
+            SendReplyAndDie();
+        }
+    }
+
+    void Handle(NPQ::NMLP::TEvChangeResponse::TPtr& ev) {
+        auto& messages = ev->Get()->Messages;
+
+        auto status = [&](const auto& message) {
+            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                return TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+            }
+            return message.Success ?
+                  TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::OK
+                : TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed;
+        };
+
+        if (IsBatch_) {
+            Y_ABORT_UNLESS(messages.size() == MLPRequestToReplyIndexMapping_.size());
+            for (size_t i = 0, size = messages.size(); i < size; ++i) {
+                const size_t entryIndex = MLPRequestToReplyIndexMapping_[i];
+                Y_ABORT_UNLESS(entryIndex < Response_.GetChangeMessageVisibilityBatch().EntriesSize());
+
+                ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(entryIndex), status(messages[i]));
+            }
+        } else {
+            Y_ABORT_UNLESS(RequestsToLeader_ == 1);
+            Y_ABORT_UNLESS(ev->Get()->Messages.size() == 1);
+            ProcessAnswer(Response_.MutableChangeMessageVisibility(), status(messages[0]));
         }
 
         --RequestsToLeader_;
@@ -197,6 +260,8 @@ private:
     };
     size_t RequestsToLeader_ = 0;
     std::vector<TShardInfo> ShardInfo_;
+    NPQ::NMLP::TMessageDeadlineChangerSettings MLPRequest_;
+    std::vector<size_t> MLPRequestToReplyIndexMapping_;
     TInstant NowTimestamp_;
 };
 

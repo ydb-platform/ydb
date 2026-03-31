@@ -47,7 +47,7 @@ inline void* TPoolAllocator::Allocate() noexcept
 {
     YT_ASSERT_THREAD_AFFINITY(HomeThread);
 
-    if (Y_UNLIKELY(!FirstFree_)) {
+    if (!FirstFree_) [[unlikely]] {
         AllocateChunk();
     }
 

@@ -2,14 +2,20 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() const {
+std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
     std::vector<TCompactionTaskData> result;
     AFL_VERIFY(Portions.size());
     result.emplace_back(NextLevel->GetLevelId(), CompactionTaskMemoryLimit, CompactionTaskPortionsCountLimit, CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     i64 tasksLeft = GetMaxConcurrency();
     for (auto&& i : Portions) {
-        result.back().AddCurrentLevelPortion(
-            i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
+        if (!mayUsePortion(i.GetPortion())) {
+            continue;
+        }
+        auto affectedPortions = NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd(), mayUsePortion);
+        if (affectedPortions.has_value() && affectedPortions->HasBlockedPortions()) {
+            continue;
+        }
+        result.back().AddCurrentLevelPortion(i.GetPortion(), std::move(affectedPortions), true);
         if (!result.back().CanTakeMore()) {
             //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             if (--tasksLeft <= 0) {
@@ -22,7 +28,9 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() co
     if (result.back().IsEmpty()) {
         result.pop_back();
     }
-    AFL_VERIFY(!result.empty());
+    if (result.empty()) {
+        return result;
+    }
 
     if (result.back().CanTakeMore()) {
         PredOptimization = TInstant::Now();

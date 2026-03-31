@@ -367,7 +367,7 @@ private:
                 auto childIndex = *maybeChildIndex;
                 const auto& childDescription = *type->Children[childIndex];
                 auto guard = EnterChild(childDescription);
-                if (Y_UNLIKELY(wireTag != childDescription.WireTag)) {
+                if (wireTag != childDescription.WireTag) [[unlikely]] {
                     THROW_ERROR_EXCEPTION("Expected wire tag for field %Qv to be %v, got %v",
                         GetPathString(),
                         childDescription.WireTag,
@@ -423,7 +423,7 @@ private:
             }
             ColumnConsumer_.OnEndList();
         } else {
-            if (Y_UNLIKELY(std::distance(begin, end) > 1)) {
+            if (std::distance(begin, end) > 1) [[unlikely]] {
                 THROW_ERROR_EXCEPTION("Error parsing protobuf: found %v entries for non-repeated field %Qv",
                     std::distance(begin, end),
                     GetPathString())
@@ -463,9 +463,9 @@ private:
             }
             int structFieldIndex = childDescription.StructFieldIndex;
             if (fieldRangeBegin != fieldIt || (childDescription.Repeated && !childDescription.Type->Optional)) {
-                if (Y_UNLIKELY(
+                if (
                     childDescription.IsOneofAlternative() &&
-                    lastOutputStructFieldIndex == structFieldIndex))
+                    lastOutputStructFieldIndex == structFieldIndex) [[unlikely]]
                 {
                     const auto* oneof = childDescription.ContainingOneof;
                     YT_VERIFY(oneof);
@@ -512,7 +512,7 @@ private:
                     // so the check is deferred to the next alternative.
                     return structFieldIndex == nextChildDescription.StructFieldIndex;
                 };
-                if (Y_UNLIKELY(!isStructFieldPresentOrLegallyMissing())) {
+                if (!isStructFieldPresentOrLegallyMissing()) [[unlikely]] {
                     int offset = 0;
                     if (childDescription.IsOneofAlternative()) {
                         offset = 1;

@@ -20,6 +20,38 @@
 
 namespace NYdb::NFederatedTopic::NTests {
 
+void WriteMessages(std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> setup, const TString& path, const TString& messageBase, size_t count) {
+    NPersQueue::TWriteSessionSettings writeSettings;
+    writeSettings.Path(path).MessageGroupId("src_id");
+    writeSettings.Codec(NPersQueue::ECodec::RAW);
+    IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
+    writeSettings.CompressionExecutor(executor);
+
+    auto& pqClient = setup->GetPersQueueClient();
+    auto writeSession = pqClient.CreateSimpleBlockingWriteSession(writeSettings);
+
+    for (size_t i = 0; i < count; ++i) {
+        UNIT_ASSERT(writeSession->Write(messageBase + ToString(i)));
+    }
+    writeSession->Close();
+}
+
+void WriteMessages(std::shared_ptr<NPersQueue::NTests::TPersQueueYdbSdkTestSetup> setup, const TString& messageBase, size_t count) {
+    NPersQueue::TWriteSessionSettings writeSettings;
+    writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+    writeSettings.Codec(NPersQueue::ECodec::RAW);
+    IExecutor::TPtr executor = NPersQueue::CreateSyncExecutor();
+    writeSettings.CompressionExecutor(executor);
+
+    auto& pqClient = setup->GetPersQueueClient();
+    auto writeSession = pqClient.CreateSimpleBlockingWriteSession(writeSettings);
+
+    for (size_t i = 0; i < count; ++i) {
+        UNIT_ASSERT(writeSession->Write(messageBase + ToString(i)));
+    }
+    writeSession->Close();
+}
+
 Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(GetAllStartPartitionSessions) {
@@ -401,6 +433,52 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         startPartitionSessionEvent->Confirm();
 
         ReadSession->Close(TDuration::MilliSeconds(10));
+    }
+
+    Y_UNIT_TEST(SimpleDataHandlersAndGetEvent) {
+        auto setup = std::make_shared<NPersQueue::NTests::TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
+        setup->Start(true, true);
+
+        const TString topic1 = setup->GetTestTopic();
+        const TString topic2 = setup->GetTestTopic() + "-second";
+        setup->CreateTopic(topic2, setup->GetLocalCluster());
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << setup->GetGrpcPort())
+            .SetDatabase("/Root");
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NFederatedTopic::TFederatedTopicClient client(driver);
+
+        TString messageBase = "hello-";
+        WriteMessages(setup, topic1, messageBase, 5);
+        WriteMessages(setup, topic2, messageBase + "t2-", 3);
+
+        TVector<TString> receivedMessages;
+        NYdb::NFederatedTopic::TFederatedReadSessionSettings settings;
+        settings
+            .ConsumerName("test-consumer")
+            .MaxMemoryUsageBytes(1_MB)
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic1))
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings(topic2));
+
+        settings.EventHandlers_.SimpleDataHandlers(
+            [&receivedMessages](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+                for (const auto& message: event.GetMessages()) {
+                    receivedMessages.push_back(TString(message.GetData()));
+                }
+            },
+            true  // commit on receive
+        );
+
+        auto session = client.CreateReadSession(settings);
+        std::jthread thread([&] {
+            Sleep(TDuration::Seconds(3));
+            UNIT_ASSERT(session->Close(TDuration::MilliSeconds(10)));
+        });
+
+        auto event = session->GetEvent(/* block = */true);
+        UNIT_ASSERT(event.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(receivedMessages.size(), 8);
     }
 
     Y_UNIT_TEST(FallbackToSingleDbAfterBadRequest) {

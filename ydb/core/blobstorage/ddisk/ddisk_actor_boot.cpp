@@ -114,10 +114,10 @@ namespace NKikimr::NDDisk {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = false;
-        config.UseIOPoll = false;
+        config.UseSQPoll = Config.UseSQPoll;
+        config.UseIOPoll = Config.UseIOPoll;
         if (!UringRouter) {
-            if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     STLOG(PRI_WARN, BS_DDISK, BSDD18,
@@ -146,7 +146,6 @@ namespace NKikimr::NDDisk {
                 "TDDiskActor::StartHandlingQueries started io_uring with config",
                 (DDiskId, DDiskId),
                 (Config, UringRouter->GetConfig()));
-
         } else {
             *Counters.DirectIO.RegularUringCount = 0;
             *Counters.DirectIO.FallbackUringCount = 0;

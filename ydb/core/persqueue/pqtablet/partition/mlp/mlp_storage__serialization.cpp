@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/packedtypes/longs.h>
@@ -426,6 +427,10 @@ bool TStorage::Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot) {
         }
     }
 
+    for (const auto& externalLockedMessageGroupsId : snapshot.GetExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
+    }
+
     return true;
 }
 
@@ -600,6 +605,10 @@ bool TStorage::ApplyWAL(const NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
+    for (const auto& externalLockedMessageGroupsId : wal.GetExternalLockedMessageGroupsId()) {
+        DoUpdateExternalLockedMessageGroupsId(externalLockedMessageGroupsId, true);
+    }
+
     FirstUncommittedOffset = std::max(FirstUncommittedOffset, FirstOffset);
     FirstUnlockedOffset = std::max(FirstUnlockedOffset, FirstOffset);
 
@@ -671,6 +680,13 @@ bool TStorage::SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
             });
         }
         snapshot.SetDLQMessages(std::move(serializer.Buffer));
+    }
+
+    if (KeepMessageOrder) {
+        for (const auto& info : ParentPartitionExternalLockInfo) {
+            auto* msg = snapshot.AddExternalLockedMessageGroupsId();
+            SerializeFullExternalLockedMessageGroupsIdTo(*msg, info);
+        }
     }
 
     return true;
@@ -785,7 +801,25 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         }
     }
 
+    if (!UpdateExternalLockedMessageGroupsId.empty()) {
+        for (const auto& info : Storage->ParentPartitionExternalLockInfo) {
+            if (!UpdateExternalLockedMessageGroupsId.contains(info.PartitionId)) {
+                continue;
+            }
+            auto* msg = wal.AddExternalLockedMessageGroupsId();
+            Storage->SerializeFullExternalLockedMessageGroupsIdTo(*msg, info);
+        }
+    }
     return true;
+}
+
+void TStorage::SerializeFullExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg, const TParentPartitionExternalLockInfo& info) const {
+    Y_ASSERT(KeepMessageOrder);
+    msg.SetParentPartitionId(info.PartitionId);
+    msg.SetGeneration(info.TabletGeneration);
+    msg.SetConsumerGeneration(info.ConsumerGeneration);
+    msg.SetStep(info.ConsumerStep);
+    msg.SetMode(info.ReadWithKeepOrder);
 }
 
 } // namespace NKikimr::NPQ::NMLP

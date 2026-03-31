@@ -116,7 +116,7 @@ void TPruneColumnsStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
             // If we have a column store read, and we don't fetch any attributes,
             // we'll have a problem. So we leave the first attribute in the read
-            if (read->StorageType == EStorageType::ColumnStorage && newColumns.empty() && !read->Columns.empty()) {
+            if (read->StorageType == NYql::EStorageType::ColumnStorage && newColumns.empty() && !read->Columns.empty()) {
                 newColumns.push_back(read->Columns[0]);
                 newIUs.push_back(read->OutputIUs[0]);
             }

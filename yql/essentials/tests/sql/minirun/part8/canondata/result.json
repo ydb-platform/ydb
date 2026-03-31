@@ -167,6 +167,20 @@
             "uri": "https://{canondata_backend}/1775059/1a03de67ea83d8e1a68ef0d18e7c006bc9d9165e/resource.tar.gz#test.test_agg_phases-agg_list_n_null-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-bit_xor_opt-default.txt-Debug]": [
+        {
+            "checksum": "83c8759196daaa0926d678d0faffe979",
+            "size": 2181,
+            "uri": "https://{canondata_backend}/1917492/2edbcca2460a8ca815e50330c71805b071b0521e/resource.tar.gz#test.test_agg_phases-bit_xor_opt-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-bit_xor_opt-default.txt-Results]": [
+        {
+            "checksum": "ca37875409fe051fcb8ca1f90ef27b2b",
+            "size": 7016,
+            "uri": "https://{canondata_backend}/1917492/2edbcca2460a8ca815e50330c71805b071b0521e/resource.tar.gz#test.test_agg_phases-bit_xor_opt-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-count_opt-default.txt-Debug]": [
         {
             "checksum": "fa0346f0a27ba3c37e3ec024837bda1d",
@@ -1672,6 +1686,20 @@
             "checksum": "b204692654e9a175f23dc8efd761e05b",
             "size": 696,
             "uri": "https://{canondata_backend}/1924537/72bd8029e9ee499150ffd3ab146adc9817c9d625/resource.tar.gz#test.test_select_yql-group_by_count_b-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-grouping_sets_ab_a_o_optional-default.txt-Debug]": [
+        {
+            "checksum": "9c9212bc87668efd4ae5537b448d4f6d",
+            "size": 1745,
+            "uri": "https://{canondata_backend}/1130705/5c77dc1c1b1f5245cd366091dc095b07ada47bb6/resource.tar.gz#test.test_select_yql-grouping_sets_ab_a_o_optional-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-grouping_sets_ab_a_o_optional-default.txt-Results]": [
+        {
+            "checksum": "738e6f668c8917c57e001992a259d56d",
+            "size": 3557,
+            "uri": "https://{canondata_backend}/1130705/5c77dc1c1b1f5245cd366091dc095b07ada47bb6/resource.tar.gz#test.test_select_yql-grouping_sets_ab_a_o_optional-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-join_disambiguation_off-default.txt-Debug]": [

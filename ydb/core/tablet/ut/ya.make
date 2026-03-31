@@ -27,6 +27,7 @@ SRCS(
     tablet_req_blockbs_ut.cpp
     tablet_resolver_ut.cpp
     tablet_state_ut.cpp
+    detailed_metrics/ydb_metrics_ut.cpp
 )
 
 END()

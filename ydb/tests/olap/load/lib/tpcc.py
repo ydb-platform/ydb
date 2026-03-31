@@ -2,7 +2,7 @@ from __future__ import annotations
 from os import getenv
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 import logging
@@ -13,6 +13,7 @@ class TpccSuiteBase(LoadSuiteBase):
     threads: int = 4
     time_s: float = 60 * float(getenv('TPCC_TIME_MINUTES', 30))
     tx_mode: TxMode = TxMode.SerializableRW
+    compact: bool = external_param_is_true('tpcc-compact')
     _remote_cli_path: str = ''
 
     @classmethod
@@ -35,7 +36,7 @@ class TpccSuiteBase(LoadSuiteBase):
             logging.info(f'warehouse count {wh_count} less then need {cls.warehouses}. Data will be reimport.')
             YdbCliHelper.clear_tpcc(cls.get_tpcc_path())
             YdbCliHelper.init_tpcc(cls.get_tpcc_path(), cls.warehouses)
-            YdbCliHelper.import_data_tpcc(cls._remote_cli_path, cls.get_tpcc_path(), cls.warehouses)
+            YdbCliHelper.import_data_tpcc(cls._remote_cli_path, cls.get_tpcc_path(), cls.warehouses, cls.compact)
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:

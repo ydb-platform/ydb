@@ -46,7 +46,7 @@ def write_stream(path, data, partition_key=None, database=None, endpoint=None):
 #  Data plane grpc API is not implemented in datastreams.
 def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=None, database=None, endpoint=None):
     result_file_name = "{}-{}-read-result-{}-{}-out".format(
-        os.getenv("PYTEST_CURRENT_TEST").replace(":", "_").replace(" (call)", ""),
+        os.getenv("PYTEST_CURRENT_TEST").rsplit('/', 1)[-1].replace(":", "_").replace(" (call)", ""),
         path.replace("/", "_"),
         consumer_name,
         uuid.uuid4()
@@ -67,10 +67,13 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
         "--disable-cluster-discovery",
         "--messages-count", str(messages_count),
         "--timeout", "{}ms".format(int(timeout * 1000))
-    ] + ["--commit-after-processing"] if commit_after_processing else []
+    ]
+    if commit_after_processing:
+        cmd += ["--commit-after-processing"]
 
+    execute_timeout = timeout + max(timeout, plain_or_under_sanitizer(10, 30))
     with open(result_file, "w") as outfile:
-        yatest.common.execute(cmd, timeout=timeout * 2, stdout=outfile)
+        yatest.common.execute(cmd, timeout=execute_timeout, stdout=outfile)
 
     ret = []
     with open(result_file, "r") as result:

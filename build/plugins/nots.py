@@ -37,11 +37,20 @@ TS_LINT_DART_FIELDS = (
     df.ScriptRelPath.first_flat,  # required, used to lookup a SUITE_MAP in devtools/ya/test/explore/__init__.py
     df.SourceFolderPath.normalized,  # required
     df.TestName.name_from_macro_args,  # required, we use it to pass script name to runner
-    df.TestRecipes.value,  # from macro USE_RECIPE
+    df.TestRecipes.value,  # from macro USE_RECIPE()
     df.Size.from_macro_args_and_unit,
-    df.CustomDependencies.test_depends_only,  # from macro DEPENDS
+    df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
     df.TsCheckType.value,
+)
+
+TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
+    df.TestEnv.value,  # from macro ENV()
+    df.TestData.from_unit,  # from macro DATA()
+    df.TestTimeout.from_unit,  # from macro TIMEOUT()
+    df.Tag.from_unit,  # from macro TAG()
+    df.Requirements.from_unit,  # from macro REQUIREMENTS()
+    df.TsTestForPath.value,
 )
 
 
@@ -1067,7 +1076,7 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
 
     pm = _create_pm(unit)
     unit.on_setup_install_node_modules_recipe(pm.module_path)
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
+    unit.on_setup_extract_output_tars_recipe(pm.module_path)
 
     peers = _create_pm(unit).get_local_peers_from_package_json()
     if peers:
@@ -1082,8 +1091,7 @@ def on_ts_check_configure(unit: NotsUnitType) -> None:
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE
 
-        assert check_type in ("lint"), f"Unknown check type: {check_type}"
-        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else None
+        dart_fields = TS_LINT_DART_FIELDS if check_type == "lint" else TS_TEST_DART_FIELDS
 
         dart_record = create_dart_record(dart_fields, unit, flat_args, spec_args)
         dart_record[df.TestFiles.KEY] = test_files
@@ -1226,6 +1234,13 @@ def on_ts_test_for_configure(
         unit.set_property(["DART_DATA", data])
 
 
+def on__ts_test_for_configure(unit: NotsUnitType) -> None:
+    # it has to be here because it uses TS_TEST_FOR_PATH that is set in plugin.
+    # if you call _SET_TS_TEST_FOR_INPUTS() directly
+    # from _TS_TEST_FOR_EPILOGUE(), TS_TEST_FOR_PATH is not set yet.
+    unit.on_set_ts_test_for_inputs()
+
+
 # noinspection PyUnusedLocal
 @_with_report_configure_error
 def on_validate_ts_test_for_args(unit: NotsUnitType, for_mod: str, root: str) -> None:
@@ -1260,8 +1275,6 @@ def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str])
             )
 
     new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
-    new_items += " "
-    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
     __set_append(unit, "_TS_FILES_INOUTS", new_items)
 
 
@@ -1289,7 +1302,7 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
 
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    new_items = [f'$MOVE_FILE {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
 
     __on_ts_files(unit, in_files, out_files)

@@ -1,9 +1,9 @@
 LIBRARY()
 
 SRCS(
-    kqp_proxy_service.cpp
     kqp_proxy_databases_cache.cpp
     kqp_proxy_peer_stats_calculator.cpp
+    kqp_proxy_service.cpp
     kqp_query_text_cache_service.cpp
     kqp_script_executions.cpp
     kqp_session_info.cpp
@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     library/cpp/protobuf/interop
     library/cpp/protobuf/json
+    library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/cms/console

@@ -629,20 +629,42 @@ TMaybe<bool> ScanExprForMatchedGroup(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode& groups, TExprContext& ctx, bool isYql) {
-    // calculate hashes
-    TVector<TGroupExpr> exprs;
-    TExprNode::TListType typeNodes;
-    for (ui32 index = 0; index < groups.ChildrenSize(); ++index) {
-        const auto& g = *groups.Child(index);
-        const auto& lambda = g.Tail();
+TVector<TExprNode::TPtr> InferSqlGroupRefTypes(
+    const TExprNode& groupExprs,
+    const TExprNode& groupSets,
+    TExprContext& ctx,
+    bool isYql)
+{
+    if (isYql) {
+        return InferYqlGroupRefTypes(groupExprs, groupSets, ctx);
+    }
+
+    return InferPgGroupRefTypes(groupExprs, ctx);
+}
+
+TExprNode::TPtr ReplaceGroupByExpr(
+    const TExprNode::TPtr& root,
+    const TExprNode& groupExprs,
+    const TExprNode& groupSets,
+    TExprContext& ctx,
+    bool isYql)
+{
+    TVector<TExprNode::TPtr> types = InferSqlGroupRefTypes(groupExprs, groupSets, ctx, isYql);
+    YQL_ENSURE(types.size() == groupExprs.ChildrenSize());
+
+    TVector<TGroupExpr> exprs(Reserve(groupExprs.ChildrenSize()));
+    for (ui32 index = 0; index < groupExprs.ChildrenSize(); ++index) {
+        const auto& lambda = groupExprs.Child(index)->Tail();
+
         TNodeMap<ui64> visited;
         visited[&lambda.Head().Head()] = 0;
+        ui64 hash = CalculateExprHash(lambda.Tail(), visited);
+
         exprs.push_back({
-            lambda.TailPtr(),
-            CalculateExprHash(lambda.Tail(), visited),
-            ExpandType(g.Pos(), *lambda.GetTypeAnn(), ctx)
-            });
+            .OriginalRoot = lambda.TailPtr(),
+            .Hash = hash,
+            .TypeNode = std::move(types[index]),
+        });
     }
 
     TNodeOnNodeOwnedMap replaces;
@@ -1239,6 +1261,7 @@ bool ValidateGroups(
     bool scanColumnsOnly,
     bool allowAggregates,
     const TExprNode::TPtr& groupExprs,
+    const TExprNode::TPtr& groupSets,
     const TStringBuf& scope,
     const TProjectionOrders* projectionOrders,
     const TExprNode::TPtr& projection,
@@ -1336,7 +1359,7 @@ bool ValidateGroups(
         }
 
         if (groupExprs) {
-            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
             if (!ret) {
                 return false;
             }
@@ -1364,6 +1387,7 @@ bool ValidateSort(
     TExprNode::TListType& newSorts,
     bool scanColumnsOnly,
     const TExprNode::TPtr& groupExprs,
+    const TExprNode::TPtr& groupSets,
     const TStringBuf& scope,
     const TProjectionOrders* projectionOrders,
     const TExprNode::TPtr& projection,
@@ -1466,7 +1490,9 @@ bool ValidateSort(
         }
 
         if (groupExprs) {
-            auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), ctx.Expr, isYql);
+            YQL_ENSURE(groupSets);
+
+            auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
             if (!ret) {
                 return false;
             }
@@ -2002,8 +2028,14 @@ IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TEx
     }
 
     for (const auto& child : input->Children()) {
-        if (!EnsureAtom(*child, ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(*child, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
@@ -2020,18 +2052,34 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
 
     if (input->Head().IsList()) {
         for (const auto& x : input->Head().Children()) {
+            if (x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(x->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!x->IsList() && !x->IsAtom()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), TStringBuilder() << "Expected atom or list, but got: " << x->Type()));
                 return IGraphTransformer::TStatus::Error;
             }
         }
     } else {
-        if (!EnsureAtom(input->Head(), ctx.Expr)) {
+        bool isUniversal;
+        if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
     bool hasType = false;
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(1)->IsCallable("Void")) {
         hasType = true;
         if (auto status = EnsureTypeRewrite(input->ChildRef(1), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2040,9 +2088,15 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto& lambda = input->ChildRef(2);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2138,15 +2192,26 @@ IGraphTransformer::TStatus SqlWhereWrapper(const TExprNode::TPtr& input, TExprNo
     bool hasType = false;
     if (!input->Child(0)->IsCallable("Void")) {
         hasType = true;
+        if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (auto status = EnsureTypeRewrite(input->ChildRef(0), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    bool isUniversal;
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2172,8 +2237,14 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->Child(2)->Content() != "asc" && input->Child(2)->Content() != "desc") {
@@ -2182,8 +2253,13 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+    if (!EnsureAtomOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (input->Child(3)->Content() != "first" && input->Child(3)->Content() != "last") {
@@ -2193,6 +2269,11 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     bool hasType = false;
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(0)->IsCallable("Void")) {
         hasType = true;
         if (auto status = EnsureTypeRewrite(input->ChildRef(0), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -2201,9 +2282,14 @@ IGraphTransformer::TStatus SqlSortWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     auto& lambda = input->ChildRef(1);
-    const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 1 : 0);
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 1 : 0);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!hasType) {
@@ -2237,6 +2323,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     const bool isColumnOrderForced = !isYql || ctx.Types.OrderedColumns;
 
     auto& options = input->Head();
+    if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(options.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -2268,6 +2359,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
         bool hasEmitPgStar = false;
         bool hasUnknownsAllowed = false;
         TExprNode::TPtr groupExprs;
+        TExprNode::TPtr groupSets;
         TExprNode::TPtr result;
         bool isUsing = false;
         THashMap<TString, TString> repeatedColumnsInUsing;
@@ -2337,7 +2429,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     for (const auto& x : data.Children()) {
                         auto alias = x->Head().Content();
                         auto type = x->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                        joinInputs.push_back(TInput{ TString(alias), type, Nothing(), TInput::External, {} });
+                        joinInputs.push_back(TInput{ .Alias=TString(alias), .Type=type, .Order=Nothing(), .Priority=TInput::External, .UsedExternalColumns={} });
                         if (!alias.empty()) {
                             possibleAliases.insert(TString(alias));
                         }
@@ -2748,7 +2840,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             bool hasChanges = false;
                             for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
                                 const auto& column = *data.Child(index);
-                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                                 if (!ret) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
@@ -2940,10 +3032,10 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            inputs.push_back(TInput{ alias, newStructType, newOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=newStructType, .Order=newOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                         else {
-                            inputs.push_back(TInput{ alias, inputStructType, columnOrder, TInput::Current, {} });
+                            inputs.push_back(TInput{ .Alias=alias, .Type=inputStructType, .Order=columnOrder, .Priority=TInput::Current, .UsedExternalColumns={} });
                         }
                     }
                 }
@@ -3062,7 +3154,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     }
 
                     if (!scanColumnsOnly && optionName == "having" && groupExprs) {
-                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                         if (!ret) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -3408,7 +3500,25 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TExprNode::TListType newGroups;
                     bool hasNewGroups = false;
                     bool isUniversal;
-                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, GetSetting(options, "result"), result, isYql, repeatedColumnsInUsing, isUniversal)) {
+                    if (!ValidateGroups(
+                        joinInputs,
+                        possibleAliases,
+                        data,
+                        ctx,
+                        newGroups,
+                        hasNewGroups,
+                        scanColumnsOnly,
+                        /*allowAggregates=*/false,
+                        /*groupExprs=*/nullptr,
+                        /*groupSets=*/nullptr,
+                        "GROUP BY",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        result,
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3471,7 +3581,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         continue;
                     }
 
-                    groupExprs = option;
+                    groupSets = option;
                     if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3537,7 +3647,25 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         TExprNode::TListType newGroups;
                         bool hasNewGroups = false;
                         bool isUniversal;
-                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                        if (!ValidateGroups(
+                            joinInputs,
+                            possibleAliases,
+                            *partitions,
+                            ctx,
+                            newGroups,
+                            hasNewGroups,
+                            scanColumnsOnly,
+                            /*allowAggregates=*/true,
+                            groupExprs,
+                            groupSets,
+                            /*scope=*/"",
+                            /*projectionOrders=*/nullptr,
+                            /*projection=*/nullptr,
+                            /*result=*/nullptr,
+                            isYql,
+                            repeatedColumnsInUsing,
+                            isUniversal))
+                        {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3550,7 +3678,24 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
 
                         bool hasNewSort = false;
                         TExprNode::TListType newSorts;
-                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupExprs, "", nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                        if (!ValidateSort(
+                            joinInputs,
+                            joinInputs,
+                            possibleAliases,
+                            *sort,
+                            ctx,
+                            hasNewSort,
+                            newSorts,
+                            scanColumnsOnly,
+                            groupExprs,
+                            groupSets,
+                            /*scope=*/"",
+                            /*projectionOrders=*/nullptr,
+                            /*projection=*/nullptr,
+                            isYql,
+                            repeatedColumnsInUsing,
+                            isUniversal))
+                        {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3611,8 +3756,26 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool isUniversal;
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
-                    projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
-                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                    projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
+                    if (!ValidateGroups(
+                        projectionInputs,
+                        /*possibleAliases=*/{},
+                        data,
+                        ctx,
+                        newGroups,
+                        hasNewGroups,
+                        scanColumnsOnly,
+                        /*allowAggregates=*/false,
+                        /*groupExprs=*/nullptr,
+                        /*groupSets=*/nullptr,
+                        "DISTINCT ON",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        /*result=*/nullptr,
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3650,16 +3813,31 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TInputs projectionInputs = joinInputs;
                     // all row columns are visible too, but projection's columns have more priority
                     if (!scanColumnsOnly) {
-                        projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
+                        projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
                     }
 
                     bool hasNewSort = false;
                     bool isUniversal;
                     TExprNode::TListType newSortTupleItems;
                     // no effective types yet, scan lambda bodies
-                    if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, hasNewSort, newSortTupleItems,
-                        scanColumnsOnly, groupExprs, "ORDER BY", &projectionOrders, GetSetting(options, "result"), isYql, repeatedColumnsInUsing,
-                        isUniversal)) {
+                    if (!ValidateSort(
+                        projectionInputs,
+                        joinInputs,
+                        possibleAliases,
+                        data,
+                        ctx,
+                        hasNewSort,
+                        newSortTupleItems,
+                        scanColumnsOnly,
+                        groupExprs,
+                        groupSets,
+                        "ORDER BY",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3905,6 +4083,11 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto& firstValue = input->Head();
+    if (firstValue.GetTypeAnn() && firstValue.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(firstValue.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(firstValue, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -3920,6 +4103,10 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     bool needRetype = false;
     for (size_t i = 0; i < input->ChildrenSize(); ++i) {
         auto* value = input->Child(i);
+        if (value->GetTypeAnn() && value->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(value->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
 
         if (!EnsureTuple(*value, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -4011,6 +4198,11 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     auto& options = input->Head();
+    if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(options.GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureTuple(options, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4302,7 +4494,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         YQL_ENSURE(option);
         const auto& data = option->Tail();
         TInputs projectionInputs;
-        projectionInputs.push_back(TInput{ TString(), resultStructType, resultColumnOrder, TInput::Projection, {} });
+        projectionInputs.push_back(TInput{ .Alias=TString(), .Type=resultStructType, .Order=resultColumnOrder, .Priority=TInput::Projection, .UsedExternalColumns={} });
         TExprNode::TListType newSortTupleItems;
 
         // no effective types yet, scan lambda bodies
@@ -4315,8 +4507,24 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         }
 
         bool isUniversal;
-        if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, hasNewSort, newSortTupleItems, false, nullptr, "ORDER BY", &projectionOrders, nullptr, isYql,
-            {}, isUniversal)) {
+        if (!ValidateSort(
+            /*inputs=*/projectionInputs,
+            /*subLinkInputs=*/projectionInputs,
+            /*possibleAliases=*/{},
+            /*data=*/data,
+            /*ctx=*/ctx,
+            /*hasNewSort=*/hasNewSort,
+            /*newSorts=*/newSortTupleItems,
+            /*scanColumnsOnly=*/false,
+            /*groupExprs=*/nullptr,
+            /*groupSets=*/nullptr,
+            /*scope=*/"ORDER BY",
+            /*projectionOrders=*/&projectionOrders,
+            /*projection=*/nullptr,
+            /*isYql=*/isYql,
+            /*usedInUsing=*/{},
+            /*isUniversal=*/isUniversal))
+        {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -4353,8 +4561,14 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     auto linkType = input->Child(0)->Content();
@@ -4365,12 +4579,22 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     bool hasType = false;
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(1)->IsCallable("Void")) {
         if (!ValidateInputTypes(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         hasType = true;
+    }
+
+    if (input->Child(2)->GetTypeAnn() && input->Child(2)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(2)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(2)->IsCallable("Void")) {
@@ -4384,19 +4608,41 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         }
     }
 
+    if (input->Child(3)->GetTypeAnn() && input->Child(3)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(3)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!input->Child(3)->IsCallable("Void")) {
         auto& lambda = input->ChildRef(3);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, (!input->Child(2)->IsCallable("Void") && hasType) ? 2 : 1);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
         }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+    }
+
+    if (input->Child(4)->GetTypeAnn() && input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(4)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!input->Child(4)->IsCallable(sqlSelect)) {
         auto& lambda = input->ChildRef(4);
-        const auto status = ConvertToLambda(lambda, ctx.Expr, 0);
+        bool isUniversal;
+        const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 0);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         if (hasType) {
@@ -4475,9 +4721,15 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
         if (!input->Child(2)->IsCallable("Void")) {
             auto& lambda = input->ChildRef(3);
-            const auto status = ConvertToLambda(lambda, ctx.Expr, hasType ? 2 : 1);
+            bool isUniversal;
+            const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, hasType ? 2 : 1);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
 
             auto rowType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
@@ -4491,7 +4743,6 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
 
             ui32 testExprType;
             bool convertToPg;
-            bool isUniversal;
             if (!ExtractPgType(lambda->GetTypeAnn(), testExprType, convertToPg, lambda->Pos(), ctx.Expr, isUniversal)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -4547,21 +4798,42 @@ IGraphTransformer::TStatus SqlGroupRefWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureStructType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(1)->GetTypeAnn() && input->Child(1)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(1)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureType(*input->Child(1), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(2), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (input->ChildrenSize() >= 4) {
-        if (!EnsureAtom(*input->Child(3), ctx.Expr)) {
+        if (!EnsureAtomOrUniversal(*input->Child(3), ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
     }
 
@@ -4615,8 +4887,14 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(*input->Child(0), ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     auto kind = input->Child(0)->Content();
@@ -4633,6 +4911,11 @@ IGraphTransformer::TStatus SqlGroupingSetWrapper(const TExprNode::TPtr& input, T
     }
 
     for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+        if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(i)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(i), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

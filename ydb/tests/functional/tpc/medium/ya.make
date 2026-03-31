@@ -15,14 +15,18 @@ TEST_SRCS(
     test_tpcc.py
 )
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+FORK_TESTS()
+FORK_TEST_FILES()
+FORK_SUBTESTS()
+
+REQUIREMENTS(ram:16 cpu:4)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -47,7 +51,4 @@ DATA(
     arcadia/ydb/tests/functional/clickbench/data/hits.csv
     arcadia/ydb/tests/functional/tpc/data
 )
-
-FORK_TEST_FILES()
-REQUIREMENTS(ram:28)
 END()

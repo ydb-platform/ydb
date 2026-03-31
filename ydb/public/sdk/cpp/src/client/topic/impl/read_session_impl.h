@@ -161,6 +161,7 @@ public:
     void DeferReconnection(TCallbackContextPtr<UseMigrationProtocol> cbContext, TPlainStatus&& status);
     void DeferStartSession(TCallbackContextPtr<UseMigrationProtocol> cbContext);
     void DeferSignalWaiter(TWaiter&& waiter);
+    void DeferOnUserRetrievedEvent(TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& accumulator);
     void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
 
 private:
@@ -175,6 +176,7 @@ private:
     void Reconnect();
     void SignalWaiters();
     void StartSessions();
+    void OnUserRetrievedEvent();
     void DestroyDecompressionInfos();
 
 private:
@@ -218,6 +220,9 @@ private:
 
     // Contexts for sessions to start
     std::vector<TCallbackContextPtr<UseMigrationProtocol>> CbContexts;
+
+    // User retrieved events info accumulator.
+    std::vector<TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>> UserRetrievedEventsInfoAccumulator;
 
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> DecompressionInfos;
 };
@@ -1176,6 +1181,7 @@ public:
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSessionControlCallbacks;
+    friend class TDataDecompressionInfo<UseMigrationProtocol>;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,

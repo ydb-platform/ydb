@@ -42,7 +42,7 @@ SELECT * FROM postgresql_datasource.<table_name>
 - `postgresql_datasource` - идентификатор внешнего источника данных;
 - `<table_name>` - имя таблицы внутри внешнего источника данных.
 
-## Ограничения
+## Ограничения {#limitations}
 
 При работе с кластерами PostgreSQL существует ряд ограничений:
 

@@ -419,6 +419,9 @@ public:
     ~TProducer();
 
 private:
+    // for logging
+    std::string Id;
+
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     std::shared_ptr<TTopicClient::TImpl> Client;
     TDbDriverStatePtr DbDriverState;
@@ -430,7 +433,6 @@ private:
 
     TProducerSettings Settings;
     ESeqNoStrategy SeqNoStrategy = ESeqNoStrategy::NotInitialized;
-    TProducerSettings::EPartitionChooserStrategy PartitionChooserStrategy = TProducerSettings::EPartitionChooserStrategy::Hash;
 
     NThreading::TPromise<void> ClosePromise;
     NThreading::TFuture<void> CloseFuture;

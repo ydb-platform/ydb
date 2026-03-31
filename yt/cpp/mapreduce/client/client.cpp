@@ -1694,7 +1694,7 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 {
     auto g = Guard(Lock_);
     if (!TransactionPinger_) {
-        TransactionPinger_ = CreateTransactionPinger(Context_.Config, Context_.UseTLS);
+        TransactionPinger_ = CreateTransactionPinger(Context_.Config);
     }
     return TransactionPinger_;
 }

@@ -14,6 +14,7 @@
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqevents_global.pb.h>
 
 namespace NKikimr::TEvPersQueue {
     enum EEv {
@@ -67,6 +68,7 @@ namespace NKikimr::TEvPersQueue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
+    static_assert(EvInternalEvents == InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL));
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {
@@ -230,6 +232,8 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        bool GetSkipSrcIdInfo() const;
+
         NWilson::TSpan ExecuteSpan;
     };
 

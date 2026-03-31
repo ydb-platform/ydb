@@ -16,7 +16,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/metrics
-    yql/essentials/core/cbo
     yql/essentials/core/dq_integration
     yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/computation

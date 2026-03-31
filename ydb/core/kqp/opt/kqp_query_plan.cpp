@@ -1,6 +1,7 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
@@ -192,6 +193,28 @@ NJson::TJsonValue GetSsaProgramInJsonByTable(const TString& tablePath, const NKq
     }
     return NJson::TJsonValue();
 }
+
+// Uniform view over stats that may come from either TKqpStatsStore or TTypeAnnotationContext
+struct TStatsView {
+    double Nrows = 0;
+    double Cost = 0;
+    double ByteSize = 0;
+    bool Valid = false;
+
+    TStatsView() = default;
+
+    template <typename T>
+    explicit TStatsView(const std::shared_ptr<T>& stats) {
+        if (stats) {
+            Nrows = stats->Nrows;
+            Cost = stats->Cost;
+            ByteSize = stats->ByteSize;
+            Valid = true;
+        }
+    }
+
+    explicit operator bool() const { return Valid; }
+};
 
 class TxPlanSerializer {
 public:
@@ -587,10 +610,13 @@ private:
 
             if (SerializerCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(SerializerCtx.Config->GetDefaultCostBasedOptimizationLevel())!=0) {
 
-                if (auto stats = SerializerCtx.TypeCtx.GetStats(tableLookup.Raw())) {
-                    planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats->Nrows;
-                    planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats->Cost;
-                    planNode.OptEstimates["E-Size"] = TStringBuilder() << stats->ByteSize;
+                TStatsView stats = SerializerCtx.OptimizeCtx
+                    ? TStatsView(SerializerCtx.OptimizeCtx->KqpStats.GetStats(tableLookup.Raw()))
+                    : TStatsView(SerializerCtx.TypeCtx.GetStats(tableLookup.Raw()));
+                if (stats) {
+                    planNode.OptEstimates["E-Rows"] = TStringBuilder() << stats.Nrows;
+                    planNode.OptEstimates["E-Cost"] = TStringBuilder() << stats.Cost;
+                    planNode.OptEstimates["E-Size"] = TStringBuilder() << stats.ByteSize;
                 }
                 else {
                     planNode.OptEstimates["E-Rows"] = "No estimate";
@@ -773,14 +799,21 @@ private:
                 auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJson);
 
-                auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
-                for(const auto& column: readColumns) {
-                    for(const auto& analyzer: desc.settings().columns()) {
-                        if (analyzer.column() == column) {
-                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
-                                searchTerms.push_back(term);
+                if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
+                    for (auto term: NJsonIndex::BuildSearchTerms(literal)) {
+                        searchTerms.emplace_back(std::move(term));
+                    }
+                } else {
+                    auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+                    for(const auto& column: readColumns) {
+                        for(const auto& analyzer: desc.settings().columns()) {
+                            if (analyzer.column() == column) {
+                                for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                                    searchTerms.push_back(term);
+                                }
                             }
                         }
                     }
@@ -897,10 +930,14 @@ private:
         return path;
     }
 
-    std::shared_ptr<TOptimizerStatistics> FindWrapStats(TExprNode::TPtr node, const TExprNode* dataSourceNode) {
+    TStatsView FindWrapStats(TExprNode::TPtr node, const TExprNode* dataSourceNode) {
         if (auto maybeWrapBase = TMaybeNode<TDqSourceWrapBase>(node)) {
             if (maybeWrapBase.Cast().DataSource().Raw() == dataSourceNode) {
-                return SerializerCtx.TypeCtx.GetStats(node.Get());
+                if (SerializerCtx.OptimizeCtx) {
+                    return TStatsView(SerializerCtx.OptimizeCtx->KqpStats.GetStats(node.Get()));
+                } else {
+                    return TStatsView(SerializerCtx.TypeCtx.GetStats(node.Get()));
+                }
             }
         }
         for (const auto& child : node->Children()) {
@@ -917,7 +954,7 @@ private:
                 }
             }
         }
-        return nullptr;
+        return TStatsView{};
     }
 
     void Visit(const TDqSource& source, TQueryPlanNode& stagePlanNode, const TCoLambda& Lambda) {
@@ -956,17 +993,19 @@ private:
         }
 
         // Actual stats must be binded with TDqSourceWrapBase
-        auto stats = FindWrapStats(Lambda.Body().Ptr(), dataSource.Raw());
+        TStatsView stats = FindWrapStats(Lambda.Body().Ptr(), dataSource.Raw());
 
         if (!stats) {
             // Fallback to TCoDataSource
-            stats = SerializerCtx.TypeCtx.GetStats(dataSource.Raw());
+            stats = SerializerCtx.OptimizeCtx
+                ? TStatsView(SerializerCtx.OptimizeCtx->KqpStats.GetStats(dataSource.Raw()))
+                : TStatsView(SerializerCtx.TypeCtx.GetStats(dataSource.Raw()));
         }
 
         if (stats) {
-            op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
-            op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
-            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
+            op.Properties["E-Rows"] = TStringBuilder() << stats.Nrows;
+            op.Properties["E-Cost"] = TStringBuilder() << stats.Cost;
+            op.Properties["E-Size"] = TStringBuilder() << stats.ByteSize;
         }
 
         if (dqIntegration) {
@@ -1911,10 +1950,13 @@ private:
             return;
         }
 
-        if (auto stats = SerializerCtx.TypeCtx.GetStats(expr.Raw())) {
-            op.Properties["E-Rows"] = TStringBuilder() << stats->Nrows;
-            op.Properties["E-Cost"] = TStringBuilder() << stats->Cost;
-            op.Properties["E-Size"] = TStringBuilder() << stats->ByteSize;
+        TStatsView stats = SerializerCtx.OptimizeCtx
+            ? TStatsView(SerializerCtx.OptimizeCtx->KqpStats.GetStats(expr.Raw()))
+            : TStatsView(SerializerCtx.TypeCtx.GetStats(expr.Raw()));
+        if (stats) {
+            op.Properties["E-Rows"] = TStringBuilder() << stats.Nrows;
+            op.Properties["E-Cost"] = TStringBuilder() << stats.Cost;
+            op.Properties["E-Size"] = TStringBuilder() << stats.ByteSize;
         }
         else {
             op.Properties["E-Rows"] = "No estimate";

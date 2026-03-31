@@ -243,6 +243,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'SlotSize',
             'TotalSize',
             'CapacityAlert',
             'GroupSizeInUnits',
@@ -254,6 +255,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'Limit',
             'TotalSize',
             'CapacityAlert',
         ]
@@ -261,6 +263,7 @@ class Test(TestBase):
         return [
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '-H', '--columns', *group_columns),
+            self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage'),
         ]
 
     def test_group_resize(self):
@@ -337,3 +340,12 @@ class Test(TestBase):
         trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
 
         return [trace1, trace2]
+
+    def test_pdisk_check_leaked_slots(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
+        return [
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots'),
+        ]

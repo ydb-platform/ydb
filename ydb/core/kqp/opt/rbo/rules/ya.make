@@ -18,12 +18,15 @@ SRCS(
     push_limit_into_sort.cpp
     push_map.cpp
     push_olap_filter.cpp
+    push_olap_projection.cpp
     remove_extra_renames_stage.cpp
     remove_identity_map.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/opt/peephole
+    ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
 )
 
 YQL_LAST_ABI_VERSION()

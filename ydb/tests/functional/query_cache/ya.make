@@ -20,3 +20,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    warmup
+)

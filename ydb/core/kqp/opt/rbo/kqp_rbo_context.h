@@ -22,8 +22,10 @@ public:
         , PeepholeTypeAnnTransformer(peepholeTypeAnnTransformer)
         , FuncRegistry(funcRegistry)
         , CBOCtx(
-              TKqpProviderContext(kqpCtx, kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()))) {
-    }
+              TKqpProviderContext(kqpCtx, 
+                kqpCtx.Config->CostBasedOptimizationLevel.Get().GetOrElse(kqpCtx.Config->GetDefaultCostBasedOptimizationLevel()), 
+                kqpCtx.Config->UseBlockHashJoin.Get().GetOrElse(false)))
+        {}
 
     TKqpOptimizeContext& KqpCtx;
     NYql::TExprContext& ExprCtx;

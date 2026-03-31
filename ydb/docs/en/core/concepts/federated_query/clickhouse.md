@@ -43,7 +43,7 @@ Where:
 - `clickhouse_datasource` is the identifier of the external data source;
 - `<table_name>` is the table's name within the external data source.
 
-## Limitations
+## Limitations {#limitations}
 
 There are several limitations when working with ClickHouse clusters:
 

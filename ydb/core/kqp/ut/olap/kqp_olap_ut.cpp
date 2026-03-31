@@ -3901,6 +3901,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
     }
 
+    Y_UNIT_TEST(DisableBlockExecutionPerQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10, 1'000'000, 10);
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.DisableBlockExecution;
+
+            SELECT timestamp, resource_id, uid, level
+            FROM `/Root/olapStore/olapTable`
+            WHERE level >= 1
+            ORDER BY level, resource_id
+            LIMIT 5
+        )";
+
+        {
+            auto res = StreamExplainQuery(query, client);
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto plan = CollectStreamResult(res);
+            Cerr << plan.QueryStats->query_ast() << Endl;
+
+            UNIT_ASSERT_C(!plan.QueryStats->query_ast().Contains("BlockAsStruct"), plan.QueryStats->Getquery_ast());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([
+                [1000001u;["11"];"uid_1000001";[1]];
+                [1000006u;["16"];"uid_1000006";[1]];
+                [1000002u;["12"];"uid_1000002";[2]];
+                [1000007u;["17"];"uid_1000007";[2]];
+                [1000003u;["13"];"uid_1000003";[3]]
+            ])");
+        }
+    }
+
     Y_UNIT_TEST(CompactionPlanner) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -4474,8 +4521,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             if (AddNull) {
                 testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
-                    "'length')");
+                    "Bulk upsert to table '/Root/ttt' Received NULL value for not null column: length");
             } else {
                 testHelper.BulkUpsert(testTable, rowsBuilder);
             }

@@ -4823,10 +4823,12 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
         return false;
     }
 
-    { // Check by key filter existence
-        bool partByKeyFilter = bool(partView->ByKey);
-        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
-        if (partByKeyFilter != schemeByKeyFilter) {
+    { // Check bloom filters
+        TVector<ui32> partPrefixes;
+        for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
+            if (bloom) partPrefixes.push_back(prefixLen);
+        }
+        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
             return true;
         }
     }
@@ -4899,7 +4901,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
-    comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
+    comp->Layout.ByKeyFilterPrefixes = tableInfo->ByKeyFilterPrefixes;
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
     comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();

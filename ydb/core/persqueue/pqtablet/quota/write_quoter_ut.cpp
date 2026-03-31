@@ -29,6 +29,7 @@ TActorId RegisterQuoter(auto& runtime, auto& edgeActor, size_t writeSpeedInBytes
     NPersQueue::TTopicConverterPtr topicConverter;
     NKikimrPQ::TPQTabletConfig config;
     config.MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(writeSpeedInBytesPerSecond);
+    config.MutablePartitionConfig()->SetBurstSize(writeSpeedInBytesPerSecond);
     config.MutablePartitionConfig()->SetWriteMessageDeduplicationIdPerSecond(deduplicationIdQuota);
 
     TPartitionId partitionId;
@@ -48,9 +49,10 @@ void RequestQuota(auto& runtime, auto& quoterId, auto& edgeActorId) {
         new TEvPQ::TEvRequestQuota(1, new IEventHandle(quoterId, edgeActorId, writeRequest)));
 }
 
-bool WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
+THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
     auto event = runtime.GrabEdgeEvent<TEvPQ::TEvApproveWriteQuota>(timeout);
-    return !!event;
+    UNIT_ASSERT(event);
+    return std::move(event);
 }
 
 void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t deduplicationIds) {
@@ -67,15 +69,20 @@ Y_UNIT_TEST(WaitDeduplicationIdQuota) {
     RequestQuota(runtime, quoterId, edgeActorId);
     UNIT_ASSERT(WaitForQuotaApproved(runtime));
 
-    TInstant start = TInstant::Now();
+    for (size_t i = 0; i < 3; ++i) {
+        Cerr << ">>>>> Start iteration " << i << Endl;
+        TInstant start = TInstant::Now();
 
-    ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
+        ConsumeQuota(runtime, quoterId, edgeActorId, 1_KB, 1);
 
-    RequestQuota(runtime, quoterId, edgeActorId);
-    UNIT_ASSERT(WaitForQuotaApproved(runtime));
+        RequestQuota(runtime, quoterId, edgeActorId);
+        const auto ev = WaitForQuotaApproved(runtime);
+        const auto waitTime = ev->PartitionQuotaWaitTime;
+        UNIT_ASSERT_GT_C(waitTime, TDuration::MilliSeconds(950), "duration: " << waitTime);
 
-    auto duration = TInstant::Now() - start;
-    UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
+        auto duration = TInstant::Now() - start;
+        UNIT_ASSERT_GT_C(duration, TDuration::MilliSeconds(950), "duration: " << duration);
+    }
 }
 
 }

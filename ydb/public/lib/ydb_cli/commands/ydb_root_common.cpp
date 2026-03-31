@@ -24,6 +24,7 @@
 #include <ydb/core/base/backtrace.h>
 #endif
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
+#include <ydb/public/lib/ydb_cli/common/completion.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -498,6 +499,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         oauth2TokenExchangeAuth
     );
 
+    ConfigureCompletionOption(opts.AddLongOption("completion"), "ydb", this, config)
+            .Hidden();
+
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;
     stream
@@ -547,7 +551,7 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
     if (std::vector<TString> errors = ParseResult->Validate(); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
-    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, !config.OnlyExplicitProfile ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
+    if (std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(Profile, (!Profile && !config.OnlyExplicitProfile) ? ProfileManager->GetActiveProfile() : nullptr); !errors.empty()) {
         MisuseErrors.insert(MisuseErrors.end(), errors.begin(), errors.end());
     }
     if (IsVerbose()) {
@@ -775,7 +779,7 @@ int TClientCommandRootCommon::Run(TConfig& config) {
     TString prompt;
     if (!ProfileName.empty()) {
         prompt = ProfileName;
-    } if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
+    } else if (const auto& activeProfileName = ProfileManager->GetActiveProfileName(); !config.OnlyExplicitProfile && activeProfileName) {
         prompt = activeProfileName;
     }
 

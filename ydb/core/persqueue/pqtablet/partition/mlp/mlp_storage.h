@@ -7,6 +7,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -21,6 +22,8 @@ class TStorage {
     static constexpr size_t MIN_MESSAGES = 100;
     static constexpr size_t MAX_PROCESSING_COUNT = 1023;
     static constexpr TDuration VACUUM_INTERVAL = TDuration::Seconds(1);
+
+    struct TParentPartitionExternalLockInfo;
 
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need
@@ -130,6 +133,7 @@ public:
         void MoveToSlow(ui64 offset);
         void DeleteFromSlow(ui64 offset);
         void SetPurged();
+        void SetUpdateExternalLockedMessageGroupsId(ui32 parentPartitionId);
 
         void Compacted(size_t count);
         void MoveBaseTime(TInstant baseDeadline, TInstant baseWriteTimestamp);
@@ -145,14 +149,21 @@ public:
         std::vector<ui64> DeletedFromSlowZone;
         size_t CompactedMessages = 0;
         bool Purged = false;
+        absl::flat_hash_set<ui32> UpdateExternalLockedMessageGroupsId;
 
         std::optional<TInstant> BaseDeadline;
         std::optional<TInstant> BaseWriteTimestamp;
     };
 
-    TStorage(TIntrusivePtr<ITimeProvider> timeProvider, size_t minMessages = MIN_MESSAGES, size_t maxMessages = MAX_MESSAGES);
+    struct TStorageSettings {
+        size_t MinMessages = MIN_MESSAGES;
+        size_t MaxMessages = MAX_MESSAGES;
+        bool KeepMessageOrder = false;
+        std::vector<ui32> ParentPartitionId; // 0 - root, 1 - merge, 2 - split
+    };
 
-    void SetKeepMessageOrder(bool keepMessageOrder);
+    explicit TStorage(TIntrusivePtr<ITimeProvider> timeProvider, const TStorageSettings& settings);
+
     void SetMaxMessageProcessingCount(ui32 MaxMessageProcessingCount);
     void SetRetentionPeriod(std::optional<TDuration> retentionPeriod);
     void SetDeadLetterPolicy(std::optional<NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy> deadLetterPolicy);
@@ -172,6 +183,8 @@ public:
     void InitMetrics();
     bool HasRetentionExpiredMessages() const;
     bool GetKeepMessageOrder() const;
+    bool HasUnlockedMessageGroupsId() const;
+    NKikimrPQ::EReadWithKeepOrder ReadWithKeepOrder() const;
 
     struct TPosition {
         std::optional<std::map<ui64, TMessage>::iterator> SlowPosition;
@@ -181,7 +194,7 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    std::optional<ui64> Next(TInstant deadline, TPosition& position);
+    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position);
     bool Commit(ui64 message);
     bool Unlock(ui64 message);
     // For SQS compatibility
@@ -191,6 +204,14 @@ public:
     bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
+    struct TUpdateExternalLockedMessageGroupsResult {
+        bool Applied : 1 = false;
+        bool Invalid : 1 = false;
+        bool VersionChanged : 1 = false;
+        bool ModeChanged : 1 = false;
+        bool SetChanged : 1 = false;
+    };
+    TUpdateExternalLockedMessageGroupsResult UpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&);
 
     size_t ProccessDeadlines();
     size_t Compact();
@@ -202,6 +223,7 @@ public:
     bool Initialize(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool SerializeTo(NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool ApplyWAL(const NKikimrPQ::TMLPStorageWAL&);
+    void SerializeFullExternalLockedMessageGroupsIdTo(NKikimrPQ::TExternalLockedMessageGroupsId& msg, const TParentPartitionExternalLockInfo& info) const;
 
     const TMetrics& GetMetrics() const;
 
@@ -222,6 +244,8 @@ private:
     bool DoUnlock(ui64 offset);
     void DoUnlock(ui64 offset, TMessage& message);
     bool DoUndelay(ui64 offset);
+    TUpdateExternalLockedMessageGroupsResult DoUpdateExternalLockedMessageGroupsId(const NKikimrPQ::TExternalLockedMessageGroupsId&, bool loadState);
+    bool CanReadMessageGroupIdHash(ui32 messageGroupIdHash) const;
 
     void UpdateFirstUncommittedOffset();
 
@@ -259,6 +283,15 @@ private:
     std::deque<TDLQMessage> DLQQueue;
     // offset->seqNo
     absl::flat_hash_map<ui64, ui64> DLQMessages;
+
+    struct TParentPartitionExternalLockInfo {
+        ui32 PartitionId = 0;
+        NKikimrPQ::EReadWithKeepOrder ReadWithKeepOrder = NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL;
+        ui64 TabletGeneration = 0;
+        ui64 ConsumerGeneration = 0;
+        ui64 ConsumerStep = 0;
+    };
+    std::vector<TParentPartitionExternalLockInfo> ParentPartitionExternalLockInfo;
 
     TBatch Batch;
     TMetrics Metrics;

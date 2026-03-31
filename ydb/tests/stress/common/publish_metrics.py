@@ -1,13 +1,6 @@
-"""
-Module for collecting and publishing YDB stress test metrics.
+"""Collecting and publishing YDB stress test metrics."""
 
-Provides:
-- ErrorEvent: class for representing events (success/error)
-- MetricsPublisher: class for publishing metrics (file/server)
-- MetricsCollector: class for aggregating metrics in memory
-- Decorators: @report_*_exception for automatic tracking
-"""
-
+import atexit
 import time
 import functools
 import os
@@ -15,7 +8,7 @@ import sys
 import traceback
 import json
 import threading
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import requests
 
@@ -24,26 +17,13 @@ __event_process_mode = os.getenv('YDB_STRESS_UTIL_EVENT_PROCESS_MODE', None)
 
 
 def set_event_process_mode(mode):
-    """
-    Sets the event processing mode.
-
-    Args:
-        mode: 'send', 'save', 'both' or None
-    """
+    """Sets the event processing mode ('send', 'save', 'both' or None)."""
     global __event_process_mode
     __event_process_mode = mode
 
 
 class ErrorEvent:
-    """
-    Represents an event (success or error) in a stress test.
-
-    Attributes:
-        kind: Event type ('query', 'init', 'work', 'teardown', 'verify')
-        type: 'success' or error name ('PreconditionFailed', etc.)
-        stress_util_name: Workload name (e.g., 'streaming.workload')
-        operation: Operation name (optional, for query metrics)
-    """
+    """Represents a success or error event in a stress test."""
     kind: str = None
     type: str = None
     stress_util_name: str = None
@@ -51,43 +31,121 @@ class ErrorEvent:
 
 
 class MetricsPublisher:
-    """
-    Class for publishing metrics to file and/or server.
+    """Publishes metrics to file and/or server.
 
-    Supports three modes:
-    - 'send': send metrics to server
-    - 'save': save metrics to file
-    - 'both': both send and save
+    Events are buffered and flushed periodically using the timeseries field.
+    Timestamps are rounded to _TS_GRID_SECONDS to match the server aggregation window.
     """
+
+    _FLUSH_INTERVAL = 360  # seconds
+    _TS_GRID_SECONDS = 15  # timestamp rounding grid (matches monium aggregation window)
 
     def __init__(self, mode: str = None,
                  file_path: str = "error_events.json",
                  server_url: str = "http://localhost:3124/write"):
-        """
-        Initialize publisher.
-
-        Args:
-            mode: Operating mode ('send', 'save', 'both' or None)
-            file_path: Path to file for saving metrics
-            server_url: Server URL for sending metrics
-        """
         self.mode = mode
         self.file_path = file_path
         self.server_url = server_url
         self.save_lock = threading.Lock()
 
-    def publish(self, event: ErrorEvent):
-        """
-        Publishes event according to configured mode.
+        # Buffer for accumulating events before sending to server.
+        # Maps label-key -> {"labels": dict, "timeseries": {ts: count, ...}}
+        # Events are aggregated at write time: each _buffer_event() call
+        # increments the counter for the corresponding (label-key, ts) pair.
+        self._buffer_lock = threading.Lock()
+        self._buffer: dict[tuple, dict] = {}
 
-        Args:
-            event: Event to publish
-        """
+        self._flush_timer: Optional[threading.Timer] = None
+        self._stopped = False
+
+        if self.mode in ['send', 'both']:
+            self._schedule_flush()
+            atexit.register(self.stop)
+
+    def _schedule_flush(self):
+        """Schedules the next periodic flush."""
+        if self._stopped:
+            return
+        self._flush_timer = threading.Timer(self._FLUSH_INTERVAL, self._periodic_flush)
+        self._flush_timer.daemon = True
+        self._flush_timer.start()
+
+    def _periodic_flush(self):
+        """Called by the timer to flush buffered events and reschedule."""
+        try:
+            self.flush()
+        except Exception:
+            print(f"Error during periodic flush: {traceback.format_exc()}",
+                  file=sys.stderr)
+        finally:
+            self._schedule_flush()
+
+    def flush(self):
+        """Flushes all buffered events to the metrics server."""
+        with self._buffer_lock:
+            if not self._buffer:
+                return
+            buffer_snapshot = self._buffer
+            self._buffer = {}
+
+        try:
+            self._send_buffer_to_server(buffer_snapshot)
+        except Exception:
+            print(f"Error: Could not flush events: {traceback.format_exc()}",
+                  file=sys.stderr)
+
+    def stop(self):
+        """Stops the flush timer and flushes remaining events."""
+        self._stopped = True
+        if self._flush_timer is not None:
+            self._flush_timer.cancel()
+            self._flush_timer = None
+        self.flush()
+
+    @staticmethod
+    def _make_labels(event: ErrorEvent) -> dict:
+        """Creates labels dict from an event."""
+        labels = {
+            "sensor": "test_metric",
+            "name": "stress_util_error",
+            "stress_util": event.stress_util_name,
+            "type": event.type,
+            "kind": event.kind,
+        }
+
+        if event.operation:
+            labels['operation'] = event.operation
+
+        return labels
+
+    @staticmethod
+    def _labels_key(labels: dict) -> tuple:
+        """Creates a hashable key from labels dict for aggregation."""
+        return tuple(sorted(labels.items()))
+
+    def _buffer_event(self, event: ErrorEvent):
+        """Adds an event to the buffer, aggregating by labels and rounded timestamp."""
+        labels = self._make_labels(event)
+        key = self._labels_key(labels)
+        ts = int(time.time())
+        ts = ts - (ts % self._TS_GRID_SECONDS)
+
+        with self._buffer_lock:
+            if key not in self._buffer:
+                self._buffer[key] = {
+                    "labels": labels,
+                    "timeseries": {},
+                }
+            ts_map = self._buffer[key]["timeseries"]
+            ts_map[ts] = ts_map.get(ts, 0) + 1
+
+    def publish(self, event: ErrorEvent):
+        """Publishes a single event (buffered for server, immediate for file)."""
         if self.mode in ['send', 'both']:
             try:
-                self._send_to_server(event)
+                self._buffer_event(event)
             except Exception:
-                print(f"Error: Could not send event: {traceback.format_exc()}",
+                print(f"Error: Could not buffer event: {traceback.format_exc()}",
                       file=sys.stderr)
 
         if self.mode in ['save', 'both']:
@@ -98,20 +156,16 @@ class MetricsPublisher:
                       file=sys.stderr)
 
     def publish_many(self, events: list[ErrorEvent]):
-        """
-        Publishes multiple events according to configured mode.
-
-        Args:
-            events: List of events to publish
-        """
+        """Publishes multiple events (buffered for server, immediate for file)."""
         if not events:
             return
 
         if self.mode in ['send', 'both']:
             try:
-                self._send_to_server_many(events)
+                for event in events:
+                    self._buffer_event(event)
             except Exception:
-                print(f"Error: Could not send events: {traceback.format_exc()}",
+                print(f"Error: Could not buffer events: {traceback.format_exc()}",
                       file=sys.stderr)
 
         if self.mode in ['save', 'both']:
@@ -122,7 +176,7 @@ class MetricsPublisher:
                       file=sys.stderr)
 
     def _save_to_file(self, event: ErrorEvent):
-        """Saves event to file."""
+        """Saves a single event to file."""
         event_data = {
             "timestamp": time.time(),
             "kind": event.kind,
@@ -130,7 +184,7 @@ class MetricsPublisher:
             "stress_util_name": event.stress_util_name,
         }
 
-        if hasattr(event, 'operation') and event.operation:
+        if event.operation:
             event_data['operation'] = event.operation
 
         with self.save_lock:
@@ -138,79 +192,21 @@ class MetricsPublisher:
                 json.dump(event_data, f)
                 f.write('\n')
 
-    def _send_to_server(self, event: ErrorEvent):
-        """Sends event to metrics server."""
-        labels = {
-            "sensor": "test_metric",
-            "name": "stress_util_error",
-            "stress_util": event.stress_util_name,
-            "type": event.type,
-            "kind": event.kind,
-        }
-
-        if hasattr(event, 'operation') and event.operation:
-            labels['operation'] = event.operation
-
-        payload = {
-            "metrics": [
-                {
-                    "labels": labels,
-                    "value": 1
-                }
-            ]
-        }
-
-        headers = {'Content-Type': 'application/json'}
-        try:
-            response = requests.post(self.server_url, json=payload,
-                                     headers=headers, timeout=5)
-            response.raise_for_status()
-        except requests.exceptions.ConnectionError:
-            print(f"Error: Could not connect to {self.server_url}. "
-                  f"Is the server running?", file=sys.stderr)
-        except requests.exceptions.Timeout:
-            print(f"Error: Request to {self.server_url} timed out.",
-                  file=sys.stderr)
-        except requests.exceptions.HTTPError as err:
-            print(f"HTTP Error: {err}", file=sys.stderr)
-        except requests.exceptions.RequestException as err:
-            print(f"An error occurred: {err}", file=sys.stderr)
-
-    def _send_to_server_many(self, events: list[ErrorEvent]):
-        """Sends multiple events to metrics server in a single request."""
-        # Aggregate events by their labels
-        aggregated_metrics = {}
-
-        for event in events:
-            labels = {
-                "sensor": "test_metric",
-                "name": "stress_util_error",
-                "stress_util": event.stress_util_name,
-                "type": event.type,
-                "kind": event.kind,
-            }
-
-            if hasattr(event, 'operation') and event.operation:
-                labels['operation'] = event.operation
-
-            # Create a unique key for aggregation
-            key = tuple(sorted(labels.items()))
-
-            if key not in aggregated_metrics:
-                aggregated_metrics[key] = {
-                    "labels": labels,
-                    "count": 0
-                }
-
-            aggregated_metrics[key]["count"] += 1
-
-        # Convert aggregated metrics to the required format
+    def _send_buffer_to_server(self, buffer: dict[tuple, dict]):
+        """Sends pre-aggregated buffered events to the metrics server."""
         metrics = []
-        for metric_data in aggregated_metrics.values():
+        for metric_data in buffer.values():
+            # timeseries is already a {ts: count} dict, aggregated at write time
+            ts_map = metric_data["timeseries"]
+            timeseries = [{"ts": ts, "value": count}
+                          for ts, count in sorted(ts_map.items())]
+
+            # Always use timeseries format to avoid overwriting values
+            # with identical timestamps across consecutive flushes.
+            # The timeseries field is mutually exclusive with ts/value.
             metrics.append({
                 "labels": metric_data["labels"],
-                "ts": int(time.time()),
-                "value": metric_data["count"]
+                "timeseries": timeseries,
             })
 
         payload = {"metrics": metrics}
@@ -243,7 +239,7 @@ class MetricsPublisher:
                         "stress_util_name": event.stress_util_name,
                     }
 
-                    if hasattr(event, 'operation') and event.operation:
+                    if event.operation:
                         event_data['operation'] = event.operation
 
                     json.dump(event_data, f)
@@ -259,20 +255,9 @@ def get_metrics_publisher() -> MetricsPublisher:
 
 
 class MetricsCollector:
-    """
-    Collector for aggregating metrics in memory and publishing them.
-
-    Collects statistics for all operations and can publish
-    events through MetricsPublisher.
-    """
+    """Aggregates metrics in memory and publishes events through MetricsPublisher."""
 
     def __init__(self, publisher: MetricsPublisher = None):
-        """
-        Initialize collector.
-
-        Args:
-            publisher: Publisher for publishing events (optional)
-        """
         self.lock = threading.Lock()
         self.metrics = {
             'total_queries': 0,
@@ -284,16 +269,7 @@ class MetricsCollector:
         self.publisher = publisher or _global_publisher
 
     def wrap_call(self, method: Callable, operation_name: str, stress_util_name: str) -> Any:
-        """
-        Wrapper for instrumenting call with automatic metrics collection.
-
-        Args:
-            method: Method to call
-            operation_name: Operation name for metrics
-
-        Returns:
-            Method execution result
-        """
+        """Calls method and records success/failure metrics."""
         success = True
         error_type = None
 
@@ -314,15 +290,7 @@ class MetricsCollector:
 
     def record_query(self, operation: str, success: bool, error_type: str = None,
                      stress_util_name: str = None):
-        """
-        Records query execution result.
-
-        Args:
-            operation: Operation name (e.g., 'create_table', 'insert_data')
-            success: True if operation succeeded, False if error
-            error_type: Error type (e.g., 'PreconditionFailed')
-            stress_util_name: Workload name
-        """
+        """Records a query result and publishes an event."""
         with self.lock:
             self.metrics['total_queries'] += 1
 
@@ -392,11 +360,7 @@ def get_metrics_collector() -> MetricsCollector:
 
 
 class report_exception(object):
-    """
-    Standalone decorator class for tracking function success/errors.
-    Automatically publishes events through MetricsPublisher.
-    Can be used directly to decorate functions or methods.
-    """
+    """Decorator that publishes success/error events for the wrapped function."""
 
     def __init__(self, func, event_kind='general', publisher: MetricsPublisher = None):
         self.kind = event_kind

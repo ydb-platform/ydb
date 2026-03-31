@@ -208,6 +208,7 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
+    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
 }
 
 message TSplitBoundary {
@@ -360,10 +361,6 @@ message TTableDescription {
     optional uint64 CoordinatedSchemaVersion = 49;
 }
 
-message TDictionaryEncodingSettings {
-   optional bool Enabled = 1;
-}
-
 message TCompressionOptions {
     optional EColumnCodec Codec = 2; // LZ4 (in arrow LZ4_FRAME variant) if not set
     optional int32 Level = 3; // Use default compression level if not set (0 != not set)
@@ -381,7 +378,7 @@ message TOlapColumn {
 
 message TOlapColumnDiff {
     optional string Name = 1;
-    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
+    reserved 4;
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
@@ -402,7 +399,7 @@ message TOlapColumnDescription {
     optional bool NotNull = 7;
 
     optional TCompressionOptions Compression = 8 [deprecated = true];
-    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
+    reserved 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
@@ -954,11 +951,11 @@ message TColumnTableDescription {
 
     // For kqp internal use only
     optional bool Temporary = 14;
-    
+
     optional bool IsRestore = 15;
-    
+
     optional string CopyFromTable = 16;
-    
+
     optional bool IsBackup = 17;
 }
 
@@ -1308,6 +1305,10 @@ message TFinalizeBuildIndexMainTable {
     optional uint64 SnapshotTxId = 2;
     optional uint64 BuildIndexId = 3;
     optional TBuildIndexOutcome Outcome = 4;
+}
+
+message TPrepareIndexValidation {
+    optional string TableName = 1;
 }
 
 message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way
@@ -1819,32 +1820,6 @@ message TSetColumnConstraintSettings {
     optional EConstraint Constraint = 2;
 }
 
-message TSetColumnConstraintsInitiate {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsLock {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsCheck {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsFinalize {
-    enum EStatus {
-        SUCCESS = 0;
-        COLUMN_CONSTRAINT_VIOLATION = 1;
-    }
-
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-    optional EStatus Status = 3;
-}
-
 // End Set Column Constraints
 
 // Request for scheme modification
@@ -1963,7 +1938,7 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
+    reserved 87;
 
     // Secret
     optional TSecretSchemaOp CreateSecret = 88;
@@ -1976,6 +1951,8 @@ message TModifyScheme {
     // but in the future it may have an indirect impact on the schema,
     // for example, by resetting all sequences.
     optional TTruncateTable TruncateTable = 92;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }

@@ -46,7 +46,7 @@ If the table is at the top level of the hierarchy (not belonging to any director
 SELECT * FROM ydb_datasource.<table_name>
 ```
 
-## Limitations
+## Limitations {#limitations}
 
 There are several limitations when working with external {{ ydb-short-name }} data sources:
 

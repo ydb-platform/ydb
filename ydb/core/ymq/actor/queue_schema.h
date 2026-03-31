@@ -232,6 +232,7 @@ public:
         EraseQueueRecord,
         RemoveTables,
         RemoveShards,
+        RemoveTopic,
         RemoveQueueVersionDirectory,
         RemoveQueueDirectory,
         DeleteQuoterResource,

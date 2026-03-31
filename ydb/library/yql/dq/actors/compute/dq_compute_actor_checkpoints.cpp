@@ -448,6 +448,7 @@ void TDqComputeActorCheckpoints::DoCheckpoint() {
     if (SaveState()) {
         LOG_PCP_T("Injecting checkpoint barrier to outputs");
         ComputeActor->InjectBarrierToOutputs(*PendingCheckpoint.Checkpoint);
+        ComputeActor->ResumeInputsByCheckpoint();
         TryToSavePendingCheckpoint();
     }
 }
@@ -536,7 +537,7 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
         LOG_PCP_D("Task checkpoint is done. Send to storage");
         PendingCheckpoint.Clear();
         SavingToDatabase = true;
-       // ComputeActor->ResumeExecution(EResumeSource::CheckpointInject);
+        ComputeActor->ResumeExecution(EResumeSource::CheckpointInject);
     }
 }
 

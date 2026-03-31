@@ -909,13 +909,12 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         TString userSID;
         TString userTraceId;
 
-        auto userCtx = record.GetUserCtx();
-        if (userCtx != nullptr) {
+        if (auto userCtx = record.GetUserCtx(); userCtx != nullptr) {
             userSID = userCtx->GetUserSID();
             if (userCtx->GetUserTraceId()) {
                 NActorsProto::TTraceId serializedTraceId;
                 userCtx->GetUserTraceId().Serialize(&serializedTraceId);
-                userTraceId = serializedTraceId.data();
+                userTraceId = serializedTraceId.GetData();
             }
         } else {
             userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;

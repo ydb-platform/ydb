@@ -1,7 +1,7 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: YqlSelect unsupported: GROUP BY aliases */
 PRAGMA YqlSelect = 'force';
+PRAGMA YqlSelectAllowUnnamedGroupByExpr;
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT

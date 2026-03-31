@@ -629,20 +629,42 @@ TMaybe<bool> ScanExprForMatchedGroup(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode& groups, TExprContext& ctx, bool isYql) {
-    // calculate hashes
-    TVector<TGroupExpr> exprs;
-    TExprNode::TListType typeNodes;
-    for (ui32 index = 0; index < groups.ChildrenSize(); ++index) {
-        const auto& g = *groups.Child(index);
-        const auto& lambda = g.Tail();
+TVector<TExprNode::TPtr> InferSqlGroupRefTypes(
+    const TExprNode& groupExprs,
+    const TExprNode& groupSets,
+    TExprContext& ctx,
+    bool isYql)
+{
+    if (isYql) {
+        return InferYqlGroupRefTypes(groupExprs, groupSets, ctx);
+    }
+
+    return InferPgGroupRefTypes(groupExprs, ctx);
+}
+
+TExprNode::TPtr ReplaceGroupByExpr(
+    const TExprNode::TPtr& root,
+    const TExprNode& groupExprs,
+    const TExprNode& groupSets,
+    TExprContext& ctx,
+    bool isYql)
+{
+    TVector<TExprNode::TPtr> types = InferSqlGroupRefTypes(groupExprs, groupSets, ctx, isYql);
+    YQL_ENSURE(types.size() == groupExprs.ChildrenSize());
+
+    TVector<TGroupExpr> exprs(Reserve(groupExprs.ChildrenSize()));
+    for (ui32 index = 0; index < groupExprs.ChildrenSize(); ++index) {
+        const auto& lambda = groupExprs.Child(index)->Tail();
+
         TNodeMap<ui64> visited;
         visited[&lambda.Head().Head()] = 0;
+        ui64 hash = CalculateExprHash(lambda.Tail(), visited);
+
         exprs.push_back({
-            lambda.TailPtr(),
-            CalculateExprHash(lambda.Tail(), visited),
-            ExpandType(g.Pos(), *lambda.GetTypeAnn(), ctx)
-            });
+            .OriginalRoot = lambda.TailPtr(),
+            .Hash = hash,
+            .TypeNode = std::move(types[index]),
+        });
     }
 
     TNodeOnNodeOwnedMap replaces;
@@ -1239,6 +1261,7 @@ bool ValidateGroups(
     bool scanColumnsOnly,
     bool allowAggregates,
     const TExprNode::TPtr& groupExprs,
+    const TExprNode::TPtr& groupSets,
     const TStringBuf& scope,
     const TProjectionOrders* projectionOrders,
     const TExprNode::TPtr& projection,
@@ -1336,7 +1359,7 @@ bool ValidateGroups(
         }
 
         if (groupExprs) {
-            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
             if (!ret) {
                 return false;
             }
@@ -1364,6 +1387,7 @@ bool ValidateSort(
     TExprNode::TListType& newSorts,
     bool scanColumnsOnly,
     const TExprNode::TPtr& groupExprs,
+    const TExprNode::TPtr& groupSets,
     const TStringBuf& scope,
     const TProjectionOrders* projectionOrders,
     const TExprNode::TPtr& projection,
@@ -1466,7 +1490,9 @@ bool ValidateSort(
         }
 
         if (groupExprs) {
-            auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), ctx.Expr, isYql);
+            YQL_ENSURE(groupSets);
+
+            auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
             if (!ret) {
                 return false;
             }
@@ -2333,6 +2359,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
         bool hasEmitPgStar = false;
         bool hasUnknownsAllowed = false;
         TExprNode::TPtr groupExprs;
+        TExprNode::TPtr groupSets;
         TExprNode::TPtr result;
         bool isUsing = false;
         THashMap<TString, TString> repeatedColumnsInUsing;
@@ -2813,7 +2840,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             bool hasChanges = false;
                             for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
                                 const auto& column = *data.Child(index);
-                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                                 if (!ret) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
@@ -3127,7 +3154,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     }
 
                     if (!scanColumnsOnly && optionName == "having" && groupExprs) {
-                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), ctx.Expr, isYql);
+                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), groupSets->Tail(), ctx.Expr, isYql);
                         if (!ret) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -3473,7 +3500,25 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TExprNode::TListType newGroups;
                     bool hasNewGroups = false;
                     bool isUniversal;
-                    if (!ValidateGroups(joinInputs, possibleAliases, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "GROUP BY", &projectionOrders, GetSetting(options, "result"), result, isYql, repeatedColumnsInUsing, isUniversal)) {
+                    if (!ValidateGroups(
+                        joinInputs,
+                        possibleAliases,
+                        data,
+                        ctx,
+                        newGroups,
+                        hasNewGroups,
+                        scanColumnsOnly,
+                        /*allowAggregates=*/false,
+                        /*groupExprs=*/nullptr,
+                        /*groupSets=*/nullptr,
+                        "GROUP BY",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        result,
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3536,7 +3581,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         continue;
                     }
 
-                    groupExprs = option;
+                    groupSets = option;
                     if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3602,7 +3647,25 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         TExprNode::TListType newGroups;
                         bool hasNewGroups = false;
                         bool isUniversal;
-                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs, "", nullptr, nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                        if (!ValidateGroups(
+                            joinInputs,
+                            possibleAliases,
+                            *partitions,
+                            ctx,
+                            newGroups,
+                            hasNewGroups,
+                            scanColumnsOnly,
+                            /*allowAggregates=*/true,
+                            groupExprs,
+                            groupSets,
+                            /*scope=*/"",
+                            /*projectionOrders=*/nullptr,
+                            /*projection=*/nullptr,
+                            /*result=*/nullptr,
+                            isYql,
+                            repeatedColumnsInUsing,
+                            isUniversal))
+                        {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3615,7 +3678,24 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
 
                         bool hasNewSort = false;
                         TExprNode::TListType newSorts;
-                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupExprs, "", nullptr, nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                        if (!ValidateSort(
+                            joinInputs,
+                            joinInputs,
+                            possibleAliases,
+                            *sort,
+                            ctx,
+                            hasNewSort,
+                            newSorts,
+                            scanColumnsOnly,
+                            groupExprs,
+                            groupSets,
+                            /*scope=*/"",
+                            /*projectionOrders=*/nullptr,
+                            /*projection=*/nullptr,
+                            isYql,
+                            repeatedColumnsInUsing,
+                            isUniversal))
+                        {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3677,7 +3757,25 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     TExprNode::TListType newGroups;
                     TInputs projectionInputs;
                     projectionInputs.push_back(TInput{ .Alias="", .Type=outputRowType, .Order=Nothing(), .Priority=TInput::Projection, .UsedExternalColumns={} });
-                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups, hasNewGroups, scanColumnsOnly, false, nullptr, "DISTINCT ON", &projectionOrders, GetSetting(options, "result"), nullptr, isYql, repeatedColumnsInUsing, isUniversal)) {
+                    if (!ValidateGroups(
+                        projectionInputs,
+                        /*possibleAliases=*/{},
+                        data,
+                        ctx,
+                        newGroups,
+                        hasNewGroups,
+                        scanColumnsOnly,
+                        /*allowAggregates=*/false,
+                        /*groupExprs=*/nullptr,
+                        /*groupSets=*/nullptr,
+                        "DISTINCT ON",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        /*result=*/nullptr,
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3722,9 +3820,24 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     bool isUniversal;
                     TExprNode::TListType newSortTupleItems;
                     // no effective types yet, scan lambda bodies
-                    if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, hasNewSort, newSortTupleItems,
-                        scanColumnsOnly, groupExprs, "ORDER BY", &projectionOrders, GetSetting(options, "result"), isYql, repeatedColumnsInUsing,
-                        isUniversal)) {
+                    if (!ValidateSort(
+                        projectionInputs,
+                        joinInputs,
+                        possibleAliases,
+                        data,
+                        ctx,
+                        hasNewSort,
+                        newSortTupleItems,
+                        scanColumnsOnly,
+                        groupExprs,
+                        groupSets,
+                        "ORDER BY",
+                        &projectionOrders,
+                        GetSetting(options, "result"),
+                        isYql,
+                        repeatedColumnsInUsing,
+                        isUniversal))
+                    {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -4394,8 +4507,24 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         }
 
         bool isUniversal;
-        if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, hasNewSort, newSortTupleItems, false, nullptr, "ORDER BY", &projectionOrders, nullptr, isYql,
-            {}, isUniversal)) {
+        if (!ValidateSort(
+            /*inputs=*/projectionInputs,
+            /*subLinkInputs=*/projectionInputs,
+            /*possibleAliases=*/{},
+            /*data=*/data,
+            /*ctx=*/ctx,
+            /*hasNewSort=*/hasNewSort,
+            /*newSorts=*/newSortTupleItems,
+            /*scanColumnsOnly=*/false,
+            /*groupExprs=*/nullptr,
+            /*groupSets=*/nullptr,
+            /*scope=*/"ORDER BY",
+            /*projectionOrders=*/&projectionOrders,
+            /*projection=*/nullptr,
+            /*isYql=*/isYql,
+            /*usedInUsing=*/{},
+            /*isUniversal=*/isUniversal))
+        {
             return IGraphTransformer::TStatus::Error;
         }
 

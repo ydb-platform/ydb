@@ -2459,7 +2459,8 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
-            code == NChaosClient::EErrorCode::ShortcutRevoked;
+            code == NChaosClient::EErrorCode::ShortcutRevoked ||
+            code == NChaosClient::EErrorCode::ChaosCellIsNotEnabled;
     }));
 }
 

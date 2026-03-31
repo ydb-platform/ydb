@@ -207,7 +207,7 @@ void THazardPointerManager::RetireHazardPointer(
     THazardPtrReclaimer reclaimer)
 {
     auto* threadState = HazardThreadState();
-    if (Y_UNLIKELY(!threadState)) {
+    if (!threadState) [[unlikely]] {
         if (HazardThreadStateDestroyed()) {
             // Looks like a global shutdown.
             reclaimer(reclaimPtr);

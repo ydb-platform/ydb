@@ -6,6 +6,10 @@
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
+#include <yt/yt/core/http/public.h>
+
+#include <mutex>
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -404,7 +408,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    void InitPingClient();
+
+private:
     const TClientContext Context_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

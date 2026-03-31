@@ -83,7 +83,7 @@ bool TSkiffTableReader::IsValid() const
 void TSkiffTableReader::Next()
 {
     EnsureValidity();
-    if (Y_UNLIKELY(Finished_ || !Parser_->HasMoreData())) {
+    if (Finished_ || !Parser_->HasMoreData()) [[unlikely]] {
         Finished_ = true;
         Valid_ = false;
         return;

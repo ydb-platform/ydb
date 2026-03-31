@@ -104,7 +104,7 @@ THazardPtr<T> THazardPtr<T>::Acquire(TPtrLoader&& ptrLoader, T* ptr)
         YT_ABORT();
     }();
 
-    if (Y_UNLIKELY(!NYT::NDetail::HazardThreadState())) {
+    if (!NYT::NDetail::HazardThreadState()) [[unlikely]] {
         NYT::NDetail::InitHazardThreadState();
     }
 

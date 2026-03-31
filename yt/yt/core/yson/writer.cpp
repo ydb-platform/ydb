@@ -386,7 +386,7 @@ Y_FORCE_INLINE void TBufferedBinaryYsonWriter::BeginCollection()
 
 Y_FORCE_INLINE void TBufferedBinaryYsonWriter::EndNode()
 {
-    if (Y_LIKELY(Type_ != EYsonType::Node || Depth_ > 0)) {
+    if (Type_ != EYsonType::Node || Depth_ > 0) [[likely]] {
         TokenWriter_->WriteItemSeparator();
     }
 }

@@ -37,8 +37,26 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TGroupingSets {
+    struct TRollup {
+        TVector<TNodePtr> Expressions;
+    };
+
+    struct TCube {
+        TVector<TNodePtr> Expressions;
+    };
+
+    TVector<TVector<TNodePtr>> Sets;
+};
+
 struct TGroupBy {
-    TVector<TNodePtr> Keys;
+    using TElement = std::variant<
+        /* Ordinary */ TNodePtr,
+        TGroupingSets,
+        TGroupingSets::TRollup,
+        TGroupingSets::TCube>;
+
+    TVector<TElement> Elements;
 };
 
 struct TOrderBy {

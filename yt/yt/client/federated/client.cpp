@@ -289,7 +289,7 @@ public:
         const std::vector<IClientPtr>& underlyingClients,
         TFederationConfigPtr config);
 
-    void Initialize() const;
+    void InitializeRefCounted();
 
     TFuture<TUnversionedLookupRowsResult> LookupRows(
         const NYPath::TYPath& path,
@@ -656,7 +656,7 @@ TClient::TClient(const std::vector<IClientPtr>& underlyingClients, TFederationCo
     ActiveClientIndex_ = 0;
 }
 
-void TClient::Initialize() const
+void TClient::InitializeRefCounted()
 {
     Executor_->Start();
 }
@@ -872,12 +872,9 @@ IClientPtr CreateClient(
     std::vector<NApi::IClientPtr> clients,
     TFederationConfigPtr config)
 {
-    auto federatedClient = New<TClient>(
+    return New<TClient>(
         std::move(clients),
         std::move(config));
-    federatedClient->Initialize();
-
-    return federatedClient;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

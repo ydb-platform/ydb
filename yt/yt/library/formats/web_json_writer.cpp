@@ -514,6 +514,8 @@ public:
     TFuture<void> GetReadyEvent() override;
     TBlob GetContext() const override;
     i64 GetWrittenSize() const override;
+    i64 GetEncodedRowBatchCount() const override;
+    i64 GetEncodedColumnarBatchCount() const override;
     TFuture<void> Close() override;
     TFuture<void> Flush() override;
     std::optional<TRowsDigest> GetDigest() const override;
@@ -616,6 +618,18 @@ template <typename TValueWriter>
 i64 TWriterForWebJson<TValueWriter>::GetWrittenSize() const
 {
     return static_cast<i64>(Output_.Counter());
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedRowBatchCount() const
+{
+    return 0;
+}
+
+template <typename TValueWriter>
+i64 TWriterForWebJson<TValueWriter>::GetEncodedColumnarBatchCount() const
+{
+    return 0;
 }
 
 template <typename TValueWriter>

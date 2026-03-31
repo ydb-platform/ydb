@@ -20,7 +20,7 @@ struct TCertProfiler
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IBusServerPtr CreatePublicTcpBusServer(
+IBusServerPtr CreateRemoteTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory = GetYTPacketTranscoderFactory(),
     IMemoryUsageTrackerPtr memoryUsageTracker = GetNullMemoryUsageTracker(),

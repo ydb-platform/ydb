@@ -114,7 +114,7 @@ public:
 protected:
     IOutputStream* GetOutputStream() const noexcept override
     {
-        if (Y_UNLIKELY(Disabled_.load(std::memory_order::acquire))) {
+        if (Disabled_.load(std::memory_order::acquire)) [[unlikely]] {
             return nullptr;
         }
         return OutputStream_.Get();

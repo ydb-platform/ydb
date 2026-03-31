@@ -2764,6 +2764,7 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
             Ctx_.Error() << "Unexpected trailing comma in grouping elements list";
             return std::unexpected(ESQLError::Basic);
         }
+
         Ctx_.IncrementMonCounter("sql_features", "ListOfNamedNode");
         return Wrap(BuildListOfNamedNodes(pos, std::move(exprs)));
     }

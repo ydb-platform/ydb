@@ -2,7 +2,11 @@ UNITTEST_FOR(ydb/core/persqueue/pqtablet/partition/mlp)
 
 YQL_LAST_ABI_VERSION()
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(200)
+
 SIZE(MEDIUM)
+
 #TIMEOUT(30)
 
 SRCS(

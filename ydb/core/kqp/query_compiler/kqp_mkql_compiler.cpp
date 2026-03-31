@@ -537,7 +537,11 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
-            auto modeArg = MkqlBuildExpr(*node.Child(2), buildCtx);
+
+            auto modeNode = node.Child(2);
+            YQL_ENSURE(modeNode->IsAtom(), "FulltextAnalyze mode should be an atom");
+            ui32 modeValue = FromString<ui32>(modeNode->Content());
+            auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
 
             return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
         });

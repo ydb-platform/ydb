@@ -12,7 +12,7 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
 {
     TString settingsProto;
     TString textColumn;
-    TString mode;
+    ui32 mode = 0;  // 0 = plain fulltext, 1 = JSON index over Json, 2 = JSON index over JsonDocument
 
     if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
         YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
@@ -32,12 +32,10 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
         auto slot = unpackedType->Cast<TDataExprType>()->GetSlot();
         switch (slot) {
             case EDataSlot::Json:
-                // JI over Json
-                mode = "1";
+                mode = 1;
                 break;
             case EDataSlot::JsonDocument:
-                // JI over JsonDocument
-                mode = "2";
+                mode = 2;
                 break;
             default:
                 YQL_ENSURE(false, "Unexpected data slot for JSON index column");
@@ -53,9 +51,6 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
         textColumn = settings.columns().at(0).column();
         const auto& analyzers = settings.columns().at(0).analyzers();
 
-        // Plain fulltext index (no JSON index semantics)
-        mode = "0";
-
         // Serialize analyzer settings for FulltextAnalyze
         YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
     }
@@ -70,17 +65,15 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
         .Literal().Build(settingsProto)
         .Done();
 
-    auto modeLiteral = Build<TCoString>(ctx, pos)
-        .Literal().Build(mode)
-        .Done();
+    auto modeAtom = ctx.NewAtom(pos, ToString(mode));
 
     // Create callable for fulltext tokenization
-    // Format: FulltextAnalyze(text: String|Utf8|Json|JsonDocument, settings: String, mode: String) -> List<Struct<__ydb_token, __ydb_freq>>
+    // Format: FulltextAnalyze(text: String|Utf8|Json|JsonDocument, settings: String, mode: Atom) -> List<Struct<__ydb_token, __ydb_freq>>
     auto analyzeCallable = ctx.Builder(pos)
         .Callable("FulltextAnalyze")
             .Add(0, textMember.Ptr())
             .Add(1, settingsLiteral.Ptr())
-            .Add(2, modeLiteral.Ptr())
+            .Add(2, modeAtom)
         .Seal()
         .Build();
 

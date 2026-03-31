@@ -2021,20 +2021,9 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Third argument: Mode (should be String - "0" (any fulltext), "1" (JI on Json) or "2" (JI on JsonDocument))
+    // Third argument: mode (should be Atom - "0" (any fulltext), "1" (JI on Json) or "2" (JI on JsonDocument))
     const auto* modeArg = node->Child(2);
-    if (!EnsureComputable(*modeArg, ctx)) {
-        return TStatus::Error;
-    }
-
-    const TDataExprType* modeDataType;
-    if (!EnsureDataOrOptionalOfData(*modeArg, isOptional, modeDataType, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (modeDataType->GetSlot() != EDataSlot::String) {
-        ctx.AddError(TIssue(ctx.GetPosition(modeArg->Pos()), TStringBuilder()
-            << "Expected String for Mode argument, but got: " << *modeArg->GetTypeAnn()));
+    if (!EnsureAtom(*modeArg, ctx)) {
         return TStatus::Error;
     }
 

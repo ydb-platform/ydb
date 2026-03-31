@@ -111,15 +111,16 @@ public:
     }
 
     EMode GetMode(TComputationContext& ctx) const {
-        auto mode = ModeArg->GetValue(ctx);
-        if (mode.AsStringRef() == TStringBuf("0")) {
-            return EMode::Fulltext;
-        } else if (mode.AsStringRef() == TStringBuf("1")) {
-            return EMode::JsonIndexOverJson;
-        } else if (mode.AsStringRef() == TStringBuf("2")) {
-            return EMode::JsonIndexOverJsonDocument;
+        switch (ModeArg->GetValue(ctx).Get<ui32>()) {
+            case 0:
+                return EMode::Fulltext;
+            case 1:
+                return EMode::JsonIndexOverJson;
+            case 2:
+                return EMode::JsonIndexOverJsonDocument;
+            default:
+                MKQL_ENSURE(false, "Invalid FulltextAnalyze mode");
         }
-        return EMode::Fulltext;
     }
 
 private:

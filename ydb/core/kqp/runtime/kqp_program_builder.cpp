@@ -401,6 +401,12 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
     MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
 
+    // Validate mode argument - should be Uint32
+    const auto& modeType = mode.GetStaticType();
+    MKQL_ENSURE(modeType->IsData(), "Expected data type for mode.");
+    const auto& modeTypeData = static_cast<const TDataType&>(*modeType);
+    MKQL_ENSURE(modeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected Uint32 for mode.");
+
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);

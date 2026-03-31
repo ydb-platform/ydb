@@ -645,7 +645,7 @@ namespace NKikimr::NBsController {
 
         void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
             TStringStream str;
-            RenderMonPage(str, ev->Cookie);
+            RenderMonPage(str, ev->Cookie, ev->Get()->GetCookie("csrf_token"));
             Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         }
 
@@ -745,7 +745,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void RenderMonPage(IOutputStream& out, bool selfHealEnabled) {
+        void RenderMonPage(IOutputStream& out, bool selfHealEnabled, const TString& csrfToken = {}) {
             HTML(out) {
                 TAG(TH2) {
                     out << "BlobStorage Controller";
@@ -763,6 +763,18 @@ namespace NKikimr::NBsController {
                             out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl;
                             out << "<input type='hidden' name='disable' value='1'>" << Endl;
                             out << "<input type='hidden' name='action' value='disableSelfHeal'>" << Endl;
+                            out << "<input type='hidden' name='csrf_token' value='";
+                            for (char c : csrfToken) {
+                                switch (c) {
+                                    case '&': out << "&amp;"; break;
+                                    case '<': out << "&lt;"; break;
+                                    case '>': out << "&gt;"; break;
+                                    case '\'': out << "&#39;"; break;
+                                    case '"': out << "&quot;"; break;
+                                    default: out << c; break;
+                                }
+                            }
+                            out << "'>" << Endl;
                             out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
                             out << "</form>";
                         }

@@ -58,8 +58,10 @@ class TestViewer(object):
         cls.cluster.wait_tenant_up(cls.serverless_db, token=cls.root_token)
         cls.databases = [cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
         cls.databases_and_no_database = ['no-database', cls.domain_name, cls.dedicated_db, cls.shared_db, cls.serverless_db]
+        cls.csrf_token = 'test-csrf-token'
         cls.default_headers = {
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
+            'Cookie': 'ydb_session_id=' + cls.root_session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
         }
         cls.wait_for_cluster_ready()
         yield
@@ -68,6 +70,13 @@ class TestViewer(object):
     @classmethod
     def login_user(cls, request):
         return requests.post("http://localhost:%s/login" % cls.cluster.nodes[1].mon_port, json=request)
+
+    @classmethod
+    def make_cookie_headers(cls, session_id):
+        return {
+            'Cookie': 'ydb_session_id=' + session_id + '; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
+        }
 
     @classmethod
     def call_viewer_api_get(cls, url, headers=None):
@@ -836,7 +845,8 @@ class TestViewer(object):
             'database': cls.dedicated_db,
             'path': cls.dedicated_db
         }, headers={
-            'Cookie': 'ydb_session_id=XXX',
+            'Cookie': 'ydb_session_id=XXX; csrf_token=' + cls.csrf_token,
+            'X-CSRF-Token': cls.csrf_token,
         }, body={
             'AddAccess': [{
                 'Subject': 'userX',
@@ -1524,156 +1534,108 @@ class TestViewer(object):
         result['database_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['database_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['database_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['database_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'database': cls.dedicated_db,
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['cluster_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['cluster_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['cluster_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['cluster_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['storage_nodes_root'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['storage_nodes_monitoring'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['storage_nodes_viewer'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['storage_nodes_database'] = cls.get_viewer_normalized("/viewer/nodes", params={
             'fields_required': 'NodeId',
             'database': cls.dedicated_db,
             'type': 'storage',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['down_node_root'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.root_session_id))
         result['down_node_monitoring'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id))
         result['down_node_viewer'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id))
         result['down_node_database'] = cls.post_viewer("/tablets/app", params={
             'TabletID': '72057594037968897',
             'page': 'SetDown',
             'node': '1',
             'down': '0',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        })
+        }, headers=cls.make_cookie_headers(cls.database_session_id))
 
         result['restart_pdisk_root'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_database'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
 
         result['restart_pdisk_database_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.database_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.database_session_id)), ['debugMessage'])
         result['restart_pdisk_viewer_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.viewer_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.viewer_session_id)), ['debugMessage'])
         result['restart_pdisk_monitoring_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.monitoring_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.monitoring_session_id)), ['debugMessage'])
         result['restart_pdisk_root_force'] = cls.replace_values_by_key(cls.post_viewer("/pdisk/restart", body={
             'pdisk_id': '1-1',
             'force': '1',
-        }, headers={
-            'Cookie': 'ydb_session_id=' + cls.root_session_id,
-        }), ['debugMessage'])
+        }, headers=cls.make_cookie_headers(cls.root_session_id)), ['debugMessage'])
         return result
 
     @classmethod

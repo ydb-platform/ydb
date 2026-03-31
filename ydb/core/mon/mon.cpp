@@ -29,6 +29,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
 
+#include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
 namespace NActors {
@@ -73,6 +74,68 @@ IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const
             std::move(peerName)),
         IEventHandle::FlagTrackDelivery
     );
+}
+
+bool IsCsrfProtectedMethod(TStringBuf method) {
+    return method == "POST" || method == "PUT" || method == "DELETE" || method == "PATCH";
+}
+
+bool HasCsrfCookie(NHttp::THttpIncomingRequest* request) {
+    NHttp::THeaders headers(request->Headers);
+    NHttp::TCookies cookies(headers["Cookie"]);
+    return cookies.Has("csrf_token");
+}
+
+bool CheckCsrfToken(NHttp::THttpIncomingRequest* request) {
+    if (!IsCsrfProtectedMethod(request->Method)) {
+        return true;
+    }
+    NHttp::THeaders headers(request->Headers);
+    NHttp::TCookies cookies(headers["Cookie"]);
+    if (!cookies.Has("ydb_session_id")) {
+        // Not using cookie-based session — CSRF not applicable
+        // (e.g. API client with Authorization header, or csrf_token set by redirect).
+        return true;
+    }
+    TStringBuf cookieToken = cookies["csrf_token"];
+    if (cookieToken.empty()) {
+        // Cookie-based session but no csrf_token yet — reject.
+        return false;
+    }
+    TStringBuf headerToken = headers["X-CSRF-Token"];
+    if (cookieToken == headerToken) {
+        return true;
+    }
+    TCgiParameters params(request->Body);
+    TStringBuf formToken = params.Get("csrf_token");
+    return cookieToken == formToken;
+}
+
+NHttp::THttpOutgoingResponsePtr WithCsrfCookie(NHttp::THttpIncomingRequestPtr request, NHttp::THttpOutgoingResponsePtr response) {
+    if (!HasCsrfCookie(request.Get())) {
+        NHttp::THeadersBuilder extraHeaders;
+        extraHeaders.Set("Set-Cookie", TStringBuilder() << "csrf_token=" << CreateGuidAsString() << "; SameSite=Strict; Path=/");
+        return response->Duplicate(request, extraHeaders);
+    }
+    return response;
+}
+
+void ReplyCsrfError(const TActorContext& ctx, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+    NHttp::THttpIncomingRequestPtr request = ev->Get()->Request;
+    NHttp::THeaders requestHeaders(request->Headers);
+    TString origin = TString(requestHeaders["Origin"]);
+    if (origin.empty()) {
+        origin = "*";
+    }
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "application/json");
+    headers.Set("Access-Control-Allow-Origin", origin);
+    headers.Set("Access-Control-Allow-Credentials", "true");
+    headers.Set("Access-Control-Allow-Headers", "Content-Type,Authorization,Origin,Accept,X-CSRF-Token");
+    headers.Set("Access-Control-Allow-Methods", "OPTIONS,GET,POST,PUT,DELETE");
+    TString body = R"({"status":"FORBIDDEN","error":"CSRF token mismatch"})";
+    ctx.Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(
+        request->CreateResponse("403", "Forbidden", headers, body)));
 }
 
 } // namespace
@@ -378,6 +441,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        response = WithCsrfCookie(Event->Get()->Request, std::move(response));
         AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
@@ -410,7 +474,7 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,X-CSRF-Token,traceparent\r\n"
                     "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
                     "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
                     "Content-Type: " << type << "\r\n"
@@ -528,7 +592,14 @@ public:
         } else {
             ev->Get()->Output(Container);
         }
-        ReplyWith(Event->Get()->Request->CreateResponseString(Container.Str()));
+        auto response = Event->Get()->Request->CreateResponseString(Container.Str());
+        TString nonce = ev->Get()->GetNonce();
+        if (!nonce.empty()) {
+            NHttp::THeadersBuilder extraHeaders;
+            extraHeaders.Set("Content-Security-Policy", TStringBuilder() << "script-src 'nonce-" << nonce << "'");
+            response = response->Duplicate(Event->Get()->Request, extraHeaders);
+        }
+        ReplyWith(response);
         PassAway();
     }
 
@@ -1006,13 +1077,16 @@ protected:
 class THttpMonAuthorizedActorRequest : public TActorBootstrapped<THttpMonAuthorizedActorRequest> {
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
+    NHttp::THttpIncomingRequestPtr Request;
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
     NMonitoring::NAudit::TAuditCtx AuditCtx;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
+    bool CsrfCookieSet = false;
 
     THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
         : Event(std::move(event))
+        , Request(Event->Get()->Request)
         , Fields(fields)
         , Authorizer(std::move(authorizer))
     {}
@@ -1038,6 +1112,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        response = WithCsrfCookie(Event->Get()->Request, std::move(response));
         AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
@@ -1083,13 +1158,11 @@ public:
     }
 
     bool AcceptsJson() const {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        TStringBuf acceptHeader = NHttp::THeaders(request->Headers)["Accept"];
+        TStringBuf acceptHeader = NHttp::THeaders(Request->Headers)["Accept"];
         return acceptHeader.find("application/json") != TStringBuf::npos;
     }
 
     void ReplyErrorAndPassAway(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, bool addAccessControlHeaders) {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         TStringBuilder response;
         TStringBuilder body;
         TStringBuf contentType;
@@ -1112,7 +1185,7 @@ public:
 
         response << "HTTP/1.1 " << httpError << "\r\n";
         if (addAccessControlHeaders) {
-            NHttp::THeaders headers(request->Headers);
+            NHttp::THeaders headers(Request->Headers);
             TString origin = TString(headers["Origin"]);
             if (origin.empty()) {
                 origin = "*";
@@ -1127,7 +1200,7 @@ public:
         response << "Content-Length: " << body.size() << "\r\n";
         response << "\r\n";
         response << body;
-        ReplyWith(request->CreateResponseString(response));
+        ReplyWith(Request->CreateResponseString(response));
         PassAway();
     }
 
@@ -1138,13 +1211,12 @@ public:
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
+            ALOG_NOTICE(NActorsServices::HTTP, (Request->Address ? Request->Address->ToString() : "")
                 << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+                << " " << Request->Method
+                << " " << Request->URL);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1160,8 +1232,7 @@ public:
         if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
             return Cancelled();
         }
-        NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
-        ReplyWith(request->CreateResponseServiceUnavailable(
+        ReplyWith(Request->CreateResponseServiceUnavailable(
             TStringBuilder() << "Actor is not available"));
         PassAway();
     }
@@ -1191,8 +1262,13 @@ public:
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& ev) {
         bool endOfData = ev->Get()->Response->IsDone();
-        AuditCtx.LogOnCompleted(ev->Get()->Response);
-        Forward(ev, Event->Sender);
+        NHttp::THttpOutgoingResponsePtr response = ev->Get()->Response;
+        if (!CsrfCookieSet && endOfData) {
+            response = WithCsrfCookie(Request, std::move(response));
+            CsrfCookieSet = true;
+        }
+        AuditCtx.LogOnCompleted(response);
+        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response), ev->Flags, ev->Cookie);
         if (endOfData) {
             return PassAway();
         }
@@ -1263,6 +1339,7 @@ public:
     }
 
     void ReplyWith(NHttp::THttpOutgoingResponsePtr response) {
+        response = WithCsrfCookie(Event->Get()->Request, std::move(response));
         AuditCtx.LogOnCompleted(response);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
     }
@@ -1350,9 +1427,7 @@ public:
 
     void ProcessRequest() {
         Container.Page->Output(Container);
-        NHttp::THttpOutgoingResponsePtr response = Event->Get()->Request->CreateResponseString(Container.Str());
-        AuditCtx.LogOnCompleted(response);
-        Send(Event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
+        ReplyWith(Event->Get()->Request->CreateResponseString(Container.Str()));
         PassAway();
     }
 
@@ -1434,7 +1509,7 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,X-CSRF-Token,traceparent\r\n"
                     "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
                     "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
                     "Content-Type: " << type << "\r\n"
@@ -1445,6 +1520,9 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
+        }
+        if (!CheckCsrfToken(ev->Get()->Request.Get())) {
+            return ReplyCsrfError(TActivationContext::AsActorContext(), ev);
         }
         Register(new THttpMonAuthorizedPageRequest(
             std::move(ev), Page.Get(), AllowedSIDs, Authorizer, /* needAudit */ true, AuthMode)
@@ -1493,7 +1571,7 @@ public:
         response << "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
-                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,traceparent\r\n"
+                    "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept,X-Trace-Verbosity,X-Want-Trace,X-CSRF-Token,traceparent\r\n"
                     "Access-Control-Expose-Headers: traceresponse,X-Worker-Name\r\n"
                     "Access-Control-Allow-Methods: OPTIONS,GET,POST,PUT,DELETE\r\n"
                     "Content-Type: " << type << "\r\n"
@@ -1504,6 +1582,9 @@ public:
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
         if (ev->Get()->Request->Method == "OPTIONS") {
             return ReplyWithOptions(ev);
+        }
+        if (!CheckCsrfToken(ev->Get()->Request.Get())) {
+            return ReplyCsrfError(TActivationContext::AsActorContext(), ev);
         }
         bool redirect = false;
         if (RedirectRoot && ev->Get()->Request->URL == "/") {

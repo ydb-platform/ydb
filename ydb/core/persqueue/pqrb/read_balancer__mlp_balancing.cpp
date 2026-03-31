@@ -42,7 +42,7 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readin
             status.UseForReading = *useForReading;
         }
 
-        auto calc = [](size_t value, size_t currentValue, size_t newValue) {
+        auto calc = [](ui64 value, ui64 currentValue, ui64 newValue) {
             auto v = value + newValue;
             return v > currentValue ? v - currentValue : 0;
         };

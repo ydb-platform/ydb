@@ -9,9 +9,9 @@ class TMLPBalancer;
 class TMLPConsumer {
 public:
     struct TMetrics {
-        size_t Messages = 0;
-        size_t DelayedMessages = 0;
-        size_t LockedMessages = 0;
+        ui64 Messages = 0;
+        ui64 DelayedMessages = 0;
+        ui64 LockedMessages = 0;
     };
 
 public:

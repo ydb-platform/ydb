@@ -15,7 +15,7 @@ TEST_SRCS(
     test_tpcc.py
 )
 
-FORK_TEST_FILES()
+FORK_TESTS()
 SPLIT_FACTOR(300)
 
 REQUIREMENTS(ram:16 cpu:4)

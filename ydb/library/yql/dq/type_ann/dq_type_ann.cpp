@@ -1205,8 +1205,8 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     const auto& joinTypeNode = *node->Child(2);
     auto& leftKeysNode = *node->Child(3);
     auto& rightKeysNode = *node->Child(4);
-    const auto& leftRenamesNode = *node->Child(8);
-    const auto& rightRenamesNode = *node->Child(9);
+    auto& leftRenamesNode = *node->Child(8);
+    auto& rightRenamesNode = *node->Child(9);
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -1290,8 +1290,8 @@ TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& 
     const auto& joinTypeNode = *node->Child(2);
     auto& leftKeysNode = *node->Child(3);
     auto& rightKeysNode = *node->Child(4);
-    const auto& leftRenamesNode = *node->Child(8);
-    const auto& rightRenamesNode = *node->Child(9);
+    auto& leftRenamesNode = *node->Child(8);
+    auto& rightRenamesNode = *node->Child(9);
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);

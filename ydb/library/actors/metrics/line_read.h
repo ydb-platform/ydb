@@ -17,8 +17,14 @@ namespace NActors {
     class TSnapshot;
     class TInMemoryMetricsBackend;
     class TInMemoryMetricsRegistry;
-    template<class TValue> struct TRawLineFrontend;
-    template<class TValue> struct TOnChangeLineFrontend;
+
+    struct TLineSnapshotAccess {
+        template<class TCallback>
+        static void ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb);
+
+        static TInstant DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept;
+        static TInstant GetCurrentTimestamp(const TLineSnapshot& snapshot) noexcept;
+    };
 
     template<class TValue>
     struct TGenericRecordView {
@@ -125,10 +131,7 @@ namespace NActors {
     private:
         template<class TFrontend>
         friend class TLine;
-        template<class TValue>
-        friend struct TRawLineFrontend;
-        template<class TValue>
-        friend struct TOnChangeLineFrontend;
+        friend struct TLineSnapshotAccess;
         friend class TInMemoryMetricsBackend;
         friend class TInMemoryMetricsRegistry;
 

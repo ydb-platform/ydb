@@ -50,7 +50,7 @@ namespace NActors {
                 return;
             }
 
-            const TInstant tailTimestamp = std::min(snapshot.CurrentTimestamp, endTs);
+            const TInstant tailTimestamp = std::min(TLineSnapshotAccess::GetCurrentTimestamp(snapshot), endTs);
             if (tailTimestamp <= lastTimestamp || tailTimestamp < beginTs) {
                 return;
             }

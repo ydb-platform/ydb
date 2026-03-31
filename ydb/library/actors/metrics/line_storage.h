@@ -118,4 +118,17 @@ namespace NActors {
         }
     }
 
+    template<class TCallback>
+    void TLineSnapshotAccess::ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb) {
+        snapshot.ForEachChunk(std::forward<TCallback>(cb));
+    }
+
+    inline TInstant TLineSnapshotAccess::DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept {
+        return snapshot.DecodeTimestampTs(ts);
+    }
+
+    inline TInstant TLineSnapshotAccess::GetCurrentTimestamp(const TLineSnapshot& snapshot) noexcept {
+        return snapshot.CurrentTimestamp;
+    }
+
 } // namespace NActors

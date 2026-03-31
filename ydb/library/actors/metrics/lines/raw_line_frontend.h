@@ -51,7 +51,7 @@ namespace NActors {
                                                TInstant beginTs,
                                                TInstant endTs,
                                                TCallback&& cb) {
-            snapshot.ForEachChunk([&](const TChunkSnapshotView& chunk) {
+            TLineSnapshotAccess::ForEachChunk(snapshot, [&](const TChunkSnapshotView& chunk) {
                 if (chunk.Payload.size() < sizeof(TChunkHeader)) {
                     return;
                 }
@@ -63,7 +63,7 @@ namespace NActors {
                 const size_t recordsCount = std::min<size_t>(header->RecordsCount, maxRecordsCount);
                 const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(recordsBegin);
                 for (size_t i = 0; i < recordsCount; ++i) {
-                    const TInstant timestamp = snapshot.DecodeTimestampTs(storedRecords[i].TimestampTs);
+                    const TInstant timestamp = TLineSnapshotAccess::DecodeTimestampTs(snapshot, storedRecords[i].TimestampTs);
                     if (beginTs <= timestamp && timestamp <= endTs) {
                         cb(timestamp, DecodeValue(storedRecords[i].Value));
                     }

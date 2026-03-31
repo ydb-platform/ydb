@@ -185,7 +185,7 @@ private:
         std::vector<NMonitoring::TDynamicCounters::TCounterPtr> SimpleCounters;
 
         /**
-         * The list of target counter used for aggregating cumulative counters
+         * The list of source counters used for aggregating cumulative counters
          * from the given source group.
          *
          * @note The size matches the number of cumulative counters from TCumulativeCountersOpts,
@@ -194,7 +194,7 @@ private:
         std::vector<NMonitoring::TDynamicCounters::TCounterPtr> CumulativeCounters;
 
         /**
-         * The list of target counters used for aggregating percentile counters
+         * The list of source counters used for aggregating percentile counters
          * from the given source group.
          *
          * @note The size matches the number of percentile counters from TPercentileCountersOpts,
@@ -266,6 +266,9 @@ private:
         NMonitoring::TDynamicCounterPtr sourceCounterGroup,
         TSourceCounters& sourceCounters
     ) {
+        sourceCounters.clear();
+        sourceCounters.reserve(counterOptions->Size);
+
         for (size_t i = 0; i < counterOptions->Size; ++i) {
             const char* counterName = counterOptions->GetNames()[i];
 

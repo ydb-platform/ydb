@@ -2173,44 +2173,89 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(LocalBloomFilterGrantForCreateAndAlterTable) {
+    Y_UNIT_TEST(GrantForCreateAndAlterTableIndex) {
         auto settings = NKqp::TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
         TKikimrRunner kikimr(settings);
 
         AddConnectPermission(kikimr, UserName);
 
-        const TString createQuery = R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/test_acl_bloom` (
-                timestamp Timestamp NOT NULL,
-                resource_id Utf8,
-                uid Utf8 NOT NULL,
-                PRIMARY KEY (timestamp, uid),
-                INDEX idx_bloom_create LOCAL USING bloom_filter
-                    ON (resource_id)
-                    WITH (false_positive_probability = 0.01)
-            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);
-        )";
+        struct TIndexTestCase {
+            TString Name;
+            TString PlainTablePath;
+            TString CreateWithIndex;
+            TString CreatePlain;
+            TString Alter;
+        };
 
-        const TString createPlainQuery = R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/test_acl_bloom_plain` (
-                timestamp Timestamp NOT NULL,
-                resource_id Utf8,
-                uid Utf8 NOT NULL,
-                PRIMARY KEY (timestamp, uid)
-            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1);
-        )";
-
-        const TString alterQuery = R"(
-            --!syntax_v1
-            ALTER TABLE `/Root/test_acl_bloom_plain`
-                ADD INDEX idx_bloom_alter LOCAL USING bloom_filter
-                ON (resource_id)
-                WITH (false_positive_probability = 0.01);
-        )";
+        const std::vector<TIndexTestCase> testCases = {
+            {
+                "bloom",
+                "/Root/test_bloom_plain",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_bloom` (
+                    Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid),
+                    INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01)
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_bloom_plain` (
+                    Key Timestamp NOT NULL, Val Utf8, Uid Utf8 NOT NULL, PRIMARY KEY (Key, Uid)
+                ) WITH (STORE = COLUMN, AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_BY_LOAD = DISABLED, PARTITION_COUNT = 1))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_bloom_plain` ADD INDEX idx LOCAL USING bloom_filter ON (Val) WITH (false_positive_probability = 0.01))",
+            },
+            {
+                "global_sync",
+                "/Root/test_sync_plain",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_sync` (
+                    Key Uint64, Val Utf8, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL SYNC ON (Val)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_sync_plain` (
+                    Key Uint64, Val Utf8, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_sync_plain` ADD INDEX idx GLOBAL SYNC ON (Val))",
+            },
+            {
+                "vector",
+                "/Root/test_vector_plain",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_vector` (
+                    Key Uint64, Embedding String, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL USING vector_kmeans_tree ON (Embedding)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_vector_plain` (
+                    Key Uint64, Embedding String, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_vector_plain` ADD INDEX idx GLOBAL USING vector_kmeans_tree ON (Embedding)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2))",
+            },
+            {
+                "fulltext",
+                "/Root/test_fulltext_plain",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_fulltext` (
+                    Key Uint64, Text String, PRIMARY KEY (Key),
+                    INDEX idx GLOBAL USING fulltext_plain ON (Text)
+                        WITH (tokenizer=whitespace, use_filter_lowercase=true)
+                ))",
+                R"(--!syntax_v1
+                CREATE TABLE `/Root/test_fulltext_plain` (
+                    Key Uint64, Text String, PRIMARY KEY (Key)
+                ))",
+                R"(--!syntax_v1
+                ALTER TABLE `/Root/test_fulltext_plain` ADD INDEX idx GLOBAL USING fulltext_plain ON (Text)
+                    WITH (tokenizer=whitespace, use_filter_lowercase=true))",
+            },
+        };
 
         auto executeQueryAsUser = [&](const TString& query) {
             auto driverConfig = TDriverConfig()
@@ -2224,37 +2269,50 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             return result;
         };
 
-        {
-            auto result = executeQueryAsUser(createQuery);
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("Access denied"),
-                result.GetIssues().ToString());
+        for (const auto& tc : testCases) {
+            Cerr << "Testing index type: " << tc.Name << Endl;
+
+            // CREATE TABLE with index must fail without create_table permission
+            {
+                auto result = executeQueryAsUser(tc.CreateWithIndex);
+                UNIT_ASSERT_C(!result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Access denied") ||
+                    result.GetIssues().ToString().contains("Unauthorized"),
+                    tc.Name << ": " << result.GetIssues().ToString());
+            }
         }
 
         AddPermissions(kikimr, "/Root", UserName, {"ydb.deprecated.create_table"});
 
-        {
-            auto result = executeQueryAsUser(createQuery);
-            AssertSuccessResult(result);
-        }
+        for (const auto& tc : testCases) {
+            // CREATE TABLE with index must succeed with create_table permission
+            {
+                auto result = executeQueryAsUser(tc.CreateWithIndex);
+                UNIT_ASSERT_C(result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+            }
 
-        AssertSuccessResult(kikimr.GetQueryClient().ExecuteQuery(createPlainQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
-        AddPermissions(kikimr, "/Root/test_acl_bloom_plain", UserName, {"ydb.deprecated.describe_schema"});
+            // Create plain table (as admin) and grant describe to user for ALTER test
+            AssertSuccessResult(kikimr.GetQueryClient().ExecuteQuery(tc.CreatePlain, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync());
+            AddPermissions(kikimr, tc.PlainTablePath, UserName, {"ydb.deprecated.describe_schema"});
 
-        {
-            auto result = executeQueryAsUser(alterQuery);
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("Access denied"),
-                result.GetIssues().ToString());
-        }
+            // ALTER TABLE to add index must fail without alter_schema permission
+            {
+                auto result = executeQueryAsUser(tc.Alter);
+                UNIT_ASSERT_C(!result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Access denied") ||
+                    result.GetIssues().ToString().contains("Unauthorized"),
+                    tc.Name << ": " << result.GetIssues().ToString());
+            }
 
-        AddPermissions(kikimr, "/Root/test_acl_bloom_plain", UserName, {"ydb.deprecated.alter_schema"});
+            AddPermissions(kikimr, tc.PlainTablePath, UserName, {"ydb.deprecated.alter_schema"});
 
-        {
-            auto result = executeQueryAsUser(alterQuery);
-            AssertSuccessResult(result);
+            // ALTER TABLE to add index must succeed with alter_schema permission
+            {
+                auto result = executeQueryAsUser(tc.Alter);
+                UNIT_ASSERT_C(result.IsSuccess(), tc.Name << ": " << result.GetIssues().ToString());
+            }
         }
     }
 }

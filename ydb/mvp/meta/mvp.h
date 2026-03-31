@@ -5,6 +5,7 @@
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
 #include <ydb/mvp/core/signals.h>
+#include <ydb/mvp/meta/meta_capabilities.h>
 #include <ydb/mvp/meta/meta_settings.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
@@ -45,6 +46,7 @@ public:
     THolder<NActors::TActorSystemSetup> BuildActorSystemSetup();
     TIntrusivePtr<NActors::NLog::TSettings> BuildLoggerSettings();
     void InitMeta();
+    void RegisterMetaHandler(const NActors::TActorId& proxyId, const TString& path, NActors::TActorId handlerId, ui32 version = 1);
 
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
@@ -55,6 +57,7 @@ public:
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
+    TMetaCapabilities MetaCapabilities;
     TMetaSettings MetaSettings;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;

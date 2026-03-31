@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 
         CompareYson(runNonSchemeQuery(R"(
-            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` < "Value_500000";
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
         )"), "[[944450u]]");
         Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
 
@@ -230,21 +230,21 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
         CompareYson(runNonSchemeQuery(R"(
-            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` > "Value_500000";
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
         )"), "[[555549u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
         CompareYson(runNonSchemeQuery(R"(
-            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` <= "Value_500000";
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
         )"), "[[944451u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
         CompareYson(runNonSchemeQuery(R"(
-            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` >= "Value_500000";
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
         )"), "[[555550u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);

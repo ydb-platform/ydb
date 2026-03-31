@@ -2434,7 +2434,10 @@ message TSecretSchemaOp {
     optional string Name = 1;
     optional string Value = 2; // original, unencrypted value
     optional bool InheritPermissions = 3;
-    optional string ValueParamName = 4; // name of parameter for value (resolved at execution)
+    // The following field is needed at KQP for sending between the prepare и execute phases.
+    // However, this field is supposed to be resolved at KQP to the actual value and be cleared.
+    // Schemeshard always uses secret's value from the Value field and asserts that the ValueParamName field is empty.
+    optional string ValueParamName = 4;
 }
 
 message TStreamingQueryProperties {

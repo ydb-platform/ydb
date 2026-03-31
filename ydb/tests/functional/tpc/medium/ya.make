@@ -15,14 +15,17 @@ TEST_SRCS(
     test_tpcc.py
 )
 
+FORK_TESTS()
+SPLIT_FACTOR(300)
+
+REQUIREMENTS(ram:16 cpu:4)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
-
-REQUIREMENTS(ram:16 cpu:4)
 
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
@@ -47,7 +50,4 @@ DATA(
     arcadia/ydb/tests/functional/clickbench/data/hits.csv
     arcadia/ydb/tests/functional/tpc/data
 )
-
-FORK_TEST_FILES()
-REQUIREMENTS(ram:28)
 END()

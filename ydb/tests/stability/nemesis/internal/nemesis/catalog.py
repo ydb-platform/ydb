@@ -2,59 +2,46 @@
 Nemesis registration for the stability nemesis app.
 
 Single registry:
-- NEMESIS_TYPES — each type: runner, schedule, ui_group, optional planner_cls.
-  If planner_cls is omitted, build_all_planners() uses DefaultRandomHostPlanner.
+- NEMESIS_TYPES — each type: runner, schedule, ui_group, optional planner_cls or planner_factory(key).
+  If both are omitted, build_all_planners() uses DefaultRandomHostPlanner.
 
 - NEMESIS_UI_GROUPS — group id -> description for /api/process_types/grouped.
 
 ChaosOrchestratorStore receives a planner map from build_all_planners().
+
+Optional cluster topology nemeses (datacenter / bridge pile) are merged from
+``cluster_chaos.registry`` only when ``cluster.yaml`` (``YAML_CONFIG_LOCATION`` /
+``Settings.yaml_config_location``) contains the corresponding sections; see
+``yaml_nemesis_gates.py``.
 """
 
 from __future__ import annotations
 
-import logging
 import signal
 import subprocess
 from typing import Any, Type
 
-from ydb.tests.tools.nemesis.library import base
 from ydb.tests.library.nemesis.network.client import NetworkClient
 
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.registry import cluster_nemesis_type_entries
+from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import (
+    MonitoredAgentActor,
+    NEMESIS_EXECUTION_LOGGER,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.kill_node_planner import (
     NODE_KILLER,
     KillNodeNemesisPlanner,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
+    DNS_NEMESIS,
+    DnsNemesisPlanner,
     NETWORK_NEMESIS,
     NetworkNemesisPlanner,
+    TIME_SKEW_NEMESIS,
+    TimeSkewNemesisPlanner,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
-
-# Dedicated logger for in-process nemesis runs; NemesisManager attaches a thread-local handler here (not on root).
-NEMESIS_EXECUTION_LOGGER = "ydb.tests.stability.nemesis.execution"
-
-
-class MonitoredAgentActor(base.AbstractMonitoredNemesis):
-    """
-    Agent-side execution only: AbstractMonitoredNemesis metrics.
-    Planning is on the orchestrator (ChaosOrchestratorStore).
-    """
-
-    def __init__(self, scope="node"):
-        base.AbstractMonitoredNemesis.__init__(self, scope=scope)
-        self._logger = logging.getLogger(NEMESIS_EXECUTION_LOGGER)
-        self._logger.setLevel(logging.DEBUG)
-
-    def prepare_fault(self, hosts):
-        raise RuntimeError(
-            f"{self.__class__.__name__} is orchestrator-planned only; "
-            "prepare_fault must not be called on the agent runner."
-        )
-
-    @property
-    def nemesis_description(self):
-        return self.__class__.__doc__ or ""
 
 
 class NetworkNemesis(MonitoredAgentActor):
@@ -75,6 +62,51 @@ class NetworkNemesis(MonitoredAgentActor):
         client = NetworkClient("localhost", port=19001, ssh_username=None)
         self._logger.info("Restoring node...")
         client.clear_all_drops()
+        self.on_success_extract_fault()
+
+
+class DnsNemesis(MonitoredAgentActor):
+    """iptables DNS isolation on localhost (same idea as ``ydb.tests.library.nemesis.nemesis_network.DnsNemesis``)."""
+
+    def inject_fault(self, payload=None):
+        del payload
+        self._logger.info("=== INJECT_FAULT START: DnsNemesis ===")
+        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client.isolate_dns()
+        self.on_success_inject_fault()
+        self._logger.info("=== INJECT_FAULT SUCCESS: DnsNemesis ===")
+
+    def extract_fault(self, payload=None):
+        del payload
+        self._logger.info("Extracting DNS isolation")
+        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client.clear_all_drops()
+        self.on_success_extract_fault()
+
+
+class TimeSkewNemesis(MonitoredAgentActor):
+    """Step local system time forward; extract re-enables NTP sync (best-effort)."""
+
+    def inject_fault(self, payload=None):
+        payload = payload or {}
+        delta = int(payload.get("delta_sec", 300))
+        self._logger.info("=== INJECT_FAULT START: TimeSkewNemesis delta_sec=%s ===", delta)
+        cmd = (
+            "sudo timedatectl set-ntp false 2>/dev/null; "
+            f"sudo date -s @$(($(date +%s)+{delta}))"
+        )
+        subprocess.run(cmd, shell=True, check=False)
+        self.on_success_inject_fault()
+
+    def extract_fault(self, payload=None):
+        del payload
+        self._logger.info("Restoring time sync (TimeSkewNemesis)")
+        subprocess.run(
+            "sudo timedatectl set-ntp true 2>/dev/null; "
+            "(command -v chronyc >/dev/null && sudo chronyc -a makestep 2>/dev/null) || true",
+            shell=True,
+            check=False,
+        )
         self.on_success_extract_fault()
 
 
@@ -108,6 +140,18 @@ NEMESIS_UI_GROUPS: dict[str, dict[str, str]] = {
     "NodeNemesis": {
         "description": "Node process failures",
     },
+    "ClusterChaos": {
+        "description": "External cluster harness chaos (cluster.yaml on the agent host)",
+    },
+    "ClusterTablets": {
+        "description": "Tablet kill / Hive tablet moves (cluster.yaml on the agent host)",
+    },
+    "DatacenterChaos": {
+        "description": "Multi-datacenter scenarios (enabled when cluster.yaml lists 2+ data_center)",
+    },
+    "BridgePileChaos": {
+        "description": "Bridge pile scenarios (enabled when cluster.yaml has config.bridge_config.piles)",
+    },
 }
 
 
@@ -124,13 +168,30 @@ NEMESIS_TYPES: dict[str, dict[str, Any]] = {
         "ui_group": "NodeNemesis",
         "planner_cls": KillNodeNemesisPlanner,
     },
+    DNS_NEMESIS: {
+        "runner": DnsNemesis(),
+        "schedule": 120,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": DnsNemesisPlanner,
+    },
+    TIME_SKEW_NEMESIS: {
+        "runner": TimeSkewNemesis(),
+        "schedule": 400,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": TimeSkewNemesisPlanner,
+    },
+    **cluster_nemesis_type_entries(),
 }
 
 
 def build_all_planners() -> dict[str, NemesisPlannerBase]:
-    """Planner per registered type: planner_cls from registry or DefaultRandomHostPlanner."""
+    """Planner per registered type: planner_factory(key), planner_cls(), or DefaultRandomHostPlanner."""
     merged: dict[str, NemesisPlannerBase] = {}
     for key, spec in NEMESIS_TYPES.items():
+        planner_factory = spec.get("planner_factory")
+        if planner_factory is not None:
+            merged[key] = planner_factory(key)
+            continue
         cls: Type[NemesisPlannerBase] | None = spec.get("planner_cls")
         if cls is not None:
             merged[key] = cls()

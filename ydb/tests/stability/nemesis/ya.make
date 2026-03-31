@@ -9,6 +9,16 @@ PY_SRCS(
     internal/safety_warden_execution.py
     internal/event_loop.py
     internal/nemesis/catalog.py
+    internal/nemesis/monitored_actor.py
+    internal/nemesis/cluster_context.py
+    internal/nemesis/cluster_chaos/registry.py
+    internal/nemesis/cluster_chaos/tablet_kill.py
+    internal/nemesis/cluster_chaos/hive_ops.py
+    internal/nemesis/cluster_chaos/disk_chaos.py
+    internal/nemesis/cluster_chaos/node_chaos.py
+    internal/nemesis/cluster_chaos/yaml_nemesis_gates.py
+    internal/nemesis/cluster_chaos/datacenter_chaos.py
+    internal/nemesis/cluster_chaos/bridge_pile_chaos.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
     internal/agent/agent_safety_runs.py
@@ -20,6 +30,8 @@ PY_SRCS(
     internal/orchestrator/nemesis/schedule_loop.py
     internal/orchestrator/nemesis/chaos_state.py
     internal/orchestrator/nemesis/default_planner.py
+    internal/orchestrator/nemesis/pinned_first_host_planner.py
+    internal/orchestrator/nemesis/serial_staggered_planner.py
     internal/orchestrator/nemesis/kill_node_planner.py
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py

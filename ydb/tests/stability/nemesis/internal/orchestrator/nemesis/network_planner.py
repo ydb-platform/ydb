@@ -48,10 +48,10 @@ class NetworkNemesisPlanner(NemesisPlannerBase):
                 inject_target = random.choice(avail)
                 self._state.isolated_hosts.add(inject_target)
         if inject_target is not None:
-            return [dispatch(NETWORK_NEMESIS, inject_target, "inject", PAYLOAD_INJECT)]
+            return [dispatch(self.nemesis_type, inject_target, "inject", self.PAYLOAD_INJECT)]
         if not extract_targets:
             return []
-        return fanout(NETWORK_NEMESIS, extract_targets, "extract", PAYLOAD_EXTRACT)
+        return fanout(self.nemesis_type, extract_targets, "extract", self.PAYLOAD_EXTRACT)
 
     def _drain_tracked_hosts(self) -> list[str]:
         targets = list(self._state.isolated_hosts)
@@ -63,3 +63,35 @@ class NetworkNemesisPlanner(NemesisPlannerBase):
 
     def _register_extract(self, host: str) -> None:
         self._state.isolated_hosts.discard(host)
+
+
+DNS_NEMESIS = "DnsNemesis"
+PAYLOAD_DNS_INJECT: dict = {}
+PAYLOAD_DNS_EXTRACT: dict = {}
+
+
+class DnsNemesisPlanner(NetworkNemesisPlanner):
+    """Same host-set bookkeeping as :class:`NetworkNemesisPlanner`, max one DNS-isolated host."""
+
+    nemesis_type = DNS_NEMESIS
+    PAYLOAD_INJECT = PAYLOAD_DNS_INJECT
+    PAYLOAD_EXTRACT = PAYLOAD_DNS_EXTRACT
+
+    def __init__(self) -> None:
+        super().__init__(max_affected=1)
+
+
+TIME_SKEW_NEMESIS = "TimeSkewNemesis"
+PAYLOAD_TIME_SKEW_INJECT = {"delta_sec": 300}
+PAYLOAD_TIME_SKEW_EXTRACT: dict = {}
+
+
+class TimeSkewNemesisPlanner(NetworkNemesisPlanner):
+    """Track hosts with skewed clock; inject carries ``delta_sec`` (seconds forward)."""
+
+    nemesis_type = TIME_SKEW_NEMESIS
+    PAYLOAD_INJECT = PAYLOAD_TIME_SKEW_INJECT
+    PAYLOAD_EXTRACT = PAYLOAD_TIME_SKEW_EXTRACT
+
+    def __init__(self) -> None:
+        super().__init__(max_affected=2)

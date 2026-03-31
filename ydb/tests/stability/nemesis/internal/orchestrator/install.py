@@ -130,6 +130,22 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
                 log_line="upload cluster.yaml",
                 host=host,
             )
+    elif yaml_config_location:
+        _require_local_path(yaml_config_location, kind="file")
+        _run_external(
+            [
+                "rsync",
+                "-aqLW",
+                "--no-o",
+                "--no-g",
+                "--rsh={}".format(ssh_rsh),
+                "--rsync-path=sudo rsync",
+                yaml_config_location,
+                f"{host}:{root}/cluster.yaml",
+            ],
+            log_line="upload cluster.yaml (agent)",
+            host=host,
+        )
 
     unit_file = f"./nemesis-agent.service.{host}"
     _require_local_path(unit_file, kind="file")
@@ -249,6 +265,11 @@ WantedBy=multi-user.target
         agent_settings = AgentSettings.from_orchestrator_args(settings)
         agent_settings.app_host = host
 
+        agent_config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
+        agent_yaml_env = (
+            f"Environment=YAML_CONFIG_LOCATION={agent_config_location}\n" if agent_config_location else ""
+        )
+
         with open(f"nemesis-agent.service.{host}", "w") as f:
             f.write(
                 f"""[Unit]
@@ -268,7 +289,7 @@ Environment=APP_PORT={agent_settings.app_port}
 Environment=MON_PORT={agent_settings.mon_port}
 Environment=NEMESIS_INSTALL_ROOT={root}
 Environment=KIKIMR_LOGS_DIRECTORY={agent_settings.kikimr_logs_directory}
-Type=simple
+{agent_yaml_env}Type=simple
 ExecStart={root}/bin/agent run
 StandardOutput=syslog
 StandardError=syslog
@@ -291,7 +312,9 @@ WantedBy=multi-user.target
             executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location)
         )
         for host in agent_hosts:
-            futures.append(executor.submit(upload_binary, host, settings, False, None))
+            futures.append(
+                executor.submit(upload_binary, host, settings, False, settings.yaml_config_location or None)
+            )
 
         for fut in as_completed(futures):
             fut.result()

@@ -136,19 +136,56 @@ class OrchestratorNemesisSchedule:
             for info in self._tasks.values():
                 info["enabled"] = False
 
+    def enable_all_schedules(self, *, uniform_interval: int | None = None) -> dict[str, str]:
+        """
+        Enable schedule for every type in NEMESIS_TYPES.
+        If uniform_interval is set, use it for all; otherwise each type uses catalog ``schedule`` (default 60).
+        Returns process_type -> ``started`` or ``already_enabled``.
+        """
+        results: dict[str, str] = {}
+        for process_type, defn in NEMESIS_TYPES.items():
+            interval = (
+                uniform_interval
+                if uniform_interval is not None
+                else int(defn.get("schedule") or 60)
+            )
+            started = self.enable_schedule(process_type, interval)
+            results[process_type] = "started" if started else "already_enabled"
+        return results
+
+    def disable_all_schedules(self) -> list[str]:
+        """
+        Same as turning off schedule for each enabled type: flush planner extracts, remove tasks.
+        Returns nemesis types that were scheduled and are now stopped.
+        """
+        with self._lock:
+            to_stop = list(self._tasks.keys())
+        stopped: list[str] = []
+        for process_type in to_stop:
+            with self._lock:
+                if not self.has_task(process_type):
+                    continue
+                self.mark_disabled_before_flush(process_type)
+                self.flush_disable_extracts(process_type)
+                self.remove_task_entry(process_type)
+            stopped.append(process_type)
+        return stopped
+
     def dispatch_command(self, cmd: DispatchCommand, *, track_history: bool) -> None:
         """POST (or local helper) to start one execution on cmd.host."""
         try:
+            payload = dict(cmd.payload or {})
+            payload["host"] = cmd.host
             body = {
                 "type": cmd.nemesis_type,
                 "action": cmd.action,
-                "payload": cmd.payload,
+                "payload": payload,
             }
             if self._is_local_host(cmd.host):
                 create_process_helper(
                     cmd.nemesis_type,
                     cmd.action,
-                    payload=cmd.payload,
+                    payload=payload,
                 )
                 logger.debug("Started %s on local host (%s)", cmd.nemesis_type, cmd.action)
             else:

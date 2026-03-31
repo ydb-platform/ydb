@@ -232,6 +232,38 @@ def set_schedule():
     return jsonify({"status": "ok"})
 
 
+@blueprint.route("/api/schedule/all", methods=["POST"])
+def set_schedule_all():
+    """
+    Enable or disable scheduled nemesis for all registered types at once.
+
+    Body JSON: ``enabled`` (bool, required). When enabling: optional ``interval`` (int) — same
+    interval for every type; if omitted, each type uses its catalog default from NEMESIS_TYPES.
+    """
+    if nemesis_schedule is None:
+        return jsonify({"status": "error", "message": "Schedule not initialized"}), 500
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"status": "error", "message": "No data provided"}), 400
+
+    enabled = data.get("enabled")
+    if enabled is None:
+        return jsonify({"status": "error", "message": "Missing enabled field"}), 400
+    if not isinstance(enabled, bool):
+        return jsonify({"status": "error", "message": "enabled must be a boolean"}), 400
+
+    interval = data.get("interval")
+    if interval is not None and not isinstance(interval, int):
+        return jsonify({"status": "error", "message": "interval must be an integer or omitted"}), 400
+
+    if enabled:
+        results = nemesis_schedule.enable_all_schedules(uniform_interval=interval)
+        return jsonify({"status": "ok", "results": results})
+    stopped = nemesis_schedule.disable_all_schedules()
+    return jsonify({"status": "ok", "stopped": stopped})
+
+
 @blueprint.route("/api/schedule", methods=["GET"])
 def get_schedule():
     """Return schedule status with intervals"""

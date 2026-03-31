@@ -85,16 +85,21 @@ class AgentSettings(BaseSettings):
     mon_port: int = 8765
     install_root: str = '/Berkanavt/nemesis'
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
+    # Same cluster.yaml as orchestrator when deployed via install (env YAML_CONFIG_LOCATION).
+    yaml_config_location: str = ''
 
     @classmethod
     def from_orchestrator_args(cls: Type['AgentSettings'], settings: Settings) -> 'AgentSettings':
         """Create AgentSettings from orchestrator Settings."""
+        root = settings.install_root.rstrip("/")
+        yaml_on_agent = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
         return cls(
             app_host=settings.app_host,
             app_port=settings.app_port,
             mon_port=settings.mon_port,
             install_root=settings.install_root,
             kikimr_logs_directory=settings.kikimr_logs_directory,
+            yaml_config_location=yaml_on_agent,
         )
 
 

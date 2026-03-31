@@ -1007,7 +1007,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             TString key(PartitionKeys[seqNo % PartitionKeys.size()]);
             TWriteMessage message(key, body);
             message.SeqNo(seqNo);
-            UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
         };
 
         auto msg = TString(1_MB, 'a');
@@ -1102,13 +1105,16 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             TString key(keys[seqNo % keys.size()]);
             TWriteMessage message(key, body);
             message.SeqNo(seqNo);
-            UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
         };
 
-        auto msg = TString(64, 'a');
+        auto msg = TString(16, 'a');
         auto producer1 = makeProducer("producer-1");
 
-        for (ui64 seqNo = 1; seqNo <= 1_MB / 64; ++seqNo) {
+        for (ui64 seqNo = 1; seqNo <= 1_MB / 16; ++seqNo) {
             writeMessage(producer1, msg, seqNo);
         }
 
@@ -1240,7 +1246,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         auto writeToPartition = [](const std::shared_ptr<IProducer>& producer, const TString& body, ui64 seqNo, ui32 partitionId) {
             TWriteMessage message(partitionId, body);
             message.SeqNo(seqNo);
-            UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "failed to write message");
+            auto result = producer->Write(std::move(message));
+            if (!result.IsQueued()) {
+                UNIT_ASSERT_C(false, "failed to write message: " << result.ErrorMessage.value_or("unknown error") << " " << (result.ClosedDescription ? result.ClosedDescription->DebugString() : "no description"));
+            }
         };
 
         auto msg = TString(1_MB, 'a');

@@ -66,10 +66,7 @@ public:
     void Add(const T& x) {
         ++N_;
         EnsureLevel(0);
-        Levels_[0].Items.push_back(x);
-        if (Levels_[0].Items.size() > Cap_) {
-            CompactLevel(0);
-        }
+        AddToLevel(0, x);
     }
 
     void AddToLevel(size_t lvl, const T& x) {
@@ -148,7 +145,7 @@ private:
             std::uniform_int_distribution<size_t> pick(0, buf.size() - 1);
             size_t idx = pick(Rng_);
             kept = buf[idx];
-            buf.erase(buf.begin() + static_cast<std::ptrdiff_t>(idx)); // теперь размер чётный
+            buf.erase(buf.begin() + static_cast<std::ptrdiff_t>(idx)); // size is even now
         }
     
         int r = Bit_(Rng_);
@@ -161,7 +158,7 @@ private:
     
         buf.clear();
         if (keepOne) {
-            buf.push_back(kept); // kept реально остаётся на этом уровне
+            buf.push_back(kept); // kept really remains on this level
         }
     
         if (up.size() > Cap_) {

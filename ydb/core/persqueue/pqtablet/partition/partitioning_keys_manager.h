@@ -1,6 +1,8 @@
 #pragma once
 
-#include "utils.h"
+// KLL-based partitioning keys for split-by-load; used only by autopartitioning_manager in this module.
+
+#include <ydb/core/persqueue/common/last_counter.h>
 
 #include <util/datetime/base.h>
 #include <ydb/library/kll_median/dynamic_sketch.h>
@@ -20,6 +22,7 @@ struct TPartitioningKeysManager {
 
 private:
     void RemoveOldSketches(TInstant now);
+    void EnsureSketch(TInstant now);
 
     static constexpr auto DEFAULT_SKETCH_LEVEL_SIZE = 100;
     static constexpr auto DEFAULT_MIN_WEIGHT = 16; // 16 bytes

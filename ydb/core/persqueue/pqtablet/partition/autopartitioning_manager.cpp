@@ -1,10 +1,11 @@
 #include "autopartitioning_manager.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/persqueue/common/last_counter.h>
 #include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/public/partitioning_keys_manager.h>
+#include <ydb/core/persqueue/pqtablet/partition/partitioning_keys_manager.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 
@@ -188,7 +189,7 @@ public:
             auto* partition = GetPartition();
             const auto& keyRange = partition->GetKeyRange();
 
-            PQ_LOG_NOTICE(
+            PQ_LOG_D(
                 TStringBuilder()
                 << "TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());

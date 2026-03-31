@@ -1,4 +1,4 @@
-#include "partitioning_keys_manager.h"
+#include <ydb/core/persqueue/pqtablet/partition/partitioning_keys_manager.h>
 
 #include <util/generic/vector.h>
 
@@ -15,31 +15,17 @@ TPartitioningKeysManager::TPartitioningKeysManager(size_t numSketches, TDuration
 }
 
 void TPartitioningKeysManager::Add(TUint128 key, ui64 msgSize) {
-    auto now = Now();
+    const TInstant now = Now();
     KeysCounter.Use(key, now);
     RemoveOldSketches(now);
-    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
-        Sketches.push_back(
-            KllSketchWrapper{
-                NKll::TDynamicKllSketch<TUint128>(DEFAULT_SKETCH_LEVEL_SIZE, Rng(), DEFAULT_MIN_WEIGHT),
-                now
-            }
-        );
-    }
+    EnsureSketch(now);
     Sketches.back().Sketch.Add(key, msgSize);
 }
 
 void TPartitioningKeysManager::Add(TUint128 key, ui64 msgSize, TInstant now) {
     KeysCounter.Use(key, now);
     RemoveOldSketches(now);
-    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
-        Sketches.push_back(
-            KllSketchWrapper{
-                NKll::TDynamicKllSketch<TUint128>(DEFAULT_SKETCH_LEVEL_SIZE, Rng(), DEFAULT_MIN_WEIGHT),
-                now
-            }
-        );
-    }
+    EnsureSketch(now);
     Sketches.back().Sketch.Add(key, msgSize);
 }
 
@@ -66,6 +52,17 @@ TUint128 TPartitioningKeysManager::GetMedianKey() {
 void TPartitioningKeysManager::RemoveOldSketches(TInstant now) {
     while (!Sketches.empty() && Sketches.front().StartTime + WindowSize < now) {
         Sketches.pop_front();
+    }
+}
+
+void TPartitioningKeysManager::EnsureSketch(TInstant now) {
+    if (Sketches.empty() || Sketches.back().StartTime + SketchWindowSize <= now) {
+        Sketches.push_back(
+            KllSketchWrapper{
+                NKll::TDynamicKllSketch<TUint128>(DEFAULT_SKETCH_LEVEL_SIZE, Rng(), DEFAULT_MIN_WEIGHT),
+                now
+            }
+        );
     }
 }
 

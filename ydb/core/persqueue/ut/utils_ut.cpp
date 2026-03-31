@@ -1,6 +1,8 @@
-#include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/common/last_counter.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/string.h>
 
 namespace NKikimr::NPQ {
 

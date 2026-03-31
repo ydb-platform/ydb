@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     config.cpp
     inflight_limiter.cpp
-    partitioning_keys_manager.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
     utils.cpp
@@ -15,7 +14,6 @@ PEERDIR(
     ydb/core/protos
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cloud_events
-    ydb/library/kll_median
 )
 
 END()

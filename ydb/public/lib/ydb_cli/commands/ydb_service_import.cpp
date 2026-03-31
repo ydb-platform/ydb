@@ -276,13 +276,8 @@ void TCommandImportBase::FillItemsFromItemParam(NImport::TImportFromS3Settings& 
 
 template <typename TSettings>
 void TCommandImportBase::FillItemsFromIncludeParam(TSettings& settings) const {
-    constexpr bool isS3 = std::is_same_v<TSettings, NImport::TImportFromS3Settings>;
     for (const TString& path : IncludePaths) {
-        if constexpr (isS3) {
-            settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
-        } else {
-            settings.AppendItem({.Src = path, .Dst = {}});
-        }
+        settings.AppendItem({.Src = {}, .Dst = {}, .SrcPath = path});
     }
 }
 

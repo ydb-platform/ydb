@@ -153,8 +153,16 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
-        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
         auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         auto runSchemeQuery = [&](TString query) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -166,43 +174,80 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
         };
 
-        auto runNonSchemeQuery = [&](TString query) {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            return session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx());
+        auto runNonSchemeQuery = [&](TString query) -> TString {
+
+            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (result.GetResultSets().empty()) {
+                return "[]";
+            }
+            return FormatResultSetYson(result.GetResultSet(0));
         };
 
-        
-
-
-
         assertSchemeQueryOk(R"(
-            CREATE TABLE `minmax_test_applied_applied` (
+            CREATE TABLE `/Root/minmax_test_applied_applied` (
                 `key` Int32 NOT NULL,
-                `value` Utf8 NOT NULL,
+                `value` String NOT NULL,
                 PRIMARY KEY (`key`)
             )
             PARTITION BY HASH (`key`)
             WITH (
                 STORE = COLUMN
             );
+        )");
 
-            ALTER OBJECT `/Root/db1/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = value_mm);
-            ALTER OBJECT `/Root/db1/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+        assertSchemeQueryOk(R"(
+            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "value"}`);
 
         )");
 
-        runNonSchemeQuery(R"(            
-            UPSERT INTO my_table (id, name, status)
-            SELECT CAST(value AS Int32) AS id, "Value_" || CAST(value AS Utf8) AS value FROM AS_TABLE(ListFromRange(500001, 1500001));
+        assertSchemeQueryOk(R"(
+            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+        )");
 
-            UPSERT INTO my_table (id, name, status)
-            SELECT CAST(value AS Int32) AS id, "Value_" || CAST(value AS Utf8) AS value FROM AS_TABLE(ListFromRange(1, 1000001));
-        )")
+        runNonSchemeQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item+1 AS String) AS `value` FROM AS_TABLE($data1);
+        )");
+
+        runNonSchemeQuery(R"(
+            $data2 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item AS String) AS `value` FROM AS_TABLE($data2);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
 
+        CompareYson(runNonSchemeQuery(R"(
+            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` < "Value_500000";
+        )"), "[[944450u]]");
+        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
 
-        
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
+        CompareYson(runNonSchemeQuery(R"(
+            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` > "Value_500000";
+        )"), "[[555549u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+        CompareYson(runNonSchemeQuery(R"(
+            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` <= "Value_500000";
+        )"), "[[944451u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+        CompareYson(runNonSchemeQuery(R"(
+            SELECT COUNT(*) FROM `minmax_test_applied_applied` WHERE `value` >= "Value_500000";
+        )"), "[[555550u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         
     }
 

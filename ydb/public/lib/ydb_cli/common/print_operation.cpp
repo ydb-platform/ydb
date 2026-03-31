@@ -250,6 +250,33 @@ namespace {
         row.FreeText(freeText);
     }
 
+    TPrettyTable MakeTable(const NYdb::NTable::TCompactionOperation&) {
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "table", "cascade", "max inflight", "total", "done"});
+    }
+
+    void PrettyPrint(const NYdb::NTable::TCompactionOperation& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
+            .Column(3, metadata.State)
+            .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
+            .Column(5, metadata.Path)
+            .Column(6, metadata.Cascade ? "true" : "false")
+            .Column(7, metadata.MaxInFlight)
+            .Column(8, metadata.Total)
+            .Column(9, metadata.Done);
+
+        TStringBuilder freeText;
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
+        row.FreeText(freeText);
+    }
+
     /// QueryService
     TPrettyTable MakeTable(const NYdb::NQuery::TScriptExecutionOperation&) {
         return TPrettyTable({"id", "ready", "status", "execution_id", "exec_status", "exec_mode"});
@@ -439,6 +466,14 @@ void PrintOperation(const NYdb::NTable::TBuildIndexOperation& operation, EDataFo
 }
 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TBuildIndexOperation>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+void PrintOperation(const NYdb::NTable::TCompactionOperation& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompactionOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

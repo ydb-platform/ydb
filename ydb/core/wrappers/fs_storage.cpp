@@ -530,7 +530,7 @@ public:
                 // Return retryable error to force datashard to retry with cleared uploadId
                 Aws::Client::AWSError<Aws::S3::S3Errors> awsError(
                     Aws::S3::S3Errors::INTERNAL_FAILURE,
-                    "OperationAborted",
+                    "FsUploadSessionLost",
                     TStringBuilder() << "Upload session not found: uploadId# " << uploadId,
                     true // retryable
                 );

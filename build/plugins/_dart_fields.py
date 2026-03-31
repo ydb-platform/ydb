@@ -1337,7 +1337,8 @@ class TestFiles:
     @classmethod
     def ts_check_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_GLOB_FILES")
-        test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
+        rel_to = "TS_TEST_FOR_PATH" if unit.get("TS_TEST_FOR") else "MODDIR"
+        test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
         value = serialize_list(test_files)
         return value
 

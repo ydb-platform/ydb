@@ -596,7 +596,7 @@ protected:
     {
         for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i) {
             // TODO: precalc unused nodes; this is too expensive to do for every row
-            // if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i]) {
+            // if (Nodes.ItemNodes[i]->GetDependentsCount() > 0U || Nodes.PasstroughtItems[i]) {
             Nodes.ItemNodes[i]->RefValue(Ctx) = *input[i];
             // }
         }

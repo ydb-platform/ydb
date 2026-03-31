@@ -1,5 +1,7 @@
 #include "uring_operation.h"
 
+#include <util/system/compiler.h>
+
 namespace NKikimr::NPDisk {
 
 TUringOperationBase::~TUringOperationBase() = default;

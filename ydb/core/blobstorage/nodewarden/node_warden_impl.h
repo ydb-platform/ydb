@@ -775,6 +775,43 @@ namespace NKikimr::NStorage {
         bool VDiskStatusChanged = false;
 
         STATEFN(StateOnline);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Inter-pile communication
+
+        struct TInterpileRequest {
+            struct TCommonPart {
+               TActorId Sender;
+                ui64 Cookie;
+                TActorId InterconnectSessionId;
+                ui32 RepliesRemaining = 0;
+                NKikimrBlobStorage::TEvInterpilePutResult Result;
+
+                TCommonPart(TEventHandle<TEvInterpilePut>& ev)
+                    : Sender(ev.Sender)
+                    , Cookie(ev.Cookie)
+                    , InterconnectSessionId(ev.InterconnectSession)
+                {
+                    auto& msg = *ev.Get();
+                    for (size_t i = 0; i < msg.Record.ItemsSize(); ++i) {
+                        Result.AddItems();
+                    }
+                }
+            };
+            std::shared_ptr<TCommonPart> CommonPart;
+            size_t Index;
+
+            TInterpileRequest(std::shared_ptr<TCommonPart> commonPart, size_t index)
+                : CommonPart(std::move(commonPart))
+                , Index(index)
+            {}
+        };
+
+        ui64 NextInterpileRequestCookie = 1;
+        THashMap<ui64, TInterpileRequest> InterpileRequests;
+
+        void Handle(TEvInterpilePut::TPtr ev);
+        void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
     };
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,

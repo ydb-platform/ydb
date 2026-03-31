@@ -17,7 +17,7 @@ TMaybe<TVector<TAttribute>> LoadActivatedFlagsFromQContext(const TString& activa
     if (!qContext.CanRead()) {
         return loadedFlags;
     }
-    if (auto loaded = qContext.GetReader()->Get({ActivationComponent, activationLabel}).GetValueSync()) {
+    if (auto loaded = qContext.GetReader()->Get({.Component = ActivationComponent, .Label = activationLabel}).GetValueSync()) {
         auto flagsNode = NYT::NodeFromYsonString(loaded->Value);
         TVector<TAttribute> flags;
         for (const auto& [flagName, flagValue] : flagsNode.AsMap()) {
@@ -43,7 +43,7 @@ void SaveActivatedFlagsToQContext(const TVector<TAttribute>& flags, const TStrin
         flagsNode[flag.GetName()] = std::move(data);
     }
     auto flagsYson = NYT::NodeToYsonString(flagsNode, NYT::NYson::EYsonFormat::Binary);
-    qContext.GetWriter()->Put({ActivationComponent, activationLabel}, flagsYson).GetValueSync();
+    qContext.GetWriter()->Put({.Component = ActivationComponent, .Label = activationLabel}, flagsYson).GetValueSync();
     YQL_CLOG(INFO, ProviderConfig) << activationLabel << " activated flags are saved to QStorage";
 }
 

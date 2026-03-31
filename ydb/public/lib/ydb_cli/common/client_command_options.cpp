@@ -570,11 +570,13 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                     break;
                 }
                 case EOptionValueSource::ActiveProfile: {
-                    TString value;
-                    if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
-                        TStringBuilder txt;
-                        txt << "active profile \"" << ActiveProfile->GetName() << "\"";
-                        processValue(opt, value, txt, validate);
+                    if (ActiveProfile) {
+                        TString value;
+                        if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
+                            TStringBuilder txt;
+                            txt << "active profile \"" << ActiveProfile->GetName() << "\"";
+                            processValue(opt, value, txt, validate);
+                        }
                     }
                     break;
                 }
@@ -614,7 +616,9 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             Cerr << " from explicitly specified profile \"" << ExplicitProfile->GetName() << "\"";
             break;
         case EOptionValueSource::ActiveProfile:
-            Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            if (ActiveProfile) {
+                Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            }
             break;
         case EOptionValueSource::EnvironmentVariable:
             for (const auto& envInfo : opt.Opt->EnvInfo) {
@@ -644,7 +648,14 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             }
         }
     } else {
-        Cerr << "No authentication methods were found. Going without authentication" << Endl;
+        Cerr << "No authentication methods were found; going without authentication";
+        if (const TOptionParseResult* clientCertResult = FindResult("client-cert-file")) {
+            const auto& values = clientCertResult->Values();
+            if (!values.empty() && !values.back().empty()) {
+                Cerr << " (a client certificate is provided and may be used for authentication if the corresponding feature flag is enabled on the server)";
+            }
+        }
+        Cerr << Endl;
     }
 
     return messages;
@@ -699,7 +710,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
 
-        if (ActiveProfile != ExplicitProfile) {
+        if (ActiveProfile && ActiveProfile != ExplicitProfile) {
             if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                 applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
                 continue;
@@ -732,7 +743,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
                 continue;
             }
 
-            if (ActiveProfile != ExplicitProfile) {
+            if (ActiveProfile && ActiveProfile != ExplicitProfile) {
                 bool isFileName = false;
                 if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                     applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);

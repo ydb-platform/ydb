@@ -58,7 +58,7 @@ Each type has both `user_*` (per-user, writable) and `site_*` (system-wide, read
 
 Full documentation is available at [platformdirs.readthedocs.io](https://platformdirs.readthedocs.io):
 
-- **[Getting started tutorial](https://platformdirs.readthedocs.io/en/latest/usage.html)** -- learn core concepts
+- **[Getting started tutorial](https://platformdirs.readthedocs.io/en/latest/tutorial.html)** -- learn core concepts
   through real-world examples
 - **[How-to guides](https://platformdirs.readthedocs.io/en/latest/howto.html)** -- recipes for common tasks and
   platform-specific tips

@@ -41,7 +41,7 @@ public:
         return &dst.Buffer;
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
+    bool Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
         Y_ENSURE(UploaderId == ev->Sender, "Mismatch"
             << " Uploader: " << UploaderId.ToString()
             << " Sender: " << ev->Sender.ToString());
@@ -52,7 +52,7 @@ public:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (!UploadStatus.IsSuccess()) {
-            return;
+            return false;
         }
 
         UploadRows += Uploading.Buffer.GetRows();
@@ -65,6 +65,8 @@ public:
                 break;
             }
         }
+
+        return true;
     }
 
     bool ShouldWaitUpload()
@@ -128,6 +130,22 @@ public:
         }
 
         return true;
+    }
+
+    bool AllFlushed() const {
+        if (Uploading) {
+            return false;
+        }
+        for (const auto& [_, dst] : Destinations) {
+            if (!dst.Buffer.IsEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    ui64 GetUploadBytes() const {
+        return UploadBytes;
     }
 
     void AddIssue(const std::exception& exc) {
@@ -214,7 +232,7 @@ private:
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
 
-        UploaderId = TlsActivationContext->Register(actor);
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
 private:

@@ -95,6 +95,23 @@ public:
         return std::nullopt;
     }
 
+    // Find item by Key
+    [[nodiscard]] std::optional<TFindItem> GetValue(TKey key)
+    {
+        auto it = RangeByKey.find(key);
+        if (it != RangeByKey.end()) {
+            auto& rangesIt = it->second;
+            std::optional<TFindItem> result(
+                {.Key = rangesIt->first.Key,
+                 .Range = rangesIt->first.Range,
+                 .Value = rangesIt->second});
+
+            return result;
+        }
+
+        return std::nullopt;
+    }
+
     // Removes block range specified by Key from the collection. Returns false
     // if the range was not found in the collection.
     bool RemoveRange(TKey key)

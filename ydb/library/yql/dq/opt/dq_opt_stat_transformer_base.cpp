@@ -120,6 +120,9 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
     else if(TCoGraceJoinCore::Match(input.Get())) {
         InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
     }
+    else if(TDqBlockHashJoinCore::Match(input.Get())) {
+        InferStatisticsForBlockHashJoin(input, TypeCtx, Pctx, Hints);
+    }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
         InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
     }

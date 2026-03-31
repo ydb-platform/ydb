@@ -57,6 +57,11 @@ namespace NKikimr {
             action = TStrategyBalance(HullCtx, Params, LevelSnap, Task).Select();
             if (action != ActNothing) {
                 ++HullCtx->CompactionStrategyGroup.BlobsBalance();
+                if (Task->IsFullCompaction) {
+                    ++HullCtx->CompactionStrategyGroup.BlobsBalanceFull();
+                } else {
+                    ++HullCtx->CompactionStrategyGroup.BlobsBalanceLevel();
+                }
                 return action;
             }
 

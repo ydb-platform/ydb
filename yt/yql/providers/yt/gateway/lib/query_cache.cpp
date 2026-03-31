@@ -72,7 +72,7 @@ TFsQueryCacheItem::TFsQueryCacheItem(const TYtSettings& config, const TString& c
     }
 }
 
-NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& /*queue*/) {
+NThreading::TFuture<bool> TFsQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& /*queue*/) {
     for (auto cachePath: CachedPaths) {
         Cerr << "Check path: " << cachePath << "\n";
         if (!cachePath.Exists()) {
@@ -178,7 +178,7 @@ TString TYtQueryCacheItem::MakeCachedPath(const TString& hash) {
     return TString::Join(CachePath, "/", hex.substr(0, 2), "/", hex.substr(2, 2), "/", hex);
 }
 
-NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr& queue) {
+NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TWeakPtr& queue) {
     if (Entry->CacheTxId) {
         return NThreading::MakeFuture<bool>(false);
     }
@@ -224,7 +224,7 @@ NThreading::TFuture<bool> TYtQueryCacheItem::LookupImpl(const TAsyncQueue::TPtr&
     return futureLock.Apply([queue, cachedPaths = CachedPaths, dstTables = DstTables, entry = Entry,
                              useExpirationTimeout = UseExpirationTimeout, logCtx = LogCtx](const auto& f) {
         f.GetValue();
-        return queue->Async([=]() {
+        return TAsyncQueue::Async(queue, [=]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             bool hit = true;
             try {

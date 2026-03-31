@@ -33,19 +33,40 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
         return IGraphTransformer::TStatus::Error;
     }
     const auto source = input->Child(0);
+    if (!EnsureComputable(*source, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
     auto& partitionKeySelector = input->ChildRef(1);
     const auto partitionColumns = input->Child(2);
+    if (partitionColumns->GetTypeAnn() && partitionColumns->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(partitionColumns->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureTuple(*partitionColumns, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     const auto sortTraits = input->Child(3);
     const auto params = input->Child(4);
     Y_UNUSED(sortTraits);
-    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
+    bool isUniversal;
+    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, isUniversal, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
     }
-    if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { GetSeqItemType(source->GetTypeAnn()) }, ctx.Expr)) {
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (source->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(source->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    auto itemType = GetSeqItemType(source->GetTypeAnn());
+    if (!itemType) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(source->Pos()), TStringBuilder() << "Unsupported source type: " << *source->GetTypeAnn()));
+        return IGraphTransformer::TStatus::Error;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { itemType }, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
     auto partitionKeySelectorType = partitionKeySelector->GetTypeAnn();
@@ -55,6 +76,10 @@ IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, T
     auto partitionKeySelectorItemTypes = partitionKeySelectorType->Cast<TTupleExprType>()->GetItems();
 
     //merge measure columns, came from params, with partition columns to form output row type
+    if (params->GetTypeAnn() && params->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(params->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureStructType(*params, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -90,14 +115,31 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallablesWrapper(const TExprNod
     const auto names = input->Child(2);
     const auto callablesItems = input->Child(3);
 
+    if (inputRowType->GetTypeAnn() && inputRowType->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(inputRowType->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureType(*inputRowType, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureTupleOfAtoms(*patternVars, ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureTupleOfAtomsOrUniversal(*patternVars, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureTupleOfAtoms(*names, ctx.Expr)) {
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureTupleOfAtomsOrUniversal(*names, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (callablesItems->GetTypeAnn() && callablesItems->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!EnsureTupleSize(*callablesItems, names->ChildrenSize(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -121,11 +163,20 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode
     const auto vars = input->Child(1);
     const auto aggregates = input->Child(2);
 
+    if (aggregates->GetTypeAnn() && aggregates->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(aggregates->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureTuple(*aggregates, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureTupleOfAtoms(*vars, ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureTupleOfAtomsOrUniversal(*vars, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!EnsureTupleSize(*aggregates, vars->ChildrenSize(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -141,8 +192,13 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode
         }
 
         const auto key = aggregate->Child(0);
-        if (!EnsureAtom(*key, ctx.Expr)) {
+        if (!EnsureAtomOrUniversal(*key, ctx.Expr, isUniversal)) {
             return IGraphTransformer::TStatus::Error;
+        }
+
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         const auto traits = aggregate->Child(1);
@@ -169,9 +225,13 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode
         }
         items.push_back(ctx.Expr.MakeType<TItemExprType>(key->Content(), finishType));
     }
-    const auto status = ConvertToLambda(lambda, ctx.Expr, 1, 1);
+    const auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 1, 1);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!UpdateLambdaAllArgumentsTypes(lambda, {ctx.Expr.MakeType<TStructExprType>(items)}, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
@@ -233,9 +293,14 @@ IGraphTransformer::TStatus MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& 
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
         auto& lambda = input->ChildRef(FirstLambdaIndex + i);
-        auto status = ConvertToLambda(lambda, ctx.Expr, 2, 2);
+        bool isUniversal;
+        auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 2, 2);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!UpdateLambdaAllArgumentsTypes(
                 lambda,
@@ -272,14 +337,27 @@ IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& i
     const auto patternVars = input->Child(1);
     const auto names = input->Child(2);
 
+    if (inputRowType->GetTypeAnn() && inputRowType->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(inputRowType->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
     if (!EnsureType(*inputRowType, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureTupleOfAtoms(*patternVars, ctx.Expr)) {
+    bool isUniversal;
+    if (!EnsureTupleOfAtomsOrUniversal(*patternVars, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
     }
-    if (!EnsureTupleOfAtoms(*names, ctx.Expr)) {
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+    if (!EnsureTupleOfAtomsOrUniversal(*names, ctx.Expr, isUniversal)) {
         return IGraphTransformer::TStatus::Error;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureArgsCount(*input, FirstLambdaIndex + names->ChildrenSize(), ctx.Expr)) {
@@ -290,9 +368,14 @@ IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& i
     TVector<const TItemExprType*> items;
     for (size_t i = 0; i != names->ChildrenSize(); ++i) {
         auto& lambda = input->ChildRef(FirstLambdaIndex + i);
-        auto status = ConvertToLambda(lambda, ctx.Expr, 3, 3);
+        bool isUniversal;
+        auto status = ConvertToLambda(lambda, ctx.Expr, isUniversal, 3, 3);
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
+        }
+        if (isUniversal) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!UpdateLambdaAllArgumentsTypes(
                 lambda,
@@ -381,9 +464,14 @@ IGraphTransformer::TStatus MatchRecognizeCoreWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, 1, 1);
+    bool isUniversal;
+    auto status = ConvertToLambda(partitionKeySelector, ctx.Expr, isUniversal, 1, 1);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
     if (!UpdateLambdaAllArgumentsTypes(partitionKeySelector, { inputRowType }, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;

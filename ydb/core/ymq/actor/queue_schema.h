@@ -1,11 +1,13 @@
 #pragma once
-#include <ydb/core/ymq/actor/cfg/defs.h>
 
+#include "action.h"
 #include "schema.h"
+
 #include <ydb/core/quoter/public/quoter.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/public/lib/value/value.h>
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <ydb/core/ymq/base/queue_attributes.h>
 
 #include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
@@ -59,6 +61,7 @@ public:
 
     void RequestTablesFormatSettings(const TString& accountName);
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
+    void RegisterMakeTopicActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
@@ -105,6 +108,7 @@ public:
         GetTablesFormatSetting,
         MakeQueueDir,
         MakeQueueVersionDir,
+        MakeTopic,
         MakeShards,
         MakeTables,
         DiscoverLeaderTabletId,
@@ -156,6 +160,8 @@ private:
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
 
     TActorId AddQuoterResourceActor_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 class TDeleteQueueSchemaActorV2
@@ -226,6 +232,7 @@ public:
         EraseQueueRecord,
         RemoveTables,
         RemoveShards,
+        RemoveTopic,
         RemoveQueueVersionDirectory,
         RemoveQueueDirectory,
         DeleteQuoterResource,

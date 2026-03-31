@@ -16,12 +16,40 @@
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
 #include <util/system/file.h>
+#include <util/system/fs.h>
+
+#include <sys/stat.h>
 
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NWrappers;
 using namespace NKikimr::NWrappers::NExternalStorage;
 using namespace Aws::S3::Model;
+
+class TPermissionGuard {
+public:
+    TPermissionGuard(const TString& path, mode_t tempMode)
+        : Path_(path)
+    {
+        struct stat st;
+        Y_ABORT_UNLESS(::stat(path.c_str(), &st) == 0,
+            "stat(%s) failed: %s", path.c_str(), strerror(errno));
+        OriginalMode_ = st.st_mode & 07777;
+        Y_ABORT_UNLESS(::chmod(path.c_str(), tempMode) == 0,
+            "chmod(%s, 0%o) failed: %s", path.c_str(), tempMode, strerror(errno));
+    }
+
+    ~TPermissionGuard() {
+        ::chmod(Path_.c_str(), OriginalMode_);
+    }
+
+    TPermissionGuard(const TPermissionGuard&) = delete;
+    TPermissionGuard& operator=(const TPermissionGuard&) = delete;
+
+private:
+    TString Path_;
+    mode_t OriginalMode_;
+};
 
 class TFsStorageTestBase : public NUnitTest::TTestBase {
 protected:
@@ -537,3 +565,202 @@ public:
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TFsStorageTests);
+
+class TFsStorageRestartTests : public TFsStorageTestBase {
+    UNIT_TEST_SUITE(TFsStorageRestartTests);
+    UNIT_TEST(CompleteMultipartUploadWithStaleUploadIdReturnsRetryableError);
+    UNIT_TEST(UploadPartFirstPartAfterRestartRecreatesSession);
+    UNIT_TEST(UploadPartLaterPartAfterRestartReturnsError);
+    UNIT_TEST(PassAwayDeletesIncompleteFiles);
+    UNIT_TEST(AbortDeleteFailureStillReleasesLock);
+    UNIT_TEST_SUITE_END();
+
+protected:
+    void RestartWrapper() {
+        Runtime->Send(new IEventHandle(Wrapper, Edge, new TEvents::TEvPoison()));
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
+        Runtime->DispatchEvents(options);
+
+        NKikimrSchemeOp::TFSSettings settings;
+        settings.SetBasePath(TempDir->Name());
+        auto config = std::make_shared<TFsExternalStorageConfig>(settings);
+        Wrapper = Runtime->Register(NWrappers::CreateStorageWrapper(config->ConstructStorageOperator()));
+    }
+
+public:
+    void CompleteMultipartUploadWithStaleUploadIdReturnsRetryableError() {
+        const TString key = KeyPath("restart_complete_test.txt");
+
+        TString uploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "data before restart");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        RestartWrapper();
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId);
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT(result.GetError().ShouldRetry());
+            TString exceptionName(result.GetError().GetExceptionName().data(),
+                result.GetError().GetExceptionName().size());
+            UNIT_ASSERT_C(exceptionName == "FsUploadSessionLost",
+                TStringBuilder() << "Expected 'FsUploadSessionLost', got: " << exceptionName);
+        }
+
+        TString newUploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            newUploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, newUploadId, 1, "data after restart");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = CompleteMultipartUpload(key, newUploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), "data after restart");
+    }
+
+    void UploadPartFirstPartAfterRestartRecreatesSession() {
+        const TString key = KeyPath("restart_part1_test.txt");
+
+        TString uploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        RestartWrapper();
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "part1_after_restart");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), "part1_after_restart");
+    }
+
+    void UploadPartLaterPartAfterRestartReturnsError() {
+        const TString key = KeyPath("restart_part2_test.txt");
+
+        TString uploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "part1_data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        RestartWrapper();
+
+        {
+            auto result = UploadPart(key, uploadId, 2, "part2_data");
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "fresh_part1");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        {
+            auto result = CompleteMultipartUpload(key, uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        TFileInput f(key);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadAll(), "fresh_part1");
+    }
+
+    void PassAwayDeletesIncompleteFiles() {
+        const TString key = KeyPath("passaway_cleanup_test.txt");
+        const TString incompleteKey = key + ".incomplete";
+
+        TString uploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "cleanup_data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+
+        Runtime->Send(new IEventHandle(Wrapper, Edge, new TEvents::TEvPoison()));
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Poison, 1);
+        Runtime->DispatchEvents(options);
+
+        UNIT_ASSERT(!TFsPath(incompleteKey).Exists());
+    }
+
+    void AbortDeleteFailureStillReleasesLock() {
+        const TString key = KeyPath("subdir/abort_lock_test.txt");
+        const TString incompleteKey = key + ".incomplete";
+        const TString parentDir = TFsPath(key).Parent().GetPath();
+
+        TString uploadId;
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+            uploadId = result.GetResult().GetUploadId();
+        }
+
+        {
+            auto result = UploadPart(key, uploadId, 1, "abort_data");
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+
+        {
+            TPermissionGuard guard(parentDir, S_IRUSR | S_IXUSR);
+
+            auto result = AbortMultipartUpload(key, uploadId);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        UNIT_ASSERT(TFsPath(incompleteKey).Exists());
+
+        {
+            auto result = CreateMultipartUpload(key);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
+        }
+
+        NFs::Remove(incompleteKey);
+    }
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TFsStorageRestartTests);

@@ -17,7 +17,8 @@ namespace NYql::NWindow {
 template <typename T>
 class TNumberAndDirection {
 public:
-    static inline constexpr bool IsArithmetic = std::is_arithmetic_v<T>;
+    static inline constexpr bool IsInt128 = std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NDecimal::TUint128>;
+    static inline constexpr bool IsArithmetic = std::is_arithmetic_v<T> || IsInt128;
 
     struct TUnbounded {
         bool operator==(const TUnbounded&) const = default;
@@ -130,8 +131,12 @@ private:
     {
         if constexpr (std::is_floating_point_v<TNumberType>) {
             if (!IsInf()) {
-                Y_ABORT_UNLESS(!std::isnan(GetUnderlyingValue()), "Nan is not allowed to be a directioned value.");
+                Y_DEBUG_ABORT_UNLESS(!std::isnan(GetUnderlyingValue()), "Nan is not allowed to be a directioned value.");
+                Y_DEBUG_ABORT_UNLESS(!std::isinf(GetUnderlyingValue()), "Inf is not allowed to be a directioned value.");
             }
+        }
+        if constexpr (IsInt128) {
+            Y_DEBUG_ABORT_UNLESS(NYql::NDecimal::IsNormal(GetUnderlyingValue()), "Only normal values are allowed.");
         }
         if constexpr (IsArithmetic) {
             YQL_ENSURE(IsInf() || GetUnderlyingValue() >= 0, "Only positive values are allowed.");

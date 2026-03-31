@@ -850,7 +850,7 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
             }
-            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{.Type = EUserDataType::URL, .UrlToken = {}, .Data = TString(args[0]), .Usage = {}, .FrozenFile = {}});
             userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
         } else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
             if (args.size() != 0) {

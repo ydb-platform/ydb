@@ -14,25 +14,27 @@ class TRegion
 {
 public:
     TRegion(
+        NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
+        ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        ui32 syncRequestsBatchSize);
+        ui32 syncRequestsBatchSize,
+        TDuration traceSamplePeriod);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
+    NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    size_t GetVChunkIndex(ui64 blockIndex) const;
-    size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

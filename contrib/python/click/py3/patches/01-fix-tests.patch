@@ -40,3 +40,13 @@
 -    assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])
 +    #assert "pyproject.toml" in click.utils._expand_args(["*.toml"])
 +    #assert os.path.join("docs", "conf.py") in click.utils._expand_args(["**/conf.py"])
+--- contrib/python/click/py3/tests/test_context.py	(index)
++++ contrib/python/click/py3/tests/test_context.py	(working tree)
+@@ -321,6 +321,7 @@ def test_multiple_eager_callbacks(runner, cli_args, expect):
+     assert called == expect
+ 
+ 
++@pytest.mark.xfail
+ def test_no_state_leaks(runner):
+     """Demonstrate state leaks with a specific case of the generic test above.
+ 

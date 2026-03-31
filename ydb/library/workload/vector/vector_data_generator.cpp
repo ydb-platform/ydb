@@ -4,6 +4,7 @@
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <ydb/public/api/protos/ydb_formats.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 #include <ydb/library/workload/abstract/colors.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
@@ -257,6 +258,7 @@ private:
     const TVectorWorkloadParams& Params;
     const NVector::TVectorOpts& VectorOpts;
     const size_t RowCount;
+    const size_t PrefixCount;
 
     std::mt19937 RandomGenerator;
     std::uniform_real_distribution<float> Distribution;
@@ -288,11 +290,12 @@ private:
     }
 
 public:
-    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const uint32_t randomSeed)
+    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const size_t prefixCount, const uint32_t randomSeed)
         : IBulkDataGenerator(params.TableOpts.Name, rowCount)
         , Params(params)
         , VectorOpts(vectorOpts)
         , RowCount(rowCount)
+        , PrefixCount(prefixCount)
         , RandomGenerator(randomSeed)
         , Distribution(0.0f, 1.0f)
     { }
@@ -304,6 +307,7 @@ public:
 
             arrow::UInt64Builder idsBuilder;
             arrow::StringBuilder embeddingsBuilder;
+            arrow::UInt64Builder prefixesBuilder;
 
             std::function<TStringBuilder()> generateEmbedding;
             if (VectorOpts.VectorType == "float") {
@@ -318,6 +322,7 @@ public:
                 ythrow yexception() << "Unknown vector type: " << VectorOpts.VectorType;
             }
 
+            const bool prefixed = Params.KmeansTreePrefixed;
             size_t currentBatchSize;
             for (currentBatchSize = 0; currentBatchSize < PORTION_SIZE && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
                 if (const auto status = idsBuilder.Append(static_cast<uint64_t>(DoneRows)); !status.ok()) {
@@ -327,6 +332,13 @@ public:
                 TStringBuilder buffer = generateEmbedding();
                 if (const auto status = embeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
                     ythrow yexception() << status.ToString();
+                }
+
+                if (prefixed) {
+                    const uint64_t prefix = PrefixCount > 0 ? (DoneRows % PrefixCount) : 0;
+                    if (const auto status = prefixesBuilder.Append(prefix); !status.ok()) {
+                        ythrow yexception() << status.ToString();
+                    }
                 }
             }
             if (currentBatchSize == 0) {
@@ -345,10 +357,21 @@ public:
             }
             resultColumns.push_back(std::move(newEmbeddingColumn));
 
-            const auto schema = arrow::schema({
+            std::vector<std::shared_ptr<arrow::Field>> fields = {
                 arrow::field("id", arrow::uint64()),
                 arrow::field("embedding", arrow::binary()),
-            });
+            };
+
+            if (prefixed) {
+                std::shared_ptr<arrow::UInt64Array> newPrefixColumn;
+                if (const auto status = prefixesBuilder.Finish(&newPrefixColumn); !status.ok()) {
+                    ythrow yexception() << status.ToString();
+                }
+                resultColumns.push_back(std::move(newPrefixColumn));
+                fields.push_back(arrow::field("prefix", arrow::uint64()));
+            }
+
+            const auto schema = arrow::schema(fields);
             const auto recordBatch = arrow::RecordBatch::Make(
                 schema,
                 currentBatchSize,
@@ -367,9 +390,48 @@ public:
 
 }
 
+TWorkloadVectorDataInitializerBase::TWorkloadVectorDataInitializerBase(const TString& name, const TString& description, const TVectorWorkloadParams& params)
+    : TWorkloadDataInitializerBase(name, description, params)
+    , VectorParams(params)
+{ }
+
+int TWorkloadVectorDataInitializerBase::PostImport() {
+    if (VectorParams.IndexType == "None") {
+        return EXIT_SUCCESS;
+    }
+
+    TStringBuilder ddlQuery;
+    ddlQuery << "ALTER TABLE `" << VectorParams.GetFullTableName(VectorParams.TableOpts.Name.c_str()) << "`\n";
+    ddlQuery << "ADD INDEX `" << VectorParams.IndexName << "`\n";
+    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    if (VectorParams.KmeansTreePrefixed) {
+        ddlQuery << "ON (prefix, embedding)\n";
+    } else {
+        ddlQuery << "ON (embedding)\n";
+    }
+    if (VectorParams.KmeansTreeCovering) {
+        ddlQuery << "COVER (id)\n";
+    }
+    ddlQuery << "WITH (\n";
+    ddlQuery << "    " << VectorParams.GetDistanceDDL() << ",\n";
+    ddlQuery << "    vector_type=" << VectorParams.VectorOpts.VectorType << ",\n";
+    ddlQuery << "    vector_dimension=" << VectorParams.VectorOpts.VectorDimension << ",\n";
+    ddlQuery << "    levels=" << VectorParams.KmeansTreeLevels << ",\n";
+    ddlQuery << "    clusters=" << VectorParams.KmeansTreeClusters << "\n";
+    ddlQuery << ");";
+
+    Cout << "Building vector index ..." << Endl;
+    auto result = VectorParams.QueryClient->RetryQuerySync([&ddlQuery](NYdb::NQuery::TSession session) {
+        return session.ExecuteQuery(ddlQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    });
+    NYdb::NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    Cout << "Building vector index ...Ok" << Endl;
+
+    return EXIT_SUCCESS;
+}
+
 TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("files", "Import vectors from files", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("files", "Import vectors from files and build a vector index", params)
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
@@ -402,11 +464,11 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         0,
-        Params.TableOpts.Name,
+        VectorParams.TableOpts.Name,
         DataFiles,
-        Params.GetColumns(),
+        VectorParams.GetColumns(),
         TDataGenerator::EPortionSizeUnit::Line
     );
 
@@ -416,15 +478,19 @@ TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData
 }
 
 TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(const TVectorWorkloadParams& params)
-    : TWorkloadDataInitializerBase("generator", "Generate random vectors", params)
-    , Params(params)
+    : TWorkloadVectorDataInitializerBase("generator", "Generate random vectors and build a vector index", params)
+    , VectorOpts(params.VectorOpts)
 { }
 
 void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
-    NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption( "rows", "Number of rows to generate")
+    opts.AddLongOption("rows", "Number of rows to generate")
         .RequiredArgument("NUMBER")
-        .Required().StoreResult(&RowCount);
+        .DefaultValue(RowCount)
+        .StoreResult(&RowCount);
+    opts.AddLongOption("prefix-count", "Number of prefixes for prefix index")
+        .RequiredArgument("NUMBER")
+        .DefaultValue(PrefixCount)
+        .StoreResult(&PrefixCount);
     opts.AddLongOption("seed", "Seed for random number generator")
         .RequiredArgument("NUMBER")
         .DefaultValue(RandomSeed)
@@ -433,7 +499,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(Params, VectorOpts, RowCount, RandomSeed)};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed)};
 }
 
 } // namespace NYdbWorkload

@@ -13,13 +13,15 @@
 
 namespace NKikimr::NSqsTopic::V1 {
 
-    struct TConsumerAttributes {
+    struct TQueueAttributes {
         NKikimrPQ::TPQTabletConfig::TConsumer Consumer;
         TMaybe<TDuration> MessageRetentionPeriod;
+        TMaybe<TDuration> ReceiveMessageDelay;
         TMaybe<ui32> MaximumMessageSize;
         TMaybe<TString> KmsMasterKeyId;
         TMaybe<TDuration> KmsDataKeyReusePeriodSeconds;
         TMaybe<bool> SqsManagedSseEnabled;
+        TMaybe<bool> ContentBasedDeduplication;
     };
 
     enum class EConsumerAttributeUsageTarget {
@@ -27,7 +29,7 @@ namespace NKikimr::NSqsTopic::V1 {
         Alter,
     };
 
-    std::expected<TConsumerAttributes, std::string> ParseConsumerAttributes(
+    std::expected<TQueueAttributes, std::string> ParseQueueAttributes(
         const google::protobuf::Map<TString, TString>& attributes,
         const TString& queueName,
         const TString& consumerName,
@@ -38,8 +40,8 @@ namespace NKikimr::NSqsTopic::V1 {
     std::expected<void, std::string> CompareWithExistingQueueAttributes(
         const NKikimrPQ::TPQTabletConfig& existingConfig,
         const NKikimrPQ::TPQTabletConfig::TConsumer& existingConsumer,
-        const TConsumerAttributes& newConfig
+        const TQueueAttributes& newConfig
     );
 
-    std::expected<void, std::string> ValidateLimits(const TConsumerAttributes& config);
+    std::expected<void, std::string> ValidateLimits(const TQueueAttributes& config);
 } // namespace NKikimr::NSqsTopic::V1

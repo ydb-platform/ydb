@@ -259,6 +259,8 @@ public:
         return MatchRecognizeAggregations_;
     }
 
+    bool IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(NYql::TPosition tokenPos);
 
     // `if ( ret.error()    ) an error issued`
@@ -438,6 +440,7 @@ public:
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
     bool WindowNewPipeline = false;
+    bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

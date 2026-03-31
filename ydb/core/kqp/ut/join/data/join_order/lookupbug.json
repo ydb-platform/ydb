@@ -3,32 +3,32 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (Map)",
+        "op_name":"LeftJoin (Map)",
         "args":
           [
             {
-              "op_name":"InnerJoin (Map)",
+              "op_name":"LeftJoin (Map)",
               "args":
                 [
                   {
                     "op_name":"TableFullScan",
-                    "table":"browsers"
+                    "table":"quotas_browsers_relation"
                   },
                   {
-                    "op_name":"TableFullScan",
-                    "table":"quotas_browsers_relation"
+                    "op_name":"TableLookup",
+                    "table":"browsers"
                   }
                 ]
             },
             {
-              "op_name":"TablePointLookup",
-              "table":"quota"
+              "op_name":"TableLookup",
+              "table":"browser_groups"
             }
           ]
       },
       {
-        "op_name":"TableLookup",
-        "table":"browser_groups"
+        "op_name":"TableFullScan",
+        "table":"quota"
       }
     ]
 }

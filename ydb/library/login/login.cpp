@@ -1149,7 +1149,9 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
             if (pbSid.GetPasswordHashes()) {
                 sid.PasswordHashes = pbSid.GetPasswordHashes();
             } else if (pbSid.GetArgonHash()) {
-                sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*ArgonHashToNewFormat(pbSid.GetArgonHash()));
+                if (const auto argonHashInNewFormat = ArgonHashToNewFormat(pbSid.GetArgonHash())) {
+                    sid.PasswordHashes = HashedPasswordFromNewArgonHashFormat(*argonHashInNewFormat);
+                }
             }
             sid.FillHashStorage();
 

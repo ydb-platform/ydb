@@ -193,7 +193,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     } else if (useSkiff) {
                         tables[i].Format = SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false);
                     } else {
-                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
+                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute) && ExecCtx_->CheckSpecDoesntUseNativeYtTypes_) {
                             EnsureSpecDoesntUseNativeYtTypes(specNode, tablePath, true);
                         }
                         NYT::TNode formatNode("yson");

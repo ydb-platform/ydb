@@ -24,7 +24,7 @@ Y_UNIT_TEST(TopLevelNamesCollected) {
             $first, $second, $_ = AsTuple(1, 2, 3);
         )";
 
-    TGlobalContext ctx = global->Analyze({query}, {});
+    TGlobalContext ctx = global->Analyze({.Text = query}, {});
     Sort(ctx.Names);
 
     TVector<TString> expected = {
@@ -86,25 +86,25 @@ Y_UNIT_TEST(EnclosingFunctionName) {
     {
         TString query = "SELECT * FROM Concat(#)";
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-        TFunctionContext expected = {"Concat", 0};
+        TFunctionContext expected = {.Name = "Concat", .ArgumentNumber = 0};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
     }
     {
         TString query = "SELECT * FROM Concat(a, #)";
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-        TFunctionContext expected = {"Concat", 1, "a"};
+        TFunctionContext expected = {.Name = "Concat", .ArgumentNumber = 1, .Arg0 = "a"};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
     }
     {
         TString query = "SELECT * FROM Concat(a#)";
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-        TFunctionContext expected = {"Concat", 0};
+        TFunctionContext expected = {.Name = "Concat", .ArgumentNumber = 0};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
     }
     {
         TString query = "SELECT * FROM Concat(#";
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-        TFunctionContext expected = {"Concat", 0};
+        TFunctionContext expected = {.Name = "Concat", .ArgumentNumber = 0};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction, expected);
     }
     {
@@ -115,7 +115,7 @@ Y_UNIT_TEST(EnclosingFunctionName) {
     {
         TString query = "SELECT * FROM plato.Concat(#)";
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
-        TClusterContext expected = {"", "plato"};
+        TClusterContext expected = {.Provider = "", .Name = "plato"};
         UNIT_ASSERT_VALUES_EQUAL(ctx.EnclosingFunction->Cluster, expected);
     }
 }
@@ -127,7 +127,7 @@ Y_UNIT_TEST(SimpleSelectFrom) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TTableId{"plato", "Input"}}};
+        TColumnContext expected = {.Tables = {TTableId{.Cluster = "plato", .Path = "Input"}}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
     {
@@ -135,7 +135,7 @@ Y_UNIT_TEST(SimpleSelectFrom) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TTableId{"plato", "//home/input"}}};
+        TColumnContext expected = {.Tables = {TTableId{.Cluster = "plato", .Path = "//home/input"}}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
     {
@@ -143,7 +143,7 @@ Y_UNIT_TEST(SimpleSelectFrom) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TAliased<TTableId>("x", TTableId{"plato", "Input"})}};
+        TColumnContext expected = {.Tables = {TAliased<TTableId>("x", TTableId{.Cluster = "plato", .Path = "Input"})}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
 }
@@ -161,10 +161,10 @@ Y_UNIT_TEST(Join) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("", {"", "c"}),
-                TAliased<TTableId>("", {"p", "b"}),
-                TAliased<TTableId>("x", {"q", "a"}),
-                TAliased<TTableId>("y", {"p", "d"}),
+                TAliased<TTableId>("", {.Cluster = "", .Path = "c"}),
+                TAliased<TTableId>("", {.Cluster = "p", .Path = "b"}),
+                TAliased<TTableId>("x", {.Cluster = "q", .Path = "a"}),
+                TAliased<TTableId>("y", {.Cluster = "p", .Path = "d"}),
             },
         };
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
@@ -178,7 +178,7 @@ Y_UNIT_TEST(Subquery) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {"", "x"})}};
+        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {.Cluster = "", .Path = "x"})}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
     {
@@ -202,7 +202,7 @@ Y_UNIT_TEST(Subquery) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Columns = {{"x", "a"}, {"x", "b"}}};
+        TColumnContext expected = {.Columns = {{.TableAlias = "x", .Name = "a"}, {.TableAlias = "x", .Name = "b"}}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
     {
@@ -216,7 +216,7 @@ Y_UNIT_TEST(Subquery) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("ep", {"example", "/people"}),
+                TAliased<TTableId>("ep", {.Cluster = "example", .Path = "/people"}),
             },
             .Columns = {
                 {.TableAlias = "et", .Name = "Room"},
@@ -238,7 +238,7 @@ Y_UNIT_TEST(Subquery) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("", {"", "a"}),
+                TAliased<TTableId>("", {.Cluster = "", .Path = "a"}),
             },
             .Columns = {
                 {.Name = "d"},
@@ -254,7 +254,7 @@ Y_UNIT_TEST(Subquery) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("", {"", "t"}),
+                TAliased<TTableId>("", {.Cluster = "", .Path = "t"}),
             },
         };
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
@@ -270,7 +270,7 @@ Y_UNIT_TEST(SubqueryWithout) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("", {"", "x"}),
+                TAliased<TTableId>("", {.Cluster = "", .Path = "x"}),
             },
             .WithoutByTableAlias = {
                 {"", {"a"}},
@@ -293,9 +293,9 @@ Y_UNIT_TEST(SubqueryWithout) {
 
         TColumnContext expected = {
             .Tables = {
-                TAliased<TTableId>("ep", {"", "testing"}),
-                TAliased<TTableId>("ep", {"example", "/people"}),
-                TAliased<TTableId>("ep", {"example", "/yql/tutorial"}),
+                TAliased<TTableId>("ep", {.Cluster = "", .Path = "testing"}),
+                TAliased<TTableId>("ep", {.Cluster = "example", .Path = "/people"}),
+                TAliased<TTableId>("ep", {.Cluster = "example", .Path = "/yql/tutorial"}),
             },
             .WithoutByTableAlias = {
                 {"ep", {"course", "Age"}},
@@ -312,7 +312,7 @@ Y_UNIT_TEST(Projection) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {"", "x"})}};
+        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {.Cluster = "", .Path = "x"})}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
 }
@@ -327,7 +327,7 @@ Y_UNIT_TEST(NamedSubquery) {
 
         TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
-        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {"", "x"})}};
+        TColumnContext expected = {.Tables = {TAliased<TTableId>("", {.Cluster = "", .Path = "x"})}};
         UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
     }
     {
@@ -395,8 +395,8 @@ Y_UNIT_TEST(EvaluationAssignment) {
 
     TColumnContext expected = {
         .Tables = {
-            TAliased<TTableId>("", {"", "table1"}),
-            TAliased<TTableId>("", {"", "table2"}),
+            TAliased<TTableId>("", {.Cluster = "", .Path = "table1"}),
+            TAliased<TTableId>("", {.Cluster = "", .Path = "table2"}),
         },
     };
     UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
@@ -446,7 +446,7 @@ Y_UNIT_TEST(EvaluationStringConcat) {
     TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
 
     TColumnContext expected = {
-        .Tables = {TAliased<TTableId>("", {"example", "/home/yql/1"})},
+        .Tables = {TAliased<TTableId>("", {.Cluster = "example", .Path = "/home/yql/1"})},
     };
     UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
 }

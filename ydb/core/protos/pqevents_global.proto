@@ -1,0 +1,308 @@
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_transaction.proto";
+
+import "ydb/core/protos/base.proto";
+
+import "ydb/library/actors/protos/actors.proto";
+
+package NKikimrPQ;
+option java_package = "ru.yandex.persqueue.events.global.proto";
+
+
+message TUpdateConfig {
+    optional uint64 TxId = 1;
+    optional TPQTabletConfig TabletConfig = 2;
+    optional TBootstrapConfig BootstrapConfig = 3; // passed only upon creation
+}
+
+message TUpdateBalancerConfig { //for schemeshard use only
+    optional uint64 TxId = 1;
+    optional uint64 PathId = 2;
+    optional string TopicName = 3;
+    optional string Path = 4;
+    optional uint32 Version = 5;
+
+    optional uint32 TotalGroupCount = 11;
+    optional uint32 NextPartitionId = 12;
+
+    optional TPQTabletConfig TabletConfig = 7;
+    optional uint32 PartitionPerTablet = 8;
+    optional uint64 SchemeShardId = 9;
+    message TPartition {
+        optional uint32 Partition = 1;
+        optional uint64 TabletId = 2;
+        optional uint32 Group = 3;
+        optional TPartitionKeyRange KeyRange = 4;
+        optional ETopicPartitionStatus Status = 5;
+        repeated uint32 ParentPartitionIds = 6;
+        repeated uint32 ChildPartitionIds = 7;
+        optional uint64 CreateVersion = 8;
+    }
+
+    repeated TPartition Partitions = 6;
+
+    message TTablet {
+        optional uint64 TabletId = 1;
+        optional uint64 Owner = 2;
+        optional uint64 Idx = 3;
+    }
+
+    repeated TTablet Tablets = 10;
+    optional uint64 SubDomainPathId = 13;
+}
+
+message TRegisterReadSession {
+    optional string Session = 1;
+    optional NActorsProto.TActorId PipeClient = 2;
+    optional string ClientId = 3;
+    optional string ClientNode = 4;
+
+    repeated uint32 Groups = 5;
+}
+
+message TGetReadSessionsInfo {
+    optional string ClientId = 1;
+    repeated uint32 Partitions = 2;
+}
+
+message TReadSessionsInfoResponse {
+    message TPartitionInfo {
+        optional uint32 Partition = 1;
+        optional string ClientNode = 2;
+        optional uint32 ProxyNodeId = 3;
+        optional string Session = 4;
+        optional uint64 Timestamp = 5;
+        optional uint64 TimestampMs = 6;
+    }
+    repeated TPartitionInfo PartitionInfo = 1;
+    optional uint64 TabletId = 2;
+
+    message TReadSessionInfo {
+        optional NActorsProto.TActorId SessionActor = 1;
+        optional string Session = 2;
+
+    }
+    repeated TReadSessionInfo ReadSessions = 3;
+}
+
+message TGetPartitionsLocation {
+    repeated uint64 Partitions = 1;
+}
+
+message TPartitionsLocationResponse {
+    optional bool Status = 1;
+    repeated TPartitionLocation Locations = 2;
+}
+
+message TLockPartition {
+    optional uint32 Partition = 1;
+    optional uint64 TabletId = 2;
+    optional string Topic = 3;
+    optional uint32 Generation = 4;
+    optional uint32 Step = 5;
+    optional string Session = 6;
+    optional string ClientId = 7;
+    optional NActorsProto.TActorId PipeClient = 8;
+    optional string Path = 9;
+}
+
+message TReleasePartition {
+    optional string Topic = 1;
+    optional uint64 Generation = 2;
+    optional string Session = 3;
+    optional string ClientId = 4;
+    reserved 5; // optional uint32 Count = 5;
+    optional NActorsProto.TActorId PipeClient = 6;
+    optional uint32 Group = 7;
+    optional string Path = 8;
+    reserved 9; // repeated uint32 Partition = 9
+}
+
+message TPartitionReleased {
+    optional uint32 Partition = 1;
+    optional string Topic = 2;
+    optional string Session = 3;
+    optional NActorsProto.TActorId PipeClient = 4;
+    optional string ClientId = 5;
+}
+
+message TDropTablet {
+    optional uint64 TxId = 1;
+    optional ETabletState RequestedState = 2;
+}
+
+message TDropTabletResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint64 TxId = 2;
+    optional uint64 TabletId = 3;
+    optional ETabletState ActualState = 4;
+}
+
+enum EStatus{
+    OK = 0;
+    ERROR = 1;
+    ERROR_BAD_VERSION = 2;
+    ERROR_UPDATE_IN_PROGRESS = 3;
+}
+
+message TUpdateConfigResponse {
+    optional uint64 TxId = 1;
+    optional uint64 Origin = 2;
+    optional EStatus Status = 3;
+}
+
+message TOffsets {
+    optional string ClientId = 1;
+}
+
+message TStatus {
+    optional string ClientId = 1;
+    optional bool GetStatForAllConsumers = 2;
+    repeated string Consumers = 3;
+}
+
+message THasDataInfo {
+    optional int32 Partition = 1;
+    optional uint64 Offset = 2;
+    optional uint64 Deadline = 3; //in ms
+    optional NActorsProto.TActorId Sender = 4;
+    optional uint64 Cookie = 5;
+
+    optional string ClientId = 6;
+
+    optional int32 MaxTimeLagMs = 7; // optional, default = infinity, why we use int instead of uint?
+    optional uint64 ReadTimestampMs = 8; //optional, default = 0
+}
+
+message THasDataInfoResponse { //signal
+    optional uint64 EndOffset = 1;
+    optional uint64 Cookie = 2;
+    optional uint64 SizeLag = 3;
+    optional uint64 WriteTimestampEstimateMS = 4;
+    optional bool ReadingFinished = 5;
+    repeated uint32 AdjacentPartitionIds = 6;
+    repeated uint32 ChildPartitionIds = 7;
+}
+
+message TPartitionClientInfo {
+    repeated int32 Partitions = 1;
+}
+
+message TClientInfoResponse {
+    optional int32 Partition = 1;
+    optional uint64 StartOffset = 2;
+    optional uint64 EndOffset = 3;
+    optional uint64 ResponseTimestamp = 4;
+    repeated TClientInfo ClientInfo = 5;
+}
+
+message TGetPartitionIdForWrite {
+}
+
+message TGetPartitionIdForWriteResponse {
+    optional uint64 PartitionId = 1;
+}
+
+message TEvProposeTransaction {
+    optional NActorsProto.TActorId SourceActor = 1;
+    optional uint64 TxId = 2;
+    oneof TxBody {
+        TDataTransaction Data = 3;
+        TConfigTransaction Config = 4;
+    }
+    optional NActorsProto.TActorId SupportivePartitionActor = 5;
+};
+
+message TEvProposeTransactionResult {
+    enum EStatus {
+        PREPARED = 1;
+        COMPLETE = 2;
+        ABORTED = 3;
+        ERROR = 4;
+        LOCKS_BROKEN = 5;
+        CANCELLED = 6;
+        BAD_REQUEST = 7;
+        OVERLOADED = 8;
+    };
+
+    optional uint64 Origin = 1; // Tablet Id
+    optional EStatus Status = 2;
+    optional uint64 TxId = 3;
+    optional uint64 MinStep = 4;
+    optional uint64 MaxStep = 6;
+    optional string StatusMessage = 7;
+    optional uint64 Step = 8;
+    repeated fixed64 DomainCoordinators = 9;
+    repeated TError Errors = 10;
+};
+
+message TEvCancelTransactionProposal {
+    optional uint64 TxId = 1;
+};
+
+message TEvPeriodicTopicStats {
+    required uint64 PathId = 1;
+
+    required uint64 Generation = 2;
+    required uint64 Round = 3;
+
+    required uint64 DataSize = 4;
+    required uint64 UsedReserveSize = 5;
+
+    optional bool SubDomainOutOfSpace = 6;
+};
+
+// The consumer's reading of the partition is finished (from ReadSession)
+message TEvReadingPartitionFinishedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional bool ScaleAwareSDK = 3;
+    optional bool StartedReadingFromEndOffset = 4;
+    optional NActorsProto.TActorId PipeClient = 5;
+};
+
+// The consumer's reading of the partition is started (from ReadSession)
+message TEvReadingPartitionStartedRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional NActorsProto.TActorId PipeClient = 3;
+};
+
+message TEvOffloadStatus {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        DONE = 1;
+    }
+
+    optional uint64 TxId = 1;
+    optional EStatus Status = 2;
+    optional uint64 TabletId = 3;
+    optional uint32 PartitionId = 4;
+}
+
+message TEvBalancingSubscribe {
+    optional NActorsProto.TActorId SourceActor = 2;
+    optional string Topic = 3;
+    optional string Consumer = 4;
+}
+
+message TEvBalancingUnsubscribe {
+    optional NActorsProto.TActorId SourceActor = 2;
+    optional string Topic = 3;
+    optional string Consumer = 4;
+}
+
+message TEvBalancingSubscribeNotify {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        BALANCING = 1;
+        FREE = 2;
+    }
+
+    optional uint64 Generation = 1;
+    optional uint64 Cookie = 2;
+
+    optional string Topic = 3;
+    optional string Consumer = 4;
+    optional EStatus Status = 5;
+}

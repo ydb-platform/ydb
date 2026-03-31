@@ -48,18 +48,19 @@ public:
 
     TString static GetMetaDatabaseAuthToken(const TRequest& request);
     NYdb::NTable::TClientSettings static GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
+    NYdb::NTable::TClientSettings static GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location);
 
     void TryGetMetaOptionsFromConfig();
     void TryGetMetaOptionsFromConfig(const NMvp::NMeta::TMetaAppConfig& appConfig);
 
     TMVPAppData AppData;
     const TMvpStartupOptions StartupOptions;
+    TMetaSettings MetaSettings;
     TIntrusivePtr<NActors::NLog::TSettings> LoggerSettings;
     THolder<NActors::TActorSystemSetup> ActorSystemSetup;
     NActors::TActorSystem ActorSystem;
     NActors::TActorId HttpProxyId;
     NActors::TActorId HandlerId;
-    TMetaSettings MetaSettings;
 
     static NMvp::TTokensConfig TokensConfig;
 };

@@ -471,6 +471,8 @@ class TestViewer(object):
                                              'Read',
                                              'Write',
                                              'size_bytes',
+                                             'GrpcRequestBytes',
+                                             'GrpcResponseBytes',
                                              })
         result = cls.wipe_values_by_key(result, {'LatencyGetFast',
                                                  'LatencyPutTabletLog',
@@ -770,11 +772,10 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        return cls.get_viewer_normalized("/viewer/tenantinfo")
-
-    @classmethod
-    def test_viewer_tenantinfo_db(cls):
-        return cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        for name in cls.databases_and_no_database:
+            result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
+        return result
 
     @classmethod
     def test_viewer_healthcheck(cls):

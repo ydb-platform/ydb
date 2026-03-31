@@ -322,6 +322,11 @@ public:
             TMethodDescriptor{"method"})
     { }
 
+    TFakeRequest(const TFakeRequest& other)
+        : TClientRequest(other)
+        , Hash_(other.Hash_)
+    { }
+
     TSharedRefArray SerializeHeaderless() const override
     {
         YT_UNIMPLEMENTED();
@@ -330,6 +335,11 @@ public:
     size_t GetHash() const override
     {
         return Hash_;
+    }
+
+    IClientRequestPtr Clone() const override
+    {
+        return New<TFakeRequest>(*this);
     }
 
 private:

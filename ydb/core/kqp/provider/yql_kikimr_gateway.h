@@ -456,6 +456,16 @@ struct TColumnCompression {
     TMaybe<i64> Level;
 };
 
+struct TColumnEncoding {
+    enum class EEncodingType {
+        UNDEFINED = 0,
+        DICTIONARY,
+        PLAIN
+    } Type = EEncodingType::UNDEFINED;
+};
+
+using TColumnEncodingsList = TVector<TColumnEncoding>;
+
 struct TKikimrColumnMetadata {
 
     TString Name;
@@ -471,6 +481,7 @@ struct TKikimrColumnMetadata {
     TKikimrPathId DefaultFromSequencePathId;
     Ydb::TypedValue DefaultFromLiteral;
     bool IsBuildInProgress = false;
+    TMaybe<TColumnEncodingsList> Encoding;
 
     TKikimrColumnMetadata() = default;
 
@@ -515,6 +526,23 @@ struct TKikimrColumnMetadata {
             }
             if (message->GetCompression().HasLevel()) {
                 Compression->Level = message->GetCompression().GetLevel();
+            }
+        }
+
+        for (const auto& encoding : message->GetEncoding()) {
+            if (!Encoding) {
+                Encoding = TColumnEncodingsList{};
+            }
+            switch (encoding.GetImplementationCase()) {
+                case NKikimrKqp::TEncoding::kPlain:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    break;
+                case NKikimrKqp::TEncoding::kDictionary:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    break;
+                case NKikimrKqp::TEncoding::IMPLEMENTATION_NOT_SET:
+                    Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                    break;
             }
         }
     }
@@ -566,14 +594,26 @@ struct TKikimrColumnMetadata {
                 compression->SetLevel(*maybeLevel);
             }
         }
+
+        if (Encoding) {
+            for (const auto& encoding : *Encoding) {
+                auto messageEncoding = message->add_encoding();
+                switch (encoding.Type) {
+                    case TColumnEncoding::EEncodingType::UNDEFINED:
+                        break;
+                    case TColumnEncoding::EEncodingType::DICTIONARY:
+                        messageEncoding->MutableDictionary();
+                        break;
+                    case TColumnEncoding::EEncodingType::PLAIN:
+                        messageEncoding->MutablePlain();
+                        break;
+                }
+            }
+        }
     }
 
     bool IsSameScheme(const TKikimrColumnMetadata& other) const {
         return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
-    }
-
-    void SetNotNull() {
-        NotNull = true;
     }
 };
 

@@ -204,6 +204,9 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse, Handle);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
 
+        hFunc(TEvInterpilePut, Handle);
+        hFunc(TEvBlobStorage::TEvPutResult, Handle);
+
         default:
             EnqueuePendingMessage(ev);
             break;

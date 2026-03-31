@@ -40,6 +40,7 @@ protected:
 
 private:
     TSortingColumns KeyColumns_;
+    bool SkipSortedCheck_ = false;
 };
 
 } // namespace NYql::NFmr

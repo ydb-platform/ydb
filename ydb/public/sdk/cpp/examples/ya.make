@@ -9,6 +9,7 @@ RECURSE(
     time
     topic_reader
     topic_writer/transaction
+    topic_writer/producer/basic_write
     ttl
     vector_index
     vector_index_builtin

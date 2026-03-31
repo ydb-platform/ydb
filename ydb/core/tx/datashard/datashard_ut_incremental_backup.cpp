@@ -2798,7 +2798,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(mainTableBackup.find("uint32_value: 400") != TString::npos,
             "Main table backup should contain new value 400");
 
-        TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByValue";
+        TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByValue/indexImplTable";
         auto indexBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << indexBackupPath << R"(`
             ORDER BY value
@@ -2885,7 +2885,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         TString incrBackupDir = FindIncrementalBackupDir(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
         UNIT_ASSERT_C(!incrBackupDir.empty(), "Could not find incremental backup directory");
 
-        TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge";
+        TString indexBackupPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge/indexImplTable";
         auto indexBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << indexBackupPath << R"(`
             )");
@@ -2903,7 +2903,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
 
         auto counts = CountCdcOperations(indexBackup);
         Cerr << "CDC metadata: " << counts.Deletes << " DELETEs, " << counts.Inserts << " INSERTs" << Endl;
-        
+
         UNIT_ASSERT_EQUAL_C(counts.Deletes, 2, "Should have 2 DELETE operations (tombstones for age 25 and 26)");
         UNIT_ASSERT_EQUAL_C(counts.Inserts, 1, "Should have 1 INSERT operation (for Alice2)");
     }
@@ -2982,7 +2982,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         TString incrBackupDir = FindIncrementalBackupDir(runtime, edgeActor, "/Root/.backups/collections/MyCollection");
         UNIT_ASSERT_C(!incrBackupDir.empty(), "Could not find incremental backup directory");
 
-        TString byNamePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByName";
+        TString byNamePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByName/indexImplTable";
         auto byNameBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byNamePath << R"(`
             )");
@@ -2993,7 +2993,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(byNameBackup.find("Carol") != TString::npos,
             "ByName backup should contain Carol (new)");
 
-        TString byAgePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge";
+        TString byAgePath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByAge/indexImplTable";
         auto byAgeBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byAgePath << R"(`
             )");
@@ -3007,7 +3007,7 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         UNIT_ASSERT_C(byAgeBackup.find("uint32_value: 5500") != TString::npos,
             "ByAge backup should contain covered salary 5500");
 
-        TString byCityPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByCity";
+        TString byCityPath = TStringBuilder() << "/Root/.backups/collections/MyCollection/" << incrBackupDir << "/__ydb_backup_meta/indexes/Table/ByCity/indexImplTable";
         auto byCityBackup = KqpSimpleExec(runtime, TStringBuilder() << R"(
             SELECT * FROM `)" << byCityPath << R"(`
             )");

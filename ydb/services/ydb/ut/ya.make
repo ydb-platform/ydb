@@ -4,14 +4,15 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 SRCS(
+    ydb_bulk_upsert_csv_ut.cpp
     ydb_bulk_upsert_ut.cpp
     ydb_bulk_upsert_olap_ut.cpp
     ydb_coordination_ut.cpp
@@ -54,6 +55,9 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/shutdown
+    ydb/core/kqp/common/simple
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/coordination

@@ -52,6 +52,21 @@ namespace NTabletFlatExecutor {
     XX(100*1024*1024*1024ULL,     "107374182400")  \
     XX(1024*1024*1024*1024ULL,    "1099511627776")
 
+/**
+ * @warning The number and sequence of the bucket entries here must match
+ *          the number and the sequence of the bucket entries defined
+ *          for the "table.datashard.used_core_percents" detailed metric,
+ *          which is defined in COUNTER_DATASHARD_USED_CORE_PERCENTS.
+ *
+ *          The actual bucket boundaries do not need to match because the Executor
+ *          uses different units for measuring the CPU consumption. For example,
+ *          the Executor uses 500000 for the 50% CPU consumption.
+ *          To account for the difference in units, the code transfers bucket
+ *          values "as is" without any recalculation, for example, the "500000" bucket
+ *          of the "HIST(ConsumedCPU)" metric is transferred to the "50" bucket
+ *          of the "table.datashard.used_core_percents" metric. This achieves
+ *          the correct result as long as the buckets are defined in the same order.
+ */
 #define FLAT_EXECUTOR_CONSUMED_CPU_RANGES(XX) \
     XX(0,          "0%")  \
     XX(100000,     "10%") \

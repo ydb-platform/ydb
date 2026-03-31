@@ -334,6 +334,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
     auto driverConfig = NYdb::TDriverConfig()
         .SetEndpoint(endpoint)
+        .SetDatabase("/Root")
         .SetAuthToken("root@builtin")
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
     NYdb::TDriver driver(driverConfig);
@@ -431,6 +432,8 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
 
     if (enableMetering) {
         ActorRuntime->RegisterService(
@@ -470,6 +473,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
         "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
         "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
+        "Columns { Name: \"TopicCreated\"       Type: \"Bool\"}"
         "KeyColumnNames: [\"Account\", \"QueueName\"]",
         TDuration::Seconds(5000),
         "root@builtin"
@@ -616,6 +620,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqArn\"                        Type: \"Utf8\"}"
         "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
         "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
+        "Columns { Name: \"TopicCreated\"                  Type: \"Bool\"}"
         "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
     client.CreateTable("/Root/SQS/.STD",
         attributesTable,

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "events.h"
-#include "types.h"
+#include "source.h"
 
 #include <ydb/mvp/meta/meta_settings.h>
 #include <ydb/library/actors/http/http.h>
@@ -10,8 +10,6 @@
 #include <memory>
 
 namespace NMVP {
-
-class ILinkSource;
 
 class TSupportLinksResolver {
 public:
@@ -23,10 +21,11 @@ public:
     struct TParams {
         EEntityType EntityType = EEntityType::Cluster;
         const TMetaSettings* Settings = nullptr;
-        THashMap<TString, TString> ClusterColumns;
+        THashMap<TString, TString> ClusterInfo;
         NHttp::TUrlParameters UrlParameters;
-        NActors::TActorId Parent;
+        NActors::TActorId Owner;
         NActors::TActorId HttpProxyId;
+        TLinkSourceFactory LinkSourceFactory = MakeLinkSource;
     };
 
     explicit TSupportLinksResolver(TParams params);
@@ -38,14 +37,20 @@ public:
     bool IsFinished() const;
 
 private:
-    auto MakeResolveInput(size_t place) const;
+    void ResetState();
+    ILinkSource::TLinkResolveInput MakeResolveInput() const;
+    ILinkSource::TResolveContext MakeResolveContext(size_t place) const;
+    TResolveOutput ResolveSource(size_t place) const;
+    void SaveSourceOutput(size_t place, TResolveOutput sourceOutput);
+    void ApplySourceResponse(size_t place, const NSupportLinks::TEvPrivate::TEvSourceResponse& response);
+    void HandleSourceTimeout(size_t place, NActors::TActorSystem* actorSystem);
 
     TVector<std::shared_ptr<ILinkSource>> Sources;
     TVector<TResolveOutput> SourceOutputs;
     TVector<TMaybe<NActors::TActorId>> SourceActors;
-    THashMap<TString, TString> ClusterColumns;
+    THashMap<TString, TString> ClusterInfo;
     NHttp::TUrlParameters UrlParameters;
-    NActors::TActorId Parent;
+    NActors::TActorId Owner;
     NActors::TActorId HttpProxyId;
 };
 

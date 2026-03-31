@@ -110,6 +110,7 @@ class DriverConfig(object):
         "discovery_request_timeout",
         "compression",
         "disable_discovery",
+        "_additional_sdk_headers",
     )
 
     def __init__(
@@ -135,6 +136,8 @@ class DriverConfig(object):
         discovery_request_timeout: int = 10,
         compression: Optional[grpc.Compression] = None,
         disable_discovery: bool = False,
+        *,
+        _additional_sdk_headers: Tuple[str, ...] = (),
     ) -> None:
         """
         A driver config to initialize a driver instance
@@ -156,6 +159,7 @@ class DriverConfig(object):
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
         :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
+        :param _additional_sdk_headers: Reserved for SDK integrations (e.g. dbapi, sqlalchemy). Do not use in application code.
 
         """
         self.endpoint = endpoint
@@ -184,6 +188,7 @@ class DriverConfig(object):
         self.discovery_request_timeout = discovery_request_timeout
         self.compression = compression
         self.disable_discovery = disable_discovery
+        self._additional_sdk_headers = _additional_sdk_headers
 
     def set_database(self, database: str) -> "DriverConfig":
         self.database = database

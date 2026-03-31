@@ -156,7 +156,7 @@ namespace {
             if (!NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId())) {
                 return;
             }
-            const auto failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
+            const TActorId failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
             TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender << ".");
             AFL_ENSURE(ChildToSubtree.contains(failedActorId));
 
@@ -175,16 +175,15 @@ namespace {
             if (subtree.empty()) {
                 return false;
             }
-            auto newRoot = *subtree.begin();
+            const TActorId newRoot = *subtree.begin();
             subtree.erase(newRoot);
             ChildToSubtree[newRoot] = std::move(subtree);
             AFL_ENSURE(NodeIdToTreeNodeActorId.emplace(newRoot.NodeId(), newRoot).second);
 
             TXLOG_DEBUG("Retrying subtree for child actor " << childActorId
                 << ". New root for subtree: " << newRoot
-                << ". Subtree size: " << subtree.size() << ".");
-
-            SendChildEvent(childActorId, subtree);
+                << ". Subtree size: " << ChildToSubtree.at(newRoot).size() << ".");
+            SendChildEvent(childActorId, ChildToSubtree.at(newRoot));
             return true;
         }
 

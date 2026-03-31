@@ -45,6 +45,7 @@ public:
         TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
+        ui64 lsn,
         NWilson::TTraceId traceId);
 
     ~TWriteRequestExecutor();
@@ -58,12 +59,14 @@ private:
     void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
     void OnWriteResponse(
         ELocation location,
-        const TDBGWriteBlocksResponse& response);
+        const TDBGWriteBlocksResponse& response,
+        std::shared_ptr<NWilson::TSpan> span);
     void OnWriteToManyPBuffersResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
+
     void Reply(NProto::TError error);
 
-    NActors::TActorSystem const* ActorSystem;
+    NActors::TActorSystem* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;

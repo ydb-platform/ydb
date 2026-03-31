@@ -31,6 +31,8 @@ items:
   href: log_config.md
 - name: memory_controller_config
   href: memory_controller_config.md
+- name: monitoring_config
+  href: monitoring_config.md
 - name: node_broker_config
   href: node_broker_config.md
 - name: resource_broker_config

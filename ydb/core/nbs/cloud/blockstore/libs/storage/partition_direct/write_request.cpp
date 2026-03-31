@@ -1,9 +1,12 @@
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -41,6 +44,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     TBlockRange64 vChunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    ui64 lsn,
     NWilson::TTraceId traceId)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
@@ -49,7 +53,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , Lsn(Request->Lsn)
+    , Lsn(lsn)
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -166,6 +170,14 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
+    auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        TraceId.Clone(),
+        "TWriteRequestExecutor",
+        NWilson::EFlags::AUTO_END,
+        ActorSystem));
+    span->Attribute("Location", ToString(location));
+
     RequestedWrites.Set(location);
 
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
@@ -174,16 +186,19 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         Lsn,
         VChunkRange,
         Request->Sglist,
-        NWilson::TTraceId(TraceId));
+        span->GetTraceId());
 
-    future.Subscribe([self = shared_from_this(), location]   //
-                     (const NThreading::TFuture<TDBGWriteBlocksResponse>& f)
-                     { self->OnWriteResponse(location, f.GetValue()); });
+    future.Subscribe(
+        [self = shared_from_this(), location, span = std::move(span)]       //
+        (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
+            self->OnWriteResponse(location, f.GetValue(), std::move(span));
+        });
 }
 
 void TWriteRequestExecutor::OnWriteResponse(
     ELocation location,
-    const TDBGWriteBlocksResponse& response)
+    const TDBGWriteBlocksResponse& response,
+    std::shared_ptr<NWilson::TSpan> span)
 {
     if (!HasError(response.Error)) {
         CompletedWrites.Set(location);
@@ -217,6 +232,8 @@ void TWriteRequestExecutor::OnWriteResponse(
             FormatError(response.Error).c_str());
 
         Reply(response.Error);
+
+        auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
 }
 

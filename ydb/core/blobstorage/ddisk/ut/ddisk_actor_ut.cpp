@@ -21,6 +21,8 @@ using NKikimrBlobStorage::NDDisk::TReplyStatus;
 
 constexpr ui32 NodeId = 1;
 constexpr ui32 BlockSize = 4096;
+constexpr ui32 MinChunksReserved = 2;
+constexpr ui32 PersistentBufferInitChunks = 4;
 
 static_assert(NDDisk::NPrivate::THasSelectorField<NKikimrBlobStorage::NDDisk::TEvWrite>::value);
 
@@ -29,6 +31,7 @@ struct TDiskHandle {
     TActorId PDiskEdge;
     ui32 PDiskId;
     ui32 SlotId;
+    ui32 FirstChunkId;
 };
 
 class TTestContext {
@@ -43,6 +46,8 @@ class TTestContext {
     }
 
 public:
+    static constexpr ui32 ChunkSize = 128u << 20;
+
     TTestActorSystem Runtime;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TActorId Edge;
@@ -87,7 +92,7 @@ public:
         const TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
         Runtime.RegisterService(ddiskServiceId, ddiskActor);
 
-        TDiskHandle disk{ddiskServiceId, pdiskEdge, pdiskId, slotId};
+        TDiskHandle disk{ddiskServiceId, pdiskEdge, pdiskId, slotId, 100000 + pdiskId * 1000};
         BootstrapDDisk(disk);
 
         return disk;
@@ -113,11 +118,8 @@ public:
     }
 
     void BootstrapDDisk(const TDiskHandle& disk) {
-        constexpr ui32 ChunkSize = 128u << 20;
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
-        constexpr ui32 MinChunksReserved = 2;
-        constexpr ui32 PersistentBufferInitChunks = 4;
 
         auto init = WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
         TVector<ui32> ownedChunks;
@@ -166,7 +168,7 @@ public:
         auto reserveReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
         const ui32 startupReserveChunks = PersistentBufferInitChunks + MinChunksReserved;
         for (ui32 i = 0; i < startupReserveChunks; ++i) {
-            reserveReply->ChunkIds.push_back(100000 + disk.PDiskId * 1000 + i);
+            reserveReply->ChunkIds.push_back(disk.FirstChunkId + i);
         }
         SendPDiskResponse(disk, *reserve, reserveReply.release());
 
@@ -209,6 +211,18 @@ TString MakeData(char ch, ui32 size) {
     return data;
 }
 
+TRope MakeAlignedRope(const TString& data) {
+    auto buf = TRcBuf::UninitializedPageAligned(data.size());
+    memcpy(buf.GetDataMut(), data.data(), data.size());
+    return TRope(std::move(buf));
+}
+
+TRope MakeMisalignedRope(const TString& data) {
+    auto buf = TRcBuf::UninitializedPageAligned(data.size() + BlockSize);
+    memcpy(buf.GetDataMut() + 1, data.data(), data.size());
+    return TRope(TRcBuf(TRcBuf::Piece, buf.data() + 1, data.size(), buf));
+}
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     NDDisk::TQueryCredentials creds;
     creds.TabletId = tabletId;
@@ -219,6 +233,67 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, 
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
 
     return creds;
+}
+
+struct TInitialWriteOutcome {
+    std::unique_ptr<TEventHandle<NDDisk::TEvWriteResult>> WriteResult;
+    ui32 ChunkIdx = 0;
+};
+
+/** First write to a vchunk: PDisk sees log records, chunk reserve, then TEvChunkWriteRaw. */
+TInitialWriteOutcome DoWriteWithChunkAllocation(TTestContext& ctx, const TDiskHandle& disk, std::unique_ptr<NDDisk::TEvWrite> write,
+        ui32 chunkId, ui32 expectedOffsetInBytes, const TString& expectedPayload,
+        bool reserveExpected, bool checkSnapshot) {
+    SendToDDisk(ctx, disk.ServiceId, write.release());
+
+    if (!reserveExpected) {
+        // no existing reserve: have to request chunk
+        auto refill = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(refill->Get()->SizeChunks, 2u);
+
+        auto refillReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+        refillReply->ChunkIds.push_back(chunkId);
+        refillReply->ChunkIds.push_back(chunkId + 1);
+        ctx.SendPDiskResponse(disk, *refill, refillReply.release());
+    }
+
+    auto logIncrement = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+    auto logIncrementReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+    logIncrementReply->Results.emplace_back(logIncrement->Get()->Lsn, logIncrement->Get()->Cookie);
+    ctx.SendPDiskResponse(disk, *logIncrement, logIncrementReply.release());
+
+    if (checkSnapshot) {
+        auto logSnapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
+        auto logSnapshotReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+        logSnapshotReply->Results.emplace_back(logSnapshot->Get()->Lsn, logSnapshot->Get()->Cookie);
+        ctx.SendPDiskResponse(disk, *logSnapshot, logSnapshotReply.release());
+    }
+
+    // DDisk took 1 chunk from reserve, it will request one to have reserve
+    auto refill = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
+    UNIT_ASSERT_VALUES_EQUAL(refill->Get()->SizeChunks, 1u);
+    auto refillReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+    refillReply->ChunkIds.push_back(chunkId + 2);
+    ctx.SendPDiskResponse(disk, *refill, refillReply.release());
+
+    auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+    const ui32 chunkIdx = writeRaw->Get()->ChunkIdx;
+    UNIT_ASSERT(chunkIdx != 0u);
+    UNIT_ASSERT_VALUES_EQUAL(chunkIdx, chunkId);
+    UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Offset, expectedOffsetInBytes);
+    UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Data.ConvertToString(), expectedPayload);
+    ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+    return TInitialWriteOutcome{WaitFromDDisk<NDDisk::TEvWriteResult>(ctx), chunkIdx};
+}
+
+/** Subsequent writes to an already allocated chunk: only TEvChunkWriteRaw, then TEvWriteResult. */
+std::unique_ptr<TEventHandle<NDDisk::TEvWriteResult>> DoWrite(TTestContext& ctx, const TDiskHandle& disk,
+        std::unique_ptr<NDDisk::TEvWrite> write) {
+    SendToDDisk(ctx, disk.ServiceId, write.release());
+    auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+    ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+    return WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
 }
 
 } // anonymous namespace
@@ -319,8 +394,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const TDiskHandle disk = ctx.CreateDDisk(4, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
 
+        ui32 offset = 0;
+
         auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
-            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {42, 0, 2 * BlockSize}, {true}));
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {42, offset, 2 * BlockSize}, {true}));
         AssertStatus(readResult, TReplyStatus::OK);
         UNIT_ASSERT(readResult->Get()->Record.HasReadResult());
         UNIT_ASSERT(readResult->Get()->Record.GetReadResult().HasPayloadId());
@@ -330,43 +407,118 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
     }
 
-    Y_UNIT_TEST(WriteThenReadRoundtrip) {
+    Y_UNIT_TEST(NoZeroRead) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        ui32 offset = 0;
+
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {42, offset, 0}, {true}));
+        AssertStatus(readResult, TReplyStatus::INCORRECT_REQUEST);
+        UNIT_ASSERT(!readResult->Get()->Record.HasReadResult());
+    }
+
+    Y_UNIT_TEST(ReadOffsetShouldBeBlockAligned) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        for (ui32 offset: {1U, 2U, BlockSize - 1}) {
+            auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+                ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {42, offset, BlockSize}, {true}));
+            AssertStatus(readResult, TReplyStatus::INCORRECT_REQUEST);
+            UNIT_ASSERT(!readResult->Get()->Record.HasReadResult());
+        }
+    }
+
+    Y_UNIT_TEST(ReadShouldBeWithinChunk) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        ui32 offset = ctx.ChunkSize - BlockSize;
+
+        auto readResult = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+            ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {42, offset, 2 * BlockSize}, {true}));
+        AssertStatus(readResult, TReplyStatus::INCORRECT_REQUEST);
+        UNIT_ASSERT(!readResult->Get()->Record.HasReadResult());
+    }
+
+    Y_UNIT_TEST(WriteOffsetShouldBeBlockAligned) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        for (ui32 offset: {1U, 2U, BlockSize - 1}) {
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(42, offset, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            write->AddPayload(TRope(MakeData('W', BlockSize)));
+            auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
+            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(WriteShouldBeWithinChunk) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        ui32 offset = ctx.ChunkSize - BlockSize;
+
+        auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(42, offset, 2 * BlockSize),
+            NDDisk::TWriteInstruction(0));
+        write->AddPayload(TRope(MakeData('W', 2 * BlockSize)));
+        auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
+        AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+    }
+
+    Y_UNIT_TEST(WritePayloadMustBeContiguousAndAligned) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(4, 1);
+        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 20, 1);
+
+        {
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(0, 0, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            write->AddPayload(MakeMisalignedRope(MakeData('U', BlockSize)));
+            auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
+            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+        }
+
+        {
+            TString part1 = MakeData('X', BlockSize / 2);
+            TString part2 = MakeData('Y', BlockSize / 2);
+            TRope nonContiguous;
+            nonContiguous.Insert(nonContiguous.End(), TRope(part1));
+            nonContiguous.Insert(nonContiguous.End(), TRope(part2));
+            UNIT_ASSERT_VALUES_EQUAL(nonContiguous.size(), BlockSize);
+
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds, NDDisk::TBlockSelector(0, 0, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            write->AddPayload(std::move(nonContiguous));
+            auto writeResult = SendToDDiskAndWait<NDDisk::TEvWriteResult>(ctx, disk.ServiceId, write.release());
+            AssertStatus(writeResult, TReplyStatus::INCORRECT_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(WriteAndRead) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(5, 1);
         NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 30, 1);
 
+        // initial write-read
+
         const TString payload = MakeData('Q', 2 * BlockSize);
         auto write = std::make_unique<NDDisk::TEvWrite>(creds,
             NDDisk::TBlockSelector(7, BlockSize, static_cast<ui32>(payload.size())), NDDisk::TWriteInstruction(0));
-        write->AddPayload(TRope(payload));
+        write->AddPayload(MakeAlignedRope(payload));
 
-        SendToDDisk(ctx, disk.ServiceId, write.release());
-
-        auto logIncrement = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
-        auto logIncrementReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
-        logIncrementReply->Results.emplace_back(logIncrement->Get()->Lsn, logIncrement->Get()->Cookie);
-        ctx.SendPDiskResponse(disk, *logIncrement, logIncrementReply.release());
-
-        auto logSnapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
-        auto logSnapshotReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
-        logSnapshotReply->Results.emplace_back(logSnapshot->Get()->Lsn, logSnapshot->Get()->Cookie);
-        ctx.SendPDiskResponse(disk, *logSnapshot, logSnapshotReply.release());
-
-        auto refill = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
-        UNIT_ASSERT_VALUES_EQUAL(refill->Get()->SizeChunks, 1u);
-        auto refillReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
-        refillReply->ChunkIds.push_back(1003);
-        ctx.SendPDiskResponse(disk, *refill, refillReply.release());
-
-        auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        const ui32 allocatedChunk = writeRaw->Get()->ChunkIdx;
-        UNIT_ASSERT(allocatedChunk != 0u);
-        UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Offset, BlockSize);
-        UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Data.ConvertToString(), payload);
-        ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        auto writeResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
-        AssertStatus(writeResult, TReplyStatus::OK);
+        auto initial = DoWriteWithChunkAllocation(
+            ctx, disk, std::move(write), disk.FirstChunkId + PersistentBufferInitChunks, BlockSize, payload, true, true);
+        AssertStatus(initial.WriteResult, TReplyStatus::OK);
+        const ui32 allocatedChunk = initial.ChunkIdx;
 
         SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds,
             {7, BlockSize, static_cast<ui32>(payload.size())}, {true}));
@@ -380,85 +532,114 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
         AssertStatus(readResult, TReplyStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+
+        // Second write to the same vchunk: only TEvChunkWriteRaw (DoWriteWithChunkAllocation's log/reserve path must not run)
+
+        const TString payload2 = MakeData('R', 2 * BlockSize);
+        const ui32 secondOffset = BlockSize + static_cast<ui32>(payload.size());
+        auto write2 = std::make_unique<NDDisk::TEvWrite>(creds,
+            NDDisk::TBlockSelector(7, secondOffset, static_cast<ui32>(payload2.size())), NDDisk::TWriteInstruction(0));
+        write2->AddPayload(MakeAlignedRope(payload2));
+        auto secondWriteResult = DoWrite(ctx, disk, std::move(write2));
+        AssertStatus(secondWriteResult, TReplyStatus::OK);
+
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds,
+            {7, secondOffset, static_cast<ui32>(payload2.size())}, {true}));
+
+        auto readRaw2 = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL(readRaw2->Get()->ChunkIdx, allocatedChunk);
+        UNIT_ASSERT_VALUES_EQUAL(readRaw2->Get()->Offset, secondOffset);
+        UNIT_ASSERT_VALUES_EQUAL(readRaw2->Get()->Size, payload2.size());
+        ctx.SendPDiskResponse(disk, *readRaw2, new NPDisk::TEvChunkReadRawResult(TRope(payload2)));
+
+        auto readResult2 = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(readResult2, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->GetPayload(0).ConvertToString(), payload2);
     }
 
-    Y_UNIT_TEST(Batch5000WritesThenReadBack) {
+    Y_UNIT_TEST(CheckVChunksArePerTablet) {
         TTestContext ctx;
-        const TDiskHandle disk = ctx.CreateDDisk(55, 1);
-        NDDisk::TQueryCredentials creds = Connect(ctx, disk.ServiceId, 31, 1);
+        const TDiskHandle disk = ctx.CreateDDisk(9, 1);
 
-        constexpr ui32 writeCount = 5000;
-        constexpr ui64 vchunkIndex = 8;
+        auto blockPayload = [](const char* lit, size_t litLen) {
+            UNIT_ASSERT_C(litLen <= BlockSize, "literal too long for block");
+            TString s(BlockSize, '\0');
+            memcpy(s.begin(), lit, litLen);
+            return s;
+        };
+        const TString payload1 = blockPayload("tablet1", 7);
+        const TString payload2 = blockPayload("tablet2", 7);
 
-        for (ui32 i = 0; i < writeCount; ++i) {
-            const ui32 offset = i * BlockSize;
-            const TString payload = MakeData(static_cast<char>('A' + i % 26), BlockSize);
-            auto write = std::make_unique<NDDisk::TEvWrite>(creds,
-                NDDisk::TBlockSelector(vchunkIndex, offset, BlockSize), NDDisk::TWriteInstruction(0));
-            write->AddPayload(TRope(payload));
-            SendToDDisk(ctx, disk.ServiceId, write.release());
+        const ui32 chunkTablet1 = disk.FirstChunkId + PersistentBufferInitChunks;
+        const ui32 chunkTablet2 = disk.FirstChunkId + PersistentBufferInitChunks + 1;
+
+        NDDisk::TQueryCredentials creds1 = Connect(ctx, disk.ServiceId, 101, 1);
+        {
+            auto w = std::make_unique<NDDisk::TEvWrite>(creds1, NDDisk::TBlockSelector(0, 0, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            w->AddPayload(MakeAlignedRope(payload1));
+            auto initial = DoWriteWithChunkAllocation(ctx, disk, std::move(w), chunkTablet1, 0, payload1, true, true);
+            AssertStatus(initial.WriteResult, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(initial.ChunkIdx, chunkTablet1);
         }
 
-        auto logIncrement = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
-        auto logIncrementReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
-        logIncrementReply->Results.emplace_back(logIncrement->Get()->Lsn, logIncrement->Get()->Cookie);
-        ctx.SendPDiskResponse(disk, *logIncrement, logIncrementReply.release());
-
-        auto logSnapshot = ctx.WaitPDiskRequest<NPDisk::TEvLog>(disk);
-        auto logSnapshotReply = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
-        logSnapshotReply->Results.emplace_back(logSnapshot->Get()->Lsn, logSnapshot->Get()->Cookie);
-        ctx.SendPDiskResponse(disk, *logSnapshot, logSnapshotReply.release());
-
-        auto refill = ctx.WaitPDiskRequest<NPDisk::TEvChunkReserve>(disk);
-        UNIT_ASSERT_VALUES_EQUAL(refill->Get()->SizeChunks, 1u);
-        auto refillReply = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
-        refillReply->ChunkIds.push_back(1003);
-        ctx.SendPDiskResponse(disk, *refill, refillReply.release());
-
-        ui32 allocatedChunk = 0;
-        TVector<std::unique_ptr<TEventHandle<NPDisk::TEvChunkWriteRaw>>> writeRawRequests;
-        writeRawRequests.reserve(writeCount);
-        for (ui32 i = 0; i < writeCount; ++i) {
-            const ui32 expectedOffset = i * BlockSize;
-            const TString expectedPayload = MakeData(static_cast<char>('A' + i % 26), BlockSize);
-
-            auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-            if (i == 0) {
-                allocatedChunk = writeRaw->Get()->ChunkIdx;
-                UNIT_ASSERT(allocatedChunk != 0u);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->ChunkIdx, allocatedChunk);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Offset, expectedOffset);
-            UNIT_ASSERT_VALUES_EQUAL(writeRaw->Get()->Data.ConvertToString(), expectedPayload);
-            writeRawRequests.push_back(std::move(writeRaw));
-        }
-
-        for (auto& writeRaw : writeRawRequests) {
-            ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        }
-
-        for (ui32 i = 0; i < writeCount; ++i) {
-            auto writeResult = WaitFromDDisk<NDDisk::TEvWriteResult>(ctx);
-            AssertStatus(writeResult, TReplyStatus::OK);
-        }
-
-        for (ui32 i = 0; i < writeCount; ++i) {
-            const ui32 offset = i * BlockSize;
-            const TString expectedPayload = MakeData(static_cast<char>('A' + i % 26), BlockSize);
-
-            SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds, {vchunkIndex, offset, BlockSize}, {true}));
-
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds1, {0, 0, BlockSize}, {true}));
+        {
             auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
-            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, allocatedChunk);
-            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Offset, offset);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, chunkTablet1);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Offset, 0u);
             UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Size, BlockSize);
-            ctx.SendPDiskResponse(disk, *readRaw, new NPDisk::TEvChunkReadRawResult(TRope(expectedPayload)));
-
-            auto readResult = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
-            AssertStatus(readResult, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expectedPayload);
+            ctx.SendPDiskResponse(disk, *readRaw, new NPDisk::TEvChunkReadRawResult(TRope(payload1)));
         }
+        auto read1 = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(read1, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read1->Get()->GetPayload(0).ConvertToString(), payload1);
+
+        NDDisk::TQueryCredentials creds2 = Connect(ctx, disk.ServiceId, 102, 1);
+
+        auto expectUnallocatedZeroes = [&](ui64 vChunk) {
+            auto rr = SendToDDiskAndWait<NDDisk::TEvReadResult>(
+                ctx, disk.ServiceId, new NDDisk::TEvRead(creds2, {vChunk, 0, BlockSize}, {true}));
+            AssertStatus(rr, TReplyStatus::OK);
+            const TString data = rr->Get()->GetPayload(0).ConvertToString();
+            UNIT_ASSERT_VALUES_EQUAL(data.size(), BlockSize);
+            UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+        };
+        expectUnallocatedZeroes(0);
+        expectUnallocatedZeroes(2);
+
+        {
+            auto w = std::make_unique<NDDisk::TEvWrite>(creds2, NDDisk::TBlockSelector(0, 0, BlockSize),
+                NDDisk::TWriteInstruction(0));
+            w->AddPayload(MakeAlignedRope(payload2));
+            auto initial = DoWriteWithChunkAllocation(ctx, disk, std::move(w), chunkTablet2, 0, payload2, true, false);
+            AssertStatus(initial.WriteResult, TReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(initial.ChunkIdx, chunkTablet2);
+        }
+
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds2, {0, 0, BlockSize}, {true}));
+        {
+            auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, chunkTablet2);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Offset, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Size, BlockSize);
+            ctx.SendPDiskResponse(disk, *readRaw, new NPDisk::TEvChunkReadRawResult(TRope(payload2)));
+        }
+        auto read2 = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(read2, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read2->Get()->GetPayload(0).ConvertToString(), payload2);
+
+        SendToDDisk(ctx, disk.ServiceId, new NDDisk::TEvRead(creds1, {0, 0, BlockSize}, {true}));
+        {
+            auto readRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkReadRaw>(disk);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->ChunkIdx, chunkTablet1);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Offset, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(readRaw->Get()->Size, BlockSize);
+            ctx.SendPDiskResponse(disk, *readRaw, new NPDisk::TEvChunkReadRawResult(TRope(payload1)));
+        }
+        auto read1Again = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
+        AssertStatus(read1Again, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(read1Again->Get()->GetPayload(0).ConvertToString(), payload1);
     }
 
     Y_UNIT_TEST(PersistentBufferLifecycle) {

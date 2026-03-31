@@ -24,14 +24,15 @@ public:
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
         ui32 pbufferReplyTimeoutMicroseconds,
-        NWilson::TTraceId traceId);
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
     NActors::TActorSystem* const ActorSystem;

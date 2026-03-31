@@ -49,14 +49,14 @@ TRegion::TRegion(
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
     return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
-        std::move(traceId));
+        traceId);
 }
 
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
@@ -64,7 +64,8 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     EWriteMode writeMode,
     ui32 pbufferReplyTimeoutMicroseconds,
-    NWilson::TTraceId traceId)
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
@@ -73,7 +74,8 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         std::move(request),
         writeMode,
         pbufferReplyTimeoutMicroseconds,
-        std::move(traceId));
+        lsn,
+        traceId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

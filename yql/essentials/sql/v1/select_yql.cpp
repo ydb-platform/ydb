@@ -214,11 +214,11 @@ public:
         if (!InitProjection(ctx, src) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
-            (GroupBy && !NSQLTranslationV1::Init(ctx, src, GroupBy->Keys)) ||
-            (Having && !Having->GetRef().Init(ctx, src) ||
-             !Init(ctx, src, OrderBy) ||
-             (Limit && !Limit->GetRef().Init(ctx, src)) ||
-             (Offset && !Offset->GetRef().Init(ctx, src)))) {
+            (GroupBy && !Init(ctx, src, *GroupBy)) ||
+            (Having && !Having->GetRef().Init(ctx, src)) ||
+            !TYqlSelectLikeNode::Init(ctx, src, OrderBy) ||
+            (Limit && !Limit->GetRef().Init(ctx, src)) ||
+            (Offset && !Offset->GetRef().Init(ctx, src))) {
             return false;
         }
 
@@ -371,6 +371,41 @@ private:
         return true;
     }
 
+    bool Init(TContext& ctx, ISource* src, const TGroupBy& groupBy) const {
+        const auto init = TOverloaded{
+            [&](const TNodePtr& x) {
+                return x->Init(ctx, src);
+            },
+            [&](const TGroupingSets& x) {
+                return Init(ctx, src, x);
+            },
+            [&](const TGroupingSets::TRollup& x) {
+                return NSQLTranslationV1::Init(ctx, src, x.Expressions);
+            },
+            [&](const TGroupingSets::TCube& x) {
+                return NSQLTranslationV1::Init(ctx, src, x.Expressions);
+            },
+        };
+
+        for (const TGroupBy::TElement& element : groupBy.Elements) {
+            if (!std::visit(init, element)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool Init(TContext& ctx, ISource* src, const TGroupingSets& groupingSet) const {
+        for (const TVector<TNodePtr>& set : groupingSet.Sets) {
+            if (!NSQLTranslationV1::Init(ctx, src, set)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     THashSet<TString> UsedLables(const TVector<TNodePtr>& terms) const {
         THashSet<TString> used(terms.size());
         for (const TNodePtr& term : terms) {
@@ -491,10 +526,49 @@ private:
 
     TNodePtr BuildGroupBy(const TGroupBy& groupBy) const {
         TNodePtr clause = Y();
-        for (TNodePtr key : groupBy.Keys) {
-            clause = L(std::move(clause), BuildYqlGroup(std::move(key)));
+        for (const TGroupBy::TElement& element : groupBy.Elements) {
+            clause = L(std::move(clause), BuildGroupByElement(element));
         }
         return clause;
+    }
+
+    TNodePtr BuildGroupByElement(const TGroupBy::TElement& element) const {
+        return std::visit(
+            TOverloaded{
+                [&](const TNodePtr& key) {
+                    return BuildYqlGroup(key);
+                },
+                [&](const TGroupingSets::TRollup& rollup) {
+                    return BuildGroupingSet("rollup", rollup.Expressions);
+                },
+                [&](const TGroupingSets::TCube& cube) {
+                    return BuildGroupingSet("cube", cube.Expressions);
+                },
+                [&](const TGroupingSets& groupingSets) {
+                    return BuildGroupingSet(groupingSets);
+                },
+            },
+            element);
+    }
+
+    TNodePtr BuildGroupingSet(const TGroupingSets& groupingSet) const {
+        TNodePtr node = Y("YqlGroupingSet", Q("sets"));
+        for (const TVector<TNodePtr>& set : groupingSet.Sets) {
+            node = L(std::move(node), Q(BuildList(set)));
+        }
+        return BuildYqlGroup(std::move(node));
+    }
+
+    TNodePtr BuildGroupingSet(TString kind, const TVector<TNodePtr>& exprs) const {
+        return BuildYqlGroup(Y("YqlGroupingSet", Q(std::move(kind)), Q(BuildList(exprs))));
+    }
+
+    TNodePtr BuildList(const TVector<TNodePtr>& exprs) const {
+        TNodePtr list = Y();
+        for (TNodePtr e : exprs) {
+            list = L(std::move(list), std::move(e));
+        }
+        return list;
     }
 
     TNodePtr BuildYqlGroup(TNodePtr node) const {

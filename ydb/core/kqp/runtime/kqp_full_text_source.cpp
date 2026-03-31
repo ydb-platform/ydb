@@ -58,6 +58,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -2207,9 +2208,17 @@ private:
         const auto& expr = Settings->GetQuerySettings().GetQuery();
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
 
-        for(const auto& column : Settings->GetQuerySettings().GetColumns()) {
+        for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
+            if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson) {
+                size_t wordIndex = 0;
+                for (const TString& query: NJsonIndex::BuildSearchTerms(expr)) {
+                    YQL_ENSURE(IndexTableReader);
+                    Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
+                }
+                continue;
+            }
 
-            for(const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
+            for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
                 if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
                     IsNgram = true;
                 }

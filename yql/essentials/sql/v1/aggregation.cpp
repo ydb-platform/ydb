@@ -387,12 +387,12 @@ private:
             suffix = "";
         }
 
-        bool isStateRecieving = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
 
         ui32 adjustArgsCount;
         if (isFactory) {
             adjustArgsCount = 0;
-        } else if (isStateRecieving) {
+        } else if (isOverState) {
             adjustArgsCount = 1;
         } else {
             adjustArgsCount = 2;
@@ -409,7 +409,7 @@ private:
 
         if (!isFactory) {
             Payload_ = exprs.front();
-            if (!isStateRecieving) {
+            if (!isOverState) {
                 Predicate_ = exprs.back();
             } else {
                 Predicate_ = Y("InstanceOf", Y("DataType", Q("Bool")));
@@ -1039,10 +1039,32 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 1 : (HasKey ? 3 : 2);
+        TStringBuf suffix;
+        if (src != nullptr) {
+            suffix = src->GetGroupBySuffix();
+        } else {
+            suffix = "";
+        }
+
+        bool isOverState = !(suffix == "" || suffix == "Combine" || suffix == "Finalize");
+        bool isMany = (suffix == "MergeManyFinalize");
+
+        ui32 adjustArgsCount;
+        if (isFactory) {
+            adjustArgsCount = 1;
+        } else if (isOverState) {
+            adjustArgsCount = 1;
+        } else if (HasKey) {
+            adjustArgsCount = 3;
+        } else {
+            adjustArgsCount = 2;
+        }
+
         if (exprs.size() != adjustArgsCount) {
-            ctx.Error(Pos_) << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " requires "
-                            << adjustArgsCount << " arguments, given: " << exprs.size();
+            ctx.Error(Pos_)
+                << "Aggregation function " << (isFactory ? "factory " : "") << Name_ << " "
+                << "requires " << adjustArgsCount << " arguments, "
+                << "given: " << exprs.size();
             return false;
         }
 
@@ -1052,12 +1074,29 @@ private:
 
         if (!isFactory) {
             Payload_ = exprs[0];
-            if (HasKey) {
-                Key_ = exprs[1];
+        }
+
+        if (!isFactory) {
+            if (!isOverState) {
+                FactoryPayload_ = Payload_;
+            } else {
+                FactoryPayload_ = PayloadFromState(Payload_, isMany);
             }
         }
 
-        Count_ = exprs.back();
+        if (!isFactory && HasKey) {
+            if (!isOverState) {
+                Key_ = exprs[1];
+            } else {
+                Key_ = KeyFromState(Payload_, isMany);
+            }
+        }
+
+        if (!isOverState) {
+            Count_ = exprs.back();
+        } else {
+            Count_ = Y("InstanceOf", Y("DataType", Q("Uint32")));
+        }
 
         if (!isFactory) {
             Name_ = src->MakeLocalName(Name_);
@@ -1077,21 +1116,59 @@ private:
         return true;
     }
 
-    TNodePtr DoClone() const final {
-        return new TTopAggregationFactory(Pos_, Name_, Func_, AggMode_);
+    TNodePtr KeyFromState(TNodePtr x, bool isMany) {
+        return GetFromState1(x, /*isMany=*/isMany, /*isKey=*/true);
+    }
+
+    TNodePtr PayloadFromState(TNodePtr x, bool isMany) {
+        return GetFromState1(x, /*isMany=*/isMany, /*isKey=*/false);
+    }
+
+    TNodePtr GetFromState1(TNodePtr x, bool isMany, bool isKey) {
+        x = isMany ? Y("Unwrap", x) : x;
+        return Y(
+            "MatchType", x,
+            Q("Optional"), Y("lambda", Q(Y()), GetFromState2(x, /*isOptional=*/true, isKey)),
+            /*          */ Y("lambda", Q(Y()), GetFromState2(x, /*isOptional=*/false, isKey)));
+    };
+
+    // Expecting:
+    //   `Tuple<Uint32, V>`              `(!isOptional && !HasKey)`
+    //   `Tuple<Uint32, V?>`             `( isOptional && !HasKey)`
+    //   `Tuple<Uint32, Tuple<K, V>>`    `(!isOptional &&  HasKey)`
+    //   `Tuple<Uint32, Tuple<K?, V?>?>` `( isOptional &&  HasKey)`
+    TNodePtr GetFromState2(TNodePtr x, bool isOptional, bool isKey) {
+        x = Y("Nth", x, Q("1"));
+        x = Y("TypeOf", x);
+        x = isOptional ? Y("OptionalItemType", x) : x;
+        x = Y("ListItemType", x);
+        x = HasKey ? Y("TupleElementType", x, Q(isKey ? "0" : "1")) : x;
+        x = isOptional && HasKey ? Y("OptionalItemType", x) : x;
+        x = isOptional ? Y("OptionalType", x) : x;
+        x = Y("InstanceOf", x);
+        return x;
+    }
+
+    TNodePtr GetExtractorBody(bool many, TContext& ctx) const override {
+        Y_UNUSED(ctx);
+        return Y("PersistableRepr", many ? Y("Unwrap", Payload_) : Payload_);
     }
 
     TNodePtr GetApply(const TNodePtr& type, bool many, bool allowAggApply, TContext& ctx) const final {
+        Y_UNUSED(many);
         Y_UNUSED(ctx);
         Y_UNUSED(allowAggApply);
+
         TNodePtr apply;
         if (HasKey) {
             apply = Y("Apply", Factory_, type,
-                      BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Key_) : Key_),
-                      BuildLambda(Pos_, Y("row"), many ? Y("Payload", Payload_) : Payload_));
+                      BuildLambda(Pos_, Y("row"), Key_),
+                      BuildLambda(Pos_, Y("row"), FactoryPayload_));
         } else {
-            apply = Y("Apply", Factory_, type, BuildLambda(Pos_, Y("row"), many ? Y("Unwrap", Payload_) : Payload_));
+            apply = Y("Apply", Factory_, type,
+                      BuildLambda(Pos_, Y("row"), FactoryPayload_));
         }
+
         AddFactoryArguments(apply);
         return apply;
     }
@@ -1134,8 +1211,13 @@ private:
         return true;
     }
 
+    TNodePtr DoClone() const final {
+        return new TTopAggregationFactory(Pos_, Name_, Func_, AggMode_);
+    }
+
     TSourcePtr FakeSource_;
     TNodePtr Key_, Payload_, Count_;
+    TNodePtr FactoryPayload_;
 };
 
 template <bool HasKey>

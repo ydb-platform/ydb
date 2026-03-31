@@ -40,7 +40,7 @@ where:
 - `ms_sql_server_datasource` - the external data source identifier;
 - `<table_name>` - the table name within the external data source.
 
-## Limitations
+## Limitations {#limitations}
 
 When working with Microsoft SQL Server clusters, there are a number of limitations:
 

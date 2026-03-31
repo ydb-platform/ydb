@@ -4,11 +4,10 @@
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_join_cost_based.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
 #include <typeinfo>
 
 namespace {
-using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
@@ -87,7 +86,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertJoinTree(TIntrusivePtr<TOpCBOTree>& c
             leftKeys,
             rightKeys,
             ConvertToJoinKind(join->JoinKind),
-            EJoinAlgoType::Undefined,
+            NKikimr::NKqp::EJoinAlgoType::Undefined,
             false,
             false,
             false);

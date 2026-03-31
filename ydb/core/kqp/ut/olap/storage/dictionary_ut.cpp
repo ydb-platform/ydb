@@ -1,9 +1,9 @@
-#include "combinatory/variator.h"
-#include "helpers/get_value.h"
-#include "helpers/local.h"
-#include "helpers/query_executor.h"
-#include "helpers/typed_local.h"
-#include "helpers/writer.h"
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
+#include <ydb/core/kqp/ut/olap/helpers/get_value.h>
+#include <ydb/core/kqp/ut/olap/helpers/local.h>
+#include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
+#include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
+#include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -1278,7 +1278,6 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
     }
 
     // Dictionary cannot be applied to non-comparable types (Json, JsonDocument, Yson). ALTER must fail for each.
-    // Create column table directly under /Root (no tablestore) to avoid schema preset conflict.
     Y_UNIT_TEST(DictionaryUnsupportedTypes) {
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -1303,6 +1302,110 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
             TString alterQuery = "ALTER TABLE `/Root/UnsupportedTypesTable` ALTER COLUMN `" + col + "` SET ENCODING(DICT)";
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_C(!alterResult.IsSuccess(), TString("ALTER COLUMN DICTIONARY on ") + col + " must fail");
+        }
+    }
+
+    void RunDictionaryUtf8BeatsCompressionOnSize(ui32 rowsCount, ui32 distinctValues, ui32 stringLen, double rawFactor, double blobFactor) {
+        UNIT_ASSERT_C(rawFactor > 0, "rawFactor must be > 0");
+        UNIT_ASSERT_C(blobFactor > 0, "blobFactor must be > 0");
+        UNIT_ASSERT_C(distinctValues > 0, "distinctValues must be > 0");
+        UNIT_ASSERT_C(stringLen > 0, "stringLen must be > 0");
+        UNIT_ASSERT_C(rowsCount > 0, "rowsCount must be > 0");
+
+        const TString scriptTemplate = R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:
+            CREATE TABLE `/Root/CompressionOnlyTable` (
+                pk Uint64 NOT NULL,
+                data Utf8 COMPRESSION(algorithm=zstd,level=5),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ------
+            SCHEMA:
+            CREATE TABLE `/Root/CompressionAndDictTable` (
+                pk Uint64 NOT NULL,
+                data Utf8 ENCODING(DICT) COMPRESSION(algorithm=zstd,level=5),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/CompressionOnlyTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/CompressionAndDictTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/CompressionOnlyTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/CompressionAndDictTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            BULK_UPSERT:
+                /Root/CompressionOnlyTable
+                %s
+                PARTS_COUNT:10
+            ------
+            ONE_COMPACTION
+            ------
+            BULK_UPSERT:
+                /Root/CompressionAndDictTable
+                %s
+                PARTS_COUNT:10
+            ------
+            ONE_COMPACTION
+            ------
+            READ: $dictBlob = SELECT COALESCE(CAST(SUM(ColumnBlobBytes) AS Double), 1) FROM `/Root/CompressionAndDictTable/.sys/primary_index_portion_stats`;
+                  $compBlob = SELECT COALESCE(CAST(SUM(ColumnBlobBytes) AS Double), 1) FROM `/Root/CompressionOnlyTable/.sys/primary_index_portion_stats`;
+                  $dictRaw = SELECT COALESCE(CAST(SUM(ColumnRawBytes) AS Double), 1) FROM `/Root/CompressionAndDictTable/.sys/primary_index_portion_stats`;
+                  $compRaw =  SELECT COALESCE(CAST(SUM(ColumnRawBytes) AS Double), 1) FROM `/Root/CompressionOnlyTable/.sys/primary_index_portion_stats`;
+                  SELECT ($compBlob / $dictBlob) AS blobRate,
+                         ($compRaw / $dictRaw) AS rawRate;
+            ------
+            READ: SELECT
+                (CAST(COALESCE((SELECT SUM(ColumnBlobBytes) FROM `/Root/CompressionAndDictTable/.sys/primary_index_portion_stats`), 0) AS Double) * %f
+                    < CAST(COALESCE((SELECT SUM(ColumnBlobBytes) FROM `/Root/CompressionOnlyTable/.sys/primary_index_portion_stats`), 0) AS Double))
+                AND
+                (CAST(COALESCE((SELECT SUM(ColumnRawBytes) FROM `/Root/CompressionAndDictTable/.sys/primary_index_portion_stats`), 0) AS Double) * %f
+                    < CAST(COALESCE((SELECT SUM(ColumnRawBytes) FROM `/Root/CompressionOnlyTable/.sys/primary_index_portion_stats`), 0) AS Double));
+            EXPECTED: [[%%true]]
+            )";
+
+        NArrow::NConstruction::TStringPoolFiller sPool(/*poolSize*/ distinctValues, /*stringLen*/ stringLen);
+        std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("pk", 0));
+        builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>>("data", sPool));
+        NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
+        const TString arrowString = Base64Encode(NArrow::NSerialization::TNativeSerializer().SerializeFull(batchBuilder.BuildBatch(rowsCount)));
+
+        Variator::ToExecutor(Variator::SingleScript(Sprintf(scriptTemplate.c_str(), arrowString.c_str(), arrowString.c_str(), blobFactor, rawFactor, blobFactor, rawFactor)))
+            .Execute(GetDictionarySettings());
+    }
+
+    Y_UNIT_TEST(DictionaryUtf8BeatsCompressionOnSize) {
+        const struct {
+            ui32 Rows;
+            ui32 Distinct;
+            ui32 StringLen;
+            double RawFactor;
+            double BlobFactor;
+        } cases[] = {
+            // - factor > 1: dictionary smaller than compression only
+            // - factor < 1: dictionary larger than compression only
+            {10000, 100, 32, 2.3, 1.5},
+            {10000, 100, 100, 4.5, 1.5},
+            {10000, 1, 32, 2.3, 1.5},
+            {10000, 1, 100, 5.0, 1.5},
+            {10000, 10000, 32, 0.9, 0.9},
+            {10000, 10000, 100, 0.9, 0.9},
+        };
+
+        for (const auto& c : cases) {
+            RunDictionaryUtf8BeatsCompressionOnSize(c.Rows, c.Distinct, c.StringLen, c.RawFactor, c.BlobFactor);
         }
     }
 }

@@ -133,6 +133,7 @@ private:
     TSelf& AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 count);
     NYql::TChunkedBuffer FinishBlocks();
     void UnpackBatchBlocks(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
+    void UnpackSingleBlockBatch(NYql::TChunkedBuffer&& batchBuf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
 
     const TType* const Type_;
     ui64 ItemCount_ = 0;

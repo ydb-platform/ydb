@@ -1327,7 +1327,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool scalarJoin
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1703,6 +1704,13 @@ TExprBase DqBuildHashJoin(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
                             .Name().Build("BuildSide")
                             .Value<TCoAtom>().Build("Left")
+                            .Done());
+                }
+                if (scalarJoin) {
+                    joinSettings.push_back(
+                        Build<TCoNameValueTuple>(ctx, join.Pos())
+                            .Name().Build("ScalarJoin")
+                            .Value<TCoAtom>().Build("true")
                             .Done());
                 }
 

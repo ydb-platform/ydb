@@ -73,7 +73,6 @@
 /ydb/public/sdk @ydb-platform/appteam
 /ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/public/lib/ydb_cli @ydb-platform/appteam
-/ydb/tests/functional/ydb_cli @ydb-platform/appteam
 /ydb/tests/functional/api @ydb-platform/appteam
 /ydb/tests/functional/sdk @ydb-platform/appteam
 /ydb/apps/ydb @ydb-platform/appteam

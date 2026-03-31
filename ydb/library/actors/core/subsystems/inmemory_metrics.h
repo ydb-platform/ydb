@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/subsystem.h>
 #include <ydb/library/actors/metrics/inmemory_backend.h>
+#include <ydb/library/actors/metrics/lines/on_change_line_frontend.h>
+#include <ydb/library/actors/metrics/lines/raw_line_frontend.h>
 
 #include <memory>
 
@@ -23,8 +25,7 @@ namespace NActors {
         // Line key canonicalizes label order, so the same (name, labels) with different
         // input label ordering still resolves to the same line.
         // Common labels are registry-wide mutable state and are not part of line identity.
-        TLine<TRawLineFrontend<>> CreateLine(TStringBuf name, std::span<const TLabel> labels);
-        template<class TFrontend>
+        template<class TFrontend = TRawLineFrontend<ui64>>
         TLine<TFrontend> CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config = {}) {
             return Backend.CreateLine<TFrontend>(name, labels, config);
         }

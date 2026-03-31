@@ -1,4 +1,5 @@
 #include "line_storage.h"
+#include "inmemory_backend.h"
 
 #include <ydb/library/actors/util/datetime.h>
 

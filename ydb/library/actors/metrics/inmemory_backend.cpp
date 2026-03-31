@@ -1,4 +1,6 @@
 #include "inmemory_backend.h"
+#include "lines/on_change_line_frontend.h"
+#include "lines/raw_line_frontend.h"
 
 #include <ydb/library/actors/util/datetime.h>
 
@@ -95,7 +97,7 @@ namespace NActors {
             return line->State.load(std::memory_order_acquire) == ELineState::Closed && line->Storage.Chunks.empty();
         }
 
-        bool TryAccessChunkMemory(TChunk* chunk, void* opaque, ILineWriteBackend::TAccessChunkMemoryFn accessChunkMemory) {
+        bool TryAccessChunkMemory(TChunk* chunk, void* opaque, TAccessChunkMemoryFn accessChunkMemory) {
             TWritableChunkMemory chunkMemory{
                 .Payload = std::span<char>(chunk->Payload.data(), chunk->Payload.size()),
                 .FirstTs = chunk->FirstTs.load(std::memory_order_relaxed),
@@ -187,10 +189,6 @@ namespace NActors {
     }
 
     TInMemoryMetricsBackend::~TInMemoryMetricsBackend() = default;
-
-    TLine<TRawLineFrontend<>> TInMemoryMetricsBackend::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
-        return TLine<TRawLineFrontend<>>(this, CreateLineWithMeta(name, labels, TRawLineFrontend<>::MakeMeta()));
-    }
 
     TLineWriterState* TInMemoryMetricsBackend::CreateLineWithMeta(TStringBuf name, std::span<const TLabel> labels, const TLineMeta& meta) {
         if (!IsMetricAllowed(name)) {

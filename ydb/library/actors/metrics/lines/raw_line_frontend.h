@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../inmemory_backend.h"
 #include "../line_storage.h"
 
 #include <util/datetime/base.h>
@@ -99,12 +100,12 @@ namespace NActors {
         friend class TLine<TRawLineFrontend<TValue>>;
         friend struct TOnChangeLineFrontend<TValue>;
 
-        static bool Append(ILineWriteBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
+        static bool Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
         static bool WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept;
     };
 
     template<class TValue>
-    bool TRawLineFrontend<TValue>::Append(ILineWriteBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
+    bool TRawLineFrontend<TValue>::Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
         const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
 

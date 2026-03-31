@@ -18,10 +18,6 @@ namespace NActors {
 
     TInMemoryMetricsRegistry::~TInMemoryMetricsRegistry() = default;
 
-    TLine<TRawLineFrontend<>> TInMemoryMetricsRegistry::CreateLine(TStringBuf name, std::span<const TLabel> labels) {
-        return Backend.CreateLine(name, labels);
-    }
-
     void TInMemoryMetricsRegistry::SetCommonLabels(std::span<const TLabel> labels) {
         Backend.SetCommonLabels(labels);
     }

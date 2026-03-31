@@ -17,7 +17,6 @@ namespace NActors {
     class TSnapshot;
     class TInMemoryMetricsBackend;
     class TInMemoryMetricsRegistry;
-    class ILineWriteBackend;
     template<class TValue> struct TRawLineFrontend;
     template<class TValue> struct TOnChangeLineFrontend;
 
@@ -38,7 +37,7 @@ namespace NActors {
     };
 
     struct TSnapshotPinnedChunk {
-        ILineWriteBackend* Backend = nullptr;
+        TInMemoryMetricsBackend* Backend = nullptr;
         TChunk* Chunk = nullptr;
         TChunkView View;
     };

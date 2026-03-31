@@ -4,6 +4,7 @@ SRCS(
     inmemory_backend.cpp
     inmemory_backend.h
     line.h
+    line_impl.h
     line_read.cpp
     line_read.h
     line_storage.cpp

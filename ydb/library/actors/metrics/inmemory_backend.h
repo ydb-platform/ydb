@@ -3,26 +3,27 @@
 #include "line_read.h"
 #include "line_types.h"
 #include "line_write.h"
-#include "line.h"
 #include "line_storage.h"
-#include "lines/on_change_line_frontend.h"
-#include "lines/raw_line_frontend.h"
 
 #include <functional>
 #include <memory>
 
 namespace NActors {
+    template<class TFrontend>
+    class TLine;
 
-    class TInMemoryMetricsBackend : public ILineWriteBackend {
+    template<class TValue>
+    struct TRawLineFrontend;
+    template<class TValue>
+    struct TOnChangeLineFrontend;
+
+    class TInMemoryMetricsBackend {
     public:
         explicit TInMemoryMetricsBackend(TInMemoryMetricsConfig config);
-        ~TInMemoryMetricsBackend() override;
+        ~TInMemoryMetricsBackend();
 
-        TLine<TRawLineFrontend<>> CreateLine(TStringBuf name, std::span<const TLabel> labels);
-        template<class TFrontend>
-        TLine<TFrontend> CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config = {}) {
-            return TLine<TFrontend>(this, CreateLineWithMeta(name, labels, TFrontend::MakeMeta(config)));
-        }
+        template<class TFrontend = TRawLineFrontend<ui64>>
+        TLine<TFrontend> CreateLine(TStringBuf name, std::span<const TLabel> labels, const typename TFrontend::TConfig& config = {});
 
         void SetCommonLabels(std::span<const TLabel> labels);
         TVector<TLabel> GetCommonLabels() const;
@@ -34,17 +35,17 @@ namespace NActors {
         ui64 GetReuseWatermark() const noexcept;
         const TInMemoryMetricsConfig& GetConfig() const noexcept;
 
-        void CloseLine(TLineWriterState* state) noexcept override;
+        void CloseLine(TLineWriterState* state) noexcept;
         bool AccessChunkMemory(
             TLineWriterState* state,
             void* opaque,
-            TAccessChunkMemoryFn accessChunkMemory) noexcept override;
-        NHPTimer::STime CurrentTimestampTs() const noexcept override;
-        TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept override;
-        ui32 GetLineId(const TLineWriterState* state) const noexcept override;
-        void MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept override;
-        void MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept override;
-        void ReleasePinnedChunk(TChunk* chunk) noexcept override;
+            TAccessChunkMemoryFn accessChunkMemory) noexcept;
+        NHPTimer::STime CurrentTimestampTs() const noexcept;
+        TLinePublishState GetPublishState(const TLineWriterState* state) const noexcept;
+        ui32 GetLineId(const TLineWriterState* state) const noexcept;
+        void MarkObserved(TLineWriterState* state, NHPTimer::STime nowTs) noexcept;
+        void MarkPublished(TLineWriterState* state, ui64 value, NHPTimer::STime nowTs) noexcept;
+        void ReleasePinnedChunk(TChunk* chunk) noexcept;
 
     private:
         class TImpl;
@@ -63,3 +64,5 @@ namespace NActors {
     };
 
 } // namespace NActors
+
+#include "line.h"

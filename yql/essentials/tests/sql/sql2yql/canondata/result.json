@@ -839,6 +839,27 @@
             "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_agg_phases-count_opt_/sql.yql"
         }
     ],
+    "test_sql2yql.test[agg_phases-histogram]": [
+        {
+            "checksum": "a741d17d21e3b52c82dc156fc3f626d0",
+            "size": 14057,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-histogram_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-histogram_null]": [
+        {
+            "checksum": "5a9275e6cf473947435d0d7686c451d1",
+            "size": 14039,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-histogram_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-histogram_opt]": [
+        {
+            "checksum": "72bafb76215b5a1531f2160ba6e2be3f",
+            "size": 14071,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-histogram_opt_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[agg_phases-hll]": [
         {
             "checksum": "ad04c72235caba95f50d58651ef4f05e",
@@ -1068,6 +1089,27 @@
             "checksum": "a6af824481c87a33c2da68750b408b49",
             "size": 14126,
             "uri": "https://{canondata_backend}/1773845/0e0b9211422494587113c35daa6822906a88aedd/resource.tar.gz#test_sql2yql.test_agg_phases-top_opt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-topfreq]": [
+        {
+            "checksum": "ff7c05c4d95b110841b3e232d06a3636",
+            "size": 15426,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-topfreq_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-topfreq_null]": [
+        {
+            "checksum": "f6341b180e219bd13815db5f1b294be9",
+            "size": 15412,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-topfreq_null_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[agg_phases-topfreq_opt]": [
+        {
+            "checksum": "6cd210e04bb501b9869f4bed19d42753",
+            "size": 15440,
+            "uri": "https://{canondata_backend}/1937150/38b825267a70ad39e60bf1e7e7bdc54473ec9a72/resource.tar.gz#test_sql2yql.test_agg_phases-topfreq_opt_/sql.yql"
         }
     ],
     "test_sql2yql.test[agg_phases-udaf]": [
@@ -11449,6 +11491,21 @@
             "uri": "file://test_sql_format.test_agg_phases-count_opt_/formatted.sql"
         }
     ],
+    "test_sql_format.test[agg_phases-histogram]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-histogram_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-histogram_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-histogram_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-histogram_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-histogram_opt_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[agg_phases-hll]": [
         {
             "uri": "file://test_sql_format.test_agg_phases-hll_/formatted.sql"
@@ -11612,6 +11669,21 @@
     "test_sql_format.test[agg_phases-top_opt]": [
         {
             "uri": "file://test_sql_format.test_agg_phases-top_opt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-topfreq]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-topfreq_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-topfreq_null]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-topfreq_null_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[agg_phases-topfreq_opt]": [
+        {
+            "uri": "file://test_sql_format.test_agg_phases-topfreq_opt_/formatted.sql"
         }
     ],
     "test_sql_format.test[agg_phases-udaf]": [

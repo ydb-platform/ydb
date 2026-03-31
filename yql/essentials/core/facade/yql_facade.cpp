@@ -1904,6 +1904,20 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
                 writer.OnInt64Scalar(TypeCtx_->LineageStats.Size);
                 writer.OnEndMap();
             }
+            if (TypeCtx_->LineageStats.Memory > 0) {
+                writer.OnKeyedItem("Memory");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Memory);
+                writer.OnEndMap();
+            }
+            if (TypeCtx_->LineageStats.Duration > 0) {
+                writer.OnKeyedItem("DurationUs");
+                writer.OnBeginMap();
+                writer.OnKeyedItem("count");
+                writer.OnInt64Scalar(TypeCtx_->LineageStats.Duration);
+                writer.OnEndMap();
+            }
         writer.OnEndMap();
     }
 

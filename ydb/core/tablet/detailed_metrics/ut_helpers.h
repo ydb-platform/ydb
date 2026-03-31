@@ -15,7 +15,7 @@ namespace NDetailedMetricsTests {
  *          is always inherently sorted in a stable order. This makes it safe
  *          to compare sensor arrays directly without sorting them.
  *
- * @param jsonString The JSON to normalize (as a string)
+ * @param[in] jsonString The JSON to normalize (as a string)
  *
  * @return The corresponding normalized JSON
  */

@@ -377,8 +377,8 @@ private:
     TProgram(
         TString issueReportTarget,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TIntrusivePtr<IRandomProvider> randomProvider,
-        const TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider,
+        TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         TLangVersion langVer,

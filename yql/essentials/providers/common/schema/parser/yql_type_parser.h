@@ -503,6 +503,6 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
     return Nothing();
 }
 
-bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err);
+bool ParseYson(NYT::TNode& res, TStringBuf yson, IOutputStream& err);
 
 } // namespace NYql::NCommon

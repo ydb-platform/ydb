@@ -16,7 +16,7 @@ namespace NKikimr::NBinaryJson {
 /**
  * @brief Translates textual JSON into BinaryJson
  */
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, bool allowInf = false);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(TStringBuf json, bool allowInf = false);
 
 /**
  * @brief Translates DOM layout from `yql/library/dom` library into BinaryJson

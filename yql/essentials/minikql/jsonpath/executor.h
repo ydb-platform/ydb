@@ -96,7 +96,7 @@ using TVariablesMap = THashMap<TString, TValue>;
 class TExecutor {
 public:
     TExecutor(
-        const TJsonPathPtr path,
+        TJsonPathPtr path,
         const TJsonNodes& input,
         const TVariablesMap& variables,
         const NUdf::IValueBuilder* valueBuilder);

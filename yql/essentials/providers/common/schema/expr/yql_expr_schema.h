@@ -34,8 +34,8 @@ NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type, bool extendedForm = f
 TString WriteTypeToYson(const TTypeAnnotationNode* type, NYT::NYson::EYsonFormat format = NYT::NYson::EYsonFormat::Binary,
                         bool extendedForm = false);
 
-const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition());
-const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
+const TTypeAnnotationNode* ParseTypeFromYson(TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition());
+const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(TStringBuf yson, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TColumnOrder& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 

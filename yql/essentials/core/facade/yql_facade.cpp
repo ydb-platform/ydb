@@ -336,8 +336,8 @@ TProgramPtr TProgramFactory::Create(
 TProgram::TProgram(
     TString issueReportTarget,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TIntrusivePtr<IRandomProvider> randomProvider,
-    const TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider,
+    TIntrusivePtr<ITimeProvider> timeProvider,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
     TLangVersion langVer,
@@ -365,8 +365,8 @@ TProgram::TProgram(
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
-    , RandomProvider_(randomProvider)
-    , TimeProvider_(timeProvider)
+    , RandomProvider_(std::move(randomProvider))
+    , TimeProvider_(std::move(timeProvider))
     , NextUniqueId_(nextUniqueId)
     , AstRoot_(nullptr)
     , Modules_(std::move(modules))

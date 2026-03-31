@@ -53,7 +53,7 @@ TUnboxedValuePod PeelData(const TDataTypeId nodeType, const TUnboxedValuePod val
 }
 
 template <bool Strict, bool AutoConvert>
-TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, const TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
+TUnboxedValuePod TryPeelDom(const ITypeInfoHelper* typeHelper, const TType* shape, TUnboxedValuePod value, const IValueBuilder* valueBuilder, const TSourcePosition& pos);
 
 template <bool Strict, bool AutoConvert>
 TUnboxedValuePod PeelList(const ITypeInfoHelper* typeHelper, const TType* itemType, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {

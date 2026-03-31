@@ -1434,7 +1434,7 @@ public:
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
+    bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {

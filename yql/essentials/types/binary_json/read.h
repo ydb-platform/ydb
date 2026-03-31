@@ -150,7 +150,7 @@ public:
     /**
      * @brief Get value corresponding to given key in object
      */
-    TMaybe<TEntryCursor> Lookup(const TStringBuf key) const;
+    TMaybe<TEntryCursor> Lookup(TStringBuf key) const;
 
     /**
      * @brief Get iterator to object key-value pairs

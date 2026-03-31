@@ -483,7 +483,7 @@ public:
                                 const TArrayRef<const ui32>& leftColumns, const TArrayRef<const ui32>& rightColumns,
                                 const TArrayRef<const ui32>& requiredColumns, const TArrayRef<const ui32>& keyColumns,
                                 ui64 memLimit, std::optional<ui32> sortedTableOrder,
-                                EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField,
+                                EAnyJoinSettings anyJoinSettings, ui32 tableIndexField,
                                 TType* returnType);
     TRuntimeNode GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,

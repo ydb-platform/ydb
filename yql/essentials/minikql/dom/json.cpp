@@ -247,7 +247,7 @@ bool IsEntity(const TUnboxedValuePod value) {
 }
 
 template <bool SkipMapEntity, bool EncodeUtf8>
-void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer);
+void WriteValue(TUnboxedValuePod value, TJsonWriter& writer);
 
 template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteArray(const TUnboxedValuePod value, TJsonWriter& writer) {

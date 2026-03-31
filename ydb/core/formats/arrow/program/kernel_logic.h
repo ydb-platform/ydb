@@ -189,37 +189,37 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
 };
 
-class TLogicEquals: public IKernelLogic {
-private:
-    using TBase = IKernelLogic;
-    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
-        TAccessorsCollection& /*resources*/) const override {
-        return false;
-    }
-    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
-        return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
-    }
-    const bool IsSimpleFunction;
+// class TLogicEquals: public IKernelLogic {
+// private:
+//     using TBase = IKernelLogic;
+//     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+//         TAccessorsCollection& /*resources*/) const override {
+//         return false;
+//     }
+//     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+//         return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
+//     }
+//     const bool IsSimpleFunction;
 
-    virtual ECalculationHardness GetWeight() const override {
-        return ECalculationHardness::Equals;
-    }
+//     virtual ECalculationHardness GetWeight() const override {
+//         return ECalculationHardness::Equals;
+//     }
 
-public:
-    TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction) {
-    }
+// public:
+//     TLogicEquals(const bool isSimpleFunction)
+//         : IsSimpleFunction(isSimpleFunction) {
+//     }
 
-    virtual TString GetClassName() const override {
-        return "EQUALS";
-    }
+//     virtual TString GetClassName() const override {
+//         return "EQUALS";
+//     }
 
-    virtual bool IsBoolInResult() const override {
-        return !IsSimpleFunction;
-    }
-};
+//     virtual bool IsBoolInResult() const override {
+//         return !IsSimpleFunction;
+//     }
+// };
 
-class TLogicLessOrGreater: public IKernelLogic {
+class TCompareKernel: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
@@ -237,14 +237,15 @@ private:
     }
 
 public:
-    TLogicLessOrGreater(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
+    TCompareKernel(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
         : IsSimpleFunction(isSimpleFunction)
         , Op(op)
     {
         AFL_VERIFY(op == TIndexCheckOperation::EOperation::Less || 
                    op == TIndexCheckOperation::EOperation::LessOrEqual || 
                    op == TIndexCheckOperation::EOperation::Greater || 
-                   op == TIndexCheckOperation::EOperation::GreaterOrEqual
+                   op == TIndexCheckOperation::EOperation::GreaterOrEqual ||
+                   op == TIndexCheckOperation::EOperation::Equals
                 );
     }
 

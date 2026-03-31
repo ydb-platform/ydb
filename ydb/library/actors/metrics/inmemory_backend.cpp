@@ -590,43 +590,46 @@ namespace NActors {
         snapshot.Anchor = Impl->TimeAnchor;
         snapshot.CommonLabels = GetCommonLabels();
 
-        TGuard<TMutex> registryGuard(Impl->RegistryLock);
-        snapshot.SnapshotLines.reserve(Impl->LinesById.size());
+        {
+            TGuard<TMutex> registryGuard(Impl->RegistryLock);
+            snapshot.SnapshotLines.reserve(Impl->LinesById.size());
 
-        for (const auto& [lineId, line] : Impl->LinesById) {
-            Y_UNUSED(lineId);
-            TLineSnapshot lineSnapshot;
-            lineSnapshot.Owner = &snapshot;
-            lineSnapshot.LineId = line->LineId;
-            lineSnapshot.Name = line->Key.Name;
-            lineSnapshot.Labels = line->Key.Labels;
-            lineSnapshot.Meta = line->Meta;
-            TGuard<TMutex> lineGuard(line->Storage.Lock);
-            lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
-            lineSnapshot.ChunkBegin = snapshot.SnapshotChunks.size();
+            for (const auto& [lineId, line] : Impl->LinesById) {
+                Y_UNUSED(lineId);
+                TLineSnapshot lineSnapshot;
+                lineSnapshot.Owner = &snapshot;
+                lineSnapshot.LineId = line->LineId;
+                lineSnapshot.Name = line->Key.Name;
+                lineSnapshot.Labels = line->Key.Labels;
+                lineSnapshot.Meta = line->Meta;
+                TGuard<TMutex> lineGuard(line->Storage.Lock);
+                lineSnapshot.Closed = line->State.load(std::memory_order_acquire) == ELineState::Closed;
+                lineSnapshot.ChunkBegin = snapshot.SnapshotChunks.size();
 
-            for (TChunk* chunk : line->Storage.Chunks) {
-                if (!NInMemoryMetricsPrivate::TryPinChunk(chunk)) {
-                    continue;
+                for (TChunk* chunk : line->Storage.Chunks) {
+                    if (!NInMemoryMetricsPrivate::TryPinChunk(chunk)) {
+                        continue;
+                    }
+
+                    const TChunkView view{
+                        .ChunkId = chunk->ChunkId,
+                        .FirstTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
+                        .LastTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->LastTs.load(std::memory_order_acquire)),
+                    };
+                    snapshot.SnapshotChunks.push_back(NInMemoryMetricsPrivate::TSnapshotPinnedChunk{
+                        .Backend = const_cast<TInMemoryMetricsBackend*>(this),
+                        .Chunk = chunk,
+                        .View = view,
+                    });
+                    ++lineSnapshot.ChunkCount;
                 }
 
-                const TChunkView view{
-                    .ChunkId = chunk->ChunkId,
-                    .FirstTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->FirstTs.load(std::memory_order_acquire)),
-                    .LastTs = NInMemoryMetricsPrivate::DecodeTs(snapshot.Anchor, chunk->LastTs.load(std::memory_order_acquire)),
-                };
-                snapshot.SnapshotChunks.push_back(NInMemoryMetricsPrivate::TSnapshotPinnedChunk{
-                    .Backend = const_cast<TInMemoryMetricsBackend*>(this),
-                    .Chunk = chunk,
-                    .View = view,
-                });
-                ++lineSnapshot.ChunkCount;
-            }
-
-            if (lineSnapshot.ChunkCount != 0 || lineSnapshot.Closed) {
-                snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
+                if (lineSnapshot.ChunkCount != 0 || lineSnapshot.Closed) {
+                    snapshot.SnapshotLines.push_back(std::move(lineSnapshot));
+                }
             }
         }
+
         cb(
             std::span<const TLabel>(snapshot.CommonLabels.data(), snapshot.CommonLabels.size()),
             std::span<const TLineSnapshot>(snapshot.SnapshotLines.data(), snapshot.SnapshotLines.size()));

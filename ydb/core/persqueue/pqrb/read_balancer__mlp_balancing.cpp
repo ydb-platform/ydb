@@ -42,13 +42,14 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readin
             status.UseForReading = *useForReading;
         }
 
-        auto calc = [](ssize_t currentValue, size_t newValue) {
-            return std::max<ssize_t>(0, newValue - currentValue);
+        auto calc = [](size_t value, size_t currentValue, size_t newValue) {
+            auto v = value + newValue;
+            return v > currentValue ? v - currentValue : 0;
         };
 
-        Metrics.LockedMessages += calc(status.Metrics.LockedMessages, metrics.LockedMessages);
-        Metrics.DelayedMessages += calc(status.Metrics.DelayedMessages, metrics.DelayedMessages);
-        Metrics.Messages += calc(status.Metrics.Messages, metrics.Messages);
+        Metrics.Messages = calc(Metrics.Messages, status.Metrics.Messages, metrics.Messages);
+        Metrics.DelayedMessages = calc(Metrics.DelayedMessages, status.Metrics.DelayedMessages, metrics.DelayedMessages);
+        Metrics.LockedMessages = calc(Metrics.LockedMessages, status.Metrics.LockedMessages, metrics.LockedMessages);
         status.Metrics = metrics;
 
         status.Generation = generation;
@@ -158,7 +159,12 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
     const auto& consumer = it->second;
     const auto& metrics = consumer.GetMetrics();
 
-    TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetRuntimeAttributesResponse(metrics.Messages, metrics.DelayedMessages, metrics.LockedMessages), 0, ev->Cookie);
+    auto response = std::make_unique<TEvPQ::TEvMLPGetRuntimeAttributesResponse>(
+        metrics.Messages,
+        metrics.DelayedMessages,
+        metrics.LockedMessages
+    );
+    TopicActor.Send(ev->Sender, std::move(response), 0, ev->Cookie);
 }
 
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
@@ -189,9 +195,9 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActo
                 auto useForReading = consumerResult.GetUseForReading();
 
                 TMLPConsumer::TMetrics metrics{
-                    .LockedMessages = consumerResult.GetMLPLockedMessageCount(),
+                    .Messages = consumerResult.GetMLPMessageCount(),
                     .DelayedMessages = consumerResult.GetMLPDelayedMessageCount(),
-                    .Messages = consumerResult.GetMLPMessageCount()
+                    .LockedMessages = consumerResult.GetMLPLockedMessageCount(),
                 };
                 mit->second |= consumer.SetUseForReading(partitionId, readingIsFinished, useForReading, metrics, generation, cookie) || inserted;
             }
@@ -213,9 +219,9 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
                      true, // reading is finished
                      std::nullopt, // use for reading
                      TMLPConsumer::TMetrics{
-                        .LockedMessages = record.GetLockedMessageCount(),
+                        .Messages = record.GetMessageCount(),
                         .DelayedMessages = record.GetDelayedMessageCount(),
-                        .Messages = record.GetMessageCount()
+                        .LockedMessages = record.GetLockedMessageCount(),
                      },
                      record.GetGeneration(),
                      record.GetCookie());
@@ -229,9 +235,9 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
                      std::nullopt, // reading is finished
                      record.GetUseForReading(), // use for reading
                      TMLPConsumer::TMetrics{
-                        .LockedMessages = record.GetLockedMessageCount(),
+                        .Messages = record.GetMessageCount(),
                         .DelayedMessages = record.GetDelayedMessageCount(),
-                        .Messages = record.GetMessageCount()
+                        .LockedMessages = record.GetLockedMessageCount(),
                      },
                      record.GetGeneration(),
                      record.GetCookie());

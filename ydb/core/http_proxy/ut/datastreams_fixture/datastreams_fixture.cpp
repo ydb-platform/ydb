@@ -318,6 +318,8 @@ void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, s
             {"AttributeNames", NJson::TJsonArray{"All"}}
         });
 
+        Cerr << (TStringBuilder() << "WaitQueueAttributes: " << json.GetStringRobust() << Endl);
+
         if (predicate(json)) {
             return;
         }
@@ -428,6 +430,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
 
     ActorRuntime->SetLogPriority(NKikimrServices::GRPC_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);

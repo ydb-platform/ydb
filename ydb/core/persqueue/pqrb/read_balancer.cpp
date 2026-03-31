@@ -490,8 +490,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
         CheckStat(ctx);
         Balancer->ProcessPendingStats(ctx);
-        ProcessPendingMLPGetPartitionRequests(ctx);
-        ProcessPendingMLPGetRuntimeAttributesRequests(ctx);
+        ProcessPendingMLPRequests(ctx);
     }
 }
 
@@ -922,43 +921,37 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
+    PQ_LOG_D("Handle TEvPQ::TEvMLPGetPartitionRequest: " << ev->Get()->Record.ShortDebugString());
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }
 
-    PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    PendingMLPRequests.push_back(std::move(ev));
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
+    PQ_LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesRequest: " << ev->Get()->Record.ShortDebugString());
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }
 
-    PendingMLPGetRuntimeAttributesRequests.push_back(std::move(ev));
+    PendingMLPRequests.push_back(std::move(ev));
 }
 
-void TPersQueueReadBalancer::ProcessPendingMLPGetPartitionRequests(const TActorContext&) {
-    while (!PendingMLPGetPartitionRequests.empty()) {
-        auto ev = std::move(PendingMLPGetPartitionRequests.front());
-        PendingMLPGetPartitionRequests.pop_front();
-        MLPBalancer->Handle(ev);
+void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext&) {
+    if (!StatsRequestTracker.StatsReceived) {
+        return;
     }
 
-    if (PendingMLPGetPartitionRequests.empty()) {
-        std::exchange(PendingMLPGetPartitionRequests, {});
-    }
-}
-
-void TPersQueueReadBalancer::ProcessPendingMLPGetRuntimeAttributesRequests(const TActorContext&) {
-    while (!PendingMLPGetRuntimeAttributesRequests.empty()) {
-        auto ev = std::move(PendingMLPGetRuntimeAttributesRequests.front());
-        PendingMLPGetRuntimeAttributesRequests.pop_front();
-        MLPBalancer->Handle(ev);
+    while (!PendingMLPRequests.empty()) {
+        auto ev = std::move(PendingMLPRequests.front());
+        std::visit([&](auto& ev) {
+            return MLPBalancer->Handle(ev);
+        }, ev);
+        PendingMLPRequests.pop_front();
     }
 
-    if (PendingMLPGetRuntimeAttributesRequests.empty()) {
-        std::exchange(PendingMLPGetRuntimeAttributesRequests, {});
-    }
+    std::exchange(PendingMLPRequests, {});
 }
 
 STFUNC(TPersQueueReadBalancer::StateInit) {

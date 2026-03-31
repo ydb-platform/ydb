@@ -1,19 +1,26 @@
 # Статистика выполнения запросов и её анализ
 
-Некоторые аспекты о работе со статистикой выполнения запросов:
+Использование статистики времени выполнения для того, чтобы понять, как выполняется запрос:
 
 - [Обзор](review.md)
 - [Как получить графическое представление плана](how-to-get.md)
     - [UI](how-to-get.md#ui)
     - [ydb cli](how-to-get.md#cli)
-    - [ydb_int](how-to-get.md#ydb_int)
-    - [kqprun](how-to-get.md#kqprun)
+- [Расположение информации на плане](layout.md)
+    - [Отдельные регионы (колонки)](layout.md#regions)
+    - [Структура плана](layout.md#structure)
+    - [Операторная статистика](layout.md#operators)
+    - [Прогресс выполнения задач](layout.md#progress)
+    - [Детальная информация по стадиям](layout.md#stages)
+    - [Временные графики](layout.md#timeline)
+    - [Интерактивные возможности](layout.md#interactive)
 - [Структура плана запроса](structure.md)
     - [Стадии](structure.md#stages)
     - [Каналы связи](structure.md#connections)
     - [Объединение](structure.md#join)
     - [Множественные выходы](structure.md#multiout)
     - [Составные графы](structure.md#complex)
+    - [Прекомпьюты](structure.md#precomputes)
 - [Визуализация метрик](metrics.md)
     - [Параллельность](metrics.md#parallelism)
     - [Агрегаты](metrics.md#aggregates)

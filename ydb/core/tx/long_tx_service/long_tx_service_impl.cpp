@@ -1154,8 +1154,8 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
     for (const auto& addedEdge : added) {
         auto existingIt = WaitEdges.find(addedEdge.Id);
         if (existingIt != WaitEdges.end()) {
-            if (existingIt->second.Blocker.LockId() != addedEdge.Blocker.LockId) {
-                TXLOG_ERROR("Unexpected blocker: " << existingIt->second.Blocker.LockId()
+            if (existingIt->second.Blocker.LockInfo(SelfId()) != addedEdge.Blocker) {
+                TXLOG_ERROR("Unexpected blocker: " << existingIt->second.Blocker.LockInfo(SelfId())
                     << " for duplicate added edge id: " << addedEdge.Id
                     << ", expected: " << addedEdge.Blocker.LockId);
             }

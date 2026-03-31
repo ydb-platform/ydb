@@ -105,6 +105,9 @@ struct THash<NKikimr::NLongTxService::TWaitEdgeId> {
     }
 };
 
-template<> struct std::hash<NKikimr::NLongTxService::TWaitEdgeId>
-    : THash<NKikimr::NLongTxService::TWaitEdgeId>
-{};
+namespace std {
+    template<>
+    struct hash<NKikimr::NLongTxService::TWaitEdgeId>
+        : THash<NKikimr::NLongTxService::TWaitEdgeId>
+    {};
+}

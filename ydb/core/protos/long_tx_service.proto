@@ -78,7 +78,7 @@ message TEvAcquireReadSnapshotResult {
 
 // Lock wait edges are uniquely identified by the (Owner, RequestId) tuple. Owner is the actor
 // reporting the wait (e.g. a DataShard), and RequestId is an id unique to the particular
-// Owner. These unique ids allow us to make the UpdateLockWaitGraph message idempotent.
+// Owner. These unique ids allow us to make the TEvUpdateLockWaitEdges message idempotent.
 message TLockWaitEdgeId {
     optional NActorsProto.TActorId Owner = 1;
     optional uint64 RequestId = 2;

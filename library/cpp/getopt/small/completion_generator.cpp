@@ -92,7 +92,7 @@ namespace NLastGetopt {
                 size_t tag = 0;
                 bool empty = true;
 
-                L << "desc='subcommands'";
+                L << "desc='modes'";
                 L << "modes=(";
                 for (auto& mode : modes) {
                     if (mode->Hidden) {
@@ -113,7 +113,7 @@ namespace NLastGetopt {
                         }
                         L;
                         if (mode->Description.empty()) {
-                            L << "desc='subcommands'";
+                            L << "desc='modes'";
                         } else {
                             L << "desc=" << SS(mode->Description);
                         }

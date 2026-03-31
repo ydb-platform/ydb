@@ -10,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -381,6 +382,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&RetentionStorageMb_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
         AddMetricsLevels(config);
@@ -480,6 +482,7 @@ namespace NYdb::NConsoleClient {
             .StoreTrue(&ContentBasedDeduplication_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
         AddMetricsLevels(config);
@@ -595,6 +598,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     int TCommandTopicDrop::Run(TConfig& config) {
@@ -674,6 +678,7 @@ namespace NYdb::NConsoleClient {
             .StoreMappedResult(&ReceiveMessageDelay_, ParseDuration);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
         AddAllowedCodecs(config, AllowedCodecs);
     }
 
@@ -785,6 +790,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&ConsumerName_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerDrop::Parse(TConfig& config) {
@@ -828,6 +834,7 @@ namespace NYdb::NConsoleClient {
         config.Opts->SetFreeArgsNum(1);
         AddOutputFormats(config, { EDataFormat::Pretty, EDataFormat::ProtoJsonBase64 });
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerDescribe::Parse(TConfig& config) {
@@ -870,6 +877,7 @@ namespace NYdb::NConsoleClient {
 
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
     }
 
     void TCommandTopicConsumerCommitOffset::Parse(TConfig& config) {
@@ -952,6 +960,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
 
         AddMessagingFormats(config, {
                                EMessagingFormat::SingleMessage,
@@ -1183,6 +1192,7 @@ namespace NYdb::NConsoleClient {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
+        SetSchemePathCompletionForTopics(config.Opts->GetOpts().GetFreeArgSpec(0));
 
         AddMessagingFormats(config, {
                                     EMessagingFormat::NewlineDelimited,

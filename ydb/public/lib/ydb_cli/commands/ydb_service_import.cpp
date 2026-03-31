@@ -3,6 +3,7 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/exclude_item.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
@@ -555,7 +556,8 @@ void TCommandImportFileBase::Config(TConfig& config) {
         .RequiredArgument("DURATION").StoreMappedResult(&OperationTimeout, &ParseDurationMilliseconds).DefaultValue(TDuration::Seconds(5 * 60));
 
     config.Opts->AddLongOption('p', "path", "Database path to table")
-        .Required().RequiredArgument("STRING").StoreResult(&Path);
+        .Required().RequiredArgument("STRING").StoreResult(&Path)
+        .SchemePathCompletionForTables();
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
 
     const TImportFileSettings defaults;

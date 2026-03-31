@@ -194,6 +194,25 @@ Y_COMPLETER(ProfileCompleter) {
     }
 }
 
+void TClientCommandRootCommon::SetSchemeCompletionContext(TSchemeCompletionContext ctx) {
+    SchemeCompletionContext_ = std::move(ctx);
+}
+
+int TClientCommandRootCommon::Process(TConfig& config) {
+    if (SchemeCompletionContext_) {
+        try {
+            TClientCommand::Prepare(config);
+            ExtractParams(config);
+            TDriver driver(config.CreateDriverConfig());
+            RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
+            driver.Stop(true);
+        } catch (...) {
+        }
+        return EXIT_SUCCESS;
+    }
+    return TClientCommand::Process(config);
+}
+
 TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TClientSettings& settings)
     : TClientCommandRootBase(name)
     , Settings(settings)

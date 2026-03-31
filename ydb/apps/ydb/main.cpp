@@ -1,8 +1,6 @@
 #include <ydb/apps/ydb/commands/ydb_root.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
-#include <library/cpp/getopt/small/completer.h>
-
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     return TVector<NYdb::NTopic::ECodec>{
             NYdb::NTopic::ECodec::RAW,
@@ -12,7 +10,6 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
 }
 
 int main(int argc, char **argv) {
-    NLastGetopt::NComp::TCustomCompleter::FireCustomCompleter(argc, const_cast<const char**>(argv));
     try {
         return NYdb::NConsoleClient::NewYdbClient(argc, argv);
     }

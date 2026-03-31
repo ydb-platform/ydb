@@ -685,7 +685,7 @@ private:
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
-            case NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED:
+            case NKqpProto::ISOLATION_LEVEL_INCONSISTENT_ONLINE_RO:
                 YQL_ENSURE(ReadOnlyTx);
                 TasksGraph.GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;

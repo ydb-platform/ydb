@@ -913,10 +913,9 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         if (userCtx != nullptr) {
             userSID = userCtx->GetUserSID();
             if (userCtx->GetUserTraceId()) {
-                NWilson::TTraceId::TSerializedTraceId serializedUserTraceId;
-                userCtx->GetUserTraceId().Serialize(&serializedUserTraceId);
-
-                userTraceId = TString(reinterpret_cast<const char*>(&serializedUserTraceId), sizeof(NWilson::TTraceId::TSerializedTraceId));
+                NActorsProto::TTraceId serializedTraceId;
+                userCtx->GetUserTraceId().Serialize(&serializedTraceId);
+                userTraceId = serializedTraceId.data();
             }
         } else {
             userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
@@ -1010,10 +1009,9 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
         TString userTraceId;
         if (userCtx != nullptr && userCtx->GetUserTraceId()) {
-            NWilson::TTraceId::TSerializedTraceId serializedUserTraceId;
-            userCtx->GetUserTraceId().Serialize(&serializedUserTraceId);
-
-            userTraceId = TString(reinterpret_cast<const char*>(&serializedUserTraceId), sizeof(NWilson::TTraceId::TSerializedTraceId));
+            NActorsProto::TTraceId serializedTraceId;
+            userCtx->GetUserTraceId().Serialize(&serializedTraceId);
+            userTraceId = serializedTraceId.data();
         }
 
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(

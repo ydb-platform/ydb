@@ -120,10 +120,10 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         }
         if (details.template HaveValue<typename TDetailsTable::UserTraceId>()) {
             auto value = details.template GetValue<typename TDetailsTable::UserTraceId>();
-            if (value.size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
-                auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(value.data());
-                userCtxBuilder.WithUserTraceId(NWilson::TTraceId(*data));
-            }
+
+            NActorsProto::TTraceId serializedTraceId;
+            *serializedTraceId.mutable_data() = value;
+            userCtxBuilder.WithUserTraceId(NWilson::TTraceId(serializedTraceId));
         }
         builder.WithUserCtx(userCtxBuilder.Build());
 

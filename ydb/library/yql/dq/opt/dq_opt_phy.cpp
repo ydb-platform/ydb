@@ -3011,21 +3011,8 @@ TExprBase DqBuildJoin(
         return node;
     }
 
-    // When UseBlockHashJoin is enabled, redirect MapJoin to BlockHashJoin with ScalarJoin mode.
-    // Scalar inputs (row-by-row OLTP data) will use DqScalarHashJoin in the peephole instead of
-    // the block path, avoiding unnecessary WideToBlocks/WideFromBlocks conversions.
-    const bool mapJoinToBlockHash = useBlockHashJoin && hashJoin == EHashJoinMode::Map;
-    const EHashJoinMode hashJoinForBuild = mapJoinToBlockHash ? EHashJoinMode::Grace : hashJoin;
-    // Disable shuffle elimination for the MapJoin→BlockHashJoin path: CBO shuffle-elimination
-    // hints were computed for a broadcast topology and are not valid for hash-partitioned join.
-    // Both sides must always use DqCnHashShuffle to avoid multiple DqCnMap inputs on one stage.
-    const bool shuffleEliminationForBuild = mapJoinToBlockHash ? false : shuffleElimination;
-
-    if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace
-            || shuffleMapJoin || mapJoinToBlockHash)) {
-        return DqBuildHashJoin(join, hashJoinForBuild, ctx, optCtx, shuffleEliminationForBuild,
-                               shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft,
-                               /*scalarJoin=*/mapJoinToBlockHash);
+    if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

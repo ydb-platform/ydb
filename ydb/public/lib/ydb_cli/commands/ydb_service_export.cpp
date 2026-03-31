@@ -9,6 +9,7 @@
 
 #include <util/generic/is_in.h>
 #include <util/generic/serialized_enum.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 
@@ -286,7 +287,8 @@ void TCommandExportBase::Config(TConfig& config) {
                 << colors.BoldColor() << "zstd-N" << colors.OldColor();
         }
         config.Opts->AddLongOption("compression", codecHelp)
-            .RequiredArgument("STRING").StoreResult(&Compression);
+            .RequiredArgument("STRING").StoreResult(&Compression)
+            .Completer(NLastGetopt::NComp::Choice({{"zstd", "ZSTD default level"}}));
     }
 
     {
@@ -314,7 +316,8 @@ void TCommandExportBase::Config(TConfig& config) {
             encryptionAlgorithmHelp << colors.BoldColor() << alg << colors.OldColor();
         }
         config.Opts->AddLongOption("encryption-algorithm", encryptionAlgorithmHelp)
-            .RequiredArgument("NAME").StoreResult(&EncryptionAlgorithm);
+            .RequiredArgument("NAME").StoreResult(&EncryptionAlgorithm)
+            .ChoicesWithCompletion({{"AES-128-GCM"}, {"AES-256-GCM"}, {"ChaCha20-Poly1305"}});
     }
 
     config.Opts->AddLongOption("encryption-key-file", "File path that contains encryption key or env that contains hex encoded key value")
@@ -483,16 +486,19 @@ void TCommandExportToS3::Config(TConfig& config) {
             << colors.BoldColor() << "http" << colors.OldColor()
             << " or "
             << colors.BoldColor() << "https" << colors.OldColor())
-        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
+        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme)
+        .ChoicesWithCompletion({{"http", "HTTP"}, {"https", "HTTPS"}});
 
     {
         TStringBuilder storageClassHelp;
         storageClassHelp << "S3 storage class. Available options: ";
+        TVector<NLastGetopt::NComp::TChoice> storageClassChoices;
         bool first = true;
         for (auto value : GetEnumAllValues<EStorageClass>()) {
             if (value == EStorageClass::UNKNOWN) {
                 continue;
             }
+            storageClassChoices.emplace_back(ToString(value));
             if (config.HelpCommandVerbosiltyLevel >= 2) {
                 storageClassHelp << Endl << "    - " << value;
             } else {
@@ -506,7 +512,8 @@ void TCommandExportToS3::Config(TConfig& config) {
         }
         storageClassHelp << Endl;
         config.Opts->AddLongOption("storage-class", storageClassHelp)
-            .RequiredArgument("STORAGE_CLASS").StoreResult(&AwsStorageClass).DefaultValue(AwsStorageClass);
+            .RequiredArgument("STORAGE_CLASS").StoreResult(&AwsStorageClass).DefaultValue(AwsStorageClass)
+            .Completer(NLastGetopt::NComp::Choice(std::move(storageClassChoices)));
     }
 
     config.Opts->AddLongOption("bucket", "S3 bucket")

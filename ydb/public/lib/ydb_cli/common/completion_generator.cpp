@@ -32,6 +32,29 @@ namespace {
         }
         return TString(desc.SubStr(0, pos)) + "...";
     }
+
+    struct TPendingChoiceFunc {
+        TString FuncName;
+        TString ArrayBody;
+    };
+
+    TVector<TPendingChoiceFunc> PendingChoiceFuncs;
+    TString ChoiceFuncPrefix;
+    size_t ChoiceFuncCounter;
+
+    // Inline ((...)) actions with multi-word descriptions break when embedded
+    // in _arguments optspecs (single-quote nesting + space splitting).
+    // Instead, generate a standalone helper function that uses _describe.
+    TString MaybeRegisterChoiceFunc(TStringBuf action) {
+        if (action.StartsWith("((") && action.EndsWith("))")) {
+            TString funcName = TStringBuilder()
+                << ChoiceFuncPrefix << "__choice_" << ++ChoiceFuncCounter;
+            TString arrayBody = TString{action.SubStr(1, action.size() - 2)};
+            PendingChoiceFuncs.push_back({funcName, arrayBody});
+            return funcName;
+        }
+        return {};
+    }
 }
 
 #define L out.Line()
@@ -57,6 +80,10 @@ namespace {
     }
 
     void TZshCompletionGenerator::Generate(TStringBuf command, IOutputStream& stream) {
+        PendingChoiceFuncs.clear();
+        ChoiceFuncPrefix = TStringBuilder() << "_" << command;
+        ChoiceFuncCounter = 0;
+
         TFormattedOutput out;
         NComp::TCompleterManager manager{command};
 
@@ -84,6 +111,19 @@ namespace {
         L << "}";
         L;
         manager.GenerateZsh(out);
+
+        for (auto& func : PendingChoiceFuncs) {
+            L << "(( $+functions[" << func.FuncName << "] )) ||";
+            L << func.FuncName << "() {";
+            {
+                I;
+                L << "local -a action";
+                L << "action=" << func.ArrayBody;
+                L << "_describe '' action -M 'r:|[_-]=* r:|=*'";
+            }
+            L << "}";
+            L;
+        }
 
         out.Print(stream);
     }
@@ -355,7 +395,13 @@ namespace {
                 }
                 line << ":";
                 if (spec.Completer_) {
-                    line << spec.Completer_->GenerateZshAction(manager);
+                    auto action = TString{spec.Completer_->GenerateZshAction(manager)};
+                    auto funcName = MaybeRegisterChoiceFunc(action);
+                    if (!funcName.empty()) {
+                        line << funcName;
+                    } else {
+                        line << action;
+                    }
                 } else {
                     line << "_default";
                 }
@@ -373,7 +419,13 @@ namespace {
                 }
                 line << ":";
                 if (spec.Completer_) {
-                    line << spec.Completer_->GenerateZshAction(manager);
+                    auto action = TString{spec.Completer_->GenerateZshAction(manager)};
+                    auto funcName = MaybeRegisterChoiceFunc(action);
+                    if (!funcName.empty()) {
+                        line << funcName;
+                    } else {
+                        line << action;
+                    }
                 } else {
                     line << "_default";
                 }
@@ -510,7 +562,13 @@ namespace {
             line << ":";
 
             if (opt.Completer_) {
-                line << C(opt.Completer_->GenerateZshAction(manager));
+                auto action = TString{opt.Completer_->GenerateZshAction(manager)};
+                auto funcName = MaybeRegisterChoiceFunc(action);
+                if (!funcName.empty()) {
+                    line << funcName;
+                } else {
+                    line << C(action);
+                }
             } else {
                 line << "_default";
             }

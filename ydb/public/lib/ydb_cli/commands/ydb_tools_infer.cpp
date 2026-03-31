@@ -41,7 +41,8 @@ void TCommandToolsInferCsv::Config(TConfig& config) {
     config.Opts->GetOpts().SetTrailingArgTitle("<input files...>",
             "One or more file paths to infer from. Or CSV data can be passed to stdin instead");
     config.Opts->AddLongOption('p', "path", "Database path to table that should be created")
-        .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path);
+        .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path)
+        .SchemePathCompletionForTables();
     auto& columnsOption = config.Opts->AddLongOption("columns",
         "Explicitly specifies table column names, as a comma-separated list.")
         .RequiredArgument("NAMES").StoreResult(&ColumnNames);

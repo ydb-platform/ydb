@@ -23,7 +23,7 @@
 ```sql
 SELECT available FROM stock WHERE sku = $sku AND warehouse_id = $warehouse_id;
 -- приложение проверяет: available > 0
--- приложение расчитывает скидки, ожидает оплаты ...
+-- приложение рассчитывает скидки, ожидает оплаты ...
 UPDATE stock SET available = available - 1 WHERE sku = $sku AND warehouse_id = $warehouse_id;
 COMMIT;
 ```

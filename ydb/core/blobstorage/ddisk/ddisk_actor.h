@@ -326,6 +326,13 @@ namespace NKikimr::NDDisk {
         const bool IsPersistentBufferActor;
 
     public:
+        NKikimrServices::TActivity::EType ActorActivityType() {
+            if (IsPersistentBufferActor) {
+                return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
+            }
+            return NKikimrServices::TActivity::BS_DDISK;
+        }
+
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor);

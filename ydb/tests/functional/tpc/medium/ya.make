@@ -15,6 +15,9 @@ TEST_SRCS(
     test_tpcc.py
 )
 
+FORK_TEST_FILES()
+FORK_SUBTESTS()
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)

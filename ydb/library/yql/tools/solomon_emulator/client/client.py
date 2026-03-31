@@ -24,12 +24,6 @@ def _do_request(method, url, json=None):
     return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json}, tries=max_tries, delay=2)
 
 
-def config_solomon(response_code):
-    url = "{url}/config".format(
-        url=get_api_url())
-    _do_request("POST", url, {"response_code": response_code})
-
-
 def cleanup_emulator():
     _do_request("POST", "{url}/cleanup".format(url=get_api_url()))
 
@@ -71,3 +65,13 @@ def get_solomon_metrics(project, cluster, service):
 
 def get_monitoring_metrics(folderId, service):
     return get_solomon_metrics(folderId, folderId, service)
+
+
+def get_api_calls_count():
+    url = "{}/api/calls".format(get_api_url())
+    return _do_request("GET", url).json()["api_calls"]
+
+
+def cleanup_api_calls():
+    url = "{}/cleanup/api/calls".format(get_api_url())
+    _do_request("POST", url)

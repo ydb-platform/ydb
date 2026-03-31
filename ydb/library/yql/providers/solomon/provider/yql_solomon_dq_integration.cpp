@@ -374,11 +374,8 @@ public:
         auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
-        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
+        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(true);
         sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
-
-        auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
-        sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
         auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
         sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
@@ -388,6 +385,9 @@ public:
 
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
+
+        auto maxDataInflight = solomonConfig->MaxDataInflight.Get().OrElse(250);
+        sourceSettings.insert({"maxDataInflight", ToString(maxDataInflight)});
 
         if (!selectors.empty()) {
             ui64 totalMetricsCount;

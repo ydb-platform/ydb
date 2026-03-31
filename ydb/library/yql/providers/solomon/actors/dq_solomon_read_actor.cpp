@@ -79,11 +79,12 @@ public:
         const THolderFactory& holderFactory,
         NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
         TDqSolomonReadParams&& readParams,
-        ui64 computeActorBatchSize,
         TDuration truePointsFindRange,
         ui64 metricsQueueConsumersCountDelta,
-        ui64 maxInflight,
+        ui64 maxApiInflight,
+        ui64 maxDataInflight,
         NActors::TActorId metricsQueueActor,
+        IMemoryQuotaManager::TPtr memoryQuotaManager,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
         )
@@ -94,12 +95,13 @@ public:
         , ProgramBuilder(programBuilder)
         , LogPrefix(TStringBuilder() << "TxId: " << TxId << ", TDqSolomonReadActor: ")
         , ReadParams(std::move(readParams))
-        , ComputeActorBatchSize(computeActorBatchSize)
         , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
         , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , MetricsQueueConsumersCountDelta(metricsQueueConsumersCountDelta)
-        , MaxInflight(maxInflight)
+        , MaxApiInflight(maxApiInflight)
+        , MaxDataInflight(maxDataInflight)
         , MetricsQueueActor(metricsQueueActor)
+        , MemoryQuotaManager(memoryQuotaManager)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {
@@ -147,6 +149,13 @@ public:
 
     void Bootstrap() {
         if (UseMetricsQueue) {
+            if (!MemoryQuotaManager->AllocateQuota(MaxDataInflight * 200_KB)) {
+                TIssues issues;
+                issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << MaxDataInflight * 200_KB << "b read buffer"});
+                Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
+            }
+
             Become(&TDqSolomonReadActor::LimitlessModeState);
             MetricsQueueEvents.Init(TxId, SelfId(), SelfId());
             MetricsQueueEvents.OnNewRecipientId(MetricsQueueActor);
@@ -157,6 +166,13 @@ public:
 
             RequestMetrics();
         } else {
+            if (!MemoryQuotaManager->AllocateQuota(1_MB)) {
+                TIssues issues;
+                issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << 1_MB << "b read buffer"});
+                Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::BAD_REQUEST));
+                return;
+            }
+
             Become(&TDqSolomonReadActor::LimitedModeState);
 
             NSo::TMetricTimeRange metric {
@@ -272,7 +288,7 @@ public:
         if (!MetricsWithTimeRange.empty()) {
             TryRequestData();
         }
-        if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {
+        if (MetricsData.size() >= MaxDataInflight / 2 || LastMetricProcessed()) {
             NotifyComputeActorWithData();
         }
     }
@@ -344,7 +360,8 @@ public:
         TInstant from = TInstant::Seconds(ReadParams.Source.GetFrom());
         TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
 
-        for (const auto& data : MetricsData) {
+        while (!MetricsData.empty()) {
+            const auto data = MetricsData.front();
             auto& labels = data.Metric.Selectors;
 
             auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);
@@ -396,6 +413,9 @@ public:
 
                 buffer.push_back(value);
             }
+
+            MetricsData.pop_front();
+            TryRequestData();
         }
 
         finished = LastMetricProcessed();
@@ -425,7 +445,11 @@ private:
         SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics, " << CompletedTimeRanges << " time ranges.");
         if (UseMetricsQueue) {
             MetricsQueueEvents.Unsubscribe();
+            MemoryQuotaManager->FreeQuota(MaxDataInflight * 200_KB);
+        } else {
+            MemoryQuotaManager->FreeQuota(1_MB);
         }
+        MemoryQuotaManager.reset();
         TActor<TDqSolomonReadActor>::PassAway();
     }
 
@@ -490,7 +514,11 @@ private:
             return false;
         }
 
-        if (CurrentInflight >= MaxInflight) {
+        if (CurrentInflight >= MaxApiInflight) {
+            return false;
+        }
+
+        if (MetricsData.size() + CurrentInflight >= MaxDataInflight) {
             return false;
         }
 
@@ -604,16 +632,17 @@ private:
     NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
     const TString LogPrefix;
     const TDqSolomonReadParams ReadParams;
-    const ui64 ComputeActorBatchSize;
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const ui64 MetricsQueueConsumersCountDelta;
-    const ui64 MaxInflight;
+    const ui64 MaxApiInflight;
+    const ui64 MaxDataInflight;
     IRetryPolicy<NSo::TGetDataResponse>::TPtr RetryPolicy;
 
     bool UseMetricsQueue;
     TRetryEventsQueue MetricsQueueEvents;
     NActors::TActorId MetricsQueueActor;
+    IMemoryQuotaManager::TPtr MemoryQuotaManager;
     bool IsWaitingMetricsQueueResponse = false;
     bool IsMetricsQueueEmpty = false;
     bool IsConfirmedMetricsQueueFinish = false;
@@ -651,6 +680,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     const THolderFactory& holderFactory,
     NKikimr::NMiniKQL::TProgramBuilder& programBuilder,
     const THashMap<TString, TString>& secureParams,
+    IMemoryQuotaManager::TPtr memoryQuotaManager,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
@@ -671,19 +701,19 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         metricsQueueActor = ActorIdFromProto(protoId);
     }
 
-    ui64 computeActorBatchSize = 1;
-    if (auto it = settings.find("computeActorBatchSize"); it != settings.end()) {
-        computeActorBatchSize = FromString<ui64>(it->second);
-    }
-
     ui64 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
         truePointsFindRange = FromString<ui64>(it->second);
     }
 
-    ui64 maxInflight = 40;
+    ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxInflight = FromString<ui64>(it->second);
+        maxApiInflight = FromString<ui64>(it->second);
+    }
+
+    ui64 maxDataInflight = 250;
+    if (auto it = settings.find("maxDataInflight"); it != settings.end()) {
+        maxDataInflight = FromString<ui64>(it->second);
     }
 
     auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
@@ -697,11 +727,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
         holderFactory,
         programBuilder,
         std::move(params),
-        computeActorBatchSize,
         TDuration::Seconds(truePointsFindRange),
         metricsQueueConsumersCountDelta,
-        maxInflight,
+        maxApiInflight,
+        maxDataInflight,
         metricsQueueActor,
+        memoryQuotaManager,
         counters,
         credentialsProvider);
     return {actor, actor};
@@ -730,6 +761,7 @@ void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServi
                 args.HolderFactory,
                 args.ProgramBuilder,
                 args.SecureParams,
+                args.MemoryQuotaManager,
                 counters,
                 credentialsFactory);
         });

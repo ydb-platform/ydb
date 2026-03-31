@@ -302,7 +302,8 @@ LIMIT 100
 | `CompilationDurationMs` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
-| `QueryType` | Метка SQL_GENERIC_QUERY или SQL_DML_QUERY, обозначающая, был ли использован Query Service или Table Service при компиляции запроса.<br/>Тип: `Utf8`. |
+| `QueryType` | Тип запроса: `SQL_GENERIC_QUERY` для запросов через Query Service, `SQL_DML_QUERY` для запросов через Table Service.<br/>Тип: `Utf8`. |
+| `Syntax` | Синтаксис запроса: `SYNTAX_YQL_V1` для YQL, `SYNTAX_PG` для PostgreSQL-совместимого синтаксиса, `SYNTAX_UNSPECIFIED` для старых записей без информации о синтаксисе.<br/>Тип: `Utf8`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 

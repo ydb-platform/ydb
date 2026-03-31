@@ -197,7 +197,7 @@ struct TPurgerSettings {
 // Return TEvPurgeResponse
 IActor* CreatePurger(const NActors::TActorId& parentId, TPurgerSettings&& settings);
 
-//Retuen TEvDescribeResponse
+// Return TEvDescribeResponse
 struct TDescribeSettings {
     TString DatabasePath;
     TString TopicName;

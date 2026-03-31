@@ -42,9 +42,13 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readin
             status.UseForReading = *useForReading;
         }
 
-        Metrics.LockedMessages += metrics.LockedMessages - status.Metrics.LockedMessages;
-        Metrics.DelayedMessages += metrics.DelayedMessages - status.Metrics.DelayedMessages;
-        Metrics.Messages += metrics.Messages - status.Metrics.Messages;
+        auto calc = [](ssize_t currentValue, size_t newValue) {
+            return std::max<ssize_t>(0, newValue - currentValue);
+        };
+
+        Metrics.LockedMessages += calc(status.Metrics.LockedMessages, metrics.LockedMessages);
+        Metrics.DelayedMessages += calc(status.Metrics.DelayedMessages, metrics.DelayedMessages);
+        Metrics.Messages += calc(status.Metrics.Messages, metrics.Messages);
         status.Metrics = metrics;
 
         status.Generation = generation;

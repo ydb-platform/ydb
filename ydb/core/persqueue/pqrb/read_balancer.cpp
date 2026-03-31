@@ -930,7 +930,6 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
-    PQ_LOG_ERROR("Handle TEvPQ::TEvMLPGetRuntimeAttributesRequest");
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }

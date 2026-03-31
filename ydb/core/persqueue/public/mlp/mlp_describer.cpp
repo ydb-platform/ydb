@@ -67,7 +67,7 @@ void TDescriberActor::DoRuntimeAttributes() {
 }
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse " << ev->Get()->Record.ShortDebugString());
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -77,6 +77,7 @@ void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev
     response->ApproximateLockedMessageCount = result->GetApproximateLockedMessageCount();
 
     Send(ParentId, std::move(response));
+    PassAway();
 }
 
 void TDescriberActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

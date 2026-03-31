@@ -26,7 +26,7 @@ private:
 
     void DoRuntimeAttributes();
     void Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr&);
-    void Handle(TEvPQ::TEvPQ::TEvMLPErrorResponse::TPtr&);
+    void Handle(TEvPQ::TEvMLPErrorResponse::TPtr&);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(RuntimeAttributesState);
 

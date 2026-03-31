@@ -76,13 +76,21 @@ protected:
                 }
 
                 msgReq.VisibilityDeadline = NowTimestamp_ + newVisibilityTimeout;
-            } else {
+            } else if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
                 if (IsBatch_) {
                     MLPRequestToReplyIndexMapping_.push_back(requestIndexInBatch);
                 }
 
                 MLPRequest_.Messages.emplace_back(static_cast<ui32>(receipt.GetShard()), receipt.GetOffset());
                 MLPRequest_.Deadlines.emplace_back(NowTimestamp_ + newVisibilityTimeout);
+            } else {
+                if (IsBatch_) {
+                    ProcessAnswer(Response_.MutableChangeMessageVisibilityBatch()->MutableEntries(requestIndexInBatch),
+                        TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed);
+                } else {
+                    ProcessAnswer(Response_.MutableChangeMessageVisibility(),
+                        TSqsEvents::TEvChangeMessageVisibilityBatchResponse::EMessageStatus::Failed);
+                }
             }
         } catch (...) {
             RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
@@ -163,7 +171,7 @@ protected:
             ++RequestsToLeader_;
         }
 
-        if (!RequestsToLeader_ && MLPRequest_.Messages.empty()) {
+        if (!RequestsToLeader_) {
             SendReplyAndDie();
         }
     }

@@ -169,7 +169,7 @@ private:
             ++RequestsToLeader_;
         }
 
-        if (!RequestsToLeader_ && MLPRequest_.Messages.empty()) {
+        if (!RequestsToLeader_) {
             SendReplyAndDie();
         }
     }

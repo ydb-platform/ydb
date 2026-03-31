@@ -100,6 +100,7 @@ namespace NActors {
         bool TryAccessChunkMemory(TChunk* chunk, void* opaque, TAccessChunkMemoryFn accessChunkMemory) {
             TWritableChunkMemory chunkMemory{
                 .Payload = std::span<char>(chunk->Payload.data(), chunk->Payload.size()),
+                .UsedPayloadBytes = chunk->CommittedBytes.load(std::memory_order_relaxed),
                 .FirstTs = chunk->FirstTs.load(std::memory_order_relaxed),
                 .LastTs = chunk->LastTs.load(std::memory_order_relaxed),
             };
@@ -107,11 +108,7 @@ namespace NActors {
                 return false;
             }
 
-            const TLineReader* owner = chunk->Owner.load(std::memory_order_acquire);
-            const TLineFrontendOps* frontend = owner ? owner->Meta.Frontend : nullptr;
-            const ui32 usedPayloadBytes = frontend && frontend->GetUsedPayloadBytes
-                ? frontend->GetUsedPayloadBytes(std::span<const char>(chunk->Payload.data(), chunk->Payload.size()))
-                : 0;
+            const ui32 usedPayloadBytes = chunkMemory.UsedPayloadBytes;
             Y_ABORT_UNLESS(usedPayloadBytes <= chunk->Payload.size());
             if (usedPayloadBytes != 0) {
                 chunk->FirstTs.store(chunkMemory.FirstTs, std::memory_order_relaxed);

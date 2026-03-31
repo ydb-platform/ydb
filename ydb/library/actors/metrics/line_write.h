@@ -19,6 +19,7 @@ namespace NActors {
 
     struct TWritableChunkMemory {
         std::span<char> Payload;
+        ui32 UsedPayloadBytes = 0;
         NHPTimer::STime FirstTs = 0;
         NHPTimer::STime LastTs = 0;
     };

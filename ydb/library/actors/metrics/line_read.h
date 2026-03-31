@@ -50,11 +50,9 @@ namespace NActors {
     struct TLineFrontendOps {
         using TInvokeValue = void (*)(void*, TInstant, const void*);
         using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeValue);
-        using TGetUsedPayloadBytes = ui32 (*)(std::span<const char>);
 
         TStringBuf Name;
         TReadRange ReadRange = nullptr;
-        TGetUsedPayloadBytes GetUsedPayloadBytes = nullptr;
     };
 
     struct TLineMeta {

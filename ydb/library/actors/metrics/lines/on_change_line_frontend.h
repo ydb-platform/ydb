@@ -64,7 +64,6 @@ namespace NActors {
             static const TLineFrontendOps descriptor{
                 .Name = "on_change",
                 .ReadRange = &TOnChangeLineFrontend<TValue>::ReadRange,
-                .GetUsedPayloadBytes = &TRawLineFrontend<TValue>::GetUsedPayloadBytes,
             };
             return descriptor;
         }

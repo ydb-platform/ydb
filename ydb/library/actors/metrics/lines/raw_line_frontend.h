@@ -71,23 +71,10 @@ namespace NActors {
             });
         }
 
-        static ui32 GetUsedPayloadBytes(std::span<const char> payload) noexcept {
-            if (payload.size() < sizeof(TChunkHeader)) {
-                return 0;
-            }
-
-            const auto* header = reinterpret_cast<const TChunkHeader*>(payload.data());
-            const size_t recordsBytes = payload.size() - sizeof(TChunkHeader);
-            const size_t maxRecordsCount = recordsBytes / sizeof(TStorageRecord);
-            const size_t recordsCount = std::min<size_t>(header->RecordsCount, maxRecordsCount);
-            return sizeof(TChunkHeader) + recordsCount * sizeof(TStorageRecord);
-        }
-
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "raw",
                 .ReadRange = &TRawLineFrontend<TValue>::ReadRange,
-                .GetUsedPayloadBytes = &TRawLineFrontend<TValue>::GetUsedPayloadBytes,
             };
             return descriptor;
         }
@@ -123,7 +110,7 @@ namespace NActors {
     template<class TValue>
     bool TRawLineFrontend<TValue>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
         const auto& record = *static_cast<const TStorageRecord*>(opaque);
-        const ui32 oldCommittedBytes = GetUsedPayloadBytes(std::span<const char>(chunkMemory.Payload.data(), chunkMemory.Payload.size()));
+        const ui32 oldCommittedBytes = chunkMemory.UsedPayloadBytes;
         const ui32 requiredBytes = oldCommittedBytes == 0
             ? sizeof(TChunkHeader) + sizeof(TStorageRecord)
             : oldCommittedBytes + sizeof(TStorageRecord);
@@ -139,6 +126,7 @@ namespace NActors {
                 .RecordsCount = 1,
             };
             storedRecords[0] = record;
+            chunkMemory.UsedPayloadBytes = sizeof(TChunkHeader) + sizeof(TStorageRecord);
             chunkMemory.FirstTs = record.TimestampTs;
             chunkMemory.LastTs = record.TimestampTs;
             return true;
@@ -147,6 +135,7 @@ namespace NActors {
         const ui32 recordsCount = header->RecordsCount;
         storedRecords[recordsCount] = record;
         header->RecordsCount = recordsCount + 1;
+        chunkMemory.UsedPayloadBytes = oldCommittedBytes + sizeof(TStorageRecord);
         chunkMemory.LastTs = record.TimestampTs;
         return true;
     }

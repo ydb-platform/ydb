@@ -18,11 +18,6 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
-#ifdef _linux_
-#include <sys/vfs.h>
-#include <linux/magic.h>
-#endif
-
 namespace NKikimr {
 namespace NGRpcService {
 

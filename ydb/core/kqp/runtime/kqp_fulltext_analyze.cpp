@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/fulltext.h>
 
+#include <ydb/core/base/json_index.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -24,11 +25,18 @@ class TFulltextAnalyzeWrapper : public TMutableComputationNode<TFulltextAnalyzeW
         Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
     };
 
+    enum class EMode {
+        Fulltext = 0,
+        JsonIndexOverJson = 1,
+        JsonIndexOverJsonDocument = 2,
+    };
+
 public:
-    TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg)
+    TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg, IComputationNode* modeArg)
         : TBaseComputation(mutables)
         , TextArg(textArg)
         , SettingsArg(settingsArg)
+        , ModeArg(modeArg)
         , CachedSettingsIndex(mutables.CurValueIndex++)
     {
     }
@@ -40,14 +48,28 @@ public:
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        auto& settings = GetSettings(ctx);
-        if (!settings.IsValid) {
-            // Failed to parse settings, return empty list
-            return ctx.HolderFactory.GetEmptyContainerLazy();
+        const auto mode = GetMode(ctx);
+
+        // Tokenize text
+        TVector<TString> tokens;
+        if (mode == EMode::Fulltext) {
+            auto& settings = GetSettings(ctx);
+            if (!settings.IsValid) {
+                // Failed to parse settings, return empty list
+                return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
+            tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
+        } else if (mode == EMode::JsonIndexOverJson) {
+            TString error;
+            tokens = NJsonIndex::TokenizeJson(text.AsStringRef(), error);
+            if (!error.empty()) {
+                // Failed to tokenize JSON, return empty list
+                return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
+        } else if (mode == EMode::JsonIndexOverJsonDocument) {
+            tokens = NJsonIndex::TokenizeBinaryJson(text.AsStringRef());
         }
 
-        // Tokenize text using NKikimr::NFulltext::Analyze
-        TVector<TString> tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
         THashMap<TString, ui32> tokenFreq;
         for (const auto& token : tokens) {
             tokenFreq[token]++;
@@ -82,32 +104,46 @@ public:
             // Return cached settings
             return GetSettings(cachedSettings);
         }
-    }    
+    }
 
     TSettings& GetSettings(auto& cachedSettings) const {
         return *static_cast<TSettings*>(cachedSettings.AsBoxed().Get());
+    }
+
+    EMode GetMode(TComputationContext& ctx) const {
+        auto mode = ModeArg->GetValue(ctx);
+        if (mode.AsStringRef() == TStringBuf("0")) {
+            return EMode::Fulltext;
+        } else if (mode.AsStringRef() == TStringBuf("1")) {
+            return EMode::JsonIndexOverJson;
+        } else if (mode.AsStringRef() == TStringBuf("2")) {
+            return EMode::JsonIndexOverJsonDocument;
+        }
+        return EMode::Fulltext;
     }
 
 private:
     void RegisterDependencies() const final {
         DependsOn(TextArg);
         DependsOn(SettingsArg);
+        DependsOn(ModeArg);
     }
 
     IComputationNode* const TextArg;
     IComputationNode* const SettingsArg;
+    IComputationNode* const ModeArg;
     const ui32 CachedSettingsIndex;
 };
 
 } // namespace
 
 IComputationNode* WrapFulltextAnalyze(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "FulltextAnalyze requires exactly 2 arguments");
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "FulltextAnalyze requires exactly 3 arguments");
 
     auto textArg = LocateNode(ctx.NodeLocator, callable, 0);
     auto settingsArg = LocateNode(ctx.NodeLocator, callable, 1);
-
-    return new TFulltextAnalyzeWrapper(ctx.Mutables, textArg, settingsArg);
+    auto modeArg = LocateNode(ctx.NodeLocator, callable, 2);
+    return new TFulltextAnalyzeWrapper(ctx.Mutables, textArg, settingsArg, modeArg);
 }
 
 } // namespace NMiniKQL

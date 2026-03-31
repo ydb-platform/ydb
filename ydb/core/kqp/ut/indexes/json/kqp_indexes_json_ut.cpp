@@ -271,6 +271,29 @@ void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
     body(db, jsonExists);
 }
 
+TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& stmt, const std::string& tableName,
+    const std::string& jsonType, const std::vector<std::pair<ui64, ui64>>& values, bool withReturning = false)
+{
+    TStringBuilder query;
+    query << stmt << " INTO " << tableName << " (Key, Text, Data) VALUES\n";
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        const auto [key, value] = values[i];
+        query << "(" << key << ", " << jsonType << "('{\"k" << value << "\": [\"v" << value << "\", " << value << ", " << (value % 2 == 0 ? "true" : "false") << "]}'), \"data " << value << "\")";
+        if (i + 1 < values.size()) {
+            query << ", ";
+        } else {
+            query << "\n";
+        }
+    }
+
+    if (withReturning) {
+        query << "RETURNING *";
+    }
+
+    return db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+}
+
 }  // namespace
 
 Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
@@ -438,6 +461,718 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(UpsertJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                        [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                        [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\2k3\0\3v3"];
+                [[1u];"\2k3\0\0"];
+                [[1u];"\2k3"];
+                [[1u];""];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\1"];
+                [[3u];"\2k2"];
+                [[3u];""];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[5u];""];
+                [[5u];"\2k5"];
+                [[5u];"\2k5\0\0"];
+                [[5u];"\2k5\0\3v5"];
+                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(ReplaceJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                        [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                        [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\2k3\0\3v3"];
+                [[1u];"\2k3\0\0"];
+                [[1u];"\2k3"];
+                [[1u];""];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\1"];
+                [[3u];"\2k2"];
+                [[3u];""];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[5u];""];
+                [[5u];"\2k5"];
+                [[5u];"\2k5\0\0"];
+                [[5u];"\2k5\0\3v5"];
+                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(InsertJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{5, 3}, {6, 2}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 2"];[6u];["{\"k2\":[\"v2\",2,true]}"]];
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 2"];[6u];["{\"k2\": [\"v2\", 2, true]}"]];
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];""];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[5u];"\2k3"];
+                [[5u];"\2k3\0\0"];
+                [[5u];""];
+                [[5u];"\2k3\0\3v3"];
+                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\2k2\0\1"];
+                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\2k2"];
+                [[6u];""];
+                [[6u];"\2k2\0\3v2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {7, 7}}, WithReturning);
+            UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];""];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[5u];"\2k3"];
+                [[5u];"\2k3\0\0"];
+                [[5u];""];
+                [[5u];"\2k3\0\3v3"];
+                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\2k2\0\1"];
+                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\2k2"];
+                [[6u];""];
+                [[6u];"\2k2\0\3v2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(UpdateJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, /* withReturning */ false);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "UPDATE `/Root/TestTable` "
+                  << "SET Text = " << jsonType << "('{\"k10\": [\"v10\", 10, true]}'), "
+                  << "Data = \"data 10\" "
+                  << "WHERE Key IN (2, 3)";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto updateResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(updateResult.IsSuccess(), updateResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]];
+                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]];
+                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\3k10"];
+                [[2u];"\3k10\0\1"];
+                [[2u];"\3k10\0\3v10"];
+                [[2u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[3u];""];
+                [[3u];"\3k10"];
+                [[3u];"\3k10\0\1"];
+                [[3u];"\3k10\0\3v10"];
+                [[3u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "UPDATE `/Root/TestTable` "
+                  << "SET Text = " << jsonType << "('{\"k100\": [\"v100\", 100, false]}'), "
+                  << "Data = \"data 100\"";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto updateResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(updateResult.IsSuccess(), updateResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[2u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[2u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\4k100"];
+                [[1u];"\4k100\0\0"];
+                [[1u];"\4k100\0\3v100"];
+                [[1u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[2u];""];
+                [[2u];"\4k100"];
+                [[2u];"\4k100\0\0"];
+                [[2u];"\4k100\0\3v100"];
+                [[2u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[3u];""];
+                [[3u];"\4k100"];
+                [[3u];"\4k100\0\0"];
+                [[3u];"\4k100\0\3v100"];
+                [[3u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[4u];""];
+                [[4u];"\4k100"];
+                [[4u];"\4k100\0\0"];
+                [[4u];"\4k100\0\3v100"];
+                [[4u];"\4k100\0\4\0\0\0\0\0\0Y@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DeleteJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, /* withReturning */ false);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            TStringBuilder query;
+            query << "DELETE FROM `/Root/TestTable` WHERE Key IN (2, 4)";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto deleteResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "DELETE FROM `/Root/TestTable`";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto deleteResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 

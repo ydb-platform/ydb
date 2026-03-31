@@ -533,12 +533,13 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("FulltextAnalyze",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 2, "FulltextAnalyze should have 2 arguments: text and settings");
+            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
 
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
+            auto modeArg = MkqlBuildExpr(*node.Child(2), buildCtx);
 
-            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
         });
 
     return compiler;

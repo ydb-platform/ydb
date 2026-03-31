@@ -779,7 +779,7 @@ PDisk содержит планировщик, который обеспечив
 
 #### Инвалидация блокировок транзакций {#tli}
 
-**Инвалидация блокировок транзакций** (Transaction Lock Invalidation, **TLI**) — ситуация, когда одна транзакция (нарушитель) записывает данные и тем самым ломает [оптимистичные блокировки](#optimistic-locking) другой транзакции (жертвы). Жертва обнаруживает это при коммите и получает ошибку `transaction locks invalidated`. Подробнее о диагностике TLI см. в [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+**Инвалидация блокировок транзакций** (Transaction Lock Invalidation, **TLI**) — штатное поведение {{ ydb-short-name }} при конфликте параллельных транзакций в рамках [оптимистичных блокировок](#optimistic-locking). Если одна транзакция (нарушитель) записывает данные и тем самым ломает блокировки другой транзакции (жертвы), {{ ydb-short-name }} обнаруживает это при коммите жертвы и откатывает её с ошибкой `transaction locks invalidated`. Подробнее о диагностике TLI см. в [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 #### Этап подготовки {#prepare-stage}
 

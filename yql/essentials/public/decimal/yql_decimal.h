@@ -25,6 +25,19 @@ using TUint128 = unsigned __int128;
 
 constexpr ui8 MaxPrecision = 35;
 
+namespace NDetail {
+
+inline constexpr auto DividersTable = []() {
+    std::array<TUint128, MaxPrecision + 1> arr{};
+    arr[0] = TUint128(1U);
+    for (ui8 i = 1; i <= MaxPrecision; ++i) {
+        arr[i] = arr[i - 1] * TUint128(10U);
+    }
+    return arr;
+}();
+
+} // namespace NDetail
+
 static_assert(sizeof(TInt128) == 16, "Wrong size of TInt128, expected 16");
 
 constexpr TInt128 Inf() {
@@ -40,18 +53,10 @@ constexpr TInt128 Err() {
 }
 
 constexpr TUint128 GetDivider(ui8 scale) {
-    constexpr auto kDividers = []() {
-        std::array<TUint128, MaxPrecision + 1> arr{};
-        arr[0] = TUint128(1U);
-        for (ui8 i = 1; i <= MaxPrecision; ++i) {
-            arr[i] = arr[i - 1] * TUint128(10U);
-        }
-        return arr;
-    }();
     if (scale > MaxPrecision) {
         return static_cast<TUint128>(Inf());
     }
-    return kDividers[scale];
+    return NDetail::DividersTable[scale];
 }
 
 template <ui8 Precision>

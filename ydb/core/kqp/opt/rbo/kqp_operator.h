@@ -11,7 +11,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/core/yql_cost_function.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -54,7 +54,7 @@ struct TPhysicalOpProps {
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
-    std::optional<EJoinAlgoType> JoinAlgo;
+    std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 };
 

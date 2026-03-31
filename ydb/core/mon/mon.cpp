@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/tablet_mon_admin.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -499,6 +500,13 @@ public:
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
+        if (ActorMonPage->Path == "tablets" && NKikimr::NTabletMon::IsAdminAppPathInfo(Container.GetPathInfo())) {
+            const TAppData* appData = AppData();
+            const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
+            if (!IsTokenAllowed(appData, userToken, appData->AdministrationAllowedSIDs)) {
+                return ReplyForbiddenAndPassAway("administration SID is required for this tablet monitoring path");
+            }
+        }
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
             TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";

@@ -23,6 +23,7 @@ TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev);
 struct THttpStatus {
     static const inline TString OK = "200 Ok";
     static const inline TString BAD_REQUEST = "400 Bad Request";
+    static const inline TString FORBIDDEN = "403 Forbidden";
 };
 
 NMon::TEvRemoteBinaryInfoRes* MakeRawHttpEvent(const TString& status, const TString& content);

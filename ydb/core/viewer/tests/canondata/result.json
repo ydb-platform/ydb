@@ -686,8 +686,8 @@
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
         "down_node_monitoring": {
-            "Down": false,
-            "NodeId": 1
+            "status_code": 403,
+            "text": "{\"error\":\"Use /tablets/app/secure for this operation; requires administration_allowed_sids\"}"
         },
         "down_node_root": {
             "Down": false,

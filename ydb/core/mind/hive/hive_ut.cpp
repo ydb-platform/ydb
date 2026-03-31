@@ -1708,7 +1708,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             if (queryMigrationReply->Record.GetMigrationState() == NKikimrHive::EMigrationState::MIGRATION_READY) {
                 NActorsProto::TRemoteHttpInfo pb;
                 pb.SetMethod(HTTP_METHOD_POST);
-                pb.SetPath("/app");
+                pb.SetPath("/app/secure");
                 auto* p1 = pb.AddQueryParams();
                 p1->SetKey("TabletID");
                 p1->SetValue(TStringBuilder() << hiveTablet);
@@ -7873,7 +7873,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -7901,7 +7901,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -7949,7 +7949,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -7978,7 +7978,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8043,7 +8043,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8113,7 +8113,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8179,7 +8179,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8210,7 +8210,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8245,7 +8245,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);
@@ -8293,7 +8293,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         {
             NActorsProto::TRemoteHttpInfo pb;
             pb.SetMethod(HTTP_METHOD_POST);
-            pb.SetPath("/app");
+            pb.SetPath("/app/secure");
             auto* p1 = pb.AddQueryParams();
             p1->SetKey("TabletID");
             p1->SetValue(TStringBuilder() << hiveTablet);

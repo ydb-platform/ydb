@@ -1,214 +1,6 @@
 # -*- coding: utf-8 -*-
-import os
-import subprocess
-import urllib3
-
 import pytest
 import requests
-
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-def generate_certificates(certs_tmp_dir):
-    ca_key = os.path.join(certs_tmp_dir, 'server_ca.key')
-    ca_crt = os.path.join(certs_tmp_dir, 'server_ca.crt')
-
-    subprocess.run(['openssl', 'genrsa', '-out', ca_key, '2048'], check=True, capture_output=True)
-
-    subprocess.run(
-        [
-            'openssl',
-            'req',
-            '-x509',
-            '-new',
-            '-nodes',
-            '-key',
-            ca_key,
-            '-sha256',
-            '-days',
-            '3650',
-            '-out',
-            ca_crt,
-            '-subj',
-            '/CN=Monitoring CA/O=YDB/C=RU',
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    # Generate server certificate with localhost in SAN
-    server_key = os.path.join(certs_tmp_dir, 'server.key')
-    server_crt = os.path.join(certs_tmp_dir, 'server.crt')
-    server_csr = os.path.join(certs_tmp_dir, 'server.csr')
-    server_conf = os.path.join(certs_tmp_dir, 'server.conf')
-
-    subprocess.run(['openssl', 'genrsa', '-out', server_key, '2048'], check=True, capture_output=True)
-
-    # Create OpenSSL config file with v3_req section and SAN
-    with open(server_conf, 'w') as f:
-        f.write('[req]\n')
-        f.write('distinguished_name = req_distinguished_name\n')
-        f.write('req_extensions = v3_req\n')
-        f.write('\n')
-        f.write('[req_distinguished_name]\n')
-        f.write('\n')
-        f.write('[v3_req]\n')
-        f.write('subjectAltName=DNS:localhost,DNS:test-server,IP:127.0.0.1\n')
-
-    # Generate CSR
-    subprocess.run(
-        [
-            'openssl',
-            'req',
-            '-new',
-            '-key',
-            server_key,
-            '-out',
-            server_csr,
-            '-subj',
-            '/CN=test-server/O=YDB/C=RU',
-            '-config',
-            server_conf,
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    # Generate server certificate signed by CA
-    subprocess.run(
-        [
-            'openssl',
-            'x509',
-            '-req',
-            '-in',
-            server_csr,
-            '-CA',
-            ca_crt,
-            '-CAkey',
-            ca_key,
-            '-CAcreateserial',
-            '-out',
-            server_crt,
-            '-days',
-            '3650',
-            '-sha256',
-            '-extensions',
-            'v3_req',
-            '-extfile',
-            server_conf,
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    return {
-        'server_cert': server_crt,
-        'server_key': server_key,
-    }
-
-
-def create_ydb_configurator(
-    certificates,
-    enforce_user_token_requirement=True,
-    require_counters_authentication=None,
-    require_healthcheck_authentication=None,
-):
-    cluster_config = {
-        'default_clusteradmin': 'root@builtin',
-        'enforce_user_token_requirement': enforce_user_token_requirement,
-    }
-    config_generator = KikimrConfigGenerator(**cluster_config)
-
-    if 'grpc_config' not in config_generator.yaml_config:
-        config_generator.yaml_config['grpc_config'] = {}
-    config_generator.yaml_config['grpc_config']['cert'] = certificates['server_cert']
-    config_generator.yaml_config['grpc_config']['key'] = certificates['server_key']
-
-    config_generator.monitoring_tls_cert_path = certificates['server_cert']
-    config_generator.monitoring_tls_key_path = certificates['server_key']
-
-    config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
-        'monitoring@builtin'
-    ]
-    assert (
-        'administration_allowed_sids' in config_generator.yaml_config['domains_config']['security_config']
-        and len(config_generator.yaml_config['domains_config']['security_config']['administration_allowed_sids']) > 0
-    ), "administration_allowed_sids was supposed to be set due to default_clusteradmin"
-
-    if require_counters_authentication is not None or require_healthcheck_authentication is not None:
-        if 'monitoring_config' not in config_generator.yaml_config:
-            config_generator.yaml_config['monitoring_config'] = {}
-        if require_counters_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_counters_authentication'
-            ] = require_counters_authentication
-        if require_healthcheck_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_healthcheck_authentication'
-            ] = require_healthcheck_authentication
-
-    return config_generator
-
-
-@pytest.fixture(scope='module')
-def certificates(tmp_path_factory):
-    certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
-    return generate_certificates(str(certs_tmp_dir))
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_enforce_user_token(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_without_enforce_user_token(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=False,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_counters_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_counters_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_healthcheck_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_healthcheck_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
 
 
 EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
@@ -551,3 +343,353 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
         },  # checks this just in case
     }
     _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
+
+
+PUBLIC_ENDPOINTS_LIST = [
+    '/actors/tablet_counters_aggregator',
+    '/counters',
+    '/counters/hosts',
+    '/followercounters',
+    '/labeledcounters',
+    '/ping',
+    '/status',
+    '/viewer/capabilities',
+    '/monitoring/',  # built-in authorization page, so it returns 200
+]
+
+
+def test_public_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in PUBLIC_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+# These endpoints downgrade access level to public when specific parameters are provided.
+def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
+            '/healthcheck?format=prometheus': {
+                None: 200,
+                'user@builtin': 200,
+                'database@builtin': 200,
+                'viewer@builtin': 200,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
+            '/healthcheck?database=%2FRoot': {
+                None: 200,
+                'user@builtin': 403,
+                'database@builtin': 403,
+                'viewer@builtin': 403,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+        },
+    )
+
+
+def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            # Forwarding entrypoint to node-specific surface.
+            '/node': {
+                None: 400,
+                'user@builtin': 400,
+                'database@builtin': 400,
+                'viewer@builtin': 400,
+                'monitoring@builtin': 400,
+                'root@builtin': 400,
+            },
+        },
+    )
+
+
+DATABASE_ENDPOINTS_LIST = [
+    '/viewer/plan2svg',
+    # Endpoints below expose excessive information.
+    '/viewer/bscontrollerinfo',
+    '/viewer/cluster',
+    '/viewer/compute',
+    '/viewer/config',
+    '/viewer/counters',
+    '/viewer/hiveinfo',
+    '/viewer/hivestats',
+    '/viewer/labeledcounters',
+    '/viewer/netinfo',
+    '/viewer/pqconsumerinfo',
+    '/viewer/storage',
+    '/viewer/storage_usage',
+    '/viewer/tenants',
+    '/viewer/topicinfo',
+]
+
+
+def test_database_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in DATABASE_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
+    '/operation/get',
+    '/operation/list',
+    '/query/script/fetch',
+    '/viewer/browse',
+    '/viewer/describe_consumer',
+    '/viewer/describe_replication',
+    '/viewer/describe_topic',
+    '/viewer/describe_transfer',
+    '/viewer/graph',
+    '/viewer/metainfo',
+    '/viewer/topic_data',
+    '/operation/list?database=%2FRoot',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/operation/forget',
+    '/viewer/commit_offset',
+    '/operation/cancel',
+    '/query/script/execute',
+    '/scheme/directory',
+    '/viewer/put_record',
+]
+
+
+def test_database_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 400,
+            'viewer@builtin': 400,
+            'monitoring@builtin': 400,
+            'root@builtin': 400,
+        }
+        for endpoint_path in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+@pytest.mark.xfail(reason='Empty request handling is unstable for this endpoint in the current environment')
+def test_database_endpoints_with_unstable_empty_request_handling_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            '/viewer/content': {
+                None: 401,
+                'user@builtin': 403,
+                'database@builtin': 504,
+                'viewer@builtin': 504,
+                'monitoring@builtin': 504,
+                'root@builtin': 504,
+            },
+            '/viewer/tabletcounters': {
+                None: 401,
+                'user@builtin': 403,
+                'database@builtin': None,
+                'viewer@builtin': None,
+                'monitoring@builtin': None,
+                'root@builtin': None,
+            },
+        },
+    )
+
+
+VIEWER_ENDPOINTS_LIST = [
+    '/storage/groups',
+    '/viewer/bsgroupinfo',
+    '/viewer/groups',
+    '/viewer/multipart_counter',
+    '/viewer/nodeinfo',
+    '/viewer/nodes',
+    '/viewer/pdiskinfo',
+    '/viewer/peers',
+    '/viewer/simple_counter',
+    '/viewer/sse_counter',
+    '/viewer/sysinfo',
+    '/viewer/tabletinfo',
+    '/viewer/v2/json/nodeinfo',
+    '/viewer/v2/json/pdiskinfo',
+    '/viewer/v2/json/sysinfo',
+    '/viewer/v2/json/tabletinfo',
+    '/viewer/v2/json/vdiskinfo',
+    '/viewer/vdiskinfo',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/viewer/autocomplete',
+    '/viewer/feature_flags',
+    '/viewer/nodelist',
+    '/viewer/tenantinfo',
+    '/viewer/whoami',
+]
+
+
+def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in VIEWER_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
+    '/viewer/render',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/pdisk/info',
+    '/pdisk/restart',
+    '/pdisk/status',
+    '/vdisk/blobindexstat',
+    '/vdisk/evict',
+    '/vdisk/getblob',
+    '/vdisk/vdiskstat',
+    '/viewer/acl',
+    '/viewer/check_access',
+    '/viewer/database_stats',
+    '/viewer/describe',
+    '/viewer/hotkeys',
+    '/viewer/query',
+    '/viewer/storage_stats',
+]
+
+
+def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 400,
+            'monitoring@builtin': 400,
+            'root@builtin': 400,
+        }
+        for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+OPERATOR_ENDPOINTS_LIST = [
+    '/actors/',
+    '/actors/dsproxynode',
+    '/actors/feature_flags',
+    '/actors/kqp_node',
+    '/actors/kqp_proxy',
+    '/actors/kqp_resource_manager',
+    '/actors/kqp_spilling_file',
+    '/actors/logger',
+    '/actors/memory_tracker',
+    '/actors/netclassifier',
+    '/actors/pql2',
+    '/actors/quoter_proxy',
+    '/actors/statservice',
+    '/grpc',
+    '/healthcheck',
+    '/jquery.tablesorter.css',
+    '/jquery.tablesorter.js',
+    '/memory/fragmentation',
+    '/memory/heap',
+    '/memory/peakheap',
+    '/memory/statistics',
+    '/static/css/bootstrap.min.css',
+    '/static/fonts/glyphicons-halflings-regular.eot',
+    '/static/fonts/glyphicons-halflings-regular.svg',
+    '/static/fonts/glyphicons-halflings-regular.ttf',
+    '/static/fonts/glyphicons-halflings-regular.woff',
+    '/static/js/bootstrap.min.js',
+    '/static/js/jquery.min.js',
+    '/tablet',
+    '/tablets',
+    '/trace',
+    '/ver',
+    '/viewer/healthcheck',
+    '/viewer/v2/json/nodelist',
+    '/viewer/v2/json/storage',
+    # Endpoints below expose excessive information or grant excessive rights.
+    '/actors/configs_dispatcher',
+    '/actors/console_configs_provider',
+    '/actors/dnameserver',
+    '/actors/icb',
+    '/actors/nodewarden',
+    '/actors/rb',
+    '/actors/tenant_pool',
+    '/cms',
+    '/internal',
+    '/nodetabmon',
+    '/viewer/v2/json/config',
+]
+
+
+OPERATOR_UNRESOLVED_ENDPOINTS_LIST = [
+    '/actors/lease',
+    '/actors/row_dispatcher',
+    '/actors/schemeboard',
+    '/actors/sqsgc',
+    '/actors/yq_control_plane_proxy',
+    '/actors/yq_health',
+    '/fq_diag/fetcher',
+    '/fq_diag/local_worker_manager',
+    '/fq_diag/quotas',
+]
+
+
+def test_operator_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in OPERATOR_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 404,
+            'root@builtin': 404,
+        }
+        for endpoint_path in OPERATOR_UNRESOLVED_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)

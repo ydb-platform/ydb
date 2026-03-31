@@ -217,20 +217,19 @@ public:
                 );
             }
         
-
             switch(op) {
-            case TIndexCheckOperation::EOperation::Equals:
-                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
-            case TIndexCheckOperation::EOperation::Less:
-                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less;
-            case TIndexCheckOperation::EOperation::Greater:
-                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater;
-            case TIndexCheckOperation::EOperation::LessOrEqual:
-                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual;
-            case TIndexCheckOperation::EOperation::GreaterOrEqual:
-                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
-            default:
-                AFL_VERIFY(false);
+                case TIndexCheckOperation::EOperation::Equals:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
+                case TIndexCheckOperation::EOperation::Less:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less;
+                case TIndexCheckOperation::EOperation::Greater:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater;
+                case TIndexCheckOperation::EOperation::LessOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual;
+                case TIndexCheckOperation::EOperation::GreaterOrEqual:
+                    return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
+                default:
+                    AFL_VERIFY(false);
             }
         }()),
           IsSimpleFunction(isSimpleFunction)

@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/storage/core/libs/diagnostics
+    ydb/core/nbs/cloud/storage/core/protos
 
     ydb/library/actors/wilson
 

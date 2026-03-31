@@ -1,8 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
-
-#include <ydb/core/nbs/workspace/.build/ydb/core/nbs/cloud/storage/core/protos/error.pb.h>
+#include <ydb/core/nbs/cloud/storage/core/protos/error.pb.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 

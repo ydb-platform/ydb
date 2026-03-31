@@ -74,6 +74,10 @@ Y_UNIT_TEST_SUITE(DataShardTruncate) {
 
         ExecSQL(server, edgeSender, "UPSERT INTO `/Root/test_table` (key, value) VALUES (1, 100), (2, 200), (3, 300);");
 
+        // Here, we explicitly trigger a compaction between the UPSERT and TRUNCATE operations.
+        // The purpose is to flush the newly inserted records from the MemTable to the SST files.
+        // As a result, we ensure that the SST statistics are non-zero, while the MemTable statistics
+        //  should conversely be zero before the TRUNCATE is executed.
         CompactTable(*runtime, shard1, tableId, false);
 
         {

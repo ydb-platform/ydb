@@ -21,9 +21,8 @@ import signal
 import subprocess
 from typing import Any, Type
 
-from ydb.tests.library.nemesis.network.client import NetworkClient
-
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.registry import cluster_nemesis_type_entries
+from ydb.tests.stability.nemesis.internal.nemesis.local_network import LocalNetworkClient
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import (
     MonitoredAgentActor,
     NEMESIS_EXECUTION_LOGGER,
@@ -50,7 +49,7 @@ class NetworkNemesis(MonitoredAgentActor):
     def inject_fault(self, payload=None):
         del payload
         self._logger.info("=== INJECT_FAULT START: NetworkNemesis ===")
-        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client = LocalNetworkClient(port=19001)
         self._logger.info("Isolating node...")
         client.isolate_node()
         self.on_success_inject_fault()
@@ -59,7 +58,7 @@ class NetworkNemesis(MonitoredAgentActor):
     def extract_fault(self, payload=None):
         del payload
         self._logger.info("Extracting fault (network)")
-        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client = LocalNetworkClient(port=19001)
         self._logger.info("Restoring node...")
         client.clear_all_drops()
         self.on_success_extract_fault()
@@ -71,7 +70,7 @@ class DnsNemesis(MonitoredAgentActor):
     def inject_fault(self, payload=None):
         del payload
         self._logger.info("=== INJECT_FAULT START: DnsNemesis ===")
-        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client = LocalNetworkClient(port=19001)
         client.isolate_dns()
         self.on_success_inject_fault()
         self._logger.info("=== INJECT_FAULT SUCCESS: DnsNemesis ===")
@@ -79,7 +78,7 @@ class DnsNemesis(MonitoredAgentActor):
     def extract_fault(self, payload=None):
         del payload
         self._logger.info("Extracting DNS isolation")
-        client = NetworkClient("localhost", port=19001, ssh_username=None)
+        client = LocalNetworkClient(port=19001)
         client.clear_all_drops()
         self.on_success_extract_fault()
 
@@ -168,12 +167,12 @@ NEMESIS_TYPES: dict[str, dict[str, Any]] = {
         "ui_group": "NodeNemesis",
         "planner_cls": KillNodeNemesisPlanner,
     },
-    DNS_NEMESIS: {
-        "runner": DnsNemesis(),
-        "schedule": 120,
-        "ui_group": "NetworkNemesis",
-        "planner_cls": DnsNemesisPlanner,
-    },
+    # DNS_NEMESIS: {
+    #     "runner": DnsNemesis(),
+    #     "schedule": 120,
+    #     "ui_group": "NetworkNemesis",
+    #     "planner_cls": DnsNemesisPlanner,
+    # },
     TIME_SKEW_NEMESIS: {
         "runner": TimeSkewNemesis(),
         "schedule": 400,

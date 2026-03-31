@@ -34,6 +34,7 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
@@ -57,6 +58,7 @@ class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
@@ -90,6 +92,7 @@ class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
@@ -123,6 +126,7 @@ class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterStopStartNodeNemesis(MonitoredAgentActor):
@@ -143,7 +147,8 @@ class ClusterStopStartNodeNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
-        self._try_start_stopped()
+        if not self._try_start_stopped():
+            self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
         del payload
@@ -178,7 +183,8 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
-        self._try_cont()
+        if not self._try_cont():
+            self.on_success_extract_fault()
 
     def inject_fault(self, payload=None) -> None:
         del payload
@@ -239,3 +245,4 @@ class ClusterRollingUpdateNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()

@@ -9,6 +9,7 @@ PY_SRCS(
     internal/safety_warden_execution.py
     internal/event_loop.py
     internal/nemesis/catalog.py
+    internal/nemesis/local_network.py
     internal/nemesis/monitored_actor.py
     internal/nemesis/cluster_context.py
     internal/nemesis/cluster_chaos/registry.py

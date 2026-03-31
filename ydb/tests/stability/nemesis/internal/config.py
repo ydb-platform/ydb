@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     app_host: str = '::'
     app_port: int = 31434
     mon_port: int = 8765
+    nemesis_mon_port: int = 8666
     yaml_config_location: str = ''
     # Remote install layout (rsync targets, systemd ExecStart); override via NEMESIS_INSTALL_ROOT.
     install_root: str = '/Berkanavt/nemesis'
@@ -83,6 +84,7 @@ class AgentSettings(BaseSettings):
     app_host: str = '::'
     app_port: int = 31434
     mon_port: int = 8765
+    nemesis_mon_port: int = 8666
     install_root: str = '/Berkanavt/nemesis'
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
     # Same cluster.yaml as orchestrator when deployed via install (env YAML_CONFIG_LOCATION).
@@ -97,6 +99,7 @@ class AgentSettings(BaseSettings):
             app_host=settings.app_host,
             app_port=settings.app_port,
             mon_port=settings.mon_port,
+            nemesis_mon_port=settings.nemesis_mon_port,
             install_root=settings.install_root,
             kikimr_logs_directory=settings.kikimr_logs_directory,
             yaml_config_location=yaml_on_agent,

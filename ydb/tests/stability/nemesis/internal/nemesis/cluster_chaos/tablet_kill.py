@@ -65,6 +65,7 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
     def extract_fault(self, payload=None) -> None:
         del payload
         self._logger.info("extract_fault (no-op recovery) %s", self.__class__.__name__)
+        self.on_success_extract_fault()
 
 
 class ClusterKillCoordinatorNemesis(ClusterKillTabletByTypeNemesis):
@@ -175,6 +176,7 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
@@ -208,3 +210,4 @@ class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()

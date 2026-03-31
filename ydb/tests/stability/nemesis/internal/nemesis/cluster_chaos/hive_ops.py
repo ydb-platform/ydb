@@ -42,6 +42,7 @@ class ClusterKickTabletsFromNodeNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterReBalanceTabletsNemesis(MonitoredAgentActor):
@@ -68,3 +69,4 @@ class ClusterReBalanceTabletsNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()

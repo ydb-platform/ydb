@@ -51,6 +51,85 @@ def _host_from_payload(payload: dict) -> str | None:
         return None
 
 
+def _kikimr_slot_id(node: Any) -> str | None:
+    """``None`` = single ``kikimr`` service; else ``kikimr-multi@`` instance id (matches harness)."""
+    return getattr(node, "_KikimrExternalNode__slot_id", None)
+
+
+def _local_stop_kikimr(node: Any) -> None:
+    """Same semantics as :meth:`KikimrExternalNode.stop`, without SSH."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr stop", shell=True, check=True)
+    else:
+        subprocess.run(
+            ["sudo", "systemctl", "stop", "kikimr-multi@{}".format(slot_id)],
+            check=True,
+        )
+
+
+def _local_kill_process_and_daemon(ic_port: int) -> None:
+    """Mirror :meth:`ExternalNodeDaemon.kill_process_and_daemon` locally."""
+    sigkill = 9
+    subprocess.run(
+        "ps aux | grep daemon | grep %d | grep -v grep | awk '{ print $2 }' | xargs -r sudo kill -%d"
+        % (ic_port, sigkill),
+        shell=True,
+        check=False,
+    )
+    subprocess.run(
+        "ps aux | grep %d | grep -v grep | awk '{ print $2 }' | xargs -r sudo kill -%d" % (ic_port, sigkill),
+        shell=True,
+        check=False,
+    )
+
+
+def _local_cleanup_disks() -> None:
+    subprocess.run(
+        "for X in /dev/disk/by-partlabel/kikimr_*; "
+        "do sudo /Berkanavt/kikimr/bin/kikimr admin bs disk obliterate $X; done",
+        shell=True,
+        check=True,
+    )
+
+
+def _local_start_kikimr(node: Any) -> None:
+    """Same semantics as :meth:`KikimrExternalNode.start`, without SSH."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr start", shell=True, check=True)
+        return
+    slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot_id)
+    slot_cfg = slot_dir + "/slot_cfg"
+    env_txt = slot_dir + "/env.txt"
+    cfg = """\
+tenant=/Root/db1
+grpc={grpc}
+mbus={mbus}
+ic={ic}
+mon={mon}""".format(
+        mbus=node.mbus_port,
+        grpc=node.grpc_port,
+        mon=node.mon_port,
+        ic=node.ic_port,
+    )
+    subprocess.run(["sudo", "mkdir", "-p", slot_dir], check=True)
+    subprocess.run(["sudo", "touch", env_txt], check=True)
+    p = subprocess.Popen(
+        ["sudo", "tee", slot_cfg],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    _out, _err = p.communicate(cfg.encode("utf-8"))
+    if p.returncode != 0:
+        raise subprocess.CalledProcessError(p.returncode, "sudo tee slot_cfg", None)
+    subprocess.run(
+        ["sudo", "systemctl", "start", "kikimr-multi@{}".format(slot_id)],
+        check=True,
+    )
+
+
 class ClusterSafelyCleanupDisksNemesis(MonitoredAgentActor):
     """Stop kikimr, cleanup disks, start on the node selected by the orchestrator (``payload.host``)."""
 
@@ -77,16 +156,17 @@ class ClusterSafelyCleanupDisksNemesis(MonitoredAgentActor):
             return
         self._logger.info("SafelyCleanupDisks on node_id=%s host=%s", node_id, node.host)
         try:
-            node.ssh_command("sudo systemctl stop kikimr.service")
-            node.kill_process_and_daemon()
-            node.cleanup_disks()
-            node.start()
+            _local_stop_kikimr(node)
+            _local_kill_process_and_daemon(int(node.ic_port))
+            _local_cleanup_disks()
+            _local_start_kikimr(node)
             self.on_success_inject_fault()
         except subprocess.CalledProcessError as e:
             self._logger.error("SafelyCleanupDisks failed: %s", e)
 
     def extract_fault(self, payload=None) -> None:
         del payload
+        self.on_success_extract_fault()
 
 
 class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
@@ -161,3 +241,4 @@ class ClusterSafelyBreakDiskNemesis(MonitoredAgentActor):
         for node_id, path in list(self._broken_drives):
             self._change_drive_status(cluster, node_id, path, EDriveStatus.ACTIVE)
         self._broken_drives.clear()
+        self.on_success_extract_fault()

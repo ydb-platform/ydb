@@ -6,6 +6,7 @@ import sys
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
+from ydb.tests.tools.nemesis.library import monitor
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_runs import run_orchestrator_liveness_cli_batch
 
 
@@ -162,7 +163,9 @@ def main():
         return
 
     elif args.command == "run":
-        # run the application
+        # Expose /sensors (monlib) on mon_port; main API stays on app_port.
+        # Second Flask app + thread: no conflict as long as mon_port != app_port.
+        monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
         from ydb.tests.stability.nemesis.app import app
         app.run(

@@ -1,8 +1,14 @@
 # query_service_config
 
+<<<<<<< HEAD
 The `query_service_config` section describes the parameters for {{ ydb-short-name }} to work with external data sources using [federated queries](../../concepts/query_execution/federated_query/index.md).
 
 If access to the required source requires deploying a [connector](../../concepts/query_execution/federated_query/architecture.md#connectors), it must also be configured according to the [instructions](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
+=======
+The `query_service_config` section describes the parameters for {{ ydb-short-name }} to work with external data sources using [federated queries](../../concepts/federated_query/index.md).
+
+If access to the required source requires deploying a [connector](../../concepts/federated_query/architecture.md#connectors), it must also be configured according to the [instructions](../../devops/deployment-options/manual/federated-queries/connector-deployment.md).
+>>>>>>> 72b0633e8f8 (DOCORG125171-Translate (#35672))
 
 ## Parameter description
 

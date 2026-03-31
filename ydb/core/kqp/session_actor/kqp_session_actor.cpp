@@ -1913,7 +1913,7 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, Settings.QueryServiceConfig, QueryState ? QueryState->Generation : 0, ChannelService,
+            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
             QueryState->PreparedQuery->GetUseNewKqpTasksGraph()
         );
 

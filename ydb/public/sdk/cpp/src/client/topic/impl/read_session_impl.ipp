@@ -2856,11 +2856,14 @@ void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
 
     ui64 sourceSize = 0;
     ui64 messagesCount = 0;
-    while (!Tasks.empty()) {
-        const auto& task = Tasks.front();
-        sourceSize += task.AddedDataSize();
-        messagesCount += task.AddedMessagesCount();
-        Tasks.pop_front();
+    {
+        std::lock_guard lock(session->Lock);
+        while (!Tasks.empty()) {
+            const auto& task = Tasks.front();
+            sourceSize += task.AddedDataSize();
+            messagesCount += task.AddedMessagesCount();
+            Tasks.pop_front();
+        }
     }
 
     OnTaskCanceled(sourceSize, messagesCount);

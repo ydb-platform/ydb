@@ -7,7 +7,30 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
+EWriteMode GetWriteModeFromProto(
+    NProto::TStorageServiceConfig::TWriteMode writeMode)
+{
+    switch (writeMode) {
+        case NProto::TStorageServiceConfig::PBufferReplication:
+            return EWriteMode::PBufferReplication;
+        case NProto::TStorageServiceConfig::DirectPBuffersFilling:
+            return EWriteMode::DirectPBuffersFilling;
+        default:
+            break;
+    }
+    Y_ABORT_UNLESS(false);
+}
+
+NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
+    EWriteMode writeMode)
+{
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            return NProto::TStorageServiceConfig::PBufferReplication;
+        case EWriteMode::DirectPBuffersFilling:
+            return NProto::TStorageServiceConfig::DirectPBuffersFilling;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -27,13 +50,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(Request->Lsn)
-    , PBufferReplyTimeoutMicroseconds(Request->PBufferReplyTimeoutMicroseconds)
-{
-    if (!PBufferReplyTimeoutMicroseconds) {
-        PBufferReplyTimeoutMicroseconds =
-            DefaultPBufferReplyTimeoutMicroseconds;
-    }
-}
+{}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
 {
@@ -50,31 +67,19 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 }
 
 void TWriteRequestExecutor::Run(
-    NProto::TStorageServiceConfig::TWriteMode writeMode)
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds)
 {
     switch (writeMode) {
-        case NProto::TStorageServiceConfig::PBufferReplication:
-            SendWriteRequestToManyPBuffers();
+        case EWriteMode::PBufferReplication:
+            SendWriteRequestToManyPBuffers(pbufferReplyTimeoutMicroseconds);
             return;
-        case NProto::TStorageServiceConfig::DirectPBuffersFilling:
+        case EWriteMode::DirectPBuffersFilling:
             SendWriteRequest(ELocation::PBuffer0);
             SendWriteRequest(ELocation::PBuffer1);
             SendWriteRequest(ELocation::PBuffer2);
             return;
-        default:
-            break;
     }
-
-    auto resultError = MakeError(
-        E_FAIL,
-        "Unsupported write mode: " + std::to_string(writeMode));
-    LOG_ERROR(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TWriteRequestExecutor: %s",
-        FormatError(resultError).c_str());
-
-    Reply(resultError);
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>
@@ -83,7 +88,8 @@ TWriteRequestExecutor::GetFuture() const
     return Promise.GetFuture();
 }
 
-void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
+void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
+    ui32 pbufferReplyTimeoutMicroseconds)
 {
     std::vector<ELocation> locations = {
         ELocation::PBuffer0,
@@ -102,7 +108,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers()
         std::move(hostsIndexes),
         Lsn,
         VChunkRange,
-        PBufferReplyTimeoutMicroseconds,
+        pbufferReplyTimeoutMicroseconds,
         Request->Sglist,
         NWilson::TTraceId(TraceId),
         DDiskIdToHostIndex);

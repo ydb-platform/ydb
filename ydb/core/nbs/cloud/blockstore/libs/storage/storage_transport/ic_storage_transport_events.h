@@ -220,6 +220,7 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
+    // TODO delete this 'using' after name's fix on the YDB's side.
     using TProtoEvWriteToManyPersistentBuffersResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TProtoEvWriteToManyPersistentBuffers =

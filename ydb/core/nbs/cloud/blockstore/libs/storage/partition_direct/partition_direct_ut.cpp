@@ -46,7 +46,7 @@ struct TScopedNbsService: TDisableCopyMove
 
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
-    NProto::TStorageServiceConfig::TWriteMode writeMode,
+    EWriteMode writeMode,
     ui32 syncRequestsBatchSize = 3)
 {
     env.CreateBoxAndPool();
@@ -79,7 +79,7 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
     storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
-    storageConfig->SetWriteMode(writeMode);
+    storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
 
     return TScopedNbsService(nbsConfig);
 }
@@ -177,7 +177,7 @@ TActorId GetLoadActorAdapterActorId(
 
 namespace {
 
-void BasicWriteRead(NProto::TStorageServiceConfig::TWriteMode writeMode)
+void BasicWriteRead(EWriteMode writeMode)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -329,8 +329,7 @@ void BasicWriteRead(NProto::TStorageServiceConfig::TWriteMode writeMode)
     }
 }
 
-void ShouldWriteAndReadBlocksInDifferentRegions(
-    NProto::TStorageServiceConfig::TWriteMode writeMode)
+void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -412,7 +411,7 @@ void ShouldWriteAndReadBlocksInDifferentRegions(
     }
 }
 
-void RandomWrites(NProto::TStorageServiceConfig::TWriteMode writeMode)
+void RandomWrites(EWriteMode writeMode)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -480,8 +479,7 @@ void RandomWrites(NProto::TStorageServiceConfig::TWriteMode writeMode)
     }
 }
 
-void ShouldWriteAndReadMultipleBlocks(
-    NProto::TStorageServiceConfig::TWriteMode writeMode)
+void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 {
     TEnvironmentSetup env{{
         .NodeCount = 8,
@@ -550,46 +548,44 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
-        BasicWriteRead(NProto::TStorageServiceConfig::PBufferReplication);
+        BasicWriteRead(EWriteMode::PBufferReplication);
     }
 
     Y_UNIT_TEST(BasicWriteReadDirectPBufferFilling)
     {
-        BasicWriteRead(NProto::TStorageServiceConfig::DirectPBuffersFilling);
+        BasicWriteRead(EWriteMode::DirectPBuffersFilling);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadBlocksInDifferentRegionsPBufferReplication)
     {
         ShouldWriteAndReadBlocksInDifferentRegions(
-            NProto::TStorageServiceConfig::PBufferReplication);
+            EWriteMode::PBufferReplication);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling)
     {
         ShouldWriteAndReadBlocksInDifferentRegions(
-            NProto::TStorageServiceConfig::DirectPBuffersFilling);
+            EWriteMode::DirectPBuffersFilling);
     }
 
     Y_UNIT_TEST(RandomWritesPBufferReplication)
     {
-        RandomWrites(NProto::TStorageServiceConfig::PBufferReplication);
+        RandomWrites(EWriteMode::PBufferReplication);
     }
 
     Y_UNIT_TEST(RandomWritesDirectPBufferFilling)
     {
-        RandomWrites(NProto::TStorageServiceConfig::DirectPBuffersFilling);
+        RandomWrites(EWriteMode::DirectPBuffersFilling);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocksPBufferReplication)
     {
-        ShouldWriteAndReadMultipleBlocks(
-            NProto::TStorageServiceConfig::PBufferReplication);
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::PBufferReplication);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocksDirectPBufferFilling)
     {
-        ShouldWriteAndReadMultipleBlocks(
-            NProto::TStorageServiceConfig::DirectPBuffersFilling);
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectPBuffersFilling);
     }
 
     // Test implementation for PBufferReplication write mode
@@ -604,9 +600,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(
-            env,
-            NProto::TStorageServiceConfig::PBufferReplication);
+        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
 
         auto partition = CreatePartitionTablet(env);
 

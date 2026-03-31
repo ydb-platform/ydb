@@ -13,6 +13,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+enum class EWriteMode: ui32
+{
+    PBufferReplication = 0,
+    DirectPBuffersFilling = 1,
+};
+
+EWriteMode GetWriteModeFromProto(
+    NProto::TStorageServiceConfig::TWriteMode writeMode);
+NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
+    EWriteMode writeMode);
+
 class TWriteRequestExecutor
     : public std::enable_shared_from_this<TWriteRequestExecutor>
 {
@@ -38,13 +49,13 @@ public:
 
     ~TWriteRequestExecutor();
 
-    void Run(NProto::TStorageServiceConfig::TWriteMode writeMode);
+    void Run(EWriteMode writeMode, ui32 pbufferReplyTimeoutMicroseconds);
 
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
     void SendWriteRequest(ELocation location);
-    void SendWriteRequestToManyPBuffers();
+    void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response);
@@ -66,7 +77,6 @@ private:
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
     TDDiskIdToHostIndex DDiskIdToHostIndex;
-    ui32 PBufferReplyTimeoutMicroseconds{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

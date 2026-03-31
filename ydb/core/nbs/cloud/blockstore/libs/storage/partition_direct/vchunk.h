@@ -40,7 +40,8 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NProto::TStorageServiceConfig::TWriteMode writeMode,
+        EWriteMode writeMode,
+        ui32 pbufferReplyTimeoutMicroseconds,
         NWilson::TTraceId traceId);
 
 private:
@@ -60,7 +61,8 @@ private:
         TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NProto::TStorageServiceConfig::TWriteMode writeMode,
+        EWriteMode writeMode,
+        ui32 pbufferReplyTimeoutMicroseconds,
         NWilson::TTraceId traceId);
     void OnWriteBlocksResponse(
         NThreading::TPromise<TWriteBlocksLocalResponse> promise,

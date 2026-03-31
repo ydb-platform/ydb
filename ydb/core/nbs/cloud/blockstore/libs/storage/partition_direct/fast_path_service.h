@@ -29,7 +29,7 @@ private:
 
     TVolumeCounters Counters;
     TVolumeConfigPtr VolumeConfig;
-    const NProto::TStorageServiceConfig::TWriteMode WriteMode;
+    const EWriteMode WriteMode;
     ui32 PBufferReplyTimeoutMicroseconds{};
 
 public:

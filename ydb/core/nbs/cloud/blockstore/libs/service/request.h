@@ -45,7 +45,6 @@ struct TWriteBlocksLocalRequest: public TDisableCopyMove
 
     // Set during execution
     ui64 Lsn = 0;
-    ui32 PBufferReplyTimeoutMicroseconds{};
 
     explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))

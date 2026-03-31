@@ -96,6 +96,14 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
         request->AddPayload(std::move(rope));
+    } else {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
+            "acquire data. Aborting.",
+            requestId);
+        Y_ABORT();
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -148,7 +156,8 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvWriteToPBuffers with requestId# %lu",
+        "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with requestId# "
+        "%lu",
         requestId);
 
     auto request = std::make_unique<TEvWriteToManyPersistentBuffers>(
@@ -164,6 +173,14 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
         request->AddPayload(std::move(rope));
+    } else {
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with "
+            "requestId# %lu was failed - can't acquire data. Aborting.",
+            requestId);
+        Y_ABORT();
     }
 
     ctx.Send(MakeHolder<IEventHandle>(
@@ -316,6 +333,14 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         if (auto guard = request.Data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
+        } else {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "Recieved TEvReadPersistentBufferResult with requestId# %lu "
+                "was failed - can't acquire data. Aborting.",
+                requestId);
+            Y_ABORT();
         }
 
         request.Promise.SetValue(std::move(ev->Get()->Record));
@@ -378,6 +403,14 @@ void TICStorageTransportActor::HandleReadResult(
         if (auto guard = request.Data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
+        } else {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "Recieved TEvReadResult with requestId# %lu was failed - can't "
+                "acquire data. Aborting.",
+                requestId);
+            Y_ABORT();
         }
 
         request.Promise.SetValue(std::move(ev->Get()->Record));

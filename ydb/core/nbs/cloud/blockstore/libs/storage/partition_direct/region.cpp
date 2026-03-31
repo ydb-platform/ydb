@@ -62,7 +62,8 @@ NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    NProto::TStorageServiceConfig::TWriteMode writeMode,
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
     NWilson::TTraceId traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
@@ -71,6 +72,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         writeMode,
+        pbufferReplyTimeoutMicroseconds,
         std::move(traceId));
 }
 

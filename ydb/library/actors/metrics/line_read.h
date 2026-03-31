@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -15,10 +14,11 @@ namespace NActors {
     struct TChunk;
     template<class TFrontend> class TLine;
     class TLineSnapshot;
+    class TSnapshotView;
     class TInMemoryMetricsBackend;
     class TInMemoryMetricsRegistry;
 
-    using TReadSnapshotCallback = std::function<void(std::span<const TLabel>, std::span<const TLineSnapshot>)>;
+    using TReadSnapshotCallback = std::function<void(const TSnapshotView&)>;
 
     namespace NInMemoryMetricsPrivate {
         struct TChunkSnapshotView;
@@ -58,6 +58,57 @@ namespace NActors {
         explicit TLineMeta(const TLineFrontendOps* frontend) noexcept;
 
         TStringBuf FrontendName() const noexcept;
+    };
+
+    // Borrowing snapshot view of the whole registry. Instances are non-copyable
+    // and non-movable, and are valid only during the enclosing ReadSnapshot()
+    // callback.
+    class TSnapshotView {
+    public:
+        TSnapshotView() = default;
+        TSnapshotView(const TSnapshotView&) = delete;
+        TSnapshotView(TSnapshotView&&) = delete;
+        TSnapshotView& operator=(const TSnapshotView&) = delete;
+        TSnapshotView& operator=(TSnapshotView&&) = delete;
+
+        size_t CommonLabelsSize() const noexcept {
+            return CommonLabelsCount;
+        }
+
+        const TLabel& GetCommonLabel(size_t index) const noexcept {
+            return CommonLabels[index];
+        }
+
+        size_t LinesSize() const noexcept {
+            return LinesCount;
+        }
+
+        const TLineSnapshot& GetLine(size_t index) const noexcept {
+            return Lines[index];
+        }
+
+        template<class TCallback>
+        void ForEachCommonLabel(TCallback&& cb) const {
+            for (size_t i = 0; i < CommonLabelsCount; ++i) {
+                cb(CommonLabels[i]);
+            }
+        }
+
+        template<class TCallback>
+        void ForEachLine(TCallback&& cb) const {
+            for (size_t i = 0; i < LinesCount; ++i) {
+                cb(Lines[i]);
+            }
+        }
+
+    private:
+        friend class TInMemoryMetricsBackend;
+        friend class TInMemoryMetricsRegistry;
+
+        const TLabel* CommonLabels = nullptr;
+        size_t CommonLabelsCount = 0;
+        const TLineSnapshot* Lines = nullptr;
+        size_t LinesCount = 0;
     };
 
     // Borrowing snapshot view of a single line. Instances are owned by backend

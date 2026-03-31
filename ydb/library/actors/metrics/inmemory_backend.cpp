@@ -630,9 +630,12 @@ namespace NActors {
             }
         }
 
-        cb(
-            std::span<const TLabel>(snapshot.CommonLabels.data(), snapshot.CommonLabels.size()),
-            std::span<const TLineSnapshot>(snapshot.SnapshotLines.data(), snapshot.SnapshotLines.size()));
+        TSnapshotView view;
+        view.CommonLabels = snapshot.CommonLabels.data();
+        view.CommonLabelsCount = snapshot.CommonLabels.size();
+        view.Lines = snapshot.SnapshotLines.data();
+        view.LinesCount = snapshot.SnapshotLines.size();
+        cb(view);
     }
 
     ui64 TInMemoryMetricsBackend::GetReuseWatermark() const noexcept {

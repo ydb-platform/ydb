@@ -385,6 +385,64 @@ Y_UNIT_TEST_SUITE(InMemoryMetrics) {
         });
     }
 
+    Y_UNIT_TEST(OnChangeRangeIncludesPreviousValueAtBegin) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        auto writer = registry.CreateLine<TOnChangeLineFrontend<>>("line", NoLabels());
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(20));
+
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
+
+            auto fullRecords = line->ReadRecordsAs<ui64>();
+            UNIT_ASSERT_VALUES_EQUAL(fullRecords.size(), 2);
+
+            const TInstant beginTs = fullRecords[0].Timestamp + TDuration::MilliSeconds(1);
+            const TInstant endTs = beginTs;
+            auto records = line->ReadRecordsAsInRange<ui64>(beginTs, endTs);
+
+            UNIT_ASSERT_VALUES_EQUAL(records.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(records[0].Timestamp, beginTs);
+            UNIT_ASSERT_VALUES_EQUAL(records[0].Value, 10);
+        });
+    }
+
+    Y_UNIT_TEST(OnChangeRangeDoesNotSynthesizeBeforeFirstPoint) {
+        TInMemoryMetricsRegistry registry({
+            .MemoryBytes = 1024,
+            .ChunkSizeBytes = 64,
+            .MaxLines = 4,
+        });
+
+        auto writer = registry.CreateLine<TOnChangeLineFrontend<>>("line", NoLabels());
+        UNIT_ASSERT(writer);
+        UNIT_ASSERT(writer.Append(10));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        UNIT_ASSERT(writer.Append(20));
+
+        ReadUserLines(registry, [&](std::span<const TLabel>, const TVector<const TLineSnapshot*>& lines) {
+            const TLineSnapshot* line = FindLineByName(lines, "line");
+            UNIT_ASSERT(line);
+
+            auto fullRecords = line->ReadRecordsAs<ui64>();
+            UNIT_ASSERT_VALUES_EQUAL(fullRecords.size(), 2);
+
+            const TInstant endTs = fullRecords[0].Timestamp - TDuration::MilliSeconds(1);
+            const TInstant beginTs = endTs;
+            auto records = line->ReadRecordsAsInRange<ui64>(beginTs, endTs);
+
+            UNIT_ASSERT_VALUES_EQUAL(records.size(), 0);
+        });
+    }
+
     Y_UNIT_TEST(OnChangeDoesNotBackfillOnCloseWithoutChange) {
         TInMemoryMetricsRegistry registry({
             .MemoryBytes = 1024,

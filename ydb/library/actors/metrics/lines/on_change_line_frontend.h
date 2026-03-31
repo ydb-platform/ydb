@@ -33,17 +33,47 @@ namespace NActors {
                               void* opaque,
                               TLineFrontendOps::TInvokeValue invoke) {
             // on_change reuses the same physical chunk format as raw; only write
-            // semantics differ. For explicit finite intervals reader appends a
-            // synthetic tail point for the current value at interval end.
+            // semantics differ. For explicit finite intervals reader may insert
+            // a synthetic point at beginTs for the last value that started
+            // before the interval, and appends a synthetic tail point for the
+            // current value at interval end.
+            bool hasPreviousValue = false;
+            TValue previousValue{};
             bool hasLastValue = false;
             TInstant lastTimestamp;
             TValue lastValue{};
-            TRawLineFrontend<TValue>::ForEachStoredRecordInRange(snapshot, beginTs, endTs, [&](TInstant timestamp, const TValue& value) {
+            bool hasPointInsideRange = false;
+
+            TRawLineFrontend<TValue>::ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
+                if (timestamp < beginTs) {
+                    hasPreviousValue = true;
+                    previousValue = value;
+                    return;
+                }
+                if (timestamp > endTs) {
+                    return;
+                }
+
+                if (!hasPointInsideRange && hasPreviousValue && beginTs < timestamp) {
+                    hasLastValue = true;
+                    lastTimestamp = beginTs;
+                    lastValue = previousValue;
+                    invoke(opaque, beginTs, &previousValue);
+                }
+
+                hasPointInsideRange = true;
                 hasLastValue = true;
                 lastTimestamp = timestamp;
                 lastValue = value;
                 invoke(opaque, timestamp, &value);
             });
+
+            if (!hasPointInsideRange && hasPreviousValue && beginTs <= endTs) {
+                hasLastValue = true;
+                lastTimestamp = beginTs;
+                lastValue = previousValue;
+                invoke(opaque, beginTs, &previousValue);
+            }
 
             if (!hasLastValue) {
                 return;

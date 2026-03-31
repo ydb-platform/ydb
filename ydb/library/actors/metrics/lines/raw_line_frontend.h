@@ -47,10 +47,7 @@ namespace NActors {
         }
 
         template<class TCallback>
-        static void ForEachStoredRecordInRange(const TLineSnapshot& snapshot,
-                                               TInstant beginTs,
-                                               TInstant endTs,
-                                               TCallback&& cb) {
+        static void ForEachStoredRecord(const TLineSnapshot& snapshot, TCallback&& cb) {
             NInMemoryMetricsPrivate::TLineSnapshotAccess::ForEachChunk(snapshot, [&](const NInMemoryMetricsPrivate::TChunkSnapshotView& chunk) {
                 if (chunk.Payload.size() < sizeof(TChunkHeader)) {
                     return;
@@ -63,10 +60,21 @@ namespace NActors {
                 const size_t recordsCount = std::min<size_t>(header->RecordsCount, maxRecordsCount);
                 const auto* storedRecords = reinterpret_cast<const TStorageRecord*>(recordsBegin);
                 for (size_t i = 0; i < recordsCount; ++i) {
-                    const TInstant timestamp = NInMemoryMetricsPrivate::TLineSnapshotAccess::DecodeTimestampTs(snapshot, storedRecords[i].TimestampTs);
-                    if (beginTs <= timestamp && timestamp <= endTs) {
-                        cb(timestamp, DecodeValue(storedRecords[i].Value));
-                    }
+                    cb(
+                        NInMemoryMetricsPrivate::TLineSnapshotAccess::DecodeTimestampTs(snapshot, storedRecords[i].TimestampTs),
+                        DecodeValue(storedRecords[i].Value));
+                }
+            });
+        }
+
+        template<class TCallback>
+        static void ForEachStoredRecordInRange(const TLineSnapshot& snapshot,
+                                               TInstant beginTs,
+                                               TInstant endTs,
+                                               TCallback&& cb) {
+            ForEachStoredRecord(snapshot, [&](TInstant timestamp, const TValue& value) {
+                if (beginTs <= timestamp && timestamp <= endTs) {
+                    cb(timestamp, value);
                 }
             });
         }

@@ -293,7 +293,7 @@ THttpResult THttpProxyTestMock::SendPing() {
 NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode) {
     auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
     if (expectedHttpCode != 0) {
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << request.GetStringRobust() << "\nRESPONSE: " << res.Body);
     }
     NJson::TJsonMap json;
     UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));

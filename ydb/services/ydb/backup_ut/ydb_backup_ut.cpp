@@ -2458,7 +2458,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(BackupRestoreColumnTableWithLocalIndexes) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         appConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);

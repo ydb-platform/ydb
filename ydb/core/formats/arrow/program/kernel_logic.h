@@ -5,14 +5,14 @@
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 
 #include <library/cpp/object_factory/object_factory.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
 
 enum class ECalculationHardness {
     JustAccessorUsage = 1,
     NotSpecified = 3,
-    LessOrGreater = 4,
-    Equals = 5,
+    Compare = 5,
     StringMatching = 10,
     Unknown = 8
 };
@@ -189,36 +189,6 @@ public:
     static const inline auto Registrator = TFactory::TRegistrator<TLogicMatchAsciiEndsWithIgnoreCase>(GetClassNameStatic());
 };
 
-// class TLogicEquals: public IKernelLogic {
-// private:
-//     using TBase = IKernelLogic;
-//     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
-//         TAccessorsCollection& /*resources*/) const override {
-//         return false;
-//     }
-//     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
-//         return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
-//     }
-//     const bool IsSimpleFunction;
-
-//     virtual ECalculationHardness GetWeight() const override {
-//         return ECalculationHardness::Equals;
-//     }
-
-// public:
-//     TLogicEquals(const bool isSimpleFunction)
-//         : IsSimpleFunction(isSimpleFunction) {
-//     }
-
-//     virtual TString GetClassName() const override {
-//         return "EQUALS";
-//     }
-
-//     virtual bool IsBoolInResult() const override {
-//         return !IsSimpleFunction;
-//     }
-// };
-
 class TCompareKernel: public IKernelLogic {
 private:
     using TBase = IKernelLogic;
@@ -233,24 +203,42 @@ private:
     const TIndexCheckOperation::EOperation Op;
 
     virtual ECalculationHardness GetWeight() const override {
-        return ECalculationHardness::LessOrGreater;
+        return ECalculationHardness::Compare;
     }
 
 public:
     TCompareKernel(const bool isSimpleFunction, TIndexCheckOperation::EOperation op)
-        : IsSimpleFunction(isSimpleFunction)
-        , Op(op)
-    {
-        AFL_VERIFY(op == TIndexCheckOperation::EOperation::Less || 
-                   op == TIndexCheckOperation::EOperation::LessOrEqual || 
-                   op == TIndexCheckOperation::EOperation::Greater || 
-                   op == TIndexCheckOperation::EOperation::GreaterOrEqual ||
-                   op == TIndexCheckOperation::EOperation::Equals
+        : IKernelLogic([&] {
+            {
+                using enum TIndexCheckOperation::EOperation;
+                
+                AFL_VERIFY(op == Less || op == LessOrEqual || 
+                    op == Greater || op == GreaterOrEqual || op == Equals
                 );
-    }
+            }
+        
+
+            switch(op) {
+            case TIndexCheckOperation::EOperation::Equals:
+                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals;
+            case TIndexCheckOperation::EOperation::Less:
+                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Less;
+            case TIndexCheckOperation::EOperation::Greater:
+                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Greater;
+            case TIndexCheckOperation::EOperation::LessOrEqual:
+                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual;
+            case TIndexCheckOperation::EOperation::GreaterOrEqual:
+                return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
+            default:
+                AFL_VERIFY(false);
+            }
+        }()),
+          IsSimpleFunction(isSimpleFunction)
+        , Op(op)
+    {}
 
     virtual TString GetClassName() const override {
-        return TStringBuilder() << "TLogicLessOrGreater{" << Op << "}";
+        return TStringBuilder() << "TCompareKernel{" << Op << "}";
     }
 
     virtual bool IsBoolInResult() const override {

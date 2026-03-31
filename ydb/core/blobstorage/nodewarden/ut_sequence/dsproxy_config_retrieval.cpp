@@ -39,8 +39,13 @@ void SetupServices(TTestBasicRuntime& runtime) {
         TFormatOptions options;
         options.SectorMap = sectorMaps[i];
         options.EnableSmallDiskOptimization = false;
-        FormatPDisk(paths[i], 0, 4096, chunkSize, guids[i], 0x1234567890 + 1, 0x4567890123 + 1, 0x7890123456 + 1,
-            NPDisk::YdbDefaultPDiskSequence, TString(), options);
+        if (i == 0) {
+            // Only format static pdisks, other should format themselves on startup
+            FormatPDisk(paths[i], 0, 4096, chunkSize, guids[i], 0x1234567890 + 1, 0x4567890123 + 1, 0x7890123456 + 1,
+                NPDisk::YdbDefaultPDiskSequence, TString(), options);
+        } else {
+            sectorMaps[i]->ZeroInit(1_MB / NKikimr::NPDisk::NSectorMap::SECTOR_SIZE);
+        }
     }
 
     // per-node NodeWarden configurations; node 0 has the static group and the BS_CONTROLLER tablet
@@ -264,6 +269,7 @@ Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
         auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvPutResult>(sender);
         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
     }
+    
     Y_UNIT_TEST(LocalGroupInfoUpdatesAfterMovingOut) {
         // Regression scenario:
         // 1) a dynamic group is initially local for owner node;

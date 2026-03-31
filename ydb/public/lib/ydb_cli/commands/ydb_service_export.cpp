@@ -428,7 +428,8 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
     // So if we use it, then we can suppose that YDB already supports expanding of items.
     const bool expandItems = (!CommonDestinationPrefix || !ExclusionPatterns.empty());
     if (expandItems && settings.Item_.empty()) {
-        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption ? CommonDestinationPrefix : TString{}});
+        constexpr bool isFs = std::is_same_v<TSettings, NExport::TExportToFsSettings>;
+        settings.AppendItem(typename TSettings::TItem{.Src = CommonSourcePath ? CommonSourcePath : config.Database, .Dst = !encryption && !isFs ? CommonDestinationPrefix : TString{}});
     }
 
     const TDriver driver = CreateDriver(config);

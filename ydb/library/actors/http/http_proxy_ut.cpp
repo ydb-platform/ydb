@@ -63,21 +63,25 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
         UNIT_ASSERT_EQUAL(port, 0);
 
+        // Fallback to old version
         CrackAddress("ipv6s:2a07::ff:1:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "ipv6s:2a07::ff:1:100"); // Fallback to old version
+        UNIT_ASSERT_EQUAL(hostname, "ipv6s:2a07::ff:1:100");
         UNIT_ASSERT_EQUAL(port, 0);
 
+        // Fallback to old version
         CrackAddress("ipv6[:2a07::ff:1]:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "ipv6[:2a07::ff:1]"); // Fallback to old version
+        UNIT_ASSERT_EQUAL(hostname, "ipv6[:2a07::ff:1]");
         UNIT_ASSERT_EQUAL(port, 100);
 
-        CrackAddress("ipv6:[not-valid:2a07::ff:1]:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "");
-        UNIT_ASSERT_EQUAL(port, 0);
+        // Keeps previous values on erorr
+        CrackAddress("ipv6:[not-valid:2a07::ff:1]:123", hostname, port);
+        UNIT_ASSERT_EQUAL(hostname, "ipv6[:2a07::ff:1]");
+        UNIT_ASSERT_EQUAL(port, 100);
 
+        // Keeps previous values on error
         CrackAddress("ipv6:not-valid", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "ipv6[:2a07::ff:1]");
+        UNIT_ASSERT_EQUAL(port, 100);
         
         // Test IPv4 scheme
         hostname = "";
@@ -90,21 +94,25 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
         UNIT_ASSERT_EQUAL(port, 1234);
 
+        // Fallback to old version
         CrackAddress("ipv4s:192.168.1.1:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "ipv4s:192.168.1.1:1234"); // Fallback to old version
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "ipv4s:192.168.1.1:1234");
+        UNIT_ASSERT_EQUAL(port, 1234);
 
+        // Keeps previous values on error
         CrackAddress("ipv4:[192.168.1.1]:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "ipv4s:192.168.1.1:1234");
+        UNIT_ASSERT_EQUAL(port, 1234);
 
+        // Keeps previous values on error
         CrackAddress("ipv4:not-valid", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "ipv4s:192.168.1.1:1234");
+        UNIT_ASSERT_EQUAL(port, 1234);
 
+        // Keeps previous values on error
         CrackAddress("ipv4:not-valid:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "ipv4s:192.168.1.1:1234");
+        UNIT_ASSERT_EQUAL(port, 1234);
 
         // Test legacy format
         hostname = "";
@@ -113,8 +121,6 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "example.com");
         UNIT_ASSERT_EQUAL(port, 12345);
         
-        hostname = "";
-        port = 0;
         CrackAddress("[::1]:23456", hostname, port);
         UNIT_ASSERT_EQUAL(hostname, "::1");
         UNIT_ASSERT_EQUAL(port, 23456);
@@ -129,11 +135,11 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
 
         CrackAddress("::1", hostname, port);
         UNIT_ASSERT_EQUAL(hostname, "::1");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(port, 3456); // Fallback keeps previous values
 
         CrackAddress("2a02:6b8:c02:1410:0:5a59:eb1e:fe7a", hostname, port);
         UNIT_ASSERT_EQUAL(hostname, "2a02:6b8:c02:1410:0:5a59:eb1e:fe7a");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(port, 3456); // Fallback keeps previous values
     }
 
     Y_UNIT_TEST(TestUrlHandlerGetHandler) {

@@ -8,14 +8,10 @@ namespace NHttp {
 namespace {
 
 // https://fuchsia.googlesource.com/third_party/grpc/+/HEAD/doc/naming.md
-enum class EURIScheme : uint8_t {
+enum class EURIScheme : ui8 {
     NONE,
     IPV6, // ipv6:
     IPV4, // ipv4:
-    UNIX_ABSTRACT, // unix-abstract:
-    UNIX, // unix:
-    VSOCK, // vsock:
-    DNS,  // dns:
 };
 
 inline EURIScheme GetScheme(const TString& uri) {
@@ -23,14 +19,6 @@ inline EURIScheme GetScheme(const TString& uri) {
         return EURIScheme::IPV6;
     } else if (uri.StartsWith("ipv4:")) {
         return EURIScheme::IPV4;
-    } else if (uri.StartsWith("unix-abstract:")) {
-        return EURIScheme::UNIX_ABSTRACT;
-    } else if (uri.StartsWith("unix:")) {
-        return EURIScheme::UNIX;
-    } else if (uri.StartsWith("vsock:")) {
-        return EURIScheme::VSOCK;
-    } else if (uri.StartsWith("dns:")) {
-        return EURIScheme::DNS;
     } else {
         return EURIScheme::NONE;
     }
@@ -488,20 +476,35 @@ bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& 
     return true;
 }
 
+// Saves the previous values in case of an error for the new functionality.
+// Does not guarantee consistency of values in the deprecated function.
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
-    hostname.clear();
-    port = 0;
+    auto prev_hostname = std::exchange(hostname, "");
+    auto prev_port = std::exchange(port, 0);
 
     switch (GetScheme(address)) {
         case EURIScheme::IPV6: {
-            CrackIPv6Address(address, hostname, port);
+            if (!CrackIPv6Address(address, hostname, port)) {
+                // return previous values on error
+                hostname = std::move(prev_hostname);
+                port = prev_port;
+            }
             return;
         }
         case EURIScheme::IPV4: {
-            CrackIPv4Address(address, hostname, port);
+            if (!CrackIPv4Address(address, hostname, port)) {
+                // return previos values on error
+                hostname = std::move(prev_hostname);
+                port = prev_port;
+            }
             return;
         }
-        default: return CrackAddressLegacy(address, hostname, port);
+        default: {
+            // Keep legacy behavior (do not clear input hostname and port)
+            hostname = std::move(prev_hostname);
+            port = prev_port;
+            return CrackAddressLegacy(address, hostname, port);
+        }
     }
 }
 

@@ -1031,6 +1031,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["warehouse","date_dim"])") != TString::npos, joinOrder);
     }
 
+    Y_UNIT_TEST(JoinOrderHintsPartialOrder) {
+        // Partial order hint {item} store: item must be in the left subtree of any join
+        // where store appears on the right. The warehouse->store edge is widened to
+        // (warehouse|item, store), forcing a group containing item to be on the left
+        // whenever store joins. Verify item is the left operand of the store join.
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/join_order_hints_partial.sql",
+            "stats/tpcds1000s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        // item must be the immediate left operand of store (hint satisfied)
+        UNIT_ASSERT_C(joinOrder.find(R"(["item","store"])") != TString::npos, joinOrder);
+    }
 
     void CanonizedJoinOrderTest(
         const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore

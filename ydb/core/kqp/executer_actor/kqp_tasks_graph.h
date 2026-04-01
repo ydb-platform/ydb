@@ -401,7 +401,7 @@ public:
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
     void RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 
-    // TODO: public used by TKqpPlanner
+    // TODO: public used by TKqpPlanner - why?
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
         const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
 
@@ -472,41 +472,6 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-};
-
-void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
-
-template<typename Proto>
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
-    TVector<TTaskMeta::TColumn> columns;
-    columns.reserve(op.GetColumns().size());
-
-    THashSet<TString> keyColumns;
-    for (auto column : tableInfo->KeyColumns) {
-        keyColumns.insert(std::move(column));
-    }
-
-    for (const auto& column : op.GetColumns()) {
-        TTaskMeta::TColumn c;
-
-        const auto& tableColumn = tableInfo->Columns.at(column.GetName());
-        c.Id = column.GetId();
-        c.Type = tableColumn.Type;
-        c.TypeMod = tableColumn.TypeMod;
-        c.Name = column.GetName();
-        c.NotNull = tableColumn.NotNull;
-        c.IsPrimary = keyColumns.contains(c.Name);
-
-        columns.emplace_back(std::move(c));
-    }
-
-    return columns;
-}
-
-struct TKqpTaskOutputType {
-    enum : ui32 {
-        ShardRangePartition = TTaskOutputType::COMMON_TASK_OUTPUT_TYPE_END
-    };
 };
 
 } // namespace NKikimr::NKqp

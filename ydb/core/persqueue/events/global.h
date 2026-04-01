@@ -80,7 +80,7 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvPartitionUpdateReadMetrics : public TEventPB<TEvPartitionUpdateReadMetrics,
-            NKikimrClient::TPersQueuePartitionUpdateReadMetrics, EvPartitionUpdateReadMetrics> {
+            NKikimrPQ::TPersQueuePartitionUpdateReadMetrics, EvPartitionUpdateReadMetrics> {
         TEvPartitionUpdateReadMetrics() = default;
     };
 

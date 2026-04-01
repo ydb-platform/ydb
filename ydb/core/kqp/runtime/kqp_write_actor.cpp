@@ -5600,7 +5600,7 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
             NACLib::TUserContextBuilder builder;
             builder.WithUserSID(settings.GetUserSID());
 
-            TString userTraceId = settings.GetUserTraceId();
+            TString userTraceId = settings.GetUserTraceId().GetData();
             if (userTraceId.size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
                 auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(userTraceId.data());
                 builder.WithUserTraceId(NWilson::TTraceId(*data));

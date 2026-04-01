@@ -89,8 +89,6 @@ namespace NSchemeShard {
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
 
-class TShredManager;
-
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
@@ -418,6 +416,8 @@ public:
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
+
+    bool IsOldArgonHashFormatMigrationCompleted = false;
 
     TShardDeleter ShardDeleter;
 
@@ -1049,6 +1049,9 @@ public:
 
     struct TTxCleanDroppedPaths;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
+
+    struct TTxUserHashesMigration;
+    NTabletFlatExecutor::ITransaction* CreateTxUserHashesMigration();
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);

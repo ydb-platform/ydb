@@ -2,7 +2,7 @@
 
 namespace NYql::NFmr {
 
-TStringBuf TIndexedBlock::GetRowBytes(ui64 rowIndex) {
+TStringBuf TIndexedBlock::GetRowBytes(ui64 rowIndex) const {
     auto markup = Rows[rowIndex];
     auto boundary = markup.back();
 

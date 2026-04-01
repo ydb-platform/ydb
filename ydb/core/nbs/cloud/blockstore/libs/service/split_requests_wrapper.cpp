@@ -18,14 +18,14 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool NeedToSplitRequest(const TRequestHeaders& headers, TBlockRange64 range)
+bool NeedToSplitRequest(const TRequestHeaders& headers)
 {
     const ui64 blocksPerStripe = headers.VolumeConfig->BlocksPerStripe;
     if (!blocksPerStripe) {
         return false;
     }
-    const bool needToSplit =
-        range.Start / blocksPerStripe != range.End / blocksPerStripe;
+    const bool needToSplit = headers.Range.Start / blocksPerStripe !=
+                             headers.Range.End / blocksPerStripe;
     return needToSplit;
 }
 
@@ -43,13 +43,14 @@ TVector<std::shared_ptr<TRequest>> SplitRequest(const TRequest& request)
     }
     const TSgList& sgList = guard.Get();
 
-    auto subRanges = request.Range.Split(stripeSize);
+    auto subRanges = request.Headers.Range.Split(stripeSize);
     result.reserve(subRanges.size());
     for (auto subRange: subRanges) {
-        auto subRequest = std::make_shared<TRequest>(request.Headers, subRange);
+        auto subRequest =
+            std::make_shared<TRequest>(request.Headers.Clone(subRange));
         auto subSgList = CreateSgListSubRange(
             sgList,
-            (subRange.Start - request.Range.Start) * blockSize,
+            (subRange.Start - request.Headers.Range.Start) * blockSize,
             subRange.Size() * blockSize);
         subRequest->Sglist =
             request.Sglist.CreateDepender(std::move(subSgList));
@@ -67,12 +68,11 @@ TVector<std::shared_ptr<TZeroBlocksLocalRequest>> SplitRequest(
 
     TVector<std::shared_ptr<TZeroBlocksLocalRequest>> result;
 
-    auto subRanges = request.Range.Split(stripeSize);
+    auto subRanges = request.Headers.Range.Split(stripeSize);
     result.reserve(subRanges.size());
     for (auto subRange: subRanges) {
         auto subRequest = std::make_shared<TZeroBlocksLocalRequest>(
-            request.Headers,
-            subRange);
+            request.Headers.Clone(subRange));
         result.push_back(std::move(subRequest));
     }
 
@@ -244,7 +244,7 @@ NThreading::TFuture<TResponse> TSplitRequestsStorageWrapper::ExecuteRequest(
     TCallContextPtr callContext,
     std::shared_ptr<TRequest> request)
 {
-    if (NeedToSplitRequest(request->Headers, request->Range)) {
+    if (NeedToSplitRequest(request->Headers)) {
         auto splittedRequest =
             std::make_shared<TSplittedRequest<TRequest, TResponse>>(
                 std::move(request));

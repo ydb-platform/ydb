@@ -2308,20 +2308,6 @@ public:
             victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
         }
 
-        // In Snapshot Isolation the conflict is detected during the write, but the actual
-        // victim is the read that established the snapshot.  When the resolved VictimQueryText
-        // is the same as the current (commit) query, prefer the first collected query text
-        // which is the lock-establishing read.
-        if (!victimQueryText.empty() && QueryState->TxCtx) {
-            TString currentQueryText = QueryState->ExtractQueryText();
-            if (victimQueryText == currentQueryText) {
-                TString firstText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
-                if (!firstText.empty() && firstText != currentQueryText) {
-                    victimQueryText = firstText;
-                }
-            }
-        }
-
         // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the
         // session-level QuerySpanId (e.g. with OLTP sink where the shard-side SpanId diverges
         // from the session's). Preserve the lock-derived SpanId for DataShard linkage but

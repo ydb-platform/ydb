@@ -98,26 +98,34 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+        );
+        // работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
-      );
-      // работа с reader
-  }
-  ```
+  - JDBC
+
+    На стороне JDBC неявный режим связан с авто-коммитом (`Connection.setAutoCommit(true)` по умолчанию): каждый отдельный запрос оформляется как отдельная транзакция и фиксируется автоматически. При `setAutoCommit(false)` границы задаются явными `commit`/`rollback`.
+
+    В **текущей реализации** {{ ydb-short-name }} JDBC-драйвера для **одиночных** вызовов при **чтении** режим **snapshot** включается, если на `Connection` вызван **`setReadOnly(true)`**. Для запросов **с записью** применяется **Serializable Read/Write** (на соединении не должен быть включён режим только чтения).
+
+    В **Spring** атрибут **`@Transactional(readOnly = true)`** при старте транзакции приводит к вызову `Connection.setReadOnly(true)` на соединении, поэтому для read-only-сценариев snapshot выбирается автоматически. Hibernate, JOOQ и другие обёртки над JDBC используют то же соединение — флаг read-only нужно выставлять так же явно (или через транзакционные настройки фреймворка, если они прокидывают его в `Connection`).
+
+  {% endlist %}
 
 - Python
 
@@ -351,27 +359,31 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Для **одиночных** вызовов через JDBC в текущей реализации драйвера используется **Serializable Read/Write** — в том числе при работе из Spring Boot, ORM и других обёрток над JDBC. Режим **snapshot** для чтений задаётся через **`setReadOnly(true)`** (см. [ImplicitTx](#implicittx)). Семантика авто-коммита и явных транзакций описана там же.
+
+  {% endlist %}
 
 - Python
 
@@ -685,27 +697,31 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Online Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -948,27 +964,31 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Stale Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -1201,27 +1221,31 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Для **одиночных** вызовов **только на чтение** через JDBC режим **snapshot** включается, когда на соединении выставлен **`Connection.setReadOnly(true)`** (в Spring — **`@Transactional(readOnly = true)`** прокидывает это в драйвер при открытии транзакции). Подробнее — в разделе [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -1457,27 +1481,31 @@
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Snapshot Read-Write из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**; для запросов с записью в текущей реализации драйвера используется **Serializable Read/Write** (см. [ImplicitTx](#implicittx) и [Serializable](#serializable)).
+
+  {% endlist %}
 
 - Python
 

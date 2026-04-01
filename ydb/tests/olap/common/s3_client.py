@@ -3,7 +3,7 @@ import requests
 from typing import Tuple, Optional
 
 import boto3
-import yatest.common
+import library.python.port_manager
 from library.recipes import common as recipes_common
 
 
@@ -11,7 +11,7 @@ class S3Mock:
     def __init__(self, moto_server_path: str):
         self.moto_server_path = moto_server_path
         self.s3_pid_file = "s3.pid"
-        self.port_manager = yatest.common.network.PortManager()
+        self.port_manager = library.python.port_manager.PortManager()
 
         self.endpoint: Optional[str] = None
         self.s3_pid: Optional[int] = None

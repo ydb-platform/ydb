@@ -3725,21 +3725,27 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        TMaybe<EDataSlot> dataType1;
+        if (!isUniversal1)  {
+            dataType1 = data1->GetSlot();
+            if (dataType1 != EDataSlot::String && dataType1 != EDataSlot::Utf8) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected (optional) String or Utf8, but got: " << *input->Head().GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        TMaybe<EDataSlot> dataType2;
+        if (!isUniversal2) {
+            dataType2 = data2->GetSlot();
+            if (dataType2 != EDataSlot::String && dataType2 != EDataSlot::Utf8) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Expected (optional) String or Utf8, but got: " << *input->Tail().GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         if (isUniversal1 || isUniversal2) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
-        }
-
-        auto dataType1 = data1->GetSlot();
-        auto dataType2 = data2->GetSlot();
-        if (dataType1 != EDataSlot::String && dataType1 != EDataSlot::Utf8) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected (optional) String or Utf8, but got: " << *input->Head().GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (dataType2 != EDataSlot::String && dataType2 != EDataSlot::Utf8) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Tail().Pos()), TStringBuilder() << "Expected (optional) String or Utf8, but got: " << *input->Tail().GetTypeAnn()));
-            return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(data1);

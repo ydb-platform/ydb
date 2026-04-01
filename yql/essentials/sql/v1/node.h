@@ -3,6 +3,7 @@
 #include "aggregation.h"
 #include "result.h"
 
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/resetable_setting.h>
 #include <yql/essentials/parser/proto_ast/common.h>
@@ -1429,11 +1430,12 @@ public:
         Alter,
     };
 
-    TMaybe<TDeferredAtom> Value;
+    TMaybe<std::variant<TDeferredAtom, TNodePtr>> Value;
+
     TMaybe<TDeferredAtom> InheritPermissions;
 
 public:
-    bool ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode);
+    bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
 struct TTopicConsumerSettings {
@@ -1776,7 +1778,7 @@ TMaybe<TString> FindMistypeIn(const TContainer& container, const TString& name) 
     return {};
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback);
+void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer)>& callback);
 bool Parseui32(TNodePtr from, ui32& to);
 TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
 const TString* DeriveCommonSourceName(const TVector<TNodePtr>& nodes);

@@ -5,8 +5,8 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-void UpdateNumOfConsumers(TIntrusivePtr<IOperator> &input) {
-    auto &props = input->Props;
+void UpdateNumOfConsumers(TIntrusivePtr<IOperator>& input) {
+    auto& props = input->Props;
     if (props.NumOfConsumers.has_value()) {
         props.NumOfConsumers.value() += 1;
     } else {
@@ -14,7 +14,27 @@ void UpdateNumOfConsumers(TIntrusivePtr<IOperator> &input) {
     }
 }
 
+void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
+    // Currently we ingore cbo join type.
+    if (false && props.JoinAlgo.has_value()) {
+        return;
+    }
+
+    auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
+    NKikimr::NKqp::EJoinAlgoType joinAlgo;
+    switch (joinMode) {
+        case NYql::NDq::EHashJoinMode::Map: {
+            joinAlgo = NKikimr::NKqp::EJoinAlgoType::MapJoin;
+            break;
+        }
+        default: {
+            joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
+            break;
+        }
+    }
+    props.JoinAlgo = joinAlgo;
 }
+} // namespace
 
 namespace NKikimr {
 namespace NKqp {
@@ -22,9 +42,7 @@ namespace NKqp {
 /**
  * Assign stages and build stage graph in the process
  */
-bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(props);
-
+bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     auto nodeName = input->ToString(ctx.ExprCtx);
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
@@ -63,13 +81,14 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOConte
 
         const auto leftInputStorageType = props.StageGraph.GetStorageType(*leftStage);
         const auto rightInputStorageType = props.StageGraph.GetStorageType(*rightStage);
+        MaybeSetJoinAlgo(join->Props, ctx);
 
-        // For cross-join we build a stage with map and broadcast connections
-        if (join->JoinKind == "Cross") {
+        // For cross-join or map join we build a stage with map and broadcast connections
+        // FIXME: We assume that right side is small one, map join also can work with hash shuffle connections.
+        if (join->JoinKind == "Cross" || join->Props.JoinAlgo == EJoinAlgoType::MapJoin) {
             props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TMapConnection>(leftInputStorageType));
             props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TBroadcastConnection>(rightInputStorageType));
         }
-
         // For inner join (we don't support other joins yet) we build a new stage
         // with GraceJoinCore and connect inputs via Shuffle connections
         else {

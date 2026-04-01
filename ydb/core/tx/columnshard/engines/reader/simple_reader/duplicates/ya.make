@@ -1,14 +1,13 @@
 LIBRARY()
 
 SRCS(
-    manager.cpp
-    events.cpp
-    merge.cpp
     common.cpp
-    private_events.cpp
-    splitter.cpp
     context.cpp
+    events.cpp
     executor.cpp
+    filters.cpp
+    manager.cpp
+    private_events.cpp
 )
 
 PEERDIR(
@@ -16,3 +15,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

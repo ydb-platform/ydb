@@ -696,13 +696,14 @@ namespace NKikimr::NStorage {
             const bool configUpdated = UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
             info.BoundNodeIds.insert(nodeId);
 
-            if (Scepter && configUpdated && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+            if (Scepter && configUpdated && CommittedStorageConfig &&
+                    item.GetMeta().GetGeneration() < CommittedStorageConfig->GetGeneration()) {
                 // a new node has arrived with stale configuration: we have to update it
                 fanOutCommittedStorageConfig = true;
             }
         }
         if (fanOutCommittedStorageConfig) {
-            FanOutReversePush(StorageConfig.get());
+            FanOutReversePush(CommittedStorageConfig.get());
         }
 
         // process deleted items

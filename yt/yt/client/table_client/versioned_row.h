@@ -596,7 +596,7 @@ public:
         return *this;
     }
 
-    TVersionedOwningRow& operator=(TVersionedOwningRow&& other)
+    TVersionedOwningRow& operator=(TVersionedOwningRow&& other) noexcept
     {
         Data_ = std::move(other.Data_);
         return *this;

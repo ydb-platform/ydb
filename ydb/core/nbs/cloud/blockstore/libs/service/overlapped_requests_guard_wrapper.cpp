@@ -156,13 +156,14 @@ TOverlappedRequestsGuardStorageWrapper::WriteBlocksLocal(
 {
     auto guard = Guard(Lock);
 
-    const auto overlaps = InflightRequests.FindFirstOverlapping(request->Range);
+    const auto overlaps =
+        InflightRequests.FindFirstOverlapping(request->Headers.Range);
 
     if (!overlaps) {
         const ui64 requestId = ++RequestIdGenerator;
         InflightRequests.AddRange(
             requestId,
-            request->Range,
+            request->Headers.Range,
             nullptr   // will create TInflight when we find the first
                       // intersection with the request.
         );
@@ -187,7 +188,7 @@ TOverlappedRequestsGuardStorageWrapper::WriteBlocksLocal(
         inflightPtr = std::make_unique<TInflight>();
     }
 
-    if (overlaps->Range.Contains(request->Range)) {
+    if (overlaps->Range.Contains(request->Headers.Range)) {
         // The new request is fully covered by the executing one.
         inflightPtr->CoveredWrites.push_back({.Request = std::move(request)});
         return inflightPtr->CoveredWrites.back().Promise;
@@ -205,13 +206,14 @@ TOverlappedRequestsGuardStorageWrapper::ZeroBlocksLocal(
 {
     auto guard = Guard(Lock);
 
-    const auto overlaps = InflightRequests.FindFirstOverlapping(request->Range);
+    const auto overlaps =
+        InflightRequests.FindFirstOverlapping(request->Headers.Range);
 
     if (!overlaps) {
         const ui64 requestId = ++RequestIdGenerator;
         InflightRequests.AddRange(
             requestId,
-            request->Range,
+            request->Headers.Range,
             nullptr   // will create TInflight when we find the first
                       // intersection with the request.
         );
@@ -236,7 +238,7 @@ TOverlappedRequestsGuardStorageWrapper::ZeroBlocksLocal(
         inflightPtr = std::make_unique<TInflight>();
     }
 
-    if (overlaps->Range.Contains(request->Range)) {
+    if (overlaps->Range.Contains(request->Headers.Range)) {
         inflightPtr->CoveredZeroes.push_back({.Request = std::move(request)});
         return inflightPtr->CoveredZeroes.back().Promise;
     }

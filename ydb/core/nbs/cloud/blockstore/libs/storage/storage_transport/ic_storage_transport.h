@@ -39,6 +39,17 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 
+    NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
+    WriteToManyPBuffers(
+        const THostConnection& connection,
+        const NKikimr::NDDisk::TBlockSelector& selector,
+        const ui64 lsn,
+        const NKikimr::NDDisk::TWriteInstruction instruction,
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
+        ui32 replyTimeoutMicroseconds,
+        const TGuardedSgList& data,
+        NWilson::TSpan& span) override;
+
     NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
@@ -56,6 +67,8 @@ public:
         const THostConnection& connection) override;
 
 private:
+    using EConnectionType = THostConnection::EConnectionType;
+
     NActors::TActorSystem* const ActorSystem;
     const NActors::TActorId ICStorageTransportActorId;
 };

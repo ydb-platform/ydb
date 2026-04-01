@@ -132,6 +132,22 @@ public:
         return true;
     }
 
+    bool AllFlushed() const {
+        if (Uploading) {
+            return false;
+        }
+        for (const auto& [_, dst] : Destinations) {
+            if (!dst.Buffer.IsEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    ui64 GetUploadBytes() const {
+        return UploadBytes;
+    }
+
     void AddIssue(const std::exception& exc) {
         UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
             << "Scan failed " << exc.what()));
@@ -216,7 +232,7 @@ private:
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
 
-        UploaderId = TlsActivationContext->Register(actor);
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
 private:

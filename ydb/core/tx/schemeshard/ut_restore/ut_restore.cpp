@@ -6343,7 +6343,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions{}.EnableTopicMessageLevelParallelism(true));
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -6397,6 +6397,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 Consumers {
                     Name: "consumer_2"
                     Important: false
+                    Codec {
+                        Ids: 0
+                        Ids: 1
+                        Ids: 2
+                    }
+                }
+                Consumers {
+                    Name: "consumer_3"
+                    Important: false
+                    Type: CONSUMER_TYPE_MLP
+                    KeepMessageOrder: true
+                    DefaultProcessingTimeoutSeconds: 30
+                    DefaultDelayMessageTimeMs: 5000
+                    DefaultReceiveMessageWaitTimeMs: 3000
+                    DeadLetterPolicyEnabled: true
+                    DeadLetterPolicy: DEAD_LETTER_POLICY_MOVE
+                    MaxProcessingAttempts: 42
+                    DeadLetterQueue: "/MyRoot/dlq_for_topic_full_test"
                     Codec {
                         Ids: 0
                         Ids: 1
@@ -6496,7 +6514,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(partStrategy.GetScaleDownPartitionWriteSpeedThresholdPercent(), 31);
 
         // Check consumers
-        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(config.ConsumersSize(), 3);
 
         const auto& consumer1 = config.GetConsumers(0);
         UNIT_ASSERT_VALUES_EQUAL(consumer1.GetName(), "consumer_1");
@@ -6515,6 +6533,28 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(0), 0);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(1), 1);
         UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().GetIds(2), 2);
+
+        const auto& consumer3 = config.GetConsumers(2);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetName(), "consumer_3");
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetImportant(), false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(consumer3.GetType()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetKeepMessageOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultProcessingTimeoutSeconds(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultDelayMessageTimeMs(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDefaultReceiveMessageWaitTimeMs(), 3000);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDeadLetterPolicyEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(consumer3.GetDeadLetterPolicy()),
+            static_cast<int>(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetMaxProcessingAttempts(), 42u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetDeadLetterQueue(), "/MyRoot/dlq_for_topic_full_test");
+        UNIT_ASSERT(consumer3.HasCodec());
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().IdsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumer3.GetCodec().GetIds(2), 2);
 
         // Check partition count
         UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 3);

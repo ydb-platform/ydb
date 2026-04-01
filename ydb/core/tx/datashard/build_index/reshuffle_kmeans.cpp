@@ -1,5 +1,6 @@
 #include "kmeans_helper.h"
 #include "../datashard_impl.h"
+#include "../range_ops.h"
 #include "../scan_common.h"
 #include "../upload_stats.h"
 #include "../buffer_data.h"
@@ -65,6 +66,11 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedCellVec LastProcessedKey;
+    TSerializedCellVec LastAckedKey;
+    ui64 NextCheckpointAtBytes = 0;
+
     TBatchRowsUploader Uploader;
 
     TBufferData* OutputBuf = nullptr;
@@ -111,6 +117,7 @@ public:
         , Lead(std::move(lead))
         , TabletId(tabletId)
         , BuildId(request.GetId())
+        , KeyTypes(table.KeyColumnTypes)
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
         , Dimensions(request.GetSettings().vector_dimension())
         , OverlapClusters(request.GetOverlapClusters() ? request.GetOverlapClusters() : 1)
@@ -120,6 +127,17 @@ public:
         , Response(std::move(response))
         , Clusters(std::move(clusters))
     {
+        if (request.HasKeyRange()) {
+            TSerializedTableRange requestedRange;
+            requestedRange.Load(request.GetKeyRange());
+            TCell fromCell, toCell;
+            auto parentRange = CreateRangeFrom(table, Parent, fromCell, toCell);
+            auto scanRange = Intersect(KeyTypes, requestedRange.ToTableRange(), parentRange);
+            Lead = CreateLeadFrom(scanRange);
+        }
+
+        NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
+
         LOG_I("Create " << Debug());
 
         const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
@@ -158,6 +176,10 @@ public:
         record.MutableMeteringStats()->SetReadRows(ReadRows);
         record.MutableMeteringStats()->SetReadBytes(ReadBytes);
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
+
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
 
         Uploader.Finish(record, status);
 
@@ -215,6 +237,8 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
+        LastProcessedKey = TSerializedCellVec(key);
+
         Feed(key, *row);
 
         return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
@@ -258,9 +282,25 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && !IsExhausted && LastProcessedKey.GetBuffer()
+                && LastProcessedKey.GetBuffer() != LastAckedKey.GetBuffer() && Uploader.AllFlushed()
+                && Uploader.GetUploadBytes() >= NextCheckpointAtBytes) {
+                NextCheckpointAtBytes = Uploader.GetUploadBytes() + ScanSettings.GetMaxCheckpointBytes();
+                LastAckedKey = LastProcessedKey;
+
+                auto progress = MakeHolder<TEvDataShard::TEvReshuffleKMeansResponse>();
+                auto& record = progress->Record;
+                record.SetId(BuildId);
+                record.SetTabletId(TabletId);
+                record.SetRequestSeqNoGeneration(Response->Record.GetRequestSeqNoGeneration());
+                record.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
+                record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -280,6 +320,7 @@ protected:
     {
         return TStringBuilder() << "TReshuffleKMeansScan TabletId: " << TabletId << " Id: " << BuildId
             << " Parent: " << Parent << " Child: " << Child
+            << ", last acked key: " << DebugPrintPoint(KeyTypes, LastAckedKey.GetCells(), *AppData()->TypeRegistry)
             << " " << Clusters->Debug()
             << " " << Uploader.Debug();
     }

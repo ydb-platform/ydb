@@ -3404,6 +3404,182 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
     }
 
+    // TDropForceUnsafe on a table with an in-progress split must abort the split
+    // via AbortUnsafe() and delete all shards. Three variants cover the three
+    // distinct dst-tablet states at the time of the drop:
+    //   1. TEvCreateTablet not yet sent (Hive unaware, TabletID == InvalidTabletId)
+    //   2. TEvCreateTablet sent, reply pending (Hive has pending creation, TabletID == InvalidTabletId)
+    //   3. Dst tablet created (TabletID valid, split in ConfigureParts)
+
+    // Variant 1: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // has not yet been sent to Hive (TabletID == InvalidTabletId, Hive unaware).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeBeforeCreateTabletRequest) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTablet: dst shards are in ShardInfos but Hive has
+        // never seen them (TabletID == InvalidTabletId).
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::TEvCreateTablet::EventType);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 2: ForceDropUnsafe while split is in CreateParts and TEvCreateTablet
+    // was sent but TEvCreateTabletReply is pending (TabletID == InvalidTabletId,
+    // Hive has a pending creation to cancel).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafeDuringCreateParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvCreateTabletReply: TEvCreateTablet was sent, Hive has a
+        // pending creation, but TabletID has not been assigned yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvHive::EvCreateTabletReply);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
+    // Variant 3: ForceDropUnsafe while split is in ConfigureParts (dst tablets
+    // created, TEvInitSplitMergeDestination sent but not yet acked).
+    Y_UNIT_TEST(SplitMergeAndConcurrentForceDropUnsafe) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto& describe = DescribePath(runtime, "/MyRoot/Table", true);
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::PartitionCount(2),
+            NLs::ShardsInsideDomain(2)
+        });
+
+        // Suppress TEvInitSplitMergeDestination: dst tablets exist (TabletID
+        // valid) but ConfigureParts has not completed yet.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto defObserver = SetSuppressObserver(runtime, suppressed, TEvDataShard::EvInitSplitMergeDestination);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", R"(
+            SourceTabletId: 72075186233409547
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 3000000000 } }
+                }
+            })");
+        ui64 splitTxId = txId;
+
+        WaitForSuppressed(runtime, suppressed, 2, defObserver);
+
+        AsyncForceDropUnsafe(runtime, ++txId, describe.GetPathDescription().GetSelf().GetPathId());
+        ui64 forceDropTxId = txId;
+
+        for (auto& msg : suppressed) {
+            runtime.Send(msg.Release());
+        }
+        suppressed.clear();
+
+        env.TestWaitNotification(runtime, {splitTxId, forceDropTxId});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets,
+                                                   TTestTxConfig::FakeHiveTablets + 10));
+    }
+
     Y_UNIT_TEST(CopyTableWithAlterConfig) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

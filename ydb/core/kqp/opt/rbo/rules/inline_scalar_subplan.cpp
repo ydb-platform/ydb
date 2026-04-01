@@ -23,7 +23,8 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
 
     auto scalarIU = scalarIUs[0];
-    auto subplan = CastOperator<IOperator>(props.Subplans.PlanMap.at(scalarIU).Plan);
+    auto subplanEntry = props.Subplans.PlanMap.at(scalarIU);
+    auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     auto subplanResIU = subplan->GetOutputIUs()[0];
     auto subplanResType = subplan->GetIUType(subplanResIU);
 
@@ -86,6 +87,11 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         renameElements.emplace_back(scalarIU, subplanResIU, subplan->Pos, &ctx.ExprCtx, &props);
         auto rename = MakeIntrusive<TOpMap>(leftJoin, subplan->Pos, renameElements, false);
         unaryOp->SetInput(rename);
+    }
+
+    // If its a correlated subplan where filter pull up didn't succeed, throw an exception
+    else if (subplanEntry.DependentIUs.size()) {
+        Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
     }
 
     // Otherwise we assume an uncorrelated supbplan

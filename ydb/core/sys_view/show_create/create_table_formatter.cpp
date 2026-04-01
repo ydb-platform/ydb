@@ -2,6 +2,7 @@
 #include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -1414,6 +1415,15 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
     }
 
+    if (olapColumnDesc.HasDataAccessorConstructor()) {
+        const auto& dataAccessorConstructor = olapColumnDesc.GetDataAccessorConstructor();
+        if (dataAccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+            Stream << " ENCODING (DICT)";
+        } else if (dataAccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName) {
+            Stream << " ENCODING (OFF)";
+        }
+    }
+
     if (olapColumnDesc.HasSerializer()) {
         Stream << " COMPRESSION (";
         auto compression = olapColumnDesc.GetSerializer();
@@ -1628,7 +1638,8 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     if (columnDesc.HasDataAccessorConstructor()) {
         const auto& dataAccessorConstructor = columnDesc.GetDataAccessorConstructor();
         if (columnDesc.GetDataAccessorConstructor().HasClassName()
-                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()) {
+                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()
+                && columnDesc.GetDataAccessorConstructor().GetClassName() == NArrow::NAccessor::TGlobalConst::SubColumnsDataAccessorName) {
             paramsStr << del;
             EscapeName("DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME", paramsStr);
             paramsStr << "=";
@@ -1700,14 +1711,6 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                 }
             }
         }
-    }
-
-    if (columnDesc.HasDictionaryEncoding()) {
-        paramsStr << del;
-        EscapeName("ENCODING.DICTIONARY.ENABLED", paramsStr);
-        paramsStr << "=";
-        EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
-        del = ", ";
     }
 
     TString params = paramsStr.Str();

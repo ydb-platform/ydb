@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import pytest
+import library.python.port_manager
 import yatest
 
 from ydb.tests.library.stress.fixtures import StressFixture
@@ -9,7 +10,7 @@ from ydb.tests.library.stress.fixtures import StressFixture
 class TestYdbTopicWorkload(StressFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        port_manager = yatest.common.network.PortManager()
+        port_manager = library.python.port_manager.PortManager()
         self.kafka_api_port = port_manager.get_port()
         yield from self.setup_cluster(
             kafka_api_port=self.kafka_api_port,

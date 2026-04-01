@@ -1,11 +1,12 @@
 #include "ddisk_actor.h"
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPDiskInterface() {
+        Y_ABORT_UNLESS(!IsPersistentBufferActor);
         STLOG(PRI_DEBUG, BS_DDISK, BSDD01, "TDDiskActor::InitPDiskInterface", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
-
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvYardInit(BaseInfo.InitOwnerRound, TVDiskID(Info->GroupID,
             Info->GroupGeneration, BaseInfo.VDiskIdShort), BaseInfo.PDiskGuid, SelfId(), SelfId(), BaseInfo.VDiskSlotId,
             0 /*groupSizeInUnits*/, true /*getDiskFd*/));
@@ -28,8 +29,6 @@ namespace NKikimr::NDDisk {
                 (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID));
         }
 
-        InitPersistentBuffer();
-
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignatureDDiskChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             ChunkMapSnapshotLsn = record.Lsn;
@@ -49,17 +48,12 @@ namespace NKikimr::NDDisk {
         if (const auto it = msg.StartingPoints.find(TLogSignature::SignaturePersistentBufferChunkMap); it != msg.StartingPoints.end()) {
             NPDisk::TLogRecord& record = it->second;
             PersistentBufferChunkMapSnapshotLsn = record.Lsn;
+
             NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord chunkMap;
             const bool success = chunkMap.ParseFromArray(record.Data.data(), record.Data.size());
             Y_ABORT_UNLESS(success);
             for (auto idx : chunkMap.GetChunkIdxs()) {
-                PersistentBufferSpaceAllocator.AddNewChunk(idx);
-                auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
-                it->second.resize(SectorInChunk);
-                if (!inserted) {
-                    STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::Handle(TEvYardInitResult) persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
-                }
-                ++*Counters.Chunks.ChunksOwned;
+                PersistentBufferChunks.emplace_back(idx);
             }
         }
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound));
@@ -103,21 +97,34 @@ namespace NKikimr::NDDisk {
 
         if (msg.IsEndOfLog) {
             StartHandlingQueries();
-            StartRestorePersistentBuffer();
+            CreatePersistentBuffer();
         } else {
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvReadLog(PDiskParams->Owner, PDiskParams->OwnerRound,
                 msg.NextPosition));
         }
     }
 
+    void TDDiskActor::CreatePersistentBuffer() {
+        auto format = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(*DiskFormat), +[](NPDisk::TDiskFormat* ptr) {
+            delete ptr;
+        });
+        auto pbActor = std::make_unique<TDDiskActor>(TVDiskConfig::TBaseInfo(BaseInfo),
+            Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), AppData()->Counters,
+            PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
+        auto *as = TActivationContext::ActorSystem();
+        PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
+        auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+        as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
+    }
+
     void TDDiskActor::StartHandlingQueries() {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
-        config.UseSQPoll = false;
-        config.UseIOPoll = false;
+        config.UseSQPoll = Config.UseSQPoll;
+        config.UseIOPoll = Config.UseIOPoll;
         if (!UringRouter) {
-            if (DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
+            if (!Config.ForcePDiskFallback && DiskFd != INVALID_FHANDLE && DiskFormat && NPDisk::TUringRouter::Probe(config)) {
                 UringRouter = std::make_unique<NPDisk::TUringRouter>(DiskFd, TActivationContext::ActorSystem(), config);
                 if (const auto result = UringRouter->RegisterFile(); !result) {
                     STLOG(PRI_WARN, BS_DDISK, BSDD18,

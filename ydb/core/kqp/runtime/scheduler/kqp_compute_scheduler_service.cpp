@@ -11,6 +11,7 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, stream)
@@ -209,7 +210,7 @@ private:
         auto poolId = SelfId().PoolID();
         NActors::TExecutorPoolStats poolStats;
         TVector<NActors::TExecutorThreadStats> threadsStats;
-        NActors::TlsActivationContext->ActorSystem()->GetPoolStats(poolId, poolStats, threadsStats);
+        NActors::GetActorSystemStats().GetPoolStats(poolId, poolStats, threadsStats);
         return Max<ui64>(poolStats.MaxThreadCount, 1);
     }
 

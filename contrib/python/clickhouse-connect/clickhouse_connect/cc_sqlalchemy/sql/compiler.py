@@ -115,4 +115,6 @@ class ChStatementCompiler(SQLCompiler):
     def get_from_hint_text(self, table, text):
         if text == "FINAL":
             return "FINAL"
+        if text.startswith("SAMPLE"):
+            return text
         return super().get_from_hint_text(table, text)

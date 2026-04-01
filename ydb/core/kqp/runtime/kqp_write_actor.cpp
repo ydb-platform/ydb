@@ -3671,7 +3671,7 @@ public:
             || CurrentStateFunc() == &TThis::StateFlush);
         Become(&TThis::StatePrepare);
 
-        PendingPrepareShards = TxManager->GetShardsCount();
+        PendingPrepareShards = CountParticipatingShards();
 
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
@@ -3696,7 +3696,7 @@ public:
         CA_LOG_D("Start immediate commit");
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
         Become(&TThis::StateCommit);
-        PendingCommitShards = TxManager->GetShardsCount();
+        PendingCommitShards = CountParticipatingShards();
 
         IsImmediateCommit = true;
         CheckQueuesEmpty();
@@ -3718,7 +3718,7 @@ public:
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(CurrentStateFunc() == &TThis::StatePrepare);
         Become(&TThis::StateCommit);
-        PendingCommitShards = TxManager->GetShardsCount();
+        PendingCommitShards = CountParticipatingShards();
         CheckQueuesEmpty();
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetDistributedCommit();
@@ -3754,6 +3754,39 @@ public:
         for (const auto& [_, queue] : RequestQueues) {
             AFL_ENSURE(queue.empty());
         }
+    }
+
+    // Count shards that actually participate in prepare/commit: write-actor
+    // shards + external shards that have locks + topic shards.  Shards tracked
+    // by TxManager but having neither writes nor locks are excluded because no
+    // prepare/commit message is ever sent to them, so no response will arrive.
+    size_t CountParticipatingShards() const {
+        THashSet<ui64> writeActorShards;
+        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            for (const auto& shardId : actor->GetShardsIds()) {
+                writeActorShards.insert(shardId);
+            }
+        });
+
+        size_t count = writeActorShards.size();
+
+        for (const auto& shardId : TxManager->GetShards()) {
+            if (writeActorShards.contains(shardId)) {
+                continue;
+            }
+            if (TxManager->GetLocks(shardId).empty()) {
+                continue;
+            }
+            ++count;
+        }
+
+        if (TxManager->HasTopics()) {
+            TTopicTabletTxs topicTxs;
+            TxManager->BuildTopicTxs(topicTxs);
+            count += topicTxs.size();
+        }
+
+        return count;
     }
 
     void SendToExternalShards() {
@@ -4742,6 +4775,13 @@ public:
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
             return;
+        }
+        // Fallback: when a shard error arrived via OnError (without shardId),
+        // ConsumeCommitResult was never called for that shard, so the condition
+        // above may never become true.  Flush the deferred error once all
+        // expected commit responses have been received.
+        if (PendingCommitShards == 0) {
+            FlushDeferredLocksBrokenIfPending();
         }
     }
 

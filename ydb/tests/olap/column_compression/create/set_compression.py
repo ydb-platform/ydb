@@ -168,6 +168,20 @@ class TestCreateWithColumnCompression(TestCompressionBase):
                 f"UPDATE `{self.table_path}` SET `{col}2` = `{col}`;"
             )
 
+        response = self.cluster.client.send(SchemeDescribeRequest(self.table_path).protobuf, 'SchemeDescribe')
+        columns = response.PathDescription.ColumnTableDescription.Schema.Columns
+
+        validated_columns = 0
+        for column in columns:
+            if not column.Name.endswith("2"):
+                continue
+            validated_columns += 1
+            if codec_id == 0:
+                assert column.HasField("Serializer") is False
+            else:
+                assert column.Serializer.ArrowCompression.Codec == codec_id
+        assert validated_columns == 4
+
         table = ColumnTableHelper(self.ydb_client, self.table_path)
         current_num_rows: int = table.get_row_count()
         logger.info(f"Table {self.table_path} altered, rows: {current_num_rows}")

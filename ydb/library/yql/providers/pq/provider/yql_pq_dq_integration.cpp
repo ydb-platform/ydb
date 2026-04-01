@@ -103,7 +103,7 @@ public:
                 return {};
             }
 
-            TString serializedWatermarkExpr;
+            TMaybeNode<TCoAtom> watermarkSerialized;
             if (const auto maybeWatermark = pqReadTopic.Watermark()) {
                 const auto watermark = maybeWatermark.Cast();
 
@@ -113,10 +113,14 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
                     return {};
                 }
+
+                TString serializedWatermarkExpr;
                 if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
                     return {};
                 }
+
+                watermarkSerialized = Build<TCoAtom>(ctx, watermark.Pos()).Value(serializedWatermarkExpr).Done();
             }
 
             return Build<TDqSourceWrap>(ctx, pos)
@@ -130,7 +134,8 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .Watermark().Value(serializedWatermarkExpr).Build()
+                    .WatermarkExpr(pqReadTopic.Watermark())
+                    .WatermarkSerialized(watermarkSerialized)
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -355,10 +360,15 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
-                NYql::NConnector::NApi::TExpression watermarkExprProto;
-                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
-                YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
-                TString watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                TString watermarkExprSql;
+                if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
+                    const auto watermarkSerialized = maybeWatermarkSerialized.Cast();
+                    const auto serializedWatermarkExpr = watermarkSerialized.Ref().Content();
+
+                    NYql::NConnector::NApi::TExpression watermarkExprProto;
+                    YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
+                    watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                }
                 srcDesc.SetWatermarkExpr(watermarkExprSql);
 
                 if (commonSettings) {
@@ -446,9 +456,9 @@ public:
 private:
     // Extract watermark delay from fixed-format expression:
     // WITH ( ...
-    //   WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))
+    //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
     // Only used (and useful) for non-shared-reading pq source
-    // (in this case, flexible watermark expression is not implented)
+    // (in this case, flexible watermark expression is not implemented)
     static TMaybe<ui64> ExtractWatermarkDelay(const TCoLambda& watermark) {
         if (watermark.Args().Size() != 1) {
             return Nothing();
@@ -528,7 +538,7 @@ public:
         if (!useSharedReading && maybeWatermark) {
             watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
             if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
+                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
                 return {};
             }
         }

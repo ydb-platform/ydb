@@ -33,6 +33,8 @@
 
 namespace NKikimr::NSQS {
 
+constexpr char const ConsumerName[] = "sqs_consumer";
+
 class TMigrationFeatureFlags
 {
 public:

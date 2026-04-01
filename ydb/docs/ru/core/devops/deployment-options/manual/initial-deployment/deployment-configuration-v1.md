@@ -166,7 +166,7 @@
           subject_terms:
             - short_name: "O"
               values: ["YDB"]
-            ```
+  ```
 
 - mirror-3-dc-9nodes
 

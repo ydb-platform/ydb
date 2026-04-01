@@ -43,28 +43,8 @@
                                         ]
                                     },
                                     {
-                                      "op_name":"InnerJoin (Map)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"customer"
-                                          },
-                                          {
-                                            "op_name":"InnerJoin (Map)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"nation"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"region"
-                                                }
-                                              ]
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"customer"
                                     }
                                   ]
                               }
@@ -75,8 +55,28 @@
                 ]
             },
             {
-              "op_name":"TableFullScan",
-              "table":"supplier"
+              "op_name":"InnerJoin (Map)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
+                    "op_name":"InnerJoin (Map)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"nation"
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"region"
+                        }
+                      ]
+                  }
+                ]
             }
           ]
       }

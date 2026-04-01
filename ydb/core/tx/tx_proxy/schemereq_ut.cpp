@@ -80,6 +80,15 @@ public:
         // default settings
         ServerSettings->AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(RootToken);
+        if (settings.AppConfig) {
+            const auto& securityConfig = settings.AppConfig->GetDomainsConfig().GetSecurityConfig();
+            if (securityConfig.GetEnforceUserTokenRequirement()) {
+                ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            }
+            for (const auto& sid : securityConfig.GetAdministrationAllowedSIDs()) {
+                ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(sid);
+            }
+        }
         ServerSettings->AuthConfig = settings.AuthConfig;
         ServerSettings->AuthConfig.SetUseBuiltinDomain(true);
         ServerSettings->SetEnableMockOnSingleNode(false);
@@ -543,11 +552,29 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 //
 //     }
     void AlterLoginProtect_RootDB(NUnitTest::TTestContext&, const TAlterLoginTestCase params) {
+        // Determine subject SID upfront (needed to configure server before start)
+        TString subjectSid = params.LocalSid
+            ? LocalSubjectSid(params.SubjectLevel)
+            : BuiltinSubjectSid(params.SubjectLevel);
+
+        // Build AppConfig with security settings that must be set before server start
+        // to avoid data races with gRPC actor threads reading AppData concurrently.
+        NKikimrConfig::TAppConfig appConfig;
+        {
+            auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+            securityConfig.SetEnforceUserTokenRequirement(params.EnforceUserTokenRequirement);
+            // Make subject a proper cluster admin before server start, if requested
+            if (params.SubjectLevel == EAccessLevel::ClusterAdmin) {
+                securityConfig.AddAdministrationAllowedSIDs(subjectSid);
+            }
+        }
+
         auto settings = Tests::TServerSettings()
             .SetNodeCount(1)
             .SetDynamicNodeCount(1)
             .SetEnableStrictUserManagement(params.EnableStrictUserManagement)
             .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+            .SetAppConfig(appConfig)
             // .SetLoggerInitializer([](auto& runtime) {
             //     runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
             // })
@@ -556,23 +583,13 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // Test context preparations
 
-        // Turn on mandatory authentication, if requested
-        env.GetTestServer().GetRuntime()->GetAppData().EnforceUserTokenRequirement = params.EnforceUserTokenRequirement;
-
         // Create local user for the subject and obtain auth token, if requested
-        TString subjectSid;
         TString subjectToken;
         if (params.LocalSid) {
-            subjectSid = LocalSubjectSid(params.SubjectLevel);
             CreateLocalUser(env, env.RootPath, subjectSid);
             subjectToken = LoginUser(env, env.RootPath, subjectSid, "passwd");
         } else {
-            subjectSid = subjectToken = BuiltinSubjectSid(params.SubjectLevel);
-        }
-
-        // Make subject a proper cluster admin, if requested
-        if (params.SubjectLevel == EAccessLevel::ClusterAdmin) {
-            env.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(subjectSid);
+            subjectToken = subjectSid;
         }
 
         // Give subject requested schema permissions
@@ -1150,4 +1167,3 @@ Y_UNIT_TEST_SUITE(SchemeReqAdminAccessInTenant) {
 }
 
 }  // namespace NKikimr::NTxProxyUT
-

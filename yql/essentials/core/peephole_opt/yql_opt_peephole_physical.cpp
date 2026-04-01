@@ -3198,8 +3198,33 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
+        return ctx.Builder(node->Pos())
+            .Callable("Block")
+                .Lambda(0)
+                    .Param("parent")
+                    .Callable("Collect")
+                        .Apply(0, node->Tail())
+                            .With(0)
+                                .Callable("Iterator")
+                                    .Add(0, node->HeadPtr())
+                                    .Callable(1, "DependsOn")
+                                        .Arg(0, "parent")
+                                    .Seal()
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+    }
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -9361,9 +9386,6 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9393,6 +9415,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"LMap", &ExpandLMapOrShuffleByKeys},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

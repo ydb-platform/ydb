@@ -2216,7 +2216,7 @@ message TColumnarStatistics
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 
-    optional int64 read_size_estimation = 15;
+    optional int64 read_size_estimate = 15;
 }
 
 message TRspGetColumnarStatistics

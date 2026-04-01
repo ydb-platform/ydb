@@ -292,11 +292,42 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
         return proto;
     }
 
+    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
+        NDDisk::TDDiskConfig config;
+        bool initialized = false;
+
+        for (ui32 i = 0; i < TestProto.DDiskTestListSize(); ++i) {
+            const auto& record = TestProto.GetDDiskTestList(i);
+            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+                continue;
+            }
+
+            const auto& load = record.GetDDiskLoad();
+            const bool useSQPoll = load.GetSQPoll();
+            const bool useIOPoll = load.GetIOPoll();
+
+            if (!initialized) {
+                config.UseSQPoll = useSQPoll;
+                config.UseIOPoll = useIOPoll;
+                initialized = true;
+                continue;
+            }
+
+            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
+                ythrow TWithBackTrace<yexception>()
+                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
+            }
+        }
+
+        return config;
+    }
+
     void Init() override {
         try {
             TBase::DoBasicSetup();
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, DDiskSlotId);
@@ -311,7 +342,8 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {}, TBase::Counters),
+                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
+                    NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);
                 TBase::Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(ddiskId, std::move(ddiskSetup)));
             }

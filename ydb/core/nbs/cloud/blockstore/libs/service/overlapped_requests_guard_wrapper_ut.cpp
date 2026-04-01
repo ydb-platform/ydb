@@ -97,8 +97,7 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
 
         // Run first request
         auto request1 = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1},
-            range);
+            TRequestHeaders{.RequestId = 1, .Range = range});
         request1->Sglist = TGuardedSgList(env.Sglist10);
         auto future1 = env.Wrapper->ReadBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -107,8 +106,7 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
 
         // Run second request
         auto request2 = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 2},
-            range);
+            TRequestHeaders{.RequestId = 2, .Range = range});
         request2->Sglist = TGuardedSgList(env.Sglist10);
         auto future2 = env.Wrapper->ReadBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -149,8 +147,7 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
 
         // Run first write request
         auto request1 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1},
-            range);
+            TRequestHeaders{.RequestId = 1, .Range = range});
         request1->Sglist = TGuardedSgList(env.Sglist10);
         auto future1 = env.Wrapper->WriteBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -159,8 +156,7 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
 
         // Run read request #2
         auto request2 = std::make_shared<TReadBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 2},
-            range);
+            TRequestHeaders{.RequestId = 2, .Range = range});
         request2->Sglist = TGuardedSgList(env.Sglist10);
         auto future2 = env.Wrapper->ReadBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -201,9 +197,10 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         TTestEnvironment env;
 
         // Run write request [1, 10]
-        auto request1 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1},
-            TBlockRange64::WithLength(1, 10));
+        auto request1 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 1,
+                .Range = TBlockRange64::WithLength(1, 10)});
         request1->Sglist = TGuardedSgList(env.Sglist10);
         auto future1 = env.Wrapper->WriteBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -211,18 +208,20 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future1.HasValue());
 
         // Run zero request covered by first write request
-        auto request2 = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 2},
-            TBlockRange64::WithLength(1, 5));
+        auto request2 =
+            std::make_shared<TZeroBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 2,
+                .Range = TBlockRange64::WithLength(1, 5)});
         auto future2 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request2));
         UNIT_ASSERT_VALUES_EQUAL(false, future2.HasValue());
 
         // Run write request covered by first write request
-        auto request3 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 3},
-            TBlockRange64::WithLength(5, 5));
+        auto request3 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 3,
+                .Range = TBlockRange64::WithLength(5, 5)});
         request3->Sglist = TGuardedSgList(env.Sglist5);
 
         auto future3 = env.Wrapper->WriteBlocksLocal(
@@ -279,9 +278,10 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         TSgList sglist5{TBlockDataRef(data.data(), 5 * DefaultBlockSize)};
 
         // Run write request [1, 10]
-        auto request1 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1},
-            TBlockRange64::WithLength(1, 10));
+        auto request1 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 1,
+                .Range = TBlockRange64::WithLength(1, 10)});
         request1->Sglist = TGuardedSgList(env.Sglist10);
         auto future1 = env.Wrapper->WriteBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -289,18 +289,20 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future1.HasValue());
 
         // Run zero request overlapped with first write request
-        auto request2 = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 2},
-            TBlockRange64::WithLength(0, 5));
+        auto request2 =
+            std::make_shared<TZeroBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 2,
+                .Range = TBlockRange64::WithLength(0, 5)});
         auto future2 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request2));
         UNIT_ASSERT_VALUES_EQUAL(false, future2.HasValue());
 
         // Run write request overlapped with first write request
-        auto request3 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 3},
-            TBlockRange64::WithLength(9, 5));
+        auto request3 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 3,
+                .Range = TBlockRange64::WithLength(9, 5)});
         request3->Sglist = TGuardedSgList(env.Sglist5);
 
         auto future3 = env.Wrapper->WriteBlocksLocal(
@@ -358,9 +360,10 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         TTestEnvironment env;
 
         // Run write request [1, 10]
-        auto request1 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 1},
-            TBlockRange64::WithLength(1, 10));
+        auto request1 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 1,
+                .Range = TBlockRange64::WithLength(1, 10)});
         request1->Sglist = TGuardedSgList(env.Sglist10);
         auto future1 = env.Wrapper->WriteBlocksLocal(
             MakeIntrusive<TCallContext>(),
@@ -368,18 +371,20 @@ Y_UNIT_TEST_SUITE(TOverlappedRequestsGuardStorageWrapperTest)
         UNIT_ASSERT_VALUES_EQUAL(false, future1.HasValue());
 
         // Run zero request overlapped with first write request
-        auto request2 = std::make_shared<TZeroBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 2},
-            TBlockRange64::WithLength(9, 5));
+        auto request2 =
+            std::make_shared<TZeroBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 2,
+                .Range = TBlockRange64::WithLength(9, 5)});
         auto future2 = env.Wrapper->ZeroBlocksLocal(
             MakeIntrusive<TCallContext>(),
             std::move(request2));
         UNIT_ASSERT_VALUES_EQUAL(false, future2.HasValue());
 
         // Run write request overlapped with zero request
-        auto request3 = std::make_shared<TWriteBlocksLocalRequest>(
-            TRequestHeaders{.RequestId = 3},
-            TBlockRange64::WithLength(12, 5));
+        auto request3 =
+            std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+                .RequestId = 3,
+                .Range = TBlockRange64::WithLength(12, 5)});
         request3->Sglist = TGuardedSgList(env.Sglist5);
 
         auto future3 = env.Wrapper->WriteBlocksLocal(

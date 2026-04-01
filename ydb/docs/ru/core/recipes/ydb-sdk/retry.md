@@ -480,25 +480,29 @@
 
 - Java
 
-  В {{ ydb-short-name }} Java SDK механизм повторных запросов реализован в виде класс хелпера `SessionRetryContext`. Данный класс конструируется с помощью метода `SessionRetryContext.create` в который требуется передать реализацию интерфейса `SessionSupplier` - как правило это экземпляр класса `TableClient` или `QueryClient`.
+  {% list tabs %}
 
-  Дополнительно пользователь может задавать некоторые другие опции:
+  - Native SDK
 
-  * `maxRetries(int maxRetries)` - максимальное количество повторов операции, не включает в себя первое выполение. Значение по умолчанию `10`
-  * `retryNotFound(boolean retryNotFound)` - опция повтора операций, вернувших статус `NOT_FOUND`. По умолчанию включено.
-  * `idempotent(boolean idempotent)` - признак идемпотентности операций. Идемпотентные операции будут повторяться для более широкого списка ошибок. По умолчанию отключено.
+    В {{ ydb-short-name }} Java SDK механизм повторных запросов реализован в виде класс хелпера `SessionRetryContext`. Данный класс конструируется с помощью метода `SessionRetryContext.create` в который требуется передать реализацию интерфейса `SessionSupplier` - как правило это экземпляр класса `TableClient` или `QueryClient`.
 
-  Для запуска операций с ретраями класс `SessionRetryContext` предоставляет два метода:
+    Дополнительно пользователь может задавать некоторые другие опции:
 
-  * `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
-  * `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
+    * `maxRetries(int maxRetries)` - максимальное количество повторов операции, не включает в себя первое выполение. Значение по умолчанию `10`
+    * `retryNotFound(boolean retryNotFound)` - опция повтора операций, вернувших статус `NOT_FOUND`. По умолчанию включено.
+    * `idempotent(boolean idempotent)` - признак идемпотентности операций. Идемпотентные операции будут повторяться для более широкого списка ошибок. По умолчанию отключено.
 
-  При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполняться в следующих случаях:
+    Для запуска операций с ретраями класс `SessionRetryContext` предоставляет два метода:
 
-  * Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
-  * В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки
+    * `CompletableFuture<Status> supplyStatus` - выполнение операции, возвращающей статус. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Status>> fn`
+    * `CompletableFuture<Result<T>> supplyResult` - выполнение операции, возвращающей данные. В качестве аргумента принимает лямбду `Function<Session, CompletableFuture<Result<T>>> fn`
 
-    {% cut "Пример кода, использующего SessionRetryContext.supplyStatus:" %}
+    При использовании класса `SessionRetryContext` нужно учитывать, что повторное исполнение операции будет выполняться в следующих случаях:
+
+    * Лямбда вернула [retryable](../../reference/ydb-sdk/error_handling.md) код ошибки
+    * В рамках исполнения лямбды была вызвано `UnexpectedResultException` c [retryable](../../reference/ydb-sdk/error_handling.md) кодом ошибки
+
+      {% cut "Пример кода, использующего SessionRetryContext.supplyStatus:" %}
 
       ```java
       private void createTable(TableClient tableClient, String database, String tableName) {
@@ -517,9 +521,9 @@
       }
       ```
 
-    {% endcut %}
+      {% endcut %}
 
-    {% cut "Пример кода, использующего SessionRetryContext.supplyResult:" %}
+      {% cut "Пример кода, использующего SessionRetryContext.supplyResult:" %}
 
       ```java
       private void selectData(TableClient tableClient, String tableName) {
@@ -552,7 +556,13 @@
       }
       ```
 
-    {% endcut %}
+      {% endcut %}
+
+  - JDBC
+
+    Повторные попытки на уровне `SessionRetryContext` относятся к нативному API (`TableClient` / `QueryClient`). При работе через JDBC используйте ретраи на уровне приложения или подключайте нативный транспорт и клиент, как в разделе [Инициализация драйвера](./init.md).
+
+  {% endlist %}
 
 - Python
 

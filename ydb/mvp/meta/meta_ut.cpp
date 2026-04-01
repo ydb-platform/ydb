@@ -1,6 +1,10 @@
 #include <ydb/mvp/meta/mvp.h>
+#include <ydb/mvp/core/core_ydb.h>
+#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/support_links/source.h>
 #include <ydb/mvp/core/utils.h>
+
+#include <ydb/library/actors/http/http.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -122,7 +126,7 @@ meta:
         UNIT_ASSERT_EXCEPTION_CONTAINS(mvp.TryGetMetaOptionsFromConfig(appConfig), yexception, "source is required");
     }
 
-    Y_UNIT_TEST(UnsupportedSourceInConfigDoesNotThrow) {
+    Y_UNIT_TEST(UnsupportedSourceInConfigThrows) {
         const TString yaml = R"(
 generic:
   access_service_type: "yandex_v2"
@@ -136,25 +140,12 @@ meta:
         url: "https://example.test"
 )";
         const NMvp::NMeta::TMetaAppConfig appConfig = ParseConfig(yaml);
-
-        UNIT_ASSERT(appConfig.HasMeta());
-        UNIT_ASSERT(appConfig.GetMeta().HasSupportLinks());
-        UNIT_ASSERT_VALUES_EQUAL(appConfig.GetMeta().GetSupportLinks().GetCluster().size(), 1);
-
-        auto source = NMVP::MakeLinkSource(appConfig.GetMeta().GetSupportLinks().GetCluster(0));
-        THashMap<TString, TString> clusterColumns;
-        NHttp::TUrlParameters urlParameters("");
-        const NMVP::ILinkSource::TResolveInput input{
-            .Place = 0,
-            .ClusterColumns = clusterColumns,
-            .UrlParameters = urlParameters,
-            .Parent = NActors::TActorId{},
-            .HttpProxyId = NActors::TActorId{},
-        };
-        const NMVP::TResolveOutput output = source->Resolve(input);
-        UNIT_ASSERT_VALUES_EQUAL(output.Name, "unknown/source");
-        UNIT_ASSERT_VALUES_EQUAL(output.Errors.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(output.Errors.front().Source, "unknown/source");
-        UNIT_ASSERT(output.Errors.front().Message.Contains("unsupported support_links source"));
+        auto mvp = MakeTestMvp();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            mvp.TryGetMetaOptionsFromConfig(appConfig),
+            yexception,
+            "unsupported support_links source: unknown/source"
+        );
     }
+
 }

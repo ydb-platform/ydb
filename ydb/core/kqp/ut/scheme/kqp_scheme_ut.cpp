@@ -13819,7 +13819,7 @@ END DO)",
         TestTruncateTable(tableName, useQueryClient, createSecondaryIndex);
     }
 
-    Y_UNIT_TEST_TWIN(AlterTableCompact, UseQueryService) {
+    Y_UNIT_TEST_TWIN(AlterTableCompactSql, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);
         TKikimrRunner kikimr(featureFlags);
@@ -13860,7 +13860,64 @@ END DO)",
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
-        // TODO: check operation status
+        NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+        auto compactOps = opClient.List<NYdb::NTable::TCompactionOperation>().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(compactOps.GetStatus(), EStatus::SUCCESS, compactOps.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(compactOps.GetList().size(), 1);
+
+        auto compactOp = compactOps.GetList()[0];
+        UNIT_ASSERT_VALUES_EQUAL_C(compactOp.Status().GetStatus(), EStatus::SUCCESS, compactOp.Status().GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableCompactPublicApi) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().ExtractValueSync().GetSession();
+
+        TExplicitPartitions partitions;
+        partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint64(250).EndTuple().Build());
+        partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint64(500).EndTuple().Build());
+        partitions.AppendSplitPoints(TValueBuilder().BeginTuple().AddElement().OptionalUint64(750).EndTuple().Build());
+
+        auto builder = TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .AddNullableColumn("Value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("Key")
+            .SetPartitionAtKeys(partitions);
+
+        auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+        if (!result.IsSuccess()) {
+            ythrow yexception() << "Unexpected status create table: " << result.GetStatus() << ": " << result.GetIssues().ToString();
+        }
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem().BeginStruct().AddMember("Key").Uint64(100).AddMember("Value").String("value_1").EndStruct();
+        rows.AddListItem().BeginStruct().AddMember("Key").Uint64(400).AddMember("Value").String("value_2").EndStruct();
+        rows.AddListItem().BeginStruct().AddMember("Key").Uint64(700).AddMember("Value").String("value_3").EndStruct();
+        rows.AddListItem().BeginStruct().AddMember("Key").Uint64(1000).AddMember("Value").String("value_4").EndStruct();
+        rows.EndList();
+
+        result = db.BulkUpsert("/Root/TestTable", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto settings = NYdb::NTable::TAlterTableSettings().Compact(TCompact());
+        auto opId = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync().Id();
+
+        bool ready = false;
+        TMaybe<NYdb::NTable::TCompactionOperation> op;
+        while (!ready) {
+            Sleep(TDuration::MilliSeconds(100));
+            NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+            op = opClient.Get<NYdb::NTable::TCompactionOperation>(opId).GetValueSync();
+            ready = op->Ready();
+        }
+        if (!op->Status().IsSuccess()) {
+            ythrow yexception() << "Unexpected status of compaction operation: " << op->Status().GetStatus() << ": " << op->Status().GetIssues().ToString();
+        }
     }
 }
 

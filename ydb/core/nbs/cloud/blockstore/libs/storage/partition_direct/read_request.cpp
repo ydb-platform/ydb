@@ -47,7 +47,7 @@ TReadRequestExecutor::~TReadRequestExecutor()
             NKikimrServices::NBS_PARTITION,
             "TReadRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Range.Print().c_str());
+            Request->Headers.Range.Print().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -108,6 +108,13 @@ void TReadRequestExecutor::OnReadResponse(
         Reply(response.Error);
         return;
     }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        TryNumber,
+        FormatError(response.Error).c_str());
 
     ++TryNumber;
     Run();

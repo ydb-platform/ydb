@@ -53,7 +53,9 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
 
     if (CurrentStateFunc() == &TThis::StateWork) {
         if (Context->SaslMechanism == "PLAIN") {
-            StartPlainAuth(ctx);
+            if (!StartPlainAuth(ctx)) {
+                return;
+            }
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
         } else {
@@ -85,10 +87,8 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
  }
 
-void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
-        return;
-    }
+bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
+    return TryParseAuthDataTo(ClientAuthData, ctx);
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
@@ -289,7 +289,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
 
     TVector<TString> tokens = StringSplitter(AuthRequest).Split('\0');
     if (tokens.size() != 3) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), "", ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN request: expected 3 tokens, got " << tokens.size(), "", ctx);
         return false;
     }
 
@@ -338,7 +338,9 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
 }
 
 void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
-    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(ClientCert));
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = TStringBuilder() << Address}));
     Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 

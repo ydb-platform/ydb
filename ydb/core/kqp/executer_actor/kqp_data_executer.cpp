@@ -1,8 +1,6 @@
-#include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_locks_helper.h"
+
 #include "kqp_planner.h"
-#include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -33,8 +31,7 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -79,7 +76,7 @@ public:
         , QueryServiceConfig(queryServiceConfig)
         , Generation(generation)
     {
-        TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
+        TasksGraph->GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
         YQL_ENSURE(Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_UNDEFINED);
@@ -131,12 +128,12 @@ public:
         size_t sourceScanPartitionsCount = 0;
         bool unknownAffectedShardCount = false;
 
-        for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
+        for (auto& [_, stageInfo] : TasksGraph->GetStagesInfo()) {
             const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
             const bool isComputeTask = !stageInfo.Meta.IsSysView() && stageInfo.Meta.ShardOperations.empty()
                 || (stage.SinksSize() + stage.OutputTransformsSize() > 0 && (
-                    !(TasksGraph.GetMeta().AllowOlapDataQuery || TasksGraph.GetMeta().StreamResult)
+                    !(TasksGraph->GetMeta().AllowOlapDataQuery || TasksGraph->GetMeta().StreamResult)
                     || !stageInfo.Meta.IsOlap()
                     || !stageInfo.Meta.HasReads())
                 );
@@ -477,7 +474,7 @@ private:
         YQL_ENSURE(ev->Get()->Description.Status == Ydb::StatusIds::SUCCESS, "failed to get secrets snapshot with issues: " << ev->Get()->Description.Issues.ToOneLineString());
 
         for (size_t i = 0; i < SecretNames.size(); ++i) {
-            TasksGraph.GetMeta().SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
+            TasksGraph->GetMeta().SecureParams.emplace(SecretNames[i], ev->Get()->Description.SecretValues[i]);
         }
 
         SecretSnapshotRequired = false;
@@ -551,7 +548,7 @@ private:
     }
 
     bool HasDmlOperationOnOlap(NKqpProto::TKqpPhyTx_EType queryType, const NKqpProto::TKqpPhyStage& stage) {
-        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !TasksGraph.GetMeta().AllowOlapDataQuery) {
+        if (queryType == NKqpProto::TKqpPhyTx::TYPE_DATA && !TasksGraph->GetMeta().AllowOlapDataQuery) {
             return true;
         }
 
@@ -585,7 +582,7 @@ private:
             const auto& tx = Request.Transactions[txIdx];
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 const auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                auto& stageInfo = TasksGraph->GetStageInfo(TStageId(txIdx, stageIdx));
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::ETableKind::KindAsyncIndexTable) {
                     TMaybe<TString> error;
@@ -626,12 +623,11 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
+            sourceScanPartitionsCount = TasksGraph->BuildAllTasks({}, ResourcesSnapshot, Stats.get());
         }
 
-        TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Data, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
-            ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
+        if (auto validateIssue = TasksGraph->ValidateTasks()) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, *validateIssue);
             return;
         }
 
@@ -641,8 +637,8 @@ private:
 
         TVector<ui64> computeTasks;
 
-        for (const auto& task : TasksGraph.GetTasks()) {
-            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        for (const auto& task : TasksGraph->GetTasks()) {
+            const auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
             if (stageInfo.Meta.IsSysView() || !task.Meta.ShardId) {
                 computeTasks.emplace_back(task.Id);
             }
@@ -680,14 +676,14 @@ private:
 
         // Single-shard datashard transactions are always immediate
         ImmediateTx = (TxManager->GetTopicOperations().GetSize() + sourceScanPartitionsCount) <= 1
-                    && !TasksGraph.GetMeta().UnknownAffectedShardCount
+                    && !TasksGraph->GetMeta().UnknownAffectedShardCount
                     && !HasOlapTable;
 
         switch (Request.IsolationLevel) {
             // OnlineRO with AllowInconsistentReads = true
             case NKqpProto::ISOLATION_LEVEL_READ_UNCOMMITTED:
                 YQL_ENSURE(ReadOnlyTx);
-                TasksGraph.GetMeta().AllowInconsistentReads = true;
+                TasksGraph->GetMeta().AllowInconsistentReads = true;
                 ImmediateTx = true;
                 break;
 
@@ -703,7 +699,7 @@ private:
 
         ComputeTasks = std::move(computeTasks);
 
-        TasksGraph.GetMeta().UseFollowers = GetUseFollowers();
+        TasksGraph->GetMeta().UseFollowers = GetUseFollowers();
 
         // TODO: use coroutines here.
         if (Request.SaveQueryPhysicalGraph) {
@@ -721,7 +717,7 @@ private:
             YQL_ENSURE(preparedQuery);
             NKikimrKqp::TQueryPhysicalGraph physicalGraph;
             *physicalGraph.MutablePreparedQuery() = *preparedQuery;
-            TasksGraph.PersistTasksGraphInfo(physicalGraph);
+            TasksGraph->PersistTasksGraphInfo(physicalGraph);
             Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
         }
 
@@ -738,8 +734,8 @@ private:
     }
 
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
-        if (TasksGraph.GetMeta().StreamResult || TasksGraph.GetMeta().AllowOlapDataQuery) {
-            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+        if (TasksGraph->GetMeta().StreamResult || TasksGraph->GetMeta().AllowOlapDataQuery) {
+            for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {
                     HasOlapTable = true;
                     ResourceSnapshotRequired = true;
@@ -754,7 +750,7 @@ private:
         }
 
         if (IsEnabledReadsMerge()) {
-            for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+            for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
                 const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     HasDatashardSourceScan = true;
@@ -768,7 +764,7 @@ private:
             if (HasDatashardSourceScan) {
                 TSet<ui64> shardIds;
 
-                for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
+                for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
                     YQL_ENSURE(stageId == stageInfo.Id);
                     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
                     if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
@@ -881,15 +877,16 @@ private:
 
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, ComputeTasks.size());
 
-        TasksGraph.GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !TasksGraph.GetMeta().UnknownAffectedShardCount && !HasExternalSources;
-        TasksGraph.GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
+        TasksGraph->GetMeta().SinglePartitionOptAllowed = !HasOlapTable && !TasksGraph->GetMeta().UnknownAffectedShardCount && !HasExternalSources;
+        TasksGraph->GetMeta().MayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
 
         bool isSubmitSuccessful = BuildPlannerAndSubmitTasks();
-        if (!isSubmitSuccessful)
+        if (!isSubmitSuccessful) {
             return;
+        }
 
         KQP_STLOG_I(KQPDATA, "Total tasks",
-            (total_tasks, TasksGraph.GetTasks().size()),
+            (total_tasks, TasksGraph->GetTasks().size()),
             (read_only, ReadOnlyTx),
             (immediate, ImmediateTx),
             (pending_compute_tasks, Planner ? Planner->GetPendingComputeTasks().size() : 0),
@@ -902,7 +899,7 @@ private:
         Y_ENSURE(Planner);
         THashMap<TActorId, THashSet<ui64>> updates;
         for (ui64 taskId : ComputeTasks) {
-            const auto& task = TasksGraph.GetTask(taskId);
+            const auto& task = TasksGraph->GetTask(taskId);
             if (task.ComputeActorId)
                 Planner->CollectTaskChannelsUpdates(task, updates);
         }
@@ -945,7 +942,7 @@ private:
         if (CheckpointCoordinatorId) {
             Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
             CheckpointCoordinatorId = TActorId{};
-            const auto context = TasksGraph.GetMeta().UserRequestContext;
+            const auto context = TasksGraph->GetMeta().UserRequestContext;
             if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && context && !context->StreamingQueryPath.empty()) {
                 auto counters = Counters->Counters->GetKqpCounters();
                 counters = counters->GetSubgroup("host", "");
@@ -984,7 +981,7 @@ private:
 
         YQL_ENSURE(Planner);
 
-        for (const auto& task : TasksGraph.GetTasks()) {
+        for (const auto& task : TasksGraph->GetTasks()) {
             // TODO: is Meta.NodeId assigned real NodeId where task is executed?
             if (task.Meta.NodeId == nodeId && !task.Meta.Completed) {
                 if (task.ComputeActorId) {
@@ -1045,7 +1042,7 @@ private:
     }
 
     void StartCheckpointCoordinator() {
-        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        const auto context = TasksGraph->GetMeta().UserRequestContext;
         bool disableCheckpoints = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetDisableCheckpoints();
 
         bool enableCheckpointCoordinator = AppData()->FeatureFlags.GetEnableStreamingQueries()
@@ -1143,8 +1140,8 @@ private:
                 ui64 deferredVictimSpanId = info.HasDeferredVictimQuerySpanId()
                     ? info.GetDeferredVictimQuerySpanId() : 0;
                 for (auto& lock : info.GetLocks()) {
-                    const auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    const auto& task = TasksGraph->GetTask(taskId);
+                    const auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
 
                     TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
@@ -1177,8 +1174,8 @@ private:
                 YQL_ENSURE(data.GetData().UnpackTo(&info), "Failed to unpack settings");
                 NDataIntegrity::LogIntegrityTrails("OutputActorResult", Request.UserTraceId, TxId, info, TlsActivationContext->AsActorContext());
                 for (auto& lock : info.GetLocks()) {
-                    const auto& task = TasksGraph.GetTask(taskId);
-                    const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+                    const auto& task = TasksGraph->GetTask(taskId);
+                    const auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
                     YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
                     IKqpTransactionManager::TActionFlags flags = IKqpTransactionManager::EAction::WRITE;
@@ -1254,5 +1251,4 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
         channelService);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

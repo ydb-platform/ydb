@@ -11,8 +11,7 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -84,15 +83,16 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
-        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
+        TasksGraph.reset(new TKqpTasksGraphOld({}, Request.Transactions, Request.TxAlloc, {}, Counters, {}, nullptr));
+
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
             Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
 
         ResponseEv->Orbit = std::move(Request.Orbit);
-        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
+        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, TasksGraph.get(),
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -141,7 +141,7 @@ public:
             (transactions_count, Request.Transactions.size()),
             (trace_id, TraceId()));
 
-        TasksGraph.BuildLiteralTasks();
+        TasksGraph->BuildLiteralTasks();
 
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions.at(txIdx);
@@ -158,7 +158,7 @@ public:
         RunnerContext->PatternCache = GetKqpResourceManager()->GetPatternCache();
         TDqTaskRunnerSettings settings = CreateTaskRunnerSettings(Request.StatsMode);
 
-        for (auto& task : TasksGraph.GetTasks()) {
+        for (auto& task : TasksGraph->GetTasks()) {
             RunTask(Request.TxAlloc->Alloc, task, *RunnerContext, settings);
 
             if (TerminateIfTimeout()) {
@@ -171,7 +171,7 @@ public:
     }
 
     void RunTask(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc, TTask& task, const TDqTaskRunnerContext& context, const TDqTaskRunnerSettings& settings) {
-        auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         NDqProto::TDqTask protoTask;
@@ -193,7 +193,7 @@ public:
 
             protoOutput->MutableMap();
 
-            auto& resultChannel = TasksGraph.GetChannel(output.Channels[0]);
+            auto& resultChannel = TasksGraph->GetChannel(output.Channels[0]);
             auto* protoResultChannel = protoOutput->AddChannels();
 
             protoResultChannel->SetId(resultChannel.Id);
@@ -227,7 +227,7 @@ public:
                 }
                 for (ui64 outputChannelId : taskOutput.Channels) {
                     auto outputChannel = taskRunner->GetOutputChannel(outputChannelId);
-                    auto& channelDesc = TasksGraph.GetChannel(outputChannelId);
+                    auto& channelDesc = TasksGraph->GetChannel(outputChannelId);
                     NYql::NDq::TDqSerializedBatch outputData;
                     while (outputChannel->Pop(outputData)) {
                         ResponseEv->TakeResult(channelDesc.DstInputIndex, std::move(outputData));
@@ -393,7 +393,7 @@ private:
     TMaybe<TInstant> CancelAt;
     TActorId OwnerActor;
     ui64 TxId = 0;
-    TKqpTasksGraph TasksGraph;
+    std::unique_ptr<TKqpTasksGraph> TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
 
@@ -416,5 +416,4 @@ std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     return executer->ExecuteLiteral();
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

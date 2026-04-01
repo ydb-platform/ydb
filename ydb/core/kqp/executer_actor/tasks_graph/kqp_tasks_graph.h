@@ -1,7 +1,6 @@
 #pragma once
 
 #include "shard_key_ranges.h"
-#include <regex>
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -9,6 +8,8 @@
 
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
 #include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+
+#include <regex>
 
 namespace NKikimrKqp {
     class TKqpFullTextSourceSettings;
@@ -20,6 +21,7 @@ namespace NKikimr::NKqp {
 class TPartitionPruner;
 struct TPartitionPrunerConfig;
 struct TQueryExecutionStats;
+struct TPhysicalShardReadSettings;
 
 struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
@@ -177,7 +179,6 @@ struct TStageInfoMeta {
 // things which are common for all tasks in the graph.
 struct TGraphMeta {
     bool IsScan = false; // indicates that ScanExecuter is in use.
-    bool IsRestored = false;
     IKqpGateway::TKqpSnapshot Snapshot;
     TMaybe<ui64> LockTxId;
     ui64 TxId = 0;
@@ -391,11 +392,13 @@ public:
         TActorId bufferActorId,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken
     );
+    virtual ~TKqpTasksGraph() = default;
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
     void BuildLiteralTasks();
+    std::optional<NYql::TIssue> ValidateTasks() const;
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
@@ -408,18 +411,36 @@ public:
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
+protected:
+    struct TStageScheduleInfo {
+        double StageCost = 0.0;
+        ui32 TaskCount = 0;
+    };
+
+    // TODO: here only for tasks graph restoration.
+    static std::map<ui32, TStageScheduleInfo> ScheduleByCost(const IKqpGateway::TPhysicalTxData& tx, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
+    static void FillReadTaskFromSource(TTask& task, const TString& sourceName, const TString& structuredToken, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui64 nodeOffset);
+
+    static TVector<TTaskMeta::TColumn> BuildKqpColumns(const NKqpProto::TKqpReadRangesSource& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo);
+    static TVector<TTaskMeta::TColumn> BuildKqpColumns(const NKqpProto::TKqpPhyTableOperation& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo);
+    static void MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMaybe<TShardKeyRanges>& keyReadRanges,
+        const TPhysicalShardReadSettings& readSettings, const TVector<TTaskMeta::TColumn>& columns,
+        const NKqpProto::TKqpPhyTableOperation& op, bool isPersistentScan);
+    static void PrepareScanMetaForUsage(TTaskMeta& meta, const TVector<NScheme::TTypeInfo>& keyTypes);
+
+    void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
+
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
+
+    TString ReplaceStructuredTokenReferences(const TString& token) const;
+
 private:
+    virtual size_t DoBuildAllTasks(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats) = 0;
+
     void FillKqpTasksGraphStages();
 
-    void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount); // returns true if affected shards count is unknown
-    void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
-    void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
-    void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
-    void BuildSysViewTasksFromSource(TStageInfo& stageInfo);
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
-    void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
-    TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode, TQueryExecutionStats* stats);
+    void RestoreReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
 
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);
     bool IsCrossShardChannel(const NYql::NDq::TChannel& channel) const;
@@ -451,9 +472,6 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
-
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
@@ -463,15 +481,16 @@ private:
     void FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, const TKqpTasksGraph::TTaskType& task) const;
 
     std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder() const;
-    TString ReplaceStructuredTokenReferences(const TString& token) const;
 
-private:
+protected:
     const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
+    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+
+private:
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig AggregationSettings;
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
-    const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 } // namespace NKikimr::NKqp

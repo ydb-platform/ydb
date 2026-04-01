@@ -2,21 +2,22 @@ LIBRARY()
 
 SRCS(
     kqp_data_executer.cpp
-    kqp_scan_executer.cpp
-    kqp_scheme_executer.cpp
     kqp_executer_impl.cpp
     kqp_executer_stats.cpp
     kqp_literal_executer.cpp
     kqp_locks_helper.cpp
-    kqp_partition_helper.cpp
-    kqp_planner.cpp
+    kqp_partitioned_executer.cpp
     kqp_planner_strategy.cpp
+    kqp_planner.cpp
+    kqp_scan_executer.cpp
+    kqp_scheme_executer.cpp
     kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
-    kqp_tasks_graph.cpp
-    kqp_tasks_validate.cpp
-    kqp_partitioned_executer.cpp
-    shard_key_ranges.cpp
+
+    tasks_graph/kqp_partition_helper.cpp
+    tasks_graph/kqp_tasks_graph.cpp
+    tasks_graph/kqp_tasks_graph_old.cpp
+    tasks_graph/shard_key_ranges.cpp
 )
 
 PEERDIR(

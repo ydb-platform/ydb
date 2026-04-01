@@ -1,14 +1,13 @@
 #pragma once
 
-#include "kqp_tasks_graph.h"
+#include "tasks_graph/kqp_tasks_graph.h"
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_counters.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
 NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);
@@ -505,8 +504,7 @@ public:
     ui64 ExecutersCpuTimeUs = 0;
 };
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp
 
 template<>
 inline void Out<NKikimr::NKqp::TProgressStatEntry>(IOutputStream& o, const NKikimr::NKqp::TProgressStatEntry& x) {

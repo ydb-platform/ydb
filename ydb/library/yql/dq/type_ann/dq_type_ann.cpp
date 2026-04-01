@@ -1273,6 +1273,71 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     return IGraphTransformer::TStatus(TStatus::Ok);
 }
 
+TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // ScalarHashJoinCore expects 7 args: leftFlow, rightFlow, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames
+    if (!EnsureArgsCount(*node, 7, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner" && joinType != "Left" && joinType != "LeftSemi" && joinType != "LeftOnly") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
+                    << ", supported: Inner, Left, LeftSemi, LeftOnly"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (!EnsureWideFlowType(leftInputNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureWideFlowType(rightInputNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto leftMultiType = leftInputNode.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+    const auto rightMultiType = rightInputNode.GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>();
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    for (auto itemType : leftMultiType->GetItems()) {
+        resultItems.push_back(itemType);
+    }
+
+    if (joinType != "LeftSemi" && joinType != "LeftOnly") {
+        for (auto itemType : rightMultiType->GetItems()) {
+            if (joinType == "Left") {
+                if (itemType->GetKind() != ETypeAnnotationKind::Optional) {
+                    itemType = ctx.MakeType<TOptionalExprType>(itemType);
+                }
+            }
+            resultItems.push_back(itemType);
+        }
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TFlowExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
+}
+
 TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (!EnsureArgsCount(*input, 6, ctx)) {
         return TStatus::Error;
@@ -1444,6 +1509,11 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             // Handle BlockHashJoinCore callable (from peephole)
             if (input->Content() == "BlockHashJoinCore") {
                 return AnnotateDqBlockHashJoinCore(input, ctx);
+            }
+
+            // Handle ScalarHashJoinCore callable (from peephole for scalar inputs)
+            if (input->Content() == "ScalarHashJoinCore") {
+                return AnnotateDqScalarHashJoinCore(input, ctx);
             }
 
             if (TDqStage::Match(input.Get())) {

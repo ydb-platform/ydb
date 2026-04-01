@@ -21,6 +21,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
@@ -2466,25 +2467,28 @@ public:
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize);
-                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive);
-                                if (localBloomNgramFilterDesc.FilterSizeBytes && localBloomNgramFilterDesc.RecordsCount) {
-                                    // DEPRECATED: old syntax — pass original values directly
-                                    double fpp = ComputeFalsePositiveProbabilityFromDeprecatedParams(
-                                        *localBloomNgramFilterDesc.FilterSizeBytes, *localBloomNgramFilterDesc.RecordsCount);
-                                    proto->set_filter_size_bytes(*localBloomNgramFilterDesc.FilterSizeBytes);
-                                    proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                                    proto->set_records_count(*localBloomNgramFilterDesc.RecordsCount);
-                                    proto->set_false_positive_probability(fpp);
+                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize.value_or(
+                                    NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive.value_or(
+                                    NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
+                                double fpp;
+                                if (localBloomNgramFilterDesc.FalsePositiveProbability) {
+                                    fpp = *localBloomNgramFilterDesc.FalsePositiveProbability;
+                                } else if (localBloomNgramFilterDesc.FilterSizeBytes || localBloomNgramFilterDesc.RecordsCount) {
+                                    const ui32 filterSizeBytes = localBloomNgramFilterDesc.FilterSizeBytes.value_or(
+                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(0.1));
+                                    const ui32 recordsCount = localBloomNgramFilterDesc.RecordsCount.value_or(
+                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::DeprecatedRecordsCount);
+                                    fpp = ComputeFalsePositiveProbabilityFromDeprecatedParams(filterSizeBytes, recordsCount);
                                 } else {
-                                    double fpp = localBloomNgramFilterDesc.FalsePositiveProbability;
-                                    proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                                    proto->set_filter_size_bytes(
-                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                                    proto->set_records_count(
-                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                                    proto->set_false_positive_probability(fpp);
+                                    fpp = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
                                 }
+                                proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                                proto->set_filter_size_bytes(
+                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                                proto->set_records_count(
+                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                                proto->set_false_positive_probability(fpp);
                             }
                         } else {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() << "Unknown index setting: " << name));

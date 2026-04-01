@@ -37,7 +37,7 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
 }
 
 bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
-    for (auto&& rename : schemaUpdate.GetRenameIndexes()) {
+    for (auto&& rename : schemaUpdate.GetMoveIndex()) {
         const auto* sourceIndex = GetByName(rename.GetSourceName());
         if (!sourceIndex) {
             errors.AddError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Unknown index for rename: " << rename.GetSourceName());

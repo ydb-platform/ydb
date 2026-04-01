@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     case_helper.cpp
     index_defaults.cpp
-    index_json_keys.cpp
+    index_parameters.cpp
 )
 
 PEERDIR(

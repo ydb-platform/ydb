@@ -610,8 +610,8 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
 
                 ngram->SetColumnId(columnIdIt->second);
-                ngram->SetNGrammSize(settings.NgramSize);
-                ngram->SetCaseSensitive(settings.CaseSensitive);
+                ngram->SetNGrammSize(settings.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                ngram->SetCaseSensitive(settings.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
                 double fpp;
                 if (settings.FalsePositiveProbability) {
                     fpp = *settings.FalsePositiveProbability;

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace NKikimr::NOlap::NIndexes::NJsonKeys {
+namespace NKikimr::NOlap::NIndexes::NIndexParameters {
 
 // Common
 inline constexpr const char* ColumnName = "column_name";
@@ -13,4 +13,4 @@ inline constexpr const char* CaseSensitive = "case_sensitive";
 inline constexpr const char* NGrammSize = "ngramm_size";
 inline constexpr const char* HashesCount = "hashes_count";
 
-}   // namespace NKikimr::NOlap::NIndexes::NJsonKeys
+}   // namespace NKikimr::NOlap::NIndexes::NIndexParameters

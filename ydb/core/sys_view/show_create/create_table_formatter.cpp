@@ -3,7 +3,7 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
@@ -25,7 +25,7 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
-namespace NJsonKeys = NKikimr::NOlap::NIndexes::NJsonKeys;
+namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -721,16 +721,16 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     if (isLocalBloomFilter) {
         const auto& settings = index.local_bloom_filter_index();
         Stream << " WITH ("
-               << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
+               << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
                << ")";
     }
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
         Stream << " WITH ("
-               << NJsonKeys::NGrammSize << "=" << settings.ngram_size()
-               << ", " << NJsonKeys::FalsePositiveProbability << "=" << settings.false_positive_probability()
-               << ", " << NJsonKeys::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false")
+               << NIndexParameters::NGrammSize << "=" << settings.ngram_size()
+               << ", " << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
+               << ", " << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false")
                << ")";
     }
 }
@@ -1749,7 +1749,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
             }
             const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
-            json[NJsonKeys::ColumnName] = columnName;
+            json[NIndexParameters::ColumnName] = columnName;
 
             if (bloomFilter.HasDataExtractor()) {
                 const auto& dataExtractor = bloomFilter.GetDataExtractor();
@@ -1772,7 +1772,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             }
 
             if (bloomFilter.HasFalsePositiveProbability()) {
-                json[NJsonKeys::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
+                json[NIndexParameters::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
@@ -1786,7 +1786,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (maxIndex.HasColumnId()) {
                 const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json[NJsonKeys::ColumnName] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in MAX index description");
@@ -1818,7 +1818,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomNGrammFilter.HasColumnId()) {
                 const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
-                json[NJsonKeys::ColumnName] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
@@ -1845,15 +1845,15 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             }
 
             if (bloomNGrammFilter.HasNGrammSize()) {
-                json[NJsonKeys::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
+                json[NIndexParameters::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
             }
 
             if (bloomNGrammFilter.HasFalsePositiveProbability()) {
-                json[NJsonKeys::FalsePositiveProbability] = bloomNGrammFilter.GetFalsePositiveProbability();
+                json[NIndexParameters::FalsePositiveProbability] = bloomNGrammFilter.GetFalsePositiveProbability();
             }
 
             if (bloomNGrammFilter.HasCaseSensitive()) {
-                json[NJsonKeys::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
+                json[NIndexParameters::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

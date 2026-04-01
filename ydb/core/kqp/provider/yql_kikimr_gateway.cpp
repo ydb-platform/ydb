@@ -506,7 +506,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
             return;
         }
 
-        desc.NgramSize = uiValue;
+        desc.NgramSize.emplace(uiValue);
         return;
     }
 
@@ -528,35 +528,14 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
             return;
         }
 
-        desc.CaseSensitive = boolValue;
+        desc.CaseSensitive.emplace(boolValue);
         return;
     }
 
-    // DEPRECATED: old syntax
-    if (name == "hashes_count") {
-        error = "hashes_count is not supported for bloom ngram filter and is calculated automatically";
-        return;
-    }
-
-    if (name == "filter_size_bytes") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
-            return;
-        }
-
-        desc.FilterSizeBytes = uiValue;
-        return;
-    }
-
-    if (name == "records_count") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid records_count value: " << value;
-            return;
-        }
-
-        desc.RecordsCount = uiValue;
+    // DEPRECATED: old syntax is intentionally unavailable in SQL ADD INDEX path.
+    if (name == "hashes_count" || name == "filter_size_bytes" || name == "records_count") {
+        error = TStringBuilder()
+            << name << " is supported only via ALTER OBJECT ... ACTION=UPSERT_INDEX compatibility path";
         return;
     }
 

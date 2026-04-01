@@ -2,13 +2,11 @@
 #include "constructor.h"
 #include "meta.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
-
-using namespace NJsonKeys;
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
@@ -42,25 +40,25 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         }
     }
 
-    if (!jsonInfo[NJsonKeys::FalsePositiveProbability].IsDouble()) {
+    if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
     }
-    FalsePositiveProbability = jsonInfo[NJsonKeys::FalsePositiveProbability].GetDouble();
+    FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
 
-    if (!jsonInfo[NJsonKeys::NGrammSize].IsUInteger()) {
+    if (!jsonInfo[NIndexParameters::NGrammSize].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }
-    NGrammSize = jsonInfo[NJsonKeys::NGrammSize].GetUInteger();
+    NGrammSize = jsonInfo[NIndexParameters::NGrammSize].GetUInteger();
 
-    if (jsonInfo.Has(NJsonKeys::HashesCount)) {
+    if (jsonInfo.Has(NIndexParameters::HashesCount)) {
         return TConclusionStatus::Fail("hashes_count is not supported for bloom ngramm filter and is calculated automatically");
     }
 
-    if (jsonInfo.Has(NJsonKeys::CaseSensitive)) {
-        if (!jsonInfo[NJsonKeys::CaseSensitive].IsBoolean()) {
+    if (jsonInfo.Has(NIndexParameters::CaseSensitive)) {
+        if (!jsonInfo[NIndexParameters::CaseSensitive].IsBoolean()) {
             return TConclusionStatus::Fail("case_sensitive have to be in bloom filter features as boolean field");
         }
-        CaseSensitive = jsonInfo[NJsonKeys::CaseSensitive].GetBoolean();
+        CaseSensitive = jsonInfo[NIndexParameters::CaseSensitive].GetBoolean();
     }
 
     return ValidateValues();

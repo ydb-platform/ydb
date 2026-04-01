@@ -1,7 +1,7 @@
 #include "constructor.h"
 #include "meta.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_json_keys.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -36,11 +36,11 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const N
         }
     }
 
-    if (!jsonInfo[NJsonKeys::FalsePositiveProbability].IsDouble()) {
+    if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
         return TConclusionStatus::Fail("false_positive_probability have to be in bloom filter features as double field");
     }
 
-    FalsePositiveProbability = jsonInfo[NJsonKeys::FalsePositiveProbability].GetDouble();
+    FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
     return ValidateValues();
 }
 

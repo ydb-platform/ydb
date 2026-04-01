@@ -7,16 +7,16 @@
 
 namespace NKikimr::NSchemeShard {
 
-    class TOlapIndexRename {
+    class TOlapIndexMove {
     private:
         YDB_READONLY_DEF(TString, SourceName);
         YDB_READONLY_DEF(TString, DestinationName);
         YDB_READONLY(bool, ReplaceDestination, false);
 
     public:
-        TOlapIndexRename() = default;
+        TOlapIndexMove() = default;
 
-        TOlapIndexRename(TString sourceName, TString destinationName, const bool replaceDestination)
+        TOlapIndexMove(TString sourceName, TString destinationName, const bool replaceDestination)
             : SourceName(std::move(sourceName))
             , DestinationName(std::move(destinationName))
             , ReplaceDestination(replaceDestination)
@@ -47,7 +47,7 @@ namespace NKikimr::NSchemeShard {
     private:
         YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
         YDB_READONLY_DEF(TSet<TString>, DropIndexes);
-        YDB_READONLY_DEF(TVector<TOlapIndexRename>, RenameIndexes);
+        YDB_READONLY_DEF(TVector<TOlapIndexMove>, MoveIndex);
     public:
         bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };

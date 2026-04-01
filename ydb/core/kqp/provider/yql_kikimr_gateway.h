@@ -73,11 +73,11 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 3;
-        double FalsePositiveProbability = 0.1;
-        bool CaseSensitive = true;
-        // DEPRECATED: old syntax
+        std::optional<ui32> NgramSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
         std::optional<ui32> HashesCount;
+        // DEPRECATED: old syntax
         std::optional<ui32> FilterSizeBytes;
         std::optional<ui32> RecordsCount;
     };

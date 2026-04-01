@@ -1197,7 +1197,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
-        auto* renameIndex = alterColumnTable->MutableAlterSchema()->AddRenameIndexes();
+        auto* renameIndex = alterColumnTable->MutableAlterSchema()->AddMoveIndex();
         renameIndex->SetSourceName(rename.source_name());
         renameIndex->SetDestinationName(rename.destination_name());
         renameIndex->SetReplaceDestination(rename.replace_destination());

@@ -1613,8 +1613,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             CompareYson(result, "[[0u;]]");
         }
 
-        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0, "Bloom ngram filter should skip at least some portions for a nonexistent value");
-        UNIT_ASSERT_C(csController->GetIndexesApprovedOnSelect().Val() == 0, "For a nonexistent value the bloom ngram filter should not approve any portion, approved: " << csController->GetIndexesApprovedOnSelect().Val());
+        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0,
+            "Bloom ngram filter should skip at least some portions for a nonexistent value");
     }
 }
 

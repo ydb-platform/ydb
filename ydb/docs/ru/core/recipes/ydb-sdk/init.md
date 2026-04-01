@@ -107,27 +107,37 @@
 
 - Java
 
-  ```java
-  public void work() {
-      GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-              .build());
-      // Работа с transport
-      doWork(transport);
-      transport.close();
-  }
-  ```
+  {% list tabs %}
 
-- JDBC Driver
+  - Native SDK
 
-  ```java
-  public void work() {
-      // JDBC Driver должен быть доступен в classpath для автоматической загрузки
-      Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
-      // Работа с connection
-      doWork(connection);
-      connection.close();
-  }
-  ```
+    ```java
+    public void work() {
+        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+                .build()) {
+            // Работа с transport
+            doWork(transport);
+        }
+    }
+    ```
+
+  - JDBC
+
+    ```java
+    public void work() throws SQLException {
+        // Драйвер tech.ydb.jdbc.YdbDriver должен быть в classpath для автозагрузки через DriverManager
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+            // Работа с connection
+            doWork(connection);
+        }
+    }
+    ```
+
+    Для Spring Boot укажите URL и класс драйвера в `application.properties` или `application.yml` (`spring.datasource.url`, `spring.datasource.driver-class-name`).
+
+    Spring Boot, а также ORM и прочие инструменты вокруг JDBC (Hibernate, JOOQ, MyBatis и т.п.) инициализируют транспорт к {{ ydb-short-name }} так же, как обычный JDBC: достаточно подключить зависимость с {{ ydb-short-name }} JDBC-драйвером и задать URL подключения — отдельная настройка нативного `GrpcTransport` не требуется.
+
+  {% endlist %}
 
 - Python
 

@@ -84,22 +84,39 @@
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = new EnvironAuthProvider();
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = new EnvironAuthProvider();
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
+
+  - JDBC
+
+    ```java
+    public void work() throws SQLException {
+        // Подключение без явных учётных данных: драйвер читает переменные окружения YDB_* в порядке,
+        // описанном в разделе [Аутентификация](../../reference/ydb-sdk/auth.md#env)
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", new Properties())) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения; учётные данные из переменных окружения подхватываются драйвером так же, как в примере выше (например, через `spring.datasource.url`).
+
+  {% endlist %}
 
 - Node.js
 

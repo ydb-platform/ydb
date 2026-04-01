@@ -104,42 +104,47 @@
 
 - Java
 
-  ```java
-  public void work(String accessToken) {
-      AuthProvider authProvider = new TokenAuthProvider(accessToken);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localohost:2135/local")
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String accessToken) {
+        AuthProvider authProvider = new TokenAuthProvider(accessToken);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localhost:2135/local")
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      // Подключение с указанием значения токена аутентификации
-      Properties props1 = new Properties();
-      props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        // Подключение с указанием значения токена аутентификации
+        Properties props1 = new Properties();
+        props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
+            doWork(connection);
+        }
 
-      // Подключение с чтением токена аутентификации из указанного файла
-      Properties props2 = new Properties();
-      props2.setProperty("tokenFile", "~/.ydb_token");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Подключение с чтением токена аутентификации из указанного файла
+        Properties props2 = new Properties();
+        props2.setProperty("tokenFile", "~/.ydb_token");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC используйте ту же JDBC-строку подключения и те же параметры аутентификации, что и выше (например, `spring.datasource.url` с query-параметрами или `spring.datasource.*` для токена и файла токена).
+
+  {% endlist %}
 
 - Node.js
 

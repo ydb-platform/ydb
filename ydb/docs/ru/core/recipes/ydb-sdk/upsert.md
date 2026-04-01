@@ -134,6 +134,53 @@
 
   {% endlist %}
 
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Используйте `SessionRetryContext` и `TableSession.executeDataQuery` с параметром `$seriesData` типа `List<Struct<...>>`. Значения для `AS_TABLE($seriesData)` собираются так же, как структуры строк в примере [пакетной вставки](./bulk-upsert.md).
+
+    ```java
+    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+
+    String yql = """
+            PRAGMA TablePathPrefix("/local");
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
+            UPSERT INTO series
+            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+            """;
+
+    Params params = Params.of("$seriesData", seriesDataListValue);
+
+    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
+            .join();
+    ```
+
+  - JDBC
+
+    ```java
+    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+         PreparedStatement ps = conn.prepareStatement(
+                 """
+                 REPLACE INTO series (series_id, title, series_info, comment)
+                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                 """
+         )) {
+        // Параметр $seriesData задаётся в соответствии с типом запроса (см. документацию JDBC-драйвера)
+    }
+    ```
+
+    В Spring Boot, Hibernate, JOOQ и других фреймворках поверх JDBC драйвер также стремится оптимизировать **крупные** последовательности вставок и изменений: при необходимости **UPSERT**, `INSERT`, `UPDATE`, `DELETE` автоматически **группируются в пакеты** на стороне драйвера (в том числе при больших батчах из ORM).
+
+  {% endlist %}
+
 - Python
 
   {% list tabs %}

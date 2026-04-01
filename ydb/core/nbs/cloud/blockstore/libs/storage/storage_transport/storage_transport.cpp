@@ -18,6 +18,8 @@ NActors::TActorId THostConnection::GetServiceId() const
                 DDiskId.NodeId,
                 DDiskId.PDiskId,
                 DDiskId.DDiskSlotId);
+        default:
+            Y_ABORT_UNLESS(false, "Unknown connection type");
     }
 }
 

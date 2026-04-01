@@ -154,8 +154,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
     }
     RegisterEvents.clear();
 
-    auto wakeupInterval = std::max<ui64>(AppData(ctx)->PQConfig.GetBalancerWakeupIntervalSec(), 1);
-    ctx.Schedule(TDuration::Seconds(wakeupInterval), new TEvents::TEvWakeup());
+    ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetBalancerInitialWakeupIntervalSec()), new TEvents::TEvWakeup());
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {

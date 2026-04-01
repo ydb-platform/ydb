@@ -301,6 +301,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
 
         ui64 txId = 100;
 
+        appData.PQConfig.SetBalancerInitialWakeupIntervalSec(30);
+
         // disable batching
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -530,6 +532,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
         auto& appData = runtime.GetAppData();
 
         ui64 txId = 100;
+
+        appData.PQConfig.SetBalancerInitialWakeupIntervalSec(30);
 
         // disable batching
         appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);

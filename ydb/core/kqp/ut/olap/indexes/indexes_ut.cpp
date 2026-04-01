@@ -569,6 +569,37 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
 
+        {
+            const TString createWithDeprecatedInNewSyntax = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/olapTableNgramDeprecatedInNewSyntax`
+                (
+                    timestamp Timestamp NOT NULL,
+                    resource_id Utf8,
+                    uid Utf8 NOT NULL,
+                    PRIMARY KEY (timestamp, uid),
+                    INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                        ON (resource_id)
+                        WITH (ngram_size = 3, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
+                )
+                PARTITION BY HASH(timestamp, uid)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
+
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(createWithDeprecatedInNewSyntax, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetIssues().ToString().Contains("filter_size_bytes"),
+                    "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteSchemeQuery(createWithDeprecatedInNewSyntax).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetIssues().ToString().Contains("filter_size_bytes"),
+                    "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
+            }
+        }
+
         ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/olapTableNgramDeprecatedSyntax`
@@ -576,13 +607,15 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 timestamp Timestamp NOT NULL,
                 resource_id Utf8,
                 uid Utf8 NOT NULL,
-                PRIMARY KEY (timestamp, uid),
-                INDEX idx_ngram LOCAL USING bloom_ngram_filter
-                    ON (resource_id)
-                    WITH (ngram_size = 3, filter_size_bytes = 512, records_count = 1024, case_sensitive = true)
+                PRIMARY KEY (timestamp, uid)
             )
             PARTITION BY HASH(timestamp, uid)
             WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapTableNgramDeprecatedSyntax` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "filter_size_bytes" : 512, "records_count" : 1024, "case_sensitive" : true}`)
+        )");
 
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableNgramDeprecatedSyntax` DROP INDEX idx_ngram;");
     }

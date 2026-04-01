@@ -12,5 +12,7 @@ inline constexpr const char* CaseSensitive = "case_sensitive";
 // Bloom ngram filter
 inline constexpr const char* NGrammSize = "ngramm_size";
 inline constexpr const char* HashesCount = "hashes_count";
+inline constexpr const char* FilterSizeBytes = "filter_size_bytes";
+inline constexpr const char* RecordsCount = "records_count";
 
 }   // namespace NKikimr::NOlap::NIndexes::NIndexParameters

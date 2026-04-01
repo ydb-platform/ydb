@@ -26,9 +26,11 @@ TConclusionStatus TIndexConstructor::ValidateValues() const {
     if (auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize); conclusion.IsFail()) {
         return conclusion;
     }
+
     if (!ColumnName) {
         return TConclusionStatus::Fail("empty column name");
     }
+
     return TConclusionStatus::Success();
 }
 
@@ -40,18 +42,62 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         }
     }
 
-    if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
-        return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
+    const bool hasFpp = jsonInfo.Has(NIndexParameters::FalsePositiveProbability);
+    if (hasFpp) {
+        if (!jsonInfo[NIndexParameters::FalsePositiveProbability].IsDouble()) {
+            return TConclusionStatus::Fail("false_positive_probability must be in bloom ngramm filter features as double field");
+        }
+
+        FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
     }
-    FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
 
     if (!jsonInfo[NIndexParameters::NGrammSize].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }
     NGrammSize = jsonInfo[NIndexParameters::NGrammSize].GetUInteger();
 
+    std::optional<ui32> hashesCount;
     if (jsonInfo.Has(NIndexParameters::HashesCount)) {
-        return TConclusionStatus::Fail("hashes_count is not supported for bloom ngramm filter and is calculated automatically");
+        if (!jsonInfo[NIndexParameters::HashesCount].IsUInteger()) {
+            return TConclusionStatus::Fail("hashes_count have to be in bloom filter features as uint field");
+        }
+
+        hashesCount = jsonInfo[NIndexParameters::HashesCount].GetUInteger();
+        if (!TConstants::CheckHashesCount(*hashesCount)) {
+            return TConclusionStatus::Fail("hashes_count have to be in bloom ngramm filter in interval " + TConstants::GetHashesCountIntervalString());
+        }
+    }
+
+    std::optional<ui32> filterSizeBytes;
+    if (jsonInfo.Has(NIndexParameters::FilterSizeBytes)) {
+        if (!jsonInfo[NIndexParameters::FilterSizeBytes].IsUInteger()) {
+            return TConclusionStatus::Fail("filter_size_bytes have to be in bloom filter features as uint field");
+        }
+
+        filterSizeBytes = jsonInfo[NIndexParameters::FilterSizeBytes].GetUInteger();
+        if (!TConstants::CheckFilterSizeBytes(*filterSizeBytes)) {
+            return TConclusionStatus::Fail("filter_size_bytes have to be in bloom ngramm filter in interval " + TConstants::GetFilterSizeBytesIntervalString());
+        }
+    }
+
+    std::optional<ui32> recordsCount;
+    if (jsonInfo.Has(NIndexParameters::RecordsCount)) {
+        if (!jsonInfo[NIndexParameters::RecordsCount].IsUInteger()) {
+            return TConclusionStatus::Fail("records_count have to be in bloom filter features as uint field");
+        }
+
+        recordsCount = jsonInfo[NIndexParameters::RecordsCount].GetUInteger();
+        if (!TConstants::CheckRecordsCount(*recordsCount)) {
+            return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
+        }
+    }
+
+    if (!hasFpp && (hashesCount || filterSizeBytes || recordsCount)) {
+        const double k = static_cast<double>(hashesCount.value_or(NDefaults::HashesCount));
+        const double m = static_cast<double>(filterSizeBytes.value_or(TConstants::CalcDeprecatedFilterSizeBytes(NDefaults::FalsePositiveProbability)) * 8);
+        const double n = static_cast<double>(recordsCount.value_or(TConstants::DeprecatedRecordsCount));
+        const double oneMinus = 1.0 - std::exp(-(k * n) / m);
+        FalsePositiveProbability = std::pow(std::clamp(oneMinus, 0.0, 1.0), k);
     }
 
     if (jsonInfo.Has(NIndexParameters::CaseSensitive)) {

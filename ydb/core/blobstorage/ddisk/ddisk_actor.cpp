@@ -33,6 +33,27 @@ namespace {
 
     TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
+            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd)
+        : TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat), std::move(ddiskConfig), counters, true)
+    {
+        PDiskParams = pDiskParams;
+        DiskFormat = std::move(diskFormat);
+        DiskFd = std::move(diskFd);
+        InitPersistentBuffer();
+        for (auto idx : initPersistentBufferChunks) {
+            PersistentBufferSpaceAllocator.AddNewChunk(idx);
+            auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
+            it->second.resize(SectorInChunk);
+            if (!inserted) {
+                STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+            }
+            ++*Counters.Chunks.ChunksOwned;
+        }
+    }
+
+    TDDiskActor::TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor)
         : BaseInfo(std::move(baseInfo))
         , Config(std::move(ddiskConfig))
@@ -157,8 +178,7 @@ namespace {
         if (IsPersistentBufferActor) {
             Become(&TThis::StateFuncPersistentBuffer);
             WritePersistentBuffersActor = RegisterWithSameMailbox(new TWritePersistentBuffersRequestActor(SelfId()));
-            auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-            Send(ddiskActorId, new TEvPrivate::TEvInitPersistentBufferChunkMap());
+            StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
             InitPDiskInterface();
@@ -208,7 +228,6 @@ namespace {
             hFunc(TEvRead, handleQuery)
             hFunc(TEvSyncWithPersistentBuffer, handleQuery)
             hFunc(TEvSyncWithDDisk, handleQuery)
-            hFunc(TEvPrivate::TEvInitPersistentBufferChunkMap, Handle)
             hFunc(TEvPrivate::TEvIssuePersistentBufferChunkAllocation, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
@@ -223,6 +242,7 @@ namespace {
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
+            hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
             hFunc(NPDisk::TEvChunkReadRawResult, Handle)
 #if defined(__linux__)
@@ -239,30 +259,24 @@ namespace {
     }
 
     STFUNC(TDDiskActor::StateFuncPersistentBuffer) {
-        auto handleQuery = [&](auto& ev) {
-            if (CanHandleQuery(ev)) {
-                Handle(ev);
-            }
-        };
-
         STRICT_STFUNC_BODY(
-            hFunc(TEvConnect, handleQuery)
-            hFunc(TEvDisconnect, handleQuery)
-            hFunc(TEvWritePersistentBuffer, handleQuery)
-            hFunc(TEvReadPersistentBuffer, handleQuery)
-            hFunc(TEvErasePersistentBuffer, handleQuery)
-            hFunc(TEvBatchErasePersistentBuffer, handleQuery)
-            hFunc(TEvListPersistentBuffer, handleQuery)
-            hFunc(TEvPrivate::TEvInitPersistentBufferChunkMapResult, Handle)
+            hFunc(TEvConnect, Handle)
+            hFunc(TEvDisconnect, Handle)
+            hFunc(TEvWritePersistentBuffer, Handle)
+            hFunc(TEvReadPersistentBuffer, Handle)
+            hFunc(TEvErasePersistentBuffer, Handle)
+            hFunc(TEvBatchErasePersistentBuffer, Handle)
+            hFunc(TEvListPersistentBuffer, Handle)
 
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)
 
             hFunc(TEvents::TEvUndelivered, Handle)
 
-            hFunc(TEvReadPersistentBufferResult, Handle)
-
             hFunc(TEvPrivate::TEvHandlePersistentBufferEventForChunk, Handle)
+
+            hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
+            hFunc(NPDisk::TEvChunkReadRawResult, Handle)
 #if defined(__linux__)
             hFunc(TEvPrivate::TEvShortIO, HandleShortIO)
 #endif
@@ -284,7 +298,12 @@ namespace {
     }
 
     void TDDiskActor::PassAway() {
-        Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
+        if (IsPersistentBufferActor) {
+            Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
+        } else {
+            auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+            Send(pbServiceId, new NActors::TEvents::TEvPoison());
+        }
 #if defined(__linux__)
         if (UringRouter) {
             for (int i = 0; i < 1000 && UringRouter->GetInflight() > 0; ++i) {
@@ -302,7 +321,7 @@ namespace {
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
         return new TDDiskActor(std::move(baseInfo), std::move(info), std::move(pbFormat),
-            std::move(ddiskConfig), std::move(counters), false);
+            std::move(ddiskConfig), std::move(counters));
     }
 
 } // NKikimr::NDDisk

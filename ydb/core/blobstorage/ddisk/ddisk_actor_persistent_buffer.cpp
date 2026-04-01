@@ -65,6 +65,7 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferReady) {
             return;
         }
+
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.InitChunks) {
             IssuePersistentBufferChunkAllocation();
             return;
@@ -199,6 +200,7 @@ namespace NKikimr::NDDisk {
                 PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = XXH3_64bits((char*)&sector, SectorSize);
             }
         }
+
         StartRestorePersistentBuffer();
         if (PersistentBufferRestoreChunksInflight == 0) {
             for (auto& [_, pb] : PersistentBuffers) {

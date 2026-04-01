@@ -211,30 +211,10 @@ namespace NKikimr::NDDisk {
                 EvWritePersistentBufferPart,
                 EvReadPersistentBufferPart,
                 EvInternalSyncWriteResult,
-                EvInitPersistentBufferChunkMap,
-                EvInitPersistentBufferChunkMapResult,
                 EvIssuePersistentBufferChunkAllocation,
             };
 
             struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
-            };
-
-            struct TEvInitPersistentBufferChunkMap : TEventLocal<TEvInitPersistentBufferChunkMap, EvInitPersistentBufferChunkMap> {
-            };
-
-            struct TEvInitPersistentBufferChunkMapResult : TEventLocal<TEvInitPersistentBufferChunkMapResult, EvInitPersistentBufferChunkMapResult> {
-                TIntrusivePtr<TPDiskParams> PDiskParams;
-                NPDisk::TDiskFormatPtr DiskFormat;
-                TFileHandle DiskFd;
-                std::vector<ui32> ChunkIdxs;
-
-                TEvInitPersistentBufferChunkMapResult(TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat,
-                    TFileHandle&& diskFd, const std::vector<ui32>& chunkIdxs)
-                    : PDiskParams(pDiskParams)
-                    , DiskFormat(std::move(diskFormat))
-                    , DiskFd(std::move(diskFd))
-                    , ChunkIdxs(chunkIdxs)
-                {}
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -323,7 +303,7 @@ namespace NKikimr::NDDisk {
             WakeupUpdateFreeSpaceInfo = 2,
         };
 
-        const bool IsPersistentBufferActor;
+        const bool IsPersistentBufferActor = false;
 
     public:
         NKikimrServices::TActivity::EType ActorActivityType() {
@@ -335,7 +315,13 @@ namespace NKikimr::NDDisk {
 
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
+
+        TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
+            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd);
+
         ~TDDiskActor();
         void Bootstrap();
         STFUNC(StateFuncDDisk);
@@ -444,7 +430,7 @@ namespace NKikimr::NDDisk {
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
             ui64 *startingPointLsnPtr, std::function<void()> callback);
 
-        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot(const std::vector<ui64>& newChunkIdxs = {});
+        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
             TChunkIdx chunkIdx);
@@ -678,7 +664,7 @@ namespace NKikimr::NDDisk {
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
-        std::vector<ui32> InitPersistentBufferChunks;
+        std::vector<ui32> PersistentBufferChunks;
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
 
@@ -712,8 +698,6 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
-        void Handle(TEvPrivate::TEvInitPersistentBufferChunkMap::TPtr ev);
-        void Handle(TEvPrivate::TEvInitPersistentBufferChunkMapResult::TPtr ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
 
         void Handle(TEvWritePersistentBuffers::TPtr ev);

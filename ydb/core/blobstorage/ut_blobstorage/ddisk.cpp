@@ -178,7 +178,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);
             }
-
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 
@@ -552,7 +551,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
         auto groups = f.AllocateDDiskBlockGroup();
         auto& node = groups.begin()->GetNodes(0);
         f.ChangeTestingNode(node);
-        return;
         for (ui32 i = 1; i < 2000; ++i) {
             f.WritePB(0, 128); // Max size records to overfill in memory buffer
         }

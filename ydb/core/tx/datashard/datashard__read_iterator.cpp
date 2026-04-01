@@ -1972,6 +1972,21 @@ public:
         state.LockId = request->Record.GetLockTxId();
         state.LockNodeId = request->Record.GetLockNodeId();
 
+        if (Self->Pipeline.HasDrop()) {
+            // We already checked this in the event handler, but the drop could have been added while
+            // this request was in the low priority queue.
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::INTERNAL_ERROR,
+                TStringBuilder() << "Request " << record.GetReadId()
+                    << " rejected, because pipeline is in process of drop"
+                    << " (shard# " << Self->TabletID()
+                    << " node# " << Self->SelfId().NodeId()
+                    << " state# " << DatashardStateName(Self->State) << ")"
+            );
+            return;
+        }
+
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
             // owner is schemeshard, read user table

@@ -59,6 +59,7 @@ namespace NKikimr::TEvPersQueue {
         EvBalancingSubscribe,
         EvBalancingUnsubscribe,
         EvBalancingSubscribeNotify,
+        EvPartitionUpdateReadMetrics,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -67,10 +68,20 @@ namespace NKikimr::TEvPersQueue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
+<<<<<<< HEAD
+=======
+    static_assert(EvInternalEvents == InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL));
+    static_assert(EvPartitionUpdateReadMetrics < EvResponse, "EvPartitionUpdateReadMetrics must be in the first PQ global event block");
+>>>>>>> 21e58b696a2 (YDBREQUESTS-7455 Fix incompatibility)
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {
         TEvRequest() {}
+    };
+
+    struct TEvPartitionUpdateReadMetrics : public TEventPB<TEvPartitionUpdateReadMetrics,
+            NKikimrClient::TPersQueuePartitionUpdateReadMetrics, EvPartitionUpdateReadMetrics> {
+        TEvPartitionUpdateReadMetrics() = default;
     };
 
     struct TEvResponse: public TEventPB<TEvResponse,

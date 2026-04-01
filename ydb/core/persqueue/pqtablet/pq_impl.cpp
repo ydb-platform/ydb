@@ -1605,6 +1605,37 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 }
 
+void TPersQueue::Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx)
+{
+    if (!ConfigInited || TabletState == NKikimrPQ::EDropped) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    if (!record.HasUpdateReadMetrics() || !record.HasPartition()) {
+        return;
+    }
+
+    const auto& metrics = record.GetUpdateReadMetrics();
+    if (!metrics.HasClientId()) {
+        return;
+    }
+
+    auto it = Partitions.find(TPartitionId(record.GetPartition()));
+    if (it == Partitions.end() || !it->second.InitDone) {
+        return;
+    }
+
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (metrics.HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(metrics.GetInFlightLimitReachedDurationMs());
+    }
+
+    ctx.Send(it->second.Actor,
+        new TEvPQ::TEvUpdateReadMetrics(metrics.GetClientId(), inFlightLimitReachedDuration),
+        0, 0, NWilson::TTraceId(ev->TraceId));
+}
+
 
 void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     for (auto partition : ev->Get()->Record.GetPartitions()) {
@@ -2411,23 +2442,6 @@ void TPersQueue::HandleDeregisterMessageGroupRequest(ui64 responseCookie, NWilso
     ctx.Send(partActor, new TEvPQ::TEvDeregisterMessageGroup(responseCookie, std::move(body.GetRef())), 0, 0, std::move(traceId));
 }
 
-void TPersQueue::HandleUpdateReadMetricsRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
-    const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
-{
-    AFL_VERIFY_DEBUG(req.HasCmdUpdateReadMetrics());
-
-    if (!req.GetCmdUpdateReadMetrics().HasClientId()) {
-        return ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "source_id is required");
-    }
-
-    auto clientId = req.GetCmdUpdateReadMetrics().GetClientId();
-    TDuration inFlightLimitReachedDuration = TDuration::Zero();
-    if (req.GetCmdUpdateReadMetrics().HasInFlightLimitReachedDurationMs()) {
-        inFlightLimitReachedDuration = TDuration::MilliSeconds(req.GetCmdUpdateReadMetrics().GetInFlightLimitReachedDurationMs());
-    }
-    ctx.Send(partActor, new TEvPQ::TEvUpdateReadMetrics(clientId, inFlightLimitReachedDuration), 0, 0, std::move(traceId));
-}
-
 void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, NWilson::TTraceId traceId, const TActorId& partActor,
     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
@@ -2743,8 +2757,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         + req.HasCmdDeregisterMessageGroup()
         + req.HasCmdSplitMessageGroup()
         + req.HasCmdPublishRead()
-        + req.HasCmdForgetRead()
-        + req.HasCmdUpdateReadMetrics();
+        + req.HasCmdForgetRead();
 
     if (count != 1) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2788,14 +2801,11 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         HandleDeregisterMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else if (req.HasCmdSplitMessageGroup()) {
         HandleSplitMessageGroupRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
-    } else if (req.HasCmdUpdateReadMetrics()) {
-        HandleUpdateReadMetricsRequest(responseCookie, NWilson::TTraceId(ev->TraceId), partActor, req, ctx);
     } else {
         PQ_LOG_ERROR_AND_DIE("unknown or empty command");
         return;
     }
 }
-
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
@@ -5489,6 +5499,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvRequest, Handle);
+        HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);

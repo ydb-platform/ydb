@@ -89,7 +89,7 @@
       )
 
       func main() {
-        db, err := sql.Open("ydb", "grpcs://localohost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
         if err != nil {
           panic(err)
         }

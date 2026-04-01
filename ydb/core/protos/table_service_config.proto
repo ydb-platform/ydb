@@ -492,4 +492,11 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+<<<<<<< HEAD
+=======
+
+    optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
+>>>>>>> 3af2cec0720 ([Optimizers] Disable blocks on column limit. (#36835))
 };

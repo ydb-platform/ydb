@@ -31,7 +31,7 @@ class TpccSuiteBase(LoadSuiteBase):
 
         # cleanup previous executions
         if not remote_execution.is_localhost(YdbCluster.get_client_host()):
-            remote_execution.execute_command(YdbCluster.get_client_host(), 'sudo pkill -9 -x ydb')
+            remote_execution.execute_command(YdbCluster.get_client_host(), 'sudo pkill -9 -x ydb', raise_on_error=False)
 
         wh_count = 0
         try:

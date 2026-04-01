@@ -2900,6 +2900,7 @@ struct TBuiltinFuncInfo {
     std::string_view Kind;
     TBuiltinFactoryCallback Callback;
     NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
 };
 
 struct TSimplePgFuncInfo {
@@ -4106,6 +4107,9 @@ TNodeResult BuildBuiltinFunc(
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+            if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
+                return std::unexpected(ESQLError::Basic);
+            }
 
             switch (ctx.GetColumnReferenceState()) {
                 case EColumnRefState::MatchRecognizeMeasures:
@@ -4136,6 +4140,9 @@ TNodeResult BuildBuiltinFunc(
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
+                return std::unexpected(ESQLError::Basic);
+            }
+            if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             TNodeResult result = (*aggrCallback).second.Callback(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
@@ -4170,6 +4177,9 @@ TNodeResult BuildBuiltinFunc(
         if (builtinCallback != builtinFuncs.end()) {
             const auto& funcInfo = builtinCallback->second;
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, funcInfo.CanonicalSqlName, funcInfo.MinLangVer)) {
+                return std::unexpected(ESQLError::Basic);
+            }
+            if (!ctx.EnsureFeatureNotExpired(pos, funcInfo.CanonicalSqlName, funcInfo.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             return Wrap(funcInfo.Callback(pos, args));
@@ -4430,10 +4440,11 @@ TNodeResult BuildBuiltinFunc(
                              TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {}));
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer)>& callback) {
+void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback) {
     struct TFuncInfo {
         TString Kind;
         NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+        NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
     };
 
     const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>();
@@ -4445,13 +4456,13 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     std::map<TString, TFuncInfo> map;
     for (const auto& [key, info] : builtinFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer});
+            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
         }
     }
 
     for (const auto& [key, info] : aggrFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer});
+            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
         }
     }
 
@@ -4464,7 +4475,7 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     }
 
     for (const auto& [name, info] : map) {
-        callback(name, info.Kind, info.MinLangVer);
+        callback(name, info.Kind, info.MinLangVer, info.MaxLangVer);
     }
 }
 

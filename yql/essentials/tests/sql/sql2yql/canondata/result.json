@@ -3247,6 +3247,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-common_type_for_resource_and_data_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-compare_null_null]": [
+        {
+            "checksum": "6baf6f97e91ce2c40afd635787fbaed6",
+            "size": 3442,
+            "uri": "https://{canondata_backend}/1942173/ae3ee3a18d8c3a9e567a47fe8cbdd31d51dc35a6/resource.tar.gz#test_sql2yql.test_expr-compare_null_null_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-concat_many]": [
         {
             "checksum": "d9e698da5ede3c7520b7f0d122ab8566",
@@ -6404,6 +6411,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_pg-distinct_all_projection_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-distinct_from_pg_null]": [
+        {
+            "checksum": "468cacd298e9d0a1eec55deabfe5f74a",
+            "size": 4861,
+            "uri": "https://{canondata_backend}/1942415/bdd898db4adebe584ddbb12a760f51966397fcc1/resource.tar.gz#test_sql2yql.test_pg-distinct_from_pg_null_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-distinct_on_multi_projection]": [
         {
             "checksum": "bd0d27f4408aad130027ee213f4058a1",
@@ -6472,6 +6486,13 @@
             "checksum": "64f6157eb962f3223cfade6185f2a4e7",
             "size": 2079,
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_pg-interval_to_pg_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[pg-is_null_pg_null]": [
+        {
+            "checksum": "4cdff6c8838a271041fead5e0d63971b",
+            "size": 3093,
+            "uri": "https://{canondata_backend}/1942415/bdd898db4adebe584ddbb12a760f51966397fcc1/resource.tar.gz#test_sql2yql.test_pg-is_null_pg_null_/sql.yql"
         }
     ],
     "test_sql2yql.test[pg-is_predicate]": [
@@ -13211,6 +13232,11 @@
             "uri": "file://test_sql_format.test_expr-common_type_for_resource_and_data_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-compare_null_null]": [
+        {
+            "uri": "file://test_sql_format.test_expr-compare_null_null_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-concat_many]": [
         {
             "uri": "file://test_sql_format.test_expr-concat_many_/formatted.sql"
@@ -15381,6 +15407,11 @@
             "uri": "file://test_sql_format.test_pg-dates_to_pg_/formatted.sql"
         }
     ],
+    "test_sql_format.test[pg-distinct_from_pg_null]": [
+        {
+            "uri": "file://test_sql_format.test_pg-distinct_from_pg_null_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[pg-in_sorted]": [
         {
             "uri": "file://test_sql_format.test_pg-in_sorted_/formatted.sql"
@@ -15389,6 +15420,11 @@
     "test_sql_format.test[pg-interval_to_pg]": [
         {
             "uri": "file://test_sql_format.test_pg-interval_to_pg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-is_null_pg_null]": [
+        {
+            "uri": "file://test_sql_format.test_pg-is_null_pg_null_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-numbers_to_pg]": [

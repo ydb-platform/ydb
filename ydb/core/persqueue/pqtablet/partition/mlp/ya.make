@@ -13,9 +13,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/persqueue/events
     ydb/core/persqueue/common
     ydb/core/persqueue/common/proxy
+    ydb/core/persqueue/events
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/public/write_meta
     ydb/core/util

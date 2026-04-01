@@ -44,7 +44,7 @@ NKikimr::NUdf::TUnboxedValue FromPySequence(
 NKikimr::NUdf::TUnboxedValue FromPySequence(
     const TPyCastContext::TPtr& castCtx,
     const NKikimr::NUdf::TType* itemType,
-    const NKikimr::NUdf::TDataTypeId keyType,
+    NKikimr::NUdf::TDataTypeId keyType,
     PyObject* sequence);
 
 } // namespace NPython

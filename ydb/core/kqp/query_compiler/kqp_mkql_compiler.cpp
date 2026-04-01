@@ -438,17 +438,17 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
             auto joinKindStr = joinKindNode->Content();
 
-            EJoinKind joinKind;
+            NMiniKQL::EJoinKind joinKind;
             if (joinKindStr == "Inner") {
-                joinKind = EJoinKind::Inner;
+                joinKind = NMiniKQL::EJoinKind::Inner;
             } else if (joinKindStr == "Left") {
-                joinKind = EJoinKind::Left;
+                joinKind = NMiniKQL::EJoinKind::Left;
             } else if (joinKindStr == "LeftSemi") {
-                joinKind = EJoinKind::LeftSemi;
+                joinKind = NMiniKQL::EJoinKind::LeftSemi;
             } else if (joinKindStr == "LeftOnly") {
-                joinKind = EJoinKind::LeftOnly;
+                joinKind = NMiniKQL::EJoinKind::LeftOnly;
             } else if (joinKindStr == "Cross") {
-                joinKind = EJoinKind::Cross;
+                joinKind = NMiniKQL::EJoinKind::Cross;
             } else {
                 YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
             }
@@ -479,7 +479,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
                     renames.emplace_back(index, EJoinSide::kLeft);
                 }
-                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
                     for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
                         renames.emplace_back(index, EJoinSide::kRight);       
                     }

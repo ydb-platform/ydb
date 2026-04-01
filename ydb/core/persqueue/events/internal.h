@@ -1,6 +1,6 @@
 #pragma once
 
-#include "global.h"
+#include "events.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
@@ -12,6 +12,8 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -19,8 +21,12 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
+#include <ydb/core/persqueue/events/internal/protos/events.pb.h>
+
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -104,7 +110,7 @@ namespace NPQ {
 
 struct TEvPQ {
     enum EEv {
-        EvWrite = TEvPersQueue::EvInternalEvents,
+        EvWrite = InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL),
         EvRead,
         EvDie,
         EvMonRequest,

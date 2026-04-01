@@ -91,7 +91,7 @@ const TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_
     return ast;
 }
 
-const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr ast) {
+const TJsonPathPtr PackBinaryJsonPath(const TAstNodePtr& ast) {
     TJsonPathBuilder builder;
     ast->Accept(builder);
     return builder.ShrinkAndGetResult();

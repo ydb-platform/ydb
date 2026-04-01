@@ -1,7 +1,6 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -25,20 +24,17 @@ public:
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
     NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
-    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

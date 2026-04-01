@@ -29,9 +29,6 @@ constexpr ui64 DefaultStripeSize = 512_KB;
 // Size of Region.
 constexpr ui64 RegionSize = 4_GB;
 
-// Blocks per Region.
-constexpr ui64 BlocksPerRegion = RegionSize / DefaultBlockSize;
-
 // Size of VChunk.
 constexpr ui64 VChunkSize = 128_MB;
 

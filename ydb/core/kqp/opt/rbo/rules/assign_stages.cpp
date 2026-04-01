@@ -21,15 +21,14 @@ void MaybeSetJoinAlgo(TPhysicalOpProps& props, const TRBOContext& rboCtx) {
     }
 
     auto joinMode = rboCtx.KqpCtx.Config->GetHashJoinMode();
-    EJoinAlgoType joinAlgo;
+    NKikimr::NKqp::EJoinAlgoType joinAlgo;
     switch (joinMode) {
-        // This is a little bit confusing, because it's not a hash join.
         case NYql::NDq::EHashJoinMode::Map: {
-            joinAlgo = EJoinAlgoType::MapJoin;
+            joinAlgo = NKikimr::NKqp::EJoinAlgoType::MapJoin;
             break;
         }
         default: {
-            joinAlgo = EJoinAlgoType::GraceJoin;
+            joinAlgo = NKikimr::NKqp::EJoinAlgoType::GraceJoin;
             break;
         }
     }

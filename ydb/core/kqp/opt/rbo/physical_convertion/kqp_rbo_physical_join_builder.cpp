@@ -480,12 +480,12 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 
     TExprNode::TPtr phyJoin;
     switch (joinAlgo) {
-        case EJoinAlgoType::MapJoin: {
+        case NKikimr::NKqp::EJoinAlgoType::MapJoin: {
             phyJoin = BuildMapJoin(joinType, leftInput, SqueezeJoinInputToDict(rightInput, rightInputColumns.size(), rightJoinKeyIdxs, !rightSideEmpty),
                                    leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames, leftKeyColumnNames, rightKeyColumnNames);
             break;
         }
-        case EJoinAlgoType::GraceJoin: {
+        case NKikimr::NKqp::EJoinAlgoType::GraceJoin: {
             phyJoin = BuildGraceJoin(joinType, leftInput, rightInput, leftColumnIdxs, rightColumnIdxs, leftRenames, rightRenames, leftKeyColumnNames,
                                      rightKeyColumnNames);
             break;

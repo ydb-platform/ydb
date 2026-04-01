@@ -4318,9 +4318,12 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 
 void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->Cookie;
-    LOG_D("Got quota." <<
-            " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition << ": Cookie: " << cookie
+    LOG_D("Got quota."
+         << " Topic: \"" << TopicName() << "\"."
+         << " Partition: " << Partition
+         << ": Cookie: " << cookie
+         << " AccountWaitTime: " << ev->Get()->AccountQuotaWaitTime
+         << " PartitionWaitTime: " << ev->Get()->PartitionQuotaWaitTime
     );
 
     // Search for proper request

@@ -402,6 +402,7 @@ void TPartitionActor::Start(
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
+        DiskId,
         BlockCount,
         BlockSize,
         std::move(directBlockGroups),
@@ -425,6 +426,7 @@ void TPartitionActor::Start(
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
+            fastPathService,
             fastPathService,
             options);
     }

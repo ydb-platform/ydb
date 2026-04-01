@@ -155,10 +155,18 @@ std::optional<TSchemeCompletionContext> DetectSchemeCompletion(int& argc, const 
         TStringBuf name(argv[i + 1]);
         for (const auto& mapping : SchemeCompleterNames) {
             if (mapping.Name == name) {
+                auto curIdx = FromString<int>(argv[i + 2]);
+                auto prefix = TStringBuf(argv[i + 3]);
+                auto suffix = TStringBuf(argv[i + 4]);
+
+                if (!prefix && !suffix && 0 <= curIdx && curIdx < i) {
+                    prefix = TStringBuf(argv[curIdx]);
+                }
+
                 TSchemeCompletionContext ctx;
                 ctx.Kind = mapping.Kind;
-                ctx.Prefix = TString(argv[i + 3]);
-                ctx.Suffix = TString(argv[i + 4]);
+                ctx.Prefix = TString(prefix);
+                ctx.Suffix = TString(suffix);
                 argc = i;
                 return ctx;
             }

@@ -78,8 +78,6 @@ namespace NKikimr::NDDisk {
         std::vector<std::pair<TString, TString>> CountersChain;
         ui64 DDiskInstanceGuid = RandomNumber<ui64>();
 
-        static constexpr ui32 BlockSize = 4096;
-
 #if defined(__linux__)
         std::unique_ptr<NPDisk::TUringRouter> UringRouter;
 #endif
@@ -492,9 +490,10 @@ namespace NKikimr::NDDisk {
 
             if constexpr (NPrivate::THasSelectorField<TRecord>::value) {
                 const TBlockSelector selector(record.GetSelector());
-                if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
+
+                if (!DiskFormat || selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
                     TStringStream ss;
-                    ss << "offset and size must be multiple of block size and size must be nonzero: ";
+                    ss << "offset and size must be multiple of sector size and size must be nonzero: ";
                     selector.Print(ss);
                     logError(ss.Str());
                     SendReply(ev, std::make_unique<typename TEvent::TResult>(

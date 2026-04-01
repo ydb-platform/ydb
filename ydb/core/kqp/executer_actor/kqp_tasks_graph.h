@@ -25,8 +25,8 @@ struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
     TQueryData::TPtr Params;
 
-    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TQueryData::TPtr params)
-        : Node(node)
+    TTransaction(NYql::NNodes::TKqpPhysicalTx node, TQueryData::TPtr params)
+        : Node(std::move(node))
         , Params(std::move(params)) {}
 };
 
@@ -75,7 +75,7 @@ struct TStageInfoMeta {
 
     TTableId TableId;
     TString TablePath;
-    ETableKind TableKind;
+    ETableKind TableKind{};
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
     std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
@@ -132,7 +132,7 @@ struct TStageInfoMeta {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
-        auto& txBody = Tx.Body;
+        const auto& txBody = Tx.Body;
         YQL_ENSURE(idx < txBody->StagesSize());
         return txBody->GetStages(idx);
     }
@@ -211,7 +211,7 @@ struct TGraphMeta {
     TShardToNodeMap ShardIdToNodeId;
     TMap<ui64 /* nodeId */, TVector<ui64 /* shardId */>> ShardsOnNode;
 
-    ui32 DqChannelVersion = 1u;
+    ui32 DqChannelVersion = 1U;
 
     const TIntrusivePtr<TProtoArenaHolder>& GetArenaIntrusivePtr() const {
         return Arena;
@@ -317,7 +317,7 @@ public:
     //   set inside ScanTasksFromSource only.
     // - NodeId is set if it's local node id, otherwise set ShardId
 
-    enum TTaskType : ui32 {
+    enum ETaskType : ui8 {
         Unknown = 0,
         Compute = 1,
         Scan = 2,
@@ -327,7 +327,7 @@ public:
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
     bool ScanTask = false;
     TActorId ExecuterId;
-    TTaskType Type = Unknown;
+    ETaskType Type = Unknown;
 
     TActorId ResultChannelActorId;
     bool Completed = false;
@@ -357,7 +357,7 @@ public:
 
     struct TReadInfo: public NYql::TSortingOperator<NYql::ERequestSorting::NONE> {
     public:
-        enum class EReadType {
+        enum class EReadType : ui8 {
             Rows,
             Blocks
         };
@@ -403,7 +403,7 @@ public:
 
     // TODO: public used by TKqpPlanner - why?
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
-        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
+        NKikimrConfig::TTableServiceConfig::EChannelTransportVersion channelTransportVersion, bool enableSpilling) const;
 
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
@@ -412,7 +412,7 @@ private:
     void FillKqpTasksGraphStages();
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
@@ -451,8 +451,8 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount);
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 

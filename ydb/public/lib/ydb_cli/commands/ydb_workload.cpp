@@ -77,7 +77,12 @@ TCommandWorkload::TCommandWorkload()
     AddHiddenCommand(std::make_unique<TCommandFulltext>());
     AddHiddenCommand(std::make_unique<TCommandTestShard>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
-        AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
+        auto command = std::make_unique<TWorkloadCommandRoot>(key.c_str());
+        if (key == "mixed") {
+            AddHiddenCommand(std::move(command));
+        } else {
+            AddCommand(std::move(command));
+        }
     }
 }
 

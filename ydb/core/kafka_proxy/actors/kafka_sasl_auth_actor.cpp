@@ -74,25 +74,8 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
-<<<<<<< HEAD
-void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
-        return;
-    }
-=======
- void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
-    auto& mtlsRequest = *ev->Get();
-    ClientCert = mtlsRequest.ClientCertificate;
-    if (CurrentStateFunc() == &TThis::StateWork) {
-        StartMtlsAuth();
-        SendDescribeRequest();
-        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
-    }
- }
-
 bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
     return TryParseAuthDataTo(ClientAuthData, ctx);
->>>>>>> 8acb5a2402c (Fixed continue processing events after auth actor has died (#36783))
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {

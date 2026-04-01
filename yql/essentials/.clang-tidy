@@ -70,7 +70,8 @@ Checks: >
   modernize-use-noexcept,
   modernize-use-nullptr,
   modernize-use-override,
-  modernize-use-using
+  modernize-use-using,
+  readability-avoid-const-params-in-decls
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

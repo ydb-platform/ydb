@@ -96,15 +96,17 @@ namespace NTabletFlatExecutor {
                 }
 
                 auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
-                ui64 evTotalSize = ev->GetTotalSize();
-                if (InFlightBytes + evTotalSize <= InFlightBytesLimit) {
-                    InFlightBytes += evTotalSize;
+                ui64 evSize = ev->GetTotalSize();
+                if (evSize <= InFlightBytesLimit - InFlightBytes) {
+                    InFlightBytes += evSize;
                     Ops->Send(Writer, ev.Release());
                 } else {
                     InFlightOverflow = true;
                     auto error = TStringBuilder()
                         << "Backup changelog in flight bytes limit exceeded: "
-                        << InFlightBytes + evTotalSize << " > " << InFlightBytesLimit;
+                        << "InFlightBytes# " << InFlightBytes << ", "
+                        << "evSize# " << evSize << ", "
+                        << "InFlightBytesLimit# " << InFlightBytesLimit;
                     TActivationContext::Send(new IEventHandle(Owner, Writer, new NBackup::TEvChangelogFailed(error)));
                 }
             }

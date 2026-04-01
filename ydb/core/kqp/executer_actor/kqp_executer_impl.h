@@ -1,9 +1,13 @@
 #pragma once
 
-#include "kqp_executer.h"
 #include "kqp_executer_stats.h"
+#include "kqp_executer.h"
 #include "kqp_planner.h"
+#include "kqp_streaming_helper.h"
 #include "kqp_table_resolver.h"
+#include "shards_resolver/kqp_shards_resolver.h"
+#include "tasks_graph/kqp_tasks_graph_new.h"
+#include "tasks_graph/kqp_tasks_graph_old.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
@@ -20,9 +24,6 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
-#include <ydb/core/kqp/executer_actor/kqp_streaming_helper.h>
-#include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -134,7 +135,8 @@ public:
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
-        std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr)
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr,
+        bool useNewKqpTasksGraph = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -154,28 +156,33 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
 
-        TasksGraph.GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
-        TasksGraph.GetMeta().RequestIsolationLevel = Request.IsolationLevel;
-        TasksGraph.GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
-        TasksGraph.GetMeta().UserRequestContext = userRequestContext;
-        TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
-        TasksGraph.GetMeta().StatsMode = Request.StatsMode;
+        if (useNewKqpTasksGraph) {
+            TasksGraph = std::make_unique<TKqpTasksGraphNew>(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, executerConfig.TableServiceConfig.GetResourceManager(), Counters, BufferActorId, UserToken);
+        } else {
+            TasksGraph = std::make_unique<TKqpTasksGraphOld>(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken);
+        }
+
+        TasksGraph->GetMeta().Snapshot = IKqpGateway::TKqpSnapshot(Request.Snapshot.Step, Request.Snapshot.TxId);
+        TasksGraph->GetMeta().RequestIsolationLevel = Request.IsolationLevel;
+        TasksGraph->GetMeta().ChannelTransportVersion = executerConfig.TableServiceConfig.GetChannelTransportVersion();
+        TasksGraph->GetMeta().UserRequestContext = userRequestContext;
+        TasksGraph->GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
+        TasksGraph->GetMeta().StatsMode = Request.StatsMode;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
-            TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
+            TasksGraph->GetMeta().AddIgnoredTliTableRegex(regex);
         }
         if (BatchOperationSettings) {
-            TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
+            TasksGraph->GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
-        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
+        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, TasksGraph.get(),
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
 
         StartTime = TAppData::TimeProvider->Now();
@@ -237,7 +244,7 @@ protected:
         TSet<ui64> shardIds; // TODO: assume Column and Data shards have non-intersecting ids.
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
-        for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
+        for (auto& [_, stageInfo] : TasksGraph->GetStagesInfo()) {
             AFL_ENSURE(TxManager);
             if (stageInfo.Meta.ShardKey) {
                 TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
@@ -267,9 +274,17 @@ protected:
                 if (isFullScan && !source.HasItemsLimit()) {
                     Counters->Counters->FullScansExecuted->Inc();
                 }
+
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+                bool singlePartitionedStage = stage.GetIsSinglePartition();
+                bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+                if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
+                    auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
+                }
             }
             // Scan tasks from shards
-            else if (TasksGraph.GetMeta().IsScan || stageInfo.Meta.IsOlap()) {
+            else if (TasksGraph->GetMeta().IsScan || stageInfo.Meta.IsOlap()) {
                 for (const auto& op : stage.GetTableOps()) {
                     bool isFullScan = false;
                     stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->Prune(op, stageInfo, isFullScan));
@@ -303,7 +318,7 @@ protected:
             return WAIT_SHARDS;
         }
 
-        TasksGraph.ResolveShards({});
+        TasksGraph->ResolveShards({});
 
         return CONTINUE;
     }
@@ -341,12 +356,12 @@ protected:
             TxManager->AddParticipantNode(nodeId);
         }
 
-        TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
+        TasksGraph->ResolveShards(std::move(reply.ShardsToNodes));
 
         if (IsDebugLogEnabled()) {
             TStringBuilder sb;
             sb << "Shards on nodes: " << Endl;
-            for (auto& pair : TasksGraph.GetMeta().ShardsOnNode) {
+            for (auto& pair : TasksGraph->GetMeta().ShardsOnNode) {
                 sb << "  node " << pair.first << ": [";
                 if (pair.second.size() <= 20) {
                     sb << JoinSeq(", ", pair.second) << "]" << Endl;
@@ -421,14 +436,14 @@ protected:
             for (ui32 i = 0; i < tx->ResultsSize(); ++i) {
                 const auto& result = tx->GetResults(i);
                 const auto& connection = result.GetConnection();
-                const auto& inputStageInfo = TasksGraph.GetStageInfo(NYql::NDq::TStageId(txIdx, connection.GetStageIndex()));
+                const auto& inputStageInfo = TasksGraph->GetStageInfo(NYql::NDq::TStageId(txIdx, connection.GetStageIndex()));
                 if (inputStageInfo.Tasks.size() >= 1) {
                     continue;
                 }
 
                 auto& txResult = ResponseEv->TxResults.at(i);
                 TVector<NYql::NDq::TDqSerializedBatch> batches(1);
-                if (TasksGraph.GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
+                if (TasksGraph->GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
                     SendStreamData(txResult, std::move(batches), std::numeric_limits<ui32>::max(), 1, true);
                 }
             }
@@ -443,10 +458,10 @@ protected:
 
     void ReadResultFromTaskOutputs(const TTask& task)
     {
-        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+        if (TasksGraph->GetMeta().DqChannelVersion >= 2u) {
             for (auto& output : task.Outputs) {
                 for (auto channelId : output.Channels) {
-                    auto& channel = TasksGraph.GetChannel(channelId);
+                    auto& channel = TasksGraph->GetChannel(channelId);
                     if (!channel.DstTask) {
                         Y_ENSURE(ChannelService && ResultInputBuffers.find(channelId) == ResultInputBuffers.end());
                         auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, task.ComputeActorId, SelfId(), task.StageId.StageId, 0,
@@ -460,10 +475,10 @@ protected:
     }
 
     void ReadResultFromInputBuffer(ui32 channelId, const std::shared_ptr<NYql::NDq::IChannelBuffer>& buffer) {
-        auto& channel = TasksGraph.GetChannel(channelId);
+        auto& channel = TasksGraph->GetChannel(channelId);
         YQL_ENSURE(channel.DstTask == 0);
         auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
-        bool streamingAllowed = TasksGraph.GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined();
+        bool streamingAllowed = TasksGraph->GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined();
 
         NYql::NDq::TDataChunk data;
         while (buffer->Pop(data)) {
@@ -516,14 +531,14 @@ protected:
     void HandleChannelData(NYql::NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto& record = ev->Get()->Record;
         auto& channelData = record.GetChannelData();
-        auto& channel = TasksGraph.GetChannel(channelData.GetChannelId());
+        auto& channel = TasksGraph->GetChannel(channelData.GetChannelId());
         const TActorId channelComputeActorId = ev->Sender;
 
         auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
         auto [it, _] = ResultChannelToComputeActor.emplace(channel.Id, ev->Sender);
         YQL_ENSURE(it->second == channelComputeActorId);
 
-        if (TasksGraph.GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
+        if (TasksGraph->GetMeta().StreamResult && txResult.IsStream && txResult.QueryResultIndex.Defined()) {
 
             TEvComputeChannelDataOOB computeData;
             computeData.Proto = std::move(ev->Get()->Record);
@@ -599,7 +614,7 @@ protected:
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
 
-        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+        if (TasksGraph->GetMeta().DqChannelVersion >= 2u) {
             if (ev->Get()->Record.GetEnough()) {
                 for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
                     inputBuffer->EarlyFinish();
@@ -743,7 +758,7 @@ protected:
             case NYql::NDqProto::COMPUTE_STATE_EXECUTING:
             case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
                 if (populateChannels) {
-                    auto& task = TasksGraph.GetTask(taskId);
+                    auto& task = TasksGraph->GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
                     Planner->CollectTaskChannelsUpdates(task, updates);
                     Planner->PropagateChannelsUpdates(updates);
@@ -851,7 +866,7 @@ protected:
                         }
                     }
                     TABLEBODY() {
-                        for (const auto& task : TasksGraph.GetTasks()) {
+                        for (const auto& task : TasksGraph->GetTasks()) {
                             TABLER() {
                                 TABLED() {str << task.StageId.TxId;}
                                 TABLED() {str << task.StageId.StageId;}
@@ -890,8 +905,8 @@ protected:
     }
 
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
-        TasksGraph.GetMeta().ExecuterId = SelfId();
-        TasksGraph.GetMeta().TxId = TxId = ev->Get()->Record.GetRequest().GetTxId();
+        TasksGraph->GetMeta().ExecuterId = SelfId();
+        TasksGraph->GetMeta().TxId = TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
 
         const auto& databaseId = GetUserRequestContext()->DatabaseId;
@@ -930,16 +945,16 @@ protected:
             lockTxId = TxId;
         }
 
-        TasksGraph.GetMeta().SetLockTxId(lockTxId);
-        TasksGraph.GetMeta().SetLockNodeId(SelfId().NodeId());
-        TasksGraph.GetMeta().SetQuerySpanId(Request.QuerySpanId);
+        TasksGraph->GetMeta().SetLockTxId(lockTxId);
+        TasksGraph->GetMeta().SetLockNodeId(SelfId().NodeId());
+        TasksGraph->GetMeta().SetQuerySpanId(Request.QuerySpanId);
 
         switch (Request.IsolationLevel) {
             case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
-                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+                TasksGraph->GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
                 break;
             default:
-                TasksGraph.GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
+                TasksGraph->GetMeta().SetLockMode(NKikimrDataEvents::OPTIMISTIC);
                 break;
         }
 
@@ -959,7 +974,7 @@ protected:
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterSpan.GetTraceId(), "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
-        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, TasksGraph, false);
+        auto kqpTableResolver = CreateKqpTableResolver(this->SelfId(), TxId, UserToken, *TasksGraph, false);
         KqpTableResolverId = this->RegisterWithSameMailbox(kqpTableResolver);
 
         KQP_STLOG_T(KQPEX, "Got request, become WaitResolveState",
@@ -1003,7 +1018,7 @@ protected:
     }
 
     void InvalidateNode(ui64 node) {
-        for (auto tablet : TasksGraph.GetMeta().ShardsOnNode[node]) {
+        for (auto tablet : TasksGraph->GetMeta().ShardsOnNode[node]) {
             auto ev = MakeHolder<TEvPipeCache::TEvForcePipeReconnect>(tablet);
             this->Send(MakePipePerNodeCacheID(false), ev.Release());
         }
@@ -1066,7 +1081,7 @@ protected:
                 }
             }
 
-            for (auto& task : TasksGraph.GetTasks()) {
+            for (auto& task : TasksGraph->GetTasks()) {
                 if (Planner->GetPendingComputeTasks().contains(task.Id)) {
                     auto actualNodeId = Planner->GetActualNodeIdForTask(task.Id);
                     if (actualNodeId && *actualNodeId == nodeId) {
@@ -1151,7 +1166,7 @@ protected:
 
         for (auto& startedTask : record.GetStartedTasks()) {
             auto taskId = startedTask.GetTaskId();
-            auto& task = TasksGraph.GetTask(taskId);
+            auto& task = TasksGraph->GetTask(taskId);
 
             TActorId computeActorId = ActorIdFromProto(startedTask.GetActorId());
             KQP_STLOG_D(KQPEX, "Executing task",
@@ -1251,7 +1266,7 @@ protected:
 
     bool BuildPlannerAndSubmitTasks() {
         Planner = CreateKqpPlanner({
-            .TasksGraph = TasksGraph,
+            .TasksGraph = *TasksGraph,
             .TxId = TxId,
             .Executer = SelfId(),
             .Database = Database,
@@ -1284,7 +1299,7 @@ protected:
             return false;
         }
 
-        if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
+        if (TasksGraph->GetMeta().DqChannelVersion >= 2u) {
             Y_ENSURE(ChannelService);
             for (auto& [channelId, outputActorId] : Planner->ResultChannels) {
                 auto inputBuffer = ChannelService->GetInputBuffer(NYql::NDq::TChannelFullInfo(channelId, outputActorId, SelfId(), 0, 0,
@@ -1318,7 +1333,7 @@ protected:
 
 protected:
     void TerminateComputeActors(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
-        for (const auto& task : this->TasksGraph.GetTasks()) {
+        for (const auto& task : TasksGraph->GetTasks()) {
             if (task.ComputeActorId && !task.Meta.Completed) {
                 KQP_STLOG_I(KQPEX, "Aborting compute actor execution",
                     (Issues, issues.ToOneLineString()),
@@ -1512,11 +1527,11 @@ protected:
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
-        return TasksGraph.GetMeta().Snapshot;
+        return TasksGraph->GetMeta().Snapshot;
     }
 
     void SetSnapshot(ui64 step, ui64 txId) {
-        TasksGraph.GetMeta().SetSnapshot(step, txId);
+        TasksGraph->GetMeta().SetSnapshot(step, txId);
     }
 
 protected:
@@ -1642,7 +1657,7 @@ protected:
             this->Send(KqpTableResolverId, new TEvents::TEvPoison);
         }
 
-        for (const auto& [_, stage] : TasksGraph.GetStagesInfo()) {
+        for (const auto& [_, stage] : TasksGraph->GetStagesInfo()) {
             for (const auto& [_, controlPlaneActorId] : stage.Meta.ControlPlaneActors) {
                 this->Send(controlPlaneActorId, new TEvents::TEvPoison());
             }
@@ -1684,23 +1699,19 @@ protected:
     }
 
     const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() const {
-        return TasksGraph.GetMeta().UserRequestContext;
+        return TasksGraph->GetMeta().UserRequestContext;
     }
 
     TIntrusivePtr<TUserRequestContext>& MutableUserRequestContext() {
-        return TasksGraph.GetMeta().UserRequestContext;
+        return TasksGraph->GetMeta().UserRequestContext;
     }
 
     bool RestoreTasksGraph() {
         if (Request.QueryPhysicalGraph) {
-            TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
+            TasksGraph->RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 
-        return TasksGraph.GetMeta().IsRestored;
-    }
-
-    NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
-        return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
+        return TasksGraph->GetMeta().IsRestored;
     }
 
     inline bool IsSchedulable() const {
@@ -1710,7 +1721,7 @@ protected:
     }
 
     void ProcessStreamingQueryCounters() {
-        const auto context = TasksGraph.GetMeta().UserRequestContext;
+        const auto context = TasksGraph->GetMeta().UserRequestContext;
         if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
             return;
         }
@@ -1806,7 +1817,7 @@ protected:
     TIntrusivePtr<IStreamingQueryCounters> StreamingQueryCounters;
 
 protected:
-    TKqpTasksGraph TasksGraph;
+    std::unique_ptr<TKqpTasksGraph> TasksGraph;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
 
@@ -1825,7 +1836,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool useNewKqpTasksGraph);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
@@ -1834,7 +1845,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager);
+    const IKqpTransactionManagerPtr& txManager, bool useNewKqpTasksGraph);
 
 } // namespace NKqp
 } // namespace NKikimr

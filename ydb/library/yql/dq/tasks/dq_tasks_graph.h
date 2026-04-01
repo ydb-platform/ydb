@@ -17,6 +17,10 @@ struct TStageId {
     ui64 TxId = 0;
     ui64 StageId = 0;
 
+    // Assume that all stages in the same pipeline are running simultaneously,
+    // it affects the prediction of number of tasks per node.
+    ui64 PipelineId = 0; // TODO: should be setup inside logical plan
+
     TStageId() = default;
     TStageId(ui64 txId, ui64 stageId)
         : TxId(txId)
@@ -208,6 +212,7 @@ public:
         LITERAL,
         RESTORED,
         FORCED,
+        FORCED_NODE_QUOTA,
         LEVEL_PREDICTED,
 
         MINIMUM_COMPUTE,         // 1

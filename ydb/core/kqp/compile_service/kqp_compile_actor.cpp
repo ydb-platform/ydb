@@ -534,11 +534,10 @@ private:
         PassAway();
     }
 
-    void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType,
-            bool allowCache, bool success) {
-        auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
-            preparingQuery.release(), AppData()->FunctionRegistry, !success);
+    void FillCompileResult(std::unique_ptr<NKikimrKqp::TPreparedQuery> preparingQuery, NKikimrKqp::EQueryType queryType, bool allowCache, bool success) {
+        auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(preparingQuery.release(), AppData()->FunctionRegistry, !success);
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
+        preparedQueryHolder->SetUseNewKqpTasksGraph(Config->GetUseNewKqpTasksGraph());
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
     }

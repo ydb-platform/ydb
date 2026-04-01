@@ -886,108 +886,14 @@ public:
     }
 
     void OnSuccessCompileRequest() {
-        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
-            TVector<IKqpGateway::TPhysicalTxData> txs;
-            std::map<TString, TString> secureParams;
-            bool isValidParams = true;
-            auto txAlloc = std::make_shared<TTxAllocatorState>(AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider);
-            const auto& parameters = QueryState->GetYdbParameters();
-            QueryState->QueryData = std::make_shared<TQueryData>(txAlloc);
-            QueryState->QueryData->ParseParameters(parameters);
-
-            for (const auto& tx : QueryState->PreparedQuery->GetTransactions()) {
-                for (const auto& secretName : tx->GetSecretNames()) {
-                    secureParams.emplace(secretName, "");
-                }
-
-                txs.emplace_back(tx, QueryState->QueryData);
-                try {
-                    QueryState->QueryData->PrepareParameters(tx, QueryState->PreparedQuery, txAlloc->TypeEnv);
-                } catch (const yexception& ex) {
-                    // TODO: throw exception instead of silent ignore?
-                    // ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
-                    isValidParams = false;
-                }
-            }
-
-            if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
-                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
-                tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
-                tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
-                tasksGraph.GetMeta().SecureParams = std::move(secureParams);
-
-                // Resolve tables
-                {
-                    auto kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph, true);
-                    RegisterWithSameMailbox(kqpTableResolver);
-                    auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
-                    if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                        ReplyResolveError(*resolveEv->Get());
-                        co_return;
-                    }
-                }
-
-                // Resolve shards
-                {
-                    TSet<ui64> shardIds;
-                    for (const auto& [stageId, stageInfo] : tasksGraph.GetStagesInfo()) {
-                        if (stageInfo.Meta.ShardKey) {
-                            for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                                shardIds.insert(partition.ShardId);
-                            }
-                        }
-                    }
-
-                    if (!shardIds.empty()) {
-                        // TODO: initialize tasksGraph.GetMeta().UseFollowers ?
-                        auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), 0, false, std::move(shardIds));
-                        RegisterWithSameMailbox(kqpShardsResolver);
-                        auto resolveEv = co_await ActorWaitForEvent<NShardResolver::TEvShardsResolveStatus>(0);
-                        if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                            ReplyResolveError(*resolveEv->Get());
-                            co_return;
-                        }
-
-                        tasksGraph.ResolveShards(std::move(resolveEv->Get()->ShardsToNodes));
-                    }
-                }
-
-                bool needResourcesSnapshot = tasksGraph.GetMeta().IsScan;
-                if (!tasksGraph.GetMeta().IsScan) {
-                    for (const auto& transaction : txs) {
-                        for (const auto& stage : transaction.Body->GetStages()) {
-                            if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                                needResourcesSnapshot = true;
-                            }
-                        }
-                    }
-                    // TODO: better set `needResourcesSnapshot`
-                }
-
-                // Get resources snapshot
-                TVector<NKikimrKqp::TKqpNodeResources> resourcesSnapshot;
-                if (needResourcesSnapshot) {
-                    resourcesSnapshot = GetKqpResourceManager()->GetClusterResources();
-                }
-
-                try {
-                    tasksGraph.BuildAllTasks({}, resourcesSnapshot, nullptr);
-                    // TODO: fill tasks count into result
-                    // Cerr << tasksGraph.DumpToString();
-                } catch (const std::exception&) {
-                    // TODO: send warning to user that we failed to estimate number of tasks.
-                }
-            }
-
-            co_return ReplyPrepareResult();
-        }
-
-        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE) {
-            co_return ReplyPrepareResult();
+        if (QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_PREPARE ||
+            QueryState->GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN)
+        {
+            return ReplyPrepareResult();
         }
 
         if (!PrepareQueryContext()) {
-            co_return;
+            return;
         }
 
         Become(&TKqpSessionActor::ExecuteState);
@@ -995,15 +901,15 @@ public:
         QueryState->TxCtx->OnBeginQuery(QueryState->GetQuerySpanId(), QueryState->ExtractQueryText());
 
         if (!CheckScriptExecutionState()) {
-            co_return;
+            return;
         }
 
         if (QueryState->NeedPersistentSnapshot()) {
             AcquirePersistentSnapshot();
-            co_return;
+            return;
         } else if (QueryState->NeedSnapshot(*Config)) {
             AcquireMvccSnapshot();
-            co_return;
+            return;
         }
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
@@ -1807,7 +1713,8 @@ public:
             Y_ENSURE(QueryState);
             request.Orbit = std::move(QueryState->Orbit);
             request.TraceId = QueryState->KqpSessionSpan.GetTraceId();
-            auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext);
+            auto response = ExecuteLiteral(std::move(request), RequestCounters, SelfId(), QueryState->UserRequestContext,
+                QueryState->PreparedQuery ? QueryState->PreparedQuery->GetUseNewKqpTasksGraph() : false);
             ++QueryState->CurrentTx;
             ProcessExecuterResult(response.get());
             return true;
@@ -1995,7 +1902,7 @@ public:
         if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
-        
+
         AFL_ENSURE(txCtx->TxManager);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -2006,7 +1913,9 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
-            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService);
+            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService,
+            QueryState->PreparedQuery->GetUseNewKqpTasksGraph()
+        );
 
         auto exId = RegisterWithSameMailbox(executerActor);
         STLOG_D("Created new KQP executer",
@@ -2396,7 +2305,7 @@ public:
 
         AFL_ENSURE(QueryState->TxCtx->TxManager);
         QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
-    
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 

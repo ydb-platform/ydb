@@ -110,6 +110,8 @@ public:
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
 
+    NCommon::TConfSetting<bool, Static> UseNewKqpTasksGraph;
+
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
 
@@ -212,6 +214,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseNewKqpTasksGraph() const;
 };
 
-}
+} // namespace NYql

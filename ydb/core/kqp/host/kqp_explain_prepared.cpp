@@ -50,7 +50,8 @@ public:
                 request.Transactions.emplace_back(tx, TransformCtx->QueryCtx->QueryData);
                 request.NeedTxId = false;
 
-                ExecuteFuture = Gateway->ExecuteLiteral(std::move(request), TransformCtx->QueryCtx->QueryData, CurrentTxIndex);
+                ExecuteFuture = Gateway->ExecuteLiteral(std::move(request), TransformCtx->QueryCtx->QueryData, CurrentTxIndex,
+                    TransformCtx->Config->GetUseNewKqpTasksGraph());
 
                 Promise = NewPromise();
                 ExecuteFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TExecPhysicalResult> future) mutable {

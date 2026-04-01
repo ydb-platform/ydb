@@ -1,7 +1,4 @@
-#include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_tasks_graph.h"
-#include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -50,11 +47,12 @@ public:
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
         const std::optional<TLlvmSettings>& llvmSettings,
         std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-        const IKqpTransactionManagerPtr& txManager)
+        const IKqpTransactionManagerPtr& txManager,
+        bool useNewKqpTasksGraph)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
             userToken, std::move(formatsSettings), counters, executerConfig,
             userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
-            {}, txManager, Nothing(), channelService)
+            {}, txManager, Nothing(), channelService, useNewKqpTasksGraph)
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
@@ -159,12 +157,12 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
+        TasksGraph->BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
         OnEmptyResult();
 
         TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
+        if (auto validateIssue = TasksGraph->ValidateTasks()) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, *validateIssue);
             return;
         }
 
@@ -176,8 +174,8 @@ private:
         TVector<ui64> computeTasks;
 
         // calc stats
-        for (const auto& task : TasksGraph.GetTasks()) {
-            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        for (const auto& task : TasksGraph->GetTasks()) {
+            const auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // TODO: YQL_ENSURE(task.Meta.Type == TTaskMeta::TTaskType::Scan);
@@ -196,14 +194,14 @@ private:
             }
         }
 
-        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
+        if (TasksGraph->GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
             KQP_STLOG_N(KQPSCAN, "Too many compute actors",
-                (total_tasks, TasksGraph.GetTasks().size()),
+                (total_tasks, TasksGraph->GetTasks().size()),
                 (trace_id, TraceId()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
+                    << "Requested too many execution units: " << TasksGraph->GetTasks().size()));
             return;
         }
 
@@ -284,11 +282,11 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager)
+    const IKqpTransactionManagerPtr& txManager, bool useNewKqpTasksGraph)
 {
     return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager);
+        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager, useNewKqpTasksGraph);
 }
 
 } // namespace NKqp

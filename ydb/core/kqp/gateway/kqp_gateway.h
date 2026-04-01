@@ -201,7 +201,7 @@ public:
 
     /* Compute */
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
-        TQueryData::TPtr params, ui32 txIndex) = 0;
+        TQueryData::TPtr params, ui32 txIndex, bool useNewKqpTasksGraph) = 0;
     using NYql::IKikimrGateway::ExecuteLiteralInstant;
 
     /* Scripting */

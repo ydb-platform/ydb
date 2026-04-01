@@ -8,15 +8,18 @@ SRCS(
     kqp_executer_stats.cpp
     kqp_literal_executer.cpp
     kqp_locks_helper.cpp
-    kqp_partition_helper.cpp
     kqp_planner.cpp
     kqp_planner_strategy.cpp
     kqp_streaming_helper.cpp
     kqp_table_resolver.cpp
-    kqp_tasks_graph.cpp
-    kqp_tasks_validate.cpp
     kqp_partitioned_executer.cpp
-    shard_key_ranges.cpp
+
+    tasks_graph/kqp_partition_helper.cpp
+    tasks_graph/kqp_tasks_graph_new.cpp
+    tasks_graph/kqp_tasks_graph_old.cpp
+    tasks_graph/kqp_tasks_graph.cpp
+    tasks_graph/max_tasks_graph.cpp
+    tasks_graph/shard_key_ranges.cpp
 )
 
 PEERDIR(

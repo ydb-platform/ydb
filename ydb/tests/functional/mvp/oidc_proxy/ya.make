@@ -5,6 +5,8 @@ SIZE(MEDIUM)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
+ENV(OIDC_PROXY_BINARY="ydb/mvp/oidc_proxy/bin/mvp_oidc_proxy")
+
 TEST_SRCS(
     conftest.py
     oidc_proxy_env.py

@@ -173,13 +173,22 @@ namespace {
             auto& sync = it->second;
 
             if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                // TODO(kruall): log error
+                STLOG(PRI_ERROR, BS_DDISK, BSDD23,
+                    "TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
+                    (DDiskId, DDiskId),
+                    (Cookie, ev->Cookie),
+                    (SyncId, syncId),
+                    (FirstRequestId, sync.FirstRequestId),
+                    (RequestsCount, sync.Requests.size()),
+                    (SourceType, sourceType));
                 return;
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
 
             request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';' << request.Selector.OffsetInBytes + request.Selector.Size << "] failed to read; reason: read event undelivered";
+            request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';'
+                << request.Selector.OffsetInBytes + request.Selector.Size
+                << "] failed to read; reason: read event undelivered";
             sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to read; ";
             if (--sync.RequestsInFlight == 0) {
                 ReplySync(it);

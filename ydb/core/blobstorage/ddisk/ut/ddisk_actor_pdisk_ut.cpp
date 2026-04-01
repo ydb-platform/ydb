@@ -72,6 +72,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
     Y_UNIT_TEST(ReadWithoutConnect_PDiskFallback) {
         TestReadWithoutConnect({.ForcePDiskFallback = true});
     }
+
+    Y_UNIT_TEST(Smoke_2Tablets_2VChunks_1Segment) {
+        TestSyncWithDDisk(2, 2, 8, 1);
+    }
 }
 
 } // NKikimr

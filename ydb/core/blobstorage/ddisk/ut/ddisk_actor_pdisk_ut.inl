@@ -29,7 +29,7 @@ using NKikimrBlobStorage::NDDisk::TReplyStatus;
 constexpr ui32 MinBlockSize = 4096;
 constexpr ui32 PDiskId = 1;
 constexpr ui32 SlotId = 1;
-constexpr ui32 ChunkSize = 16u << 20;
+constexpr ui32 ChunkSize = 16u << 20; // note, that PDisk allocates slightly bigger chunk
 constexpr ui32 ChunkCount = 1000;
 constexpr ui64 DiskSize = (ui64)ChunkSize * ChunkCount;
 constexpr ui64 DefaultPDiskSequence = 0x7e5700007e570000;
@@ -48,6 +48,12 @@ void FormatDisk(const TString& path, ui64 guid) {
         chunkKey, logKey, sysLogKey, DefaultPDiskSequence, "ddisk_pdisk_test", options);
 }
 
+struct TDiskInfo {
+    TActorId DDiskServiceId;
+    ui32 PDiskId;
+    ui32 SlotId;
+};
+
 class TTestContext {
     THolder<NActors::TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
@@ -57,8 +63,11 @@ class TTestContext {
 public:
     TActorId Edge;
     TActorId DDiskServiceId;
+    TVector<TDiskInfo> Disks;
+    ui32 NodeId = 0;
 
-    explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR) {
+    explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR,
+            ui32 numDisks = 1) {
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
@@ -73,60 +82,71 @@ public:
         Runtime->SetLogPriority(NKikimrServices::BS_DDISK, ddiskLogPriority);
 
         Edge = Runtime->AllocateEdgeActor();
+        NodeId = Runtime->GetNodeId(0);
 
-        TString path = TempDir() + "/pdisk.dat";
-        {
-            TFile file(path.c_str(), OpenAlways | RdWr);
-            file.Resize(DiskSize);
-            file.Close();
+        for (ui32 d = 0; d < numDisks; ++d) {
+            const ui32 pdiskId = PDiskId + d;
+            const ui64 pdiskGuid = 12345 + d;
+
+            TString path = TempDir() + "/pdisk_" + ToString(d) + ".dat";
+            {
+                TFile file(path.c_str(), OpenAlways | RdWr);
+                file.Resize(DiskSize);
+                file.Close();
+            }
+            FormatDisk(path, pdiskGuid);
+
+            TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
+            pdiskConfig->ChunkSize = ChunkSize;
+            pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+            pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+            pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
+
+            NPDisk::TMainKey mainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
+            IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), mainKey, Counters);
+            TActorId pdiskActorId = Runtime->Register(pdiskActor);
+
+            TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
+            Runtime->RegisterService(pdiskServiceId, pdiskActorId);
+
+            TVector<TActorId> actorIds = {
+                MakeBlobStorageDDiskId(NodeId, pdiskId, SlotId),
+            };
+            auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone, ui32(1), ui32(1),
+                ui32(1), &actorIds);
+
+            TVDiskConfig::TBaseInfo baseInfo(
+                TVDiskIdShort(groupInfo->GetVDiskId(0)),
+                pdiskServiceId,
+                pdiskGuid,
+                pdiskId,
+                NPDisk::DEVICE_TYPE_NVME,
+                SlotId,
+                NKikimrBlobStorage::TVDiskKind::Default,
+                2,
+                "ddisk_pool");
+
+            NDDisk::TPersistentBufferFormat pbFormat{256, 4, ChunkSize, 8};
+            NDDisk::TDDiskConfig cfg = ddiskConfig;
+            IActor* ddiskActor = NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
+                std::move(pbFormat), std::move(cfg), Counters);
+
+            TActorId ddiskActorId = Runtime->Register(ddiskActor);
+            TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, SlotId);
+            Runtime->RegisterService(ddiskServiceId, ddiskActorId);
+
+            Disks.push_back(TDiskInfo{ddiskServiceId, pdiskId, SlotId});
         }
 
-        const ui64 pdiskGuid = 12345;
-        FormatDisk(path, pdiskGuid);
-
-        TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, PDiskId, 0);
-        pdiskConfig->ChunkSize = ChunkSize;
-        pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
-        pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
-
-        NPDisk::TMainKey mainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
-        IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), mainKey, Counters);
-        TActorId pdiskActorId = Runtime->Register(pdiskActor);
-        const ui32 nodeId = Runtime->GetNodeId(0);
-
-        TActorId pdiskServiceId = MakeBlobStoragePDiskID(nodeId, PDiskId);
-        Runtime->RegisterService(pdiskServiceId, pdiskActorId);
-
-        TVector<TActorId> actorIds = {
-            MakeBlobStorageDDiskId(nodeId, PDiskId, SlotId),
-        };
-        auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone, ui32(1), ui32(1),
-            ui32(1), &actorIds);
-
-        TVDiskConfig::TBaseInfo baseInfo(
-            TVDiskIdShort(groupInfo->GetVDiskId(0)),
-            pdiskServiceId,
-            pdiskGuid,
-            PDiskId,
-            NPDisk::DEVICE_TYPE_NVME,
-            SlotId,
-            NKikimrBlobStorage::TVDiskKind::Default,
-            2,
-            "ddisk_pool");
-
-        // TODO: remove when DDisk and PB are separated
-        NDDisk::TPersistentBufferFormat pbFormat{256, 4, ChunkSize, 8};
-        IActor* ddiskActor = NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
-            std::move(pbFormat), std::move(ddiskConfig), Counters);
-
-        TActorId ddiskActorId = Runtime->Register(ddiskActor);
-        DDiskServiceId = MakeBlobStorageDDiskId(nodeId, PDiskId, SlotId);
-        Runtime->RegisterService(DDiskServiceId, ddiskActorId);
+        DDiskServiceId = Disks[0].DDiskServiceId;
     }
 
     void Send(IEventBase* event, ui64 cookie = 0) {
         Runtime->Send(new IEventHandle(DDiskServiceId, Edge, event, 0, cookie));
+    }
+
+    void SendTo(ui32 diskIdx, IEventBase* event, ui64 cookie = 0) {
+        Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge, event, 0, cookie));
     }
 
     template<typename TEvent>
@@ -137,6 +157,12 @@ public:
     template<typename TEvent>
     typename TEvent::TPtr SendAndGrab(IEventBase* event, ui64 cookie = 0) {
         Send(event, cookie);
+        return Grab<TEvent>();
+    }
+
+    template<typename TEvent>
+    typename TEvent::TPtr SendToAndGrab(ui32 diskIdx, IEventBase* event, ui64 cookie = 0) {
+        SendTo(diskIdx, event, cookie);
         return Grab<TEvent>();
     }
 };
@@ -189,6 +215,18 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
     creds.Generation = generation;
 
     auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
+    AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
+    creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+
+    return creds;
+}
+
+NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tabletId, ui32 generation) {
+    NDDisk::TQueryCredentials creds;
+    creds.TabletId = tabletId;
+    creds.Generation = generation;
+
+    auto connectResult = ctx.SendToAndGrab<NDDisk::TEvConnectResult>(diskIdx, new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
 
@@ -516,6 +554,94 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
     AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::SESSION_MISMATCH);
+}
+
+// Write data to DDisk0, sync to DDisk1 via TEvSyncWithDDisk, then read and verify on DDisk1.
+// segmentsPerSync controls how many non-overlapping segments each sync request carries.
+[[maybe_unused]] void TestSyncWithDDisk(ui32 numTablets, ui32 numVChunks, ui32 blocksPerVChunk,
+        ui32 segmentsPerSync, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR) {
+    TTestContext ctx({}, ddiskLogPriority, 2);
+    const ui32 baseTabletId = 401;
+
+    struct TabletCreds {
+        NDDisk::TQueryCredentials Src;
+        NDDisk::TQueryCredentials Dst;
+    };
+    TVector<TabletCreds> tablets(numTablets);
+    for (ui32 t = 0; t < numTablets; ++t) {
+        tablets[t].Src = ConnectTo(ctx, 0, baseTabletId + t, 1);
+        tablets[t].Dst = ConnectTo(ctx, 1, baseTabletId + t, 1);
+    }
+
+    // Phase 1: batch-write to DDisk0
+    ui32 totalWrites = numTablets * numVChunks * blocksPerVChunk;
+    for (ui32 t = 0; t < numTablets; ++t) {
+        for (ui32 v = 0; v < numVChunks; ++v) {
+            for (ui32 b = 0; b < blocksPerVChunk; ++b) {
+                ui32 blockIdx = v * blocksPerVChunk + b;
+                TString payload = MakeDataWithTabletAndBlock(baseTabletId + t, blockIdx, MinBlockSize);
+                auto write = std::make_unique<NDDisk::TEvWrite>(tablets[t].Src,
+                    NDDisk::TBlockSelector(v, b * MinBlockSize, MinBlockSize), NDDisk::TWriteInstruction(0));
+                write->AddPayload(MakeAlignedRope(payload));
+                ctx.SendTo(0, write.release());
+            }
+        }
+    }
+    for (ui32 i = 0; i < totalWrites; ++i) {
+        auto wr = ctx.Grab<NDDisk::TEvWriteResult>();
+        AssertStatus<NDDisk::TEvWriteResult>(wr, TReplyStatus::OK);
+    }
+
+    // Phase 2: sync DDisk0 -> DDisk1
+    ui32 totalSyncs = 0;
+    const auto srcDDiskId = std::make_tuple(ctx.NodeId, ctx.Disks[0].PDiskId, ctx.Disks[0].SlotId);
+    for (ui32 t = 0; t < numTablets; ++t) {
+        const ui64 srcGuid = *tablets[t].Src.DDiskInstanceGuid;
+        for (ui32 v = 0; v < numVChunks; ++v) {
+            const ui32 totalBlocks = blocksPerVChunk;
+            const ui32 blocksPerSegment = (totalBlocks + segmentsPerSync - 1) / segmentsPerSync;
+
+            auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
+                tablets[t].Dst, srcDDiskId, std::optional<ui64>(srcGuid));
+
+            for (ui32 s = 0; s < segmentsPerSync; ++s) {
+                ui32 startBlock = s * blocksPerSegment;
+                ui32 endBlock = std::min(startBlock + blocksPerSegment, totalBlocks);
+                if (startBlock >= endBlock) {
+                    break;
+                }
+                syncEv->AddSegment(NDDisk::TBlockSelector(v,
+                    startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
+            }
+            ctx.SendTo(1, syncEv.release());
+            totalSyncs++;
+        }
+    }
+    for (ui32 i = 0; i < totalSyncs; ++i) {
+        auto syncResult = ctx.Grab<NDDisk::TEvSyncWithDDiskResult>();
+        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(syncResult, TReplyStatus::OK);
+    }
+
+    // Phase 3: read from DDisk1 and verify
+    for (ui32 t = 0; t < numTablets; ++t) {
+        ui32 tabletId = baseTabletId + t;
+        for (ui32 v = 0; v < numVChunks; ++v) {
+            for (ui32 b = 0; b < blocksPerVChunk; ++b) {
+                ui32 blockIdx = v * blocksPerVChunk + b;
+                TString expected = MakeDataWithTabletAndBlock(tabletId, blockIdx, MinBlockSize);
+
+                auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(1,
+                    new NDDisk::TEvRead(tablets[t].Dst, {v, b * MinBlockSize, MinBlockSize}, {true}));
+                AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+
+                const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+                const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
+                UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+                    "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
+                UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+            }
+        }
+    }
 }
 
 } // anonymous namespace

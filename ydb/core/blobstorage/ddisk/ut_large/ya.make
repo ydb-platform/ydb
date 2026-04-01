@@ -16,6 +16,7 @@ PEERDIR(
 
 SRCS(
     ddisk_actor_pdisk_large_ut.cpp
+    ddisk_actor_pdisk_sync_ut.cpp
 )
 
 END()

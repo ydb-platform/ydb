@@ -2,6 +2,7 @@
 
 #include <util/generic/overloaded.h>
 #include <ydb/core/protos/blobstorage_ddisk_internal.pb.h>
+#include <ydb/core/util/stlog.h>
 
 namespace NKikimr::NDDisk {
 
@@ -80,6 +81,12 @@ namespace NKikimr::NDDisk {
             }, chunkAllocate);
         }
         if (ChunkReserve.size() < MinChunksReserved && !ReserveInFlight) { // ask for another reservation
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD28,
+                "TDDiskActor::HandleChunkReserved requesting chunk reserve",
+                (DDiskId, DDiskId),
+                (ChunkReserveSize, ChunkReserve.size()),
+                (MinChunksReserved, MinChunksReserved),
+                (RequestCount, MinChunksReserved - ChunkReserve.size()));
             Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReserve(PDiskParams->Owner, PDiskParams->OwnerRound,
                 MinChunksReserved - ChunkReserve.size()));
             ReserveInFlight = true;

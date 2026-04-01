@@ -8,7 +8,7 @@ import ydb
 
 from decimal import Decimal
 
-from testowners_utils import get_codeowners_for_tests
+from testowners_utils import get_testowners_for_tests
 from ydb_wrapper import YDBWrapper
 
 max_characters_for_status_description = int(7340032/3)  #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
@@ -350,7 +350,7 @@ def main():
             )
 
             # Add owner information
-            result_with_owners = get_codeowners_for_tests(results)
+            result_with_owners = get_testowners_for_tests(results)
             
             # Get table paths
             test_table_path = wrapper.get_table_path("test_results")

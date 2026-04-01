@@ -3,7 +3,7 @@
 import ydb
 from ydb_wrapper import YDBWrapper
 
-from testowners_utils import get_codeowners_for_tests
+from testowners_utils import get_testowners_for_tests
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -78,7 +78,7 @@ def main():
                 'run_timestamp_last': row['run_timestamp_last'],
             })
 
-        test_list = get_codeowners_for_tests(test_list)
+        test_list = get_testowners_for_tests(test_list)
 
         print('upserting testowners')
         create_tables(ydb_wrapper, table_path)

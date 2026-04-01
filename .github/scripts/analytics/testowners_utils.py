@@ -33,17 +33,16 @@ def _set_owners_field(test, owners_str: str) -> None:
         test.owners = owners_str
 
 
-def get_codeowners_for_tests(tests_data, *, codeowners_file_path=None):
+def get_testowners_for_tests(tests_data):
     """
-    For each test entry, set owners from TESTOWNERS (same string format as test_results: ;; / :).
+    For each test entry, set owners from repo ``.github/TESTOWNERS`` (``TESTOWNERS_FILE``).
+
+    Same owner string format as test_results: ``;;`` / ``:`` between tokens.
 
     Entry may be a dict with key ``suite_folder`` (upload pipeline) or any object with
     ``classname`` (e.g. generate-summary.TestResult — same path as suite_folder in JSON).
-
-    Uses ``TESTOWNERS_FILE`` from this module when ``codeowners_file_path`` is omitted.
     """
-    path = codeowners_file_path if codeowners_file_path is not None else TESTOWNERS_FILE
-    with open(path, 'r') as file:
+    with open(TESTOWNERS_FILE, 'r') as file:
         data = file.readlines()
         owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))
         tests_data_with_owners = []

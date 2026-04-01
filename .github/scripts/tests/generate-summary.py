@@ -16,7 +16,7 @@ from get_test_history import get_test_history
 _ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
 if _ANALYTICS_DIR not in sys.path:
     sys.path.insert(0, _ANALYTICS_DIR)
-from testowners_utils import get_codeowners_for_tests  # noqa: E402
+from testowners_utils import get_testowners_for_tests  # noqa: E402
 
 
 def load_owner_area_mapping():
@@ -361,7 +361,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # get testowners
     all_tests = [test for status in status_order for test in status_test.get(status)]
         
-    get_codeowners_for_tests(all_tests)
+    get_testowners_for_tests(all_tests)
     
     # statuses for history
     status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]

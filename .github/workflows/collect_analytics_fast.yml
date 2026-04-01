@@ -69,7 +69,7 @@ jobs:
         if [ "${{ steps.cleanup_gate.outputs.run_cleanup }}" = "true" ]; then
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_timeline.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id --cleanup_window_key date --cleanup_window_interval '31 * Interval("P1D")'
         else
-          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_timeline.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id
+          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_timeline.sql --table_path test_results/analytics/github_issues_timeline --store_type column --partition_keys date --primary_keys date issue_number project_item_id --cleanup_window_key date --cleanup_window_interval '0 * Interval("P1D")'
         fi
     - name: Upload GitHub issues bugs count by period (after github_issues_timeline)
       continue-on-error: true
@@ -77,7 +77,7 @@ jobs:
         if [ "${{ steps.cleanup_gate.outputs.run_cleanup }}" = "true" ]; then
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_bugs_count_by_period.sql --table_path test_results/analytics/github_issues_bugs_count_by_period --store_type column --partition_keys date_window area --primary_keys date_window area --cleanup_window_key date_window --cleanup_window_interval '365 * Interval("P1D")'
         else
-          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_bugs_count_by_period.sql --table_path test_results/analytics/github_issues_bugs_count_by_period --store_type column --partition_keys date_window area --primary_keys date_window area
+          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/github_issues_bugs_count_by_period.sql --table_path test_results/analytics/github_issues_bugs_count_by_period --store_type column --partition_keys date_window area --primary_keys date_window area --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
     - name: Upload MUTED test monitor data mart with GitHub issue links
       continue-on-error: true
@@ -91,7 +91,7 @@ jobs:
         if [ "${{ steps.cleanup_gate.outputs.run_cleanup }}" = "true" ]; then
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_with_issue_and_area.sql --table_path test_results/analytics/muted_tests_with_issue_and_area --store_type column --partition_keys date_window branch build_type area --primary_keys date_window full_name branch build_type --cleanup_window_key date_window --cleanup_window_interval '365 * Interval("P1D")'
         else
-          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_with_issue_and_area.sql --table_path test_results/analytics/muted_tests_with_issue_and_area --store_type column --partition_keys date_window branch build_type area --primary_keys date_window full_name branch build_type
+          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_with_issue_and_area.sql --table_path test_results/analytics/muted_tests_with_issue_and_area --store_type column --partition_keys date_window branch build_type area --primary_keys date_window full_name branch build_type --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
     - name: Upload muted tests statistic data mart
       continue-on-error: true
@@ -102,7 +102,7 @@ jobs:
         if [ "${{ steps.cleanup_gate.outputs.run_cleanup }}" = "true" ]; then
           python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_daily_by_team.sql --table_path test_results/analytics/muted_tests_daily_by_team --store_type column --partition_keys date_window branch build_type area --primary_keys date_window area branch build_type --cleanup_window_key date_window --cleanup_window_interval '365 * Interval("P1D")'
         else
-          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_daily_by_team.sql --table_path test_results/analytics/muted_tests_daily_by_team --store_type column --partition_keys date_window branch build_type area --primary_keys date_window area branch build_type
+          python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/muted_tests_daily_by_team.sql --table_path test_results/analytics/muted_tests_daily_by_team --store_type column --partition_keys date_window branch build_type area --primary_keys date_window area branch build_type --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
         fi
     - name: Upload postcommit retry data mart
       continue-on-error: true

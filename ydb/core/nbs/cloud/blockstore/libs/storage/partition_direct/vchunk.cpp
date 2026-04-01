@@ -29,8 +29,6 @@ TVChunk::TVChunk(
     IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer,
     ui32 syncRequestsBatchSize,
     TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
@@ -38,16 +36,12 @@ TVChunk::TVChunk(
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
-    , Scheduler(std::move(scheduler))
-    , Timer(std::move(timer))
     , VChunkConfig(vChunkConfig)
     , BlocksCount(VChunkSize / DefaultBlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
-{
-    Y_UNUSED(PartitionDirectService);
-}
+{}
 
 TVChunk::~TVChunk() = default;
 
@@ -346,8 +340,7 @@ void TVChunk::DoWriteBlocksLocal(
     auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
         ActorSystem,
         Executor,
-        Scheduler,
-        Timer,
+        PartitionDirectService,
         VChunkConfig,
         DirectBlockGroup,
         vchunkRange,

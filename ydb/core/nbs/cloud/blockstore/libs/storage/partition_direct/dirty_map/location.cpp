@@ -98,35 +98,6 @@ ELocation TranslatePBufferToDDisk(ELocation location)
     }
 }
 
-TString LocationDebugString(ELocation location)
-{
-    switch (location) {
-        case ELocation::PBuffer0:
-            return "PBuffer0";
-        case ELocation::PBuffer1:
-            return "PBuffer1";
-        case ELocation::PBuffer2:
-            return "PBuffer2";
-        case ELocation::HOPBuffer0:
-            return "HOPBuffer0";
-        case ELocation::HOPBuffer1:
-            return "HOPBuffer1";
-        case ELocation::DDisk0:
-            return "DDisk0";
-        case ELocation::DDisk1:
-            return "DDisk1";
-        case ELocation::DDisk2:
-            return "DDisk2";
-        case ELocation::HODDisk0:
-            return "HODDisk0";
-        case ELocation::HODDisk1:
-            return "HODDisk1";
-        case ELocation::Unknown:
-            return "Unknown";
-    }
-    return "";
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TLocationMask::TIterator::TIterator(const TLocationMask& mask)

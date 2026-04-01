@@ -5,9 +5,6 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
-#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 #include <ydb/library/actors/wilson/wilson_span.h>
 
@@ -43,8 +40,7 @@ NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
 TWriteRequestExecutor::TWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
     TExecutorPtr executor,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer,
+    IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
@@ -55,6 +51,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     TDuration writeHandoffDelay)
     : ActorSystem(actorSystem)
     , Executor(std::move(executor))
+    , PartitionDirectService(partitionDirectService)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkRange(vChunkRange)
@@ -62,8 +59,6 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
-    , Scheduler(std::move(scheduler))
-    , Timer(std::move(timer))
     , WriteHandoffDelay(writeHandoffDelay)
 {}
 
@@ -95,6 +90,16 @@ void TWriteRequestExecutor::Run(
             SendWriteRequest(ELocation::PBuffer2);
             return;
     }
+
+    PartitionDirectService->ScheduleAfterDelay(
+        Executor,
+        WriteHandoffDelay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->SendWriteRequestsToHandoffPBuffers();
+            }
+        });
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>
@@ -221,6 +226,31 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
             self->OnWriteResponse(location, f.GetValue(), std::move(span));
         });
+}
+
+void TWriteRequestExecutor::SendWriteRequestsToHandoffPBuffers()
+{
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteRequestExecutor. Send write request to HOPBuffer0 since we "
+            "have %lu completed writes",
+            CompletedWrites.Count());
+
+        SendWriteRequest(ELocation::HOPBuffer0);
+    }
+
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteRequestExecutor. Send write request to HOPBuffer0 since we "
+            "have %lu completed writes",
+            CompletedWrites.Count());
+
+        SendWriteRequest(ELocation::HOPBuffer1);
+    }
 }
 
 void TWriteRequestExecutor::OnWriteResponse(

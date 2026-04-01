@@ -27,8 +27,6 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        ISchedulerPtr scheduler,
-        ITimerPtr timer,
         ui32 syncRequestsBatchSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);

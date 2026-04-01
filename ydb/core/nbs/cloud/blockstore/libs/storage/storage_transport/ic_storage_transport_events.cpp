@@ -9,11 +9,10 @@ TEvTransportPrivate::TConnect::~TConnect()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-// Promise may not be set because writes to handoff
-// persistent buffers can be set before writes
-// to primary persistent buffers.
 TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
-{}
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {

@@ -7,6 +7,8 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
 #include <library/cpp/threading/future/future.h>
 
 #include <functional>
@@ -28,6 +30,15 @@ public:
     {
         Y_UNUSED(name);
         return NWilson::TSpan();
+    }
+
+    void ScheduleAfterDelay(
+        NYdb::NBS::TExecutorPtr executor,
+        TDuration delay,
+        NYdb::NBS::TCallback callback) override
+    {
+        Y_UNUSED(delay);
+        executor->ExecuteSimple(std::move(callback));
     }
 };
 

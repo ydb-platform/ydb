@@ -25,8 +25,6 @@ TRegion::TRegion(
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer,
     ui32 syncRequestsBatchSize,
     TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
@@ -42,8 +40,6 @@ TRegion::TRegion(
             partitionDirectService,
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
-            scheduler,
-            timer,
             syncRequestsBatchSize,
             writeHandoffDelay,
             traceSamplePeriod);

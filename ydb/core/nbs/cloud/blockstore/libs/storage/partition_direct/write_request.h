@@ -3,11 +3,13 @@
 #include "direct_block_group.h"
 #include "vchunk_config.h"
 
+<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+>>>>>>> resolve issues
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
-
-#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 
@@ -43,8 +45,7 @@ public:
     TWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
         TExecutorPtr executor,
-        ISchedulerPtr scheduler,
-        ITimerPtr timer,
+        IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
@@ -63,6 +64,7 @@ public:
 private:
     void SendWriteRequest(ELocation location);
     void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
+    void SendWriteRequestsToHandoffPBuffers();
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,
@@ -74,6 +76,7 @@ private:
 
     NActors::TActorSystem* ActorSystem;
     const TExecutorPtr Executor;
+    IPartitionDirectService* const PartitionDirectService;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;
@@ -82,8 +85,6 @@ private:
     const NWilson::TTraceId TraceId;
     const ui64 Lsn;
 
-    const ISchedulerPtr Scheduler;
-    const ITimerPtr Timer;
     const TDuration WriteHandoffDelay;
 
     NThreading::TPromise<TResponse> Promise =

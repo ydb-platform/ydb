@@ -5,9 +5,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
+
+#include <utility>
 
 using namespace NKikimr;
 using namespace NThreading;
@@ -41,9 +44,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig,
-    ISchedulerPtr scheduler,
-    ITimerPtr timer)
+    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
@@ -54,8 +55,6 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             partitionDirectService,
             i,
             directBlockGroups,
-            scheduler,
-            timer,
             storageConfig->GetSyncRequestsBatchSize(),
             storageConfig->GetWriteHandoffDelay(),
             storageConfig->GetTraceSamplePeriod());
@@ -81,14 +80,14 @@ TFastPathService::TFastPathService(
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , DiskId(diskId)
+    , Scheduler(std::move(scheduler))
+    , Timer(std::move(timer))
     , Regions(CreateRegions(
           this,
           blockCount,
           blockSize,
           std::move(directBlockGroups),
-          storageConfig,
-          std::move(scheduler),
-          std::move(timer)))
+          storageConfig))
     , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
@@ -234,6 +233,17 @@ NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
         name.data(),
         NWilson::EFlags::AUTO_END,
         ActorSystem);
+}
+
+void TFastPathService::ScheduleAfterDelay(
+    NYdb::NBS::TExecutorPtr executor,
+    TDuration delay,
+    NYdb::NBS::TCallback callback)
+{
+    Scheduler->Schedule(
+        executor.get(),
+        Timer->Now() + delay,
+        std::move(callback));
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

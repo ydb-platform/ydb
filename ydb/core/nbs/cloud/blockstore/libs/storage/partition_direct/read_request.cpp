@@ -80,7 +80,7 @@ void TReadRequestExecutor::Run()
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
         "TReadRequestExecutor. Reading from location %s",
-        LocationDebugString(*location).c_str());
+        ToString(*location).c_str());
 
     auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
                                            VChunkConfig.VChunkIndex,

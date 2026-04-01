@@ -20,8 +20,6 @@ public:
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
-        ISchedulerPtr scheduler,
-        ITimerPtr timer,
         ui32 syncRequestsBatchSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);

@@ -23,6 +23,8 @@ class TFastPathService
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TString DiskId;
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
     const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
     std::atomic<ui64> SequenceGenerator;
@@ -68,6 +70,11 @@ public:
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
     NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+
+    void ScheduleAfterDelay(
+        NYdb::NBS::TExecutorPtr executor,
+        TDuration delay,
+        NYdb::NBS::TCallback callback) override;
 
 private:
     ui64 GenerateSequenceNumber();

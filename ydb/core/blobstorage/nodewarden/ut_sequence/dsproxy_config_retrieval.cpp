@@ -21,6 +21,16 @@ void SetupLogging(TTestBasicRuntime& runtime) {
 void SetupServices(TTestBasicRuntime& runtime) {
     TAppPrepare app;
 
+    THashSet<ui32> registeredNodeIds;
+    TTestActorRuntimeBase::TEventObserver prevObserver = runtime.SetObserverFunc(
+            [&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerRegisterNode::EventType) {
+            auto *msg = ev->Get<TEvBlobStorage::TEvControllerRegisterNode>();
+            registeredNodeIds.insert(msg->Record.GetNodeID());
+        }
+        return prevObserver(ev);
+    });
+
     app.ClearDomainsAndHive();
     auto dom = TDomainsInfo::TDomain::ConstructEmptyDomain("dom-1", 0);
     app.AddDomain(dom.Release());
@@ -96,6 +106,12 @@ void SetupServices(TTestBasicRuntime& runtime) {
     runtime.Initialize(app.Unwrap());
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController), &CreateFlatBsController);
+
+    runtime.WaitFor("all nodes registered in BS_CONTROLLER", [&] {
+        return registeredNodeIds.size() == runtime.GetNodeCount();
+    }, TDuration::Seconds(10));
+
+    runtime.SetObserverFunc(prevObserver);
 
     // setup box and storage pool for testing
     {

@@ -17,6 +17,7 @@ SRCS(
     http_cache_ut.cpp
     http_ut.cpp
     http2_ut.cpp
+    http_proxy_ut.cpp
     tls_client_connection.cpp
 )
 ELSE()

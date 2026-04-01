@@ -338,23 +338,13 @@ TActorId TUrlHandler::GetHandler(const TString& url) const {
 }
 
 bool IsIPv6(const TString& host) {
-    if (host.find_first_not_of(":0123456789abcdef") != TString::npos) {
-        return false;
-    }
-    if (std::count(host.begin(), host.end(), ':') < 2) {
-        return false;
-    }
-    return true;
+    in6_addr addr;
+    return inet_pton(AF_INET6, host.c_str(), &addr) > 0;
 }
 
 bool IsIPv4(const TString& host) {
-    if (host.find_first_not_of(".0123456789") != TString::npos) {
-        return false;
-    }
-    if (std::count(host.begin(), host.end(), '.') != 3) {
-        return false;
-    }
-    return true;
+    in_addr addr;
+    return inet_pton(AF_INET, host.c_str(), &addr) > 0;
 }
 
 bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& uri) {

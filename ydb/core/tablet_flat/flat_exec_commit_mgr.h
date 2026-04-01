@@ -69,7 +69,7 @@ namespace NTabletFlatExecutor {
 
             void Stop() {
                 if (Running) {
-                    Ops->Send(Owner, new TEvents::TEvPoisonPill);
+                    Ops->Send(Writer, new TEvents::TEvPoisonPill);
                 }
                 *this = TBackupLogic();
             }

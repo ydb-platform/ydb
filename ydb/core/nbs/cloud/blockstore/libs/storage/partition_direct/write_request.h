@@ -15,8 +15,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 enum class EWriteMode: ui32
 {
-    PBufferReplication = 0,
-    DirectPBuffersFilling = 1,
+    PBufferReplication,
+    DirectPBuffersFilling,
 };
 
 EWriteMode GetWriteModeFromProto(

@@ -125,10 +125,29 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    for (const auto& pbufferResponse: response.Responses) {
-        auto location = VChunkConfig.GetPBufferLocation(pbufferResponse.HostId);
-        if (!HasError(pbufferResponse.Error)) {
-            CompletedWrites.Set(location);
+    if (response.FatalError.has_value() &&
+        HasError(response.FatalError.value()))
+    {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "OnWriteToManyPBuffersResponse fatal error: %s",
+            FormatError(response.FatalError.value()).c_str());
+        // The error will be set and replied below.
+    } else {
+        for (const auto& pbufferResponse: response.Responses) {
+            auto location =
+                VChunkConfig.GetPBufferLocation(pbufferResponse.HostId);
+            if (!HasError(pbufferResponse.Error)) {
+                CompletedWrites.Set(location);
+            } else {
+                LOG_WARN(
+                    *ActorSystem,
+                    NKikimrServices::NBS_PARTITION,
+                    "OnWriteToManyPBuffersResponse error on location %d: %s",
+                    location,
+                    FormatError(pbufferResponse.Error).c_str());
+            }
         }
     }
 
@@ -147,7 +166,7 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor: %s",
+            "OnWriteToManyPBuffersResponse: %s",
             FormatError(resultError).c_str());
 
         Reply(resultError);

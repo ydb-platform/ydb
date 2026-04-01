@@ -43,21 +43,27 @@ TListPBufferResponse MakeListPBufferResponse(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t TDDiskIdHash::operator()(
-    const NKikimrBlobStorage::NDDisk::TDDiskId& key) const
+TDBGWriteBlocksToManyPBuffersResponse
+TDBGWriteBlocksToManyPBuffersResponse::MakeFatalError(
+    EWellKnownResultCodes code,
+    TString reason)
 {
-    size_t h1 = std::hash<ui32>{}(key.GetNodeId());
-    size_t h2 = std::hash<ui32>{}(key.GetPDiskId());
-    size_t h3 = std::hash<ui32>{}(key.GetDDiskSlotId());
-    return h1 ^ (h2 << 1) ^ (h3 << 2);
+    TDBGWriteBlocksToManyPBuffersResponse result;
+    result.FatalError = MakeError(code, std::move(reason));
+    return result;
 }
 
-bool TDDiskIdIdEqual::operator()(
-    const NKikimrBlobStorage::NDDisk::TDDiskId& a,
-    const NKikimrBlobStorage::NDDisk::TDDiskId& b) const
+////////////////////////////////////////////////////////////////////////////////
+
+bool TDDiskIdLess::operator()(const Type& lhs, const Type& rhs) const
 {
-    return a.GetNodeId() == b.GetNodeId() && a.GetPDiskId() == b.GetPDiskId() &&
-           a.GetDDiskSlotId() == b.GetDDiskSlotId();
+    if (lhs.GetNodeId() != rhs.GetNodeId()) {
+        return lhs.GetNodeId() < rhs.GetNodeId();
+    }
+    if (lhs.GetPDiskId() != rhs.GetPDiskId()) {
+        return lhs.GetPDiskId() < rhs.GetPDiskId();
+    }
+    return lhs.GetDDiskSlotId() < rhs.GetDDiskSlotId();
 }
 
 const TFuture<NProto::TError>&
@@ -357,13 +363,10 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     }
 
     if (!Initialized) {
-        TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
-        for (auto& diskId: disksIds) {
-            dbgResponse.Responses.emplace_back(
-                PBufferIdToHostIndex[diskId],
-                MakeError(E_REJECTED, "Connections are not established"));
-        }
-        return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(dbgResponse);
+        return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(
+            TDBGWriteBlocksToManyPBuffersResponse::MakeFatalError(
+                E_REJECTED,
+                "Connections are not established"));
     }
 
     auto childSpan = NWilson::TSpan(
@@ -411,7 +414,11 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                             std::move(promise));
                     } else {
                         promise.SetValue(
-                            TDBGWriteBlocksToManyPBuffersResponse());
+                            TDBGWriteBlocksToManyPBuffersResponse::
+                                MakeFatalError(
+                                    E_FAIL,
+                                    "WriteBlocksToManyPBuffersResponse: DBG is "
+                                    "destroyed already."));
                     }
                 });
         });
@@ -449,7 +456,8 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
                       E_FAIL,
                       singlePBufferResponse.GetResult().GetErrorReason());
 
-        dbgResponse.Responses.emplace_back(hostIndex->second, error);
+        dbgResponse.Responses.push_back(
+            {.HostId = hostIndex->second, .Error = std::move(error)});
     }
     promise.SetValue(std::move(dbgResponse));
 }

@@ -31,17 +31,16 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        TSinglePersistentBufferResult(ui8 hostId, NProto::TError error)
-            : HostId(hostId)
-            , Error(std::move(error))
-        {}
-
         ui8 HostId{};
         NProto::TError Error;
     };
 
-    TDBGWriteBlocksToManyPBuffersResponse() = default;
+    static TDBGWriteBlocksToManyPBuffersResponse MakeFatalError(
+        EWellKnownResultCodes code,
+        TString reason);
+
     TVector<TSinglePersistentBufferResult> Responses;
+    std::optional<NProto::TError> FatalError;
 };
 
 struct TDBGFlushResponse
@@ -88,23 +87,14 @@ struct TAggregatedListPBufferResponse
     TMap<ui8, TListPBufferMetaVector> Meta;
 };
 
-struct TDDiskIdHash
+struct TDDiskIdLess
 {
-    size_t operator()(const NKikimrBlobStorage::NDDisk::TDDiskId& key) const;
+    using Type = NKikimrBlobStorage::NDDisk::TDDiskId;
+    bool operator()(const Type& lhs, const Type& rhs) const;
 };
 
-struct TDDiskIdIdEqual
-{
-    bool operator()(
-        const NKikimrBlobStorage::NDDisk::TDDiskId& a,
-        const NKikimrBlobStorage::NDDisk::TDDiskId& b) const;
-};
-
-using TDDiskIdToHostIndex = THashMap<
-    NKikimrBlobStorage::NDDisk::TDDiskId,
-    ui8,
-    TDDiskIdHash,
-    TDDiskIdIdEqual>;
+using TDDiskIdToHostIndex =
+    TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

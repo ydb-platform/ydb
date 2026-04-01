@@ -27,18 +27,18 @@ message TTableServiceConfig {
         }
         optional uint32 ComputeActorsCount = 1 [default = 10000];
         optional uint64 ChannelBufferSize = 2 [default = 8388608];              //  8 MB
-        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        //  48 MB
+        optional uint64 ChannelChunkSizeLimit = 30 [default = 50331648];        // 48 MB
         reserved 3;
         optional uint64 MkqlLightProgramMemoryLimit = 4 [default = 1048576];    // 1 MiB
         optional uint64 MkqlHeavyProgramMemoryLimit = 5 [default = 31457280, (InvalidateCompileCache) = true];   // 30 MB
         optional uint64 QueryMemoryLimit = 6 [default = 32212254720];           // 30 GB
         optional uint32 PublishStatisticsIntervalSec = 7 [default = 2];
-        reserved 8; // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
+        reserved 8;  // optional bool EnableInstantMkqlMemoryAlloc = 8 [default = true];
         reserved 9;  // optional uint32 InstantMkqlMemoryAllocWaitTimeMs = 9 [default = 20];
         reserved 10; // optional uint32 InstantMkqlMemoryAllocStepTimeMs = 10 [default = 1];
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
-        optional uint64 MinChannelBufferSize = 12 [default = 2048];          // 2 KB
+        optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
 
         reserved 13;
         reserved 14;

@@ -88,8 +88,11 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
-    // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps
+    // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps.
     std::vector<TShardIdToInfoMap> PrunedPartitions;
+
+    // Used for single-partitioned stage and sequential inflight optimization.
+    std::optional<TShardInfoWithId> VirtualPartition;
 
     struct TIndexMeta {
         TTableId TableId;
@@ -383,7 +386,6 @@ public:
         const TString& database,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
-        const TPartitionPrunerConfig& partitionPrunerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
@@ -392,12 +394,8 @@ public:
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
-    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-        TQueryExecutionStats* stats
-    );
-
-    // TODO: public used by TKqpLiteralExecuter
-    void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
+    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
+    void BuildLiteralTasks();
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
@@ -409,9 +407,6 @@ public:
 
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
-
-public:
-    THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public - used by Data Executer
 
 private:
     void FillKqpTasksGraphStages();
@@ -447,6 +442,7 @@ private:
         const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
         ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
 
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, ui32 outputIdx,
         bool enableSpilling, const TStageInfo& stageInfo) const;
@@ -463,10 +459,10 @@ private:
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
     void FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, const TKqpTasksGraph::TTaskType& task) const;
 
-    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder();
+    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder() const;
     TString ReplaceStructuredTokenReferences(const TString& token) const;
 
 private:

@@ -141,25 +141,11 @@ public:
             (transactions_count, Request.Transactions.size()),
             (trace_id, TraceId()));
 
+        TasksGraph.BuildLiteralTasks();
+
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions.at(txIdx);
-
-            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-                KQP_STLOG_D(KQPLIT, "Stage AST",
-                    (stage_id, stageInfo.Id),
-                    (ast, stage.GetProgramAst()),
-                    (trace_id, TraceId()));
-
-                YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
-                YQL_ENSURE(stageInfo.InputsCount == 0);
-
-                TasksGraph.AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
-            }
-
             ResponseEv->InitTxResult(tx.Body);
-            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {

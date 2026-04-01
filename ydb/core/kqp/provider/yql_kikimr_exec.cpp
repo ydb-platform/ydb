@@ -2467,27 +2467,12 @@ public:
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize.value_or(
-                                    NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
-                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive.value_or(
-                                    NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
-                                double fpp;
-                                if (localBloomNgramFilterDesc.FalsePositiveProbability) {
-                                    fpp = *localBloomNgramFilterDesc.FalsePositiveProbability;
-                                } else if (localBloomNgramFilterDesc.FilterSizeBytes || localBloomNgramFilterDesc.RecordsCount) {
-                                    const ui32 filterSizeBytes = localBloomNgramFilterDesc.FilterSizeBytes.value_or(
-                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(0.1));
-                                    const ui32 recordsCount = localBloomNgramFilterDesc.RecordsCount.value_or(
-                                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::DeprecatedRecordsCount);
-                                    fpp = ComputeFalsePositiveProbabilityFromDeprecatedParams(filterSizeBytes, recordsCount);
-                                } else {
-                                    fpp = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                                }
+                                proto->set_ngram_size(localBloomNgramFilterDesc.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                                proto->set_case_sensitive(localBloomNgramFilterDesc.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
+                                const double fpp = localBloomNgramFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
                                 proto->set_hashes_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                                proto->set_filter_size_bytes(
-                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                                proto->set_records_count(
-                                    NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                                proto->set_filter_size_bytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                                proto->set_records_count(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
                                 proto->set_false_positive_probability(fpp);
                             }
                         } else {

@@ -962,8 +962,8 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
             ScheduleProcessing();
+            NotifyPQRB(true);
             UpdateMetrics();
-            NotifyPQRB();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             break;
         }
@@ -1043,8 +1043,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
     }
+    NotifyPQRB(true);
     UpdateMetrics();
-    NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
@@ -1064,8 +1064,17 @@ bool TConsumerActor::UseForReading() const {
 void TConsumerActor::NotifyPQRB(bool force) {
     auto useForReading = UseForReading();
     if (force || useForReading != LastUseForReading) {
-        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId,
-            PartitionEndOffset - LastCommittedOffset, useForReading);
+        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId, useForReading);
+
+        const auto& metrics = Storage->GetMetrics();
+        const i64 rawMessageCount = static_cast<i64>(PartitionEndOffset)
+            - static_cast<i64>(LastCommittedOffset)
+            - static_cast<i64>(metrics.CommittedMessageCount);
+
+        ev->Record.SetLockedMessageCount(metrics.LockedMessageCount);
+        ev->Record.SetDelayedMessageCount(metrics.DelayedMessageCount);
+        ev->Record.SetMessageCount(std::max<i64>(0, rawMessageCount));
+
         Send(PartitionActorId, std::move(ev));
         LastUseForReading = useForReading;
     }

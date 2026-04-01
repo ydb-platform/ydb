@@ -18,11 +18,6 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
-#ifdef _linux_
-#include <sys/vfs.h>
-#include <linux/magic.h>
-#endif
-
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -190,16 +185,6 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
                     "base_path must be an absolute path");
             }
-
-#ifdef _linux_
-            struct statfs fsInfo;
-            if (statfs(settings.base_path().c_str(), &fsInfo) == 0) {
-                if (fsInfo.f_type != NFS_SUPER_MAGIC) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
-                        "base_path must be on NFS filesystem");
-                }
-            }
-#endif
 
             TString error;
             if (!ValidateFsPath(settings.base_path(), "base_path", error)) {

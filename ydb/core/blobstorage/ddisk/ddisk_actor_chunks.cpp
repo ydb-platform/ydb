@@ -86,8 +86,7 @@ namespace NKikimr::NDDisk {
                     IssuePDiskLogRecord(TLogSignature::SignaturePersistentBufferChunkMap, chunkIdx
                         , CreatePersistentBufferChunkMapSnapshot(), &PersistentBufferChunkMapSnapshotLsn, [this, chunkIdx] {
                         IssuePersistentBufferChunkAllocationInflight = false;
-                        auto pbActorId = MakeBlobStoragePersistentBufferId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-                        Send(pbActorId, new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
+                        Send(PersistentBufferActorId, new TEvPrivate::TEvHandlePersistentBufferEventForChunk(chunkIdx));
                         ++*Counters.Chunks.ChunksOwned;
                     });
                 }

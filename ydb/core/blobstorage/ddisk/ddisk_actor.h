@@ -307,7 +307,7 @@ namespace NKikimr::NDDisk {
         const bool IsPersistentBufferActor = false;
 
     public:
-        NKikimrServices::TActivity::EType ActorActivityType() {
+        NKikimrServices::TActivity::EType ActorActivityType() const {
             if (IsPersistentBufferActor) {
                 return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
             }
@@ -713,6 +713,7 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
         TActorId WritePersistentBuffersActor;
+        TActorId PersistentBufferActorId;
 
         void CreatePersistentBuffer();
         void InitPersistentBuffer();

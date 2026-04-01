@@ -42,12 +42,13 @@ namespace {
         DiskFd = std::move(diskFd);
         InitPersistentBuffer();
         for (auto idx : initPersistentBufferChunks) {
-            PersistentBufferSpaceAllocator.AddNewChunk(idx);
             auto [it, inserted] = PersistentBufferSectorsChecksum.insert({idx, {}});
             it->second.resize(SectorInChunk);
             if (!inserted) {
                 STLOG(PRI_ERROR, BS_DDISK, BSDD10, "TDDiskActor::TDDiskActor persistent buffer has duplicated chunk index in log", (DDiskId, DDiskId), (PDiskActorId, BaseInfo.PDiskActorID), (ChunkIdx, idx));
+                continue;
             }
+            PersistentBufferSpaceAllocator.AddNewChunk(idx);
             ++*Counters.Chunks.ChunksOwned;
         }
     }
@@ -301,8 +302,7 @@ namespace {
         if (IsPersistentBufferActor) {
             Send(WritePersistentBuffersActor, new NActors::TEvents::TEvPoison());
         } else {
-            auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-            Send(pbServiceId, new NActors::TEvents::TEvPoison());
+            Send(PersistentBufferActorId, new NActors::TEvents::TEvPoison());
         }
 #if defined(__linux__)
         if (UringRouter) {

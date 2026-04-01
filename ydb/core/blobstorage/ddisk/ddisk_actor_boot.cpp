@@ -112,9 +112,9 @@ namespace NKikimr::NDDisk {
             Info, TPersistentBufferFormat(PersistentBufferFormat), TDDiskConfig(Config), AppData()->Counters,
             PersistentBufferChunks, PDiskParams, std::move(format), std::move(DiskFd.Duplicate()));
         auto *as = TActivationContext::ActorSystem();
-        const TActorId pbActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
+        PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
-        as->RegisterLocalService(pbServiceId, pbActorId);
+        as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
     }
 
     void TDDiskActor::StartHandlingQueries() {

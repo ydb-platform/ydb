@@ -74,7 +74,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
     AddCommand(std::make_unique<TCommandVector>());
-    AddCommand(std::make_unique<TCommandFulltext>());
+    AddHiddenCommand(std::make_unique<TCommandFulltext>());
     AddHiddenCommand(std::make_unique<TCommandTestShard>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));

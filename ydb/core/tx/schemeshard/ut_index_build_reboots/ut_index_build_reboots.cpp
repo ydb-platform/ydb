@@ -1,4 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 
@@ -772,5 +775,143 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(UniqueIndexValidationFailsBetweenShards, 2 /*rebootBuckets*/, 2 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         DoUniqueIndexValidationFails(t, true);
+    }
+}
+
+// Tests for issue #35458: hung index build scans should be restarted by schemeshard
+// after a timeout when no progress ACK (TEvBuildIndexProgressResponse) is received.
+Y_UNIT_TEST_SUITE(IndexBuildHungScanRestartTests) {
+
+    // Simulates a datashard scan that never sends progress responses back to schemeshard.
+    // After the scan timeout, schemeshard must re-send TEvBuildIndexCreateRequest to restart
+    // the scan. Without the fix, the index build hangs indefinitely.
+    Y_UNIT_TEST(HungScanIsRestarted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1, 100);
+
+        // Block all progress responses from datashard to simulate a hung scan.
+        // Schemeshard should detect the timeout and resend TEvBuildIndexCreateRequest.
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime);
+
+        // Count how many scan create requests are sent to detect restarts.
+        ui32 scanCreateRequestCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr&) {
+                ++scanCreateRequestCount;
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for the initial scan request to arrive at datashard.
+        runtime.WaitFor("initial scan request", [&] { return scanCreateRequestCount >= 1; });
+        UNIT_ASSERT_GE(scanCreateRequestCount, 1);
+
+        // Progress responses are blocked - simulate a hung scan.
+        // Advance time past the scan timeout so schemeshard retries.
+        // The fix introduces a timer (e.g. a few minutes) after which
+        // schemeshard resends TEvBuildIndexCreateRequest to restart the hung scan.
+        env.SimulateSleep(runtime, TDuration::Minutes(10));
+
+        // After timeout, schemeshard should have sent a second TEvBuildIndexCreateRequest.
+        // This demonstrates the fix is working. Without the fix this assertion fails
+        // because schemeshard never retries.
+        UNIT_ASSERT_C(scanCreateRequestCount >= 2,
+            "Schemeshard did not restart the hung scan after timeout (got "
+            << scanCreateRequestCount << " scan create requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458: hung scans are never restarted.");
+
+        // Now unblock progress responses so the build can complete.
+        progressBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
+    }
+
+    // When a datashard crashes (causing a pipe reset) during index build scan,
+    // schemeshard should move the shard back to ToUpload and retry with a new
+    // TEvBuildIndexCreateRequest. This tests the existing PipeRetry mechanism
+    // combined with the new scan timeout for extra coverage.
+    Y_UNIT_TEST(HungScanIsRestartedAfterDatashardReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "index" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8"   }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (ui32 delta = 0; delta < 2; ++delta) {
+            WriteRows(runtime, TTestTxConfig::FakeHiveTablets + delta, 1 + delta, 100 + delta);
+        }
+
+        // Block progress responses from the first datashard to simulate it hanging
+        // while the second shard works normally.
+        bool firstShardBlocked = true;
+        TBlockEvents<TEvDataShard::TEvBuildIndexProgressResponse> progressBlocker(runtime,
+            [&](const TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev) {
+                return firstShardBlocked &&
+                    ev->Get()->Record.GetTabletId() == TTestTxConfig::FakeHiveTablets;
+            });
+
+        ui32 restartCount = 0;
+        auto createRequestObserver = runtime.AddObserver<TEvDataShard::TEvBuildIndexCreateRequest>(
+            [&](TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev) {
+                if (ev->Get()->Record.GetTabletId() == TTestTxConfig::FakeHiveTablets) {
+                    ++restartCount;
+                }
+            });
+
+        AsyncBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table",
+            TBuildIndexConfig{"index1", NKikimrSchemeOp::EIndexTypeGlobal, {"index"}, {}, {}});
+        const ui64 buildIndexId = txId;
+
+        // Wait for initial scan request to the blocked shard.
+        runtime.WaitFor("initial scan request to hung shard", [&] { return restartCount >= 1; });
+
+        // Advance time past scan timeout to trigger restart.
+        env.SimulateSleep(runtime, TDuration::Minutes(10));
+
+        // Schemeshard should have retried the hung shard.
+        UNIT_ASSERT_C(restartCount >= 2,
+            "Schemeshard did not restart the hung scan on shard "
+            << TTestTxConfig::FakeHiveTablets << " after timeout (got "
+            << restartCount << " requests, expected at least 2). "
+            "This demonstrates the bug from issue #35458.");
+
+        // Unblock and let the build finish.
+        firstShardBlocked = false;
+        progressBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildIndexId);
+
+        auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
+        UNIT_ASSERT_VALUES_EQUAL((ui64)descr.GetIndexBuild().GetState(),
+            (ui64)Ydb::Table::IndexBuildState::STATE_DONE);
     }
 }

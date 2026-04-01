@@ -1986,7 +1986,7 @@ public:
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
 
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-        } else if (txCtx->BufferActorId) {
+        } else if (txCtx->BufferActorId && !isRollback) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }

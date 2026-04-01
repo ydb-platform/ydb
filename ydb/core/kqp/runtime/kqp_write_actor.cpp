@@ -129,20 +129,34 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
-        const auto prepareSettings = txManager->GetPrepareTransactionInfo();
 
-        if (!prepareSettings.ArbiterColumnShard) {
-            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                transaction.AddSendingShards(sendingShardId);
-            }
-            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                transaction.AddReceivingShards(receivingShardId);
+        if (!isImmediateCommit) {
+            const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+
+            if (!prepareSettings.ArbiterColumnShard) {
+                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                    transaction.AddSendingShards(sendingShardId);
+                }
+                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                    transaction.AddReceivingShards(receivingShardId);
+                }
+            } else {
+                transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
+                transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
             }
         } else {
-            transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
-            transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+            // Transaction with single topic.
+            for (const ui64 sendingShardId : txManager->GetTopicOperations().GetSendingTabletIds()) {
+                transaction.AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : txManager->GetTopicOperations().GetReceivingTabletIds()) {
+                transaction.AddReceivingShards(receivingShardId);
+            }
+
+            AFL_ENSURE(transaction.GetSendingShards().size() == 1);
+            AFL_ENSURE(transaction.GetReceivingShards().size() == 1);
         }
     }
 
@@ -3641,7 +3655,7 @@ public:
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
             return;
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics()) && !TxManager->HasTopics() /* tmp fix */) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(traceId));
         } else {
@@ -3833,9 +3847,7 @@ public:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            if (!isImmediateCommit) {
-                FillTopicsCommit(transaction, TxManager);
-            }
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();

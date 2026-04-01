@@ -280,16 +280,17 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
-        LastResponse = std::move(ev->Get()->Record);
+        auto& record = ev->Get()->Record;
 
         // Check for error status (e.g., tenant mismatch for serverless)
-        if (LastResponse.HasStatus() && LastResponse.GetStatus() != Ydb::StatusIds::SUCCESS) {
+        if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
-            NYql::IssuesFromMessage(LastResponse.GetIssues(), issues);
-            ReplyErrorAndDie(LastResponse.GetStatus(), issues);
+            NYql::IssuesFromMessage(record.GetIssues(), issues);
+            ReplyErrorAndDie(record.GetStatus(), issues);
             return;
         }
 
+        LastResponse = std::move(record);
         ProcessRows();
     }
 

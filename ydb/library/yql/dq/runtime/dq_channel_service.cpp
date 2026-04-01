@@ -121,7 +121,6 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
-    Cerr << "TLocalBuffer Push" << Endl;
     if (!FinishPushed && !Finished.load()) {
         if (data.Finished) {
             FinishPushed = true;
@@ -135,6 +134,7 @@ void TLocalBuffer::Push(TDataChunk&& data) {
 
 void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
+
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
@@ -1064,10 +1064,14 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         // data.Timestamp = TInstant::MicroSeconds(record.GetSendTime());
     }
     data.Bytes = record.GetBytes();
+    Y_ENSURE(data.Bytes > data.Buffer.Size(), "data.Bytes " << data.Bytes << " data.Buffer.Size() " << data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
+
+    if (record.HasWatermark()) {
+        data.Watermark = record.GetWatermark();
+    }
     if (record.HasCheckpoint()) {
         data.Checkpoint = record.GetCheckpoint();
     }
-    Y_ENSURE(data.Bytes > data.Buffer.Size(), "data.Bytes " << data.Bytes << " data.Buffer.Size() " << data.Buffer.Size()); // record.GetBytes() == data.Buffer.Size() + const
     if (descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
     }

@@ -47,7 +47,9 @@
   CoordinationClient client = CoordinationClient.newClient(transport);
   ```
 
-  Узел создаётся вызовом `createNode` с полным путём к узлу в базе. Префикс пути к базе можно взять из `client.getDatabase()`. Настройки узла задаются через `CoordinationNodeSettings` и [`NodeConfig`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java): периоды `SelfCheckPeriod` и `SessionGracePeriod`, режимы согласованности чтения и подключения сессии (`readConsistencyMode`, `attachConsistencyMode`), режим счётчиков ограничителя скорости (`rateLimiterCountersMode`). Значения по умолчанию совпадают с описанием для C++ (см. выше); при необходимости их переопределяют через цепочку `NodeConfig.create().with…`.
+  Узел создаётся вызовом `createNode` с полным путём к узлу в базе. Префикс пути к базе можно взять из `client.getDatabase()`.
+
+  При необходимости задайте конфигурацию узла через [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java), используя цепочку `NodeConfig.create().with…`. Доступные параметры: периоды `SelfCheckPeriod` и `SessionGracePeriod`, режимы согласованности чтения и подключения сессии (`readConsistencyMode`, `attachConsistencyMode`), режим счётчиков ограничителя скорости (`rateLimiterCountersMode`). Значения по умолчанию совпадают с описанием для C++ (см. выше). Готовый `NodeConfig` передаётся в `CoordinationNodeSettings`.
 
   ```java
   import java.time.Duration;
@@ -138,7 +140,7 @@
 
 - Java
 
-  Сессия ([`CoordinationSession`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [`CoordinationSessionSettings`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
+  Сессия (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
 
   ```java
   import tech.ydb.coordination.CoordinationSession;
@@ -282,7 +284,7 @@
 
 - Java
 
-  Семафор создаётся явно методом `createSemaphore` у подключённой сессии. Можно передать пользовательские двоичные данные, хранящиеся вместе с семафором (`byte[] data`); перегрузка без данных эквивалентна `null`. Если семафор с таким именем уже есть, операция завершится статусом «уже существует».
+  Семафор создаётся явно методом `createSemaphore` у подключённой сессии. Можно передать пользовательские двоичные данные, хранящиеся вместе с семафором (`byte[] data`); вариант метода без параметра `data` эквивалентен передаче `null`. Если семафор с таким именем уже есть, операция завершится статусом «уже существует».
 
   ```java
   session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
@@ -383,7 +385,7 @@
 
 - Java
 
-  Захват выполняется через `acquireSemaphore` с именем семафора, числом токенов `count`, опциональными данными операции и таймаутом ожидания в очереди [`java.time.Duration`](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Асинхронный результат — `CompletableFuture` с [`Result`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) [`SemaphoreLease`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java); при отсутствии семафора с указанным именем операция завершится исключением (см. javadoc метода).
+  Захват выполняется через `acquireSemaphore` с именем семафора, числом токенов `count`, опциональными данными операции и таймаутом ожидания в очереди [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Метод возвращает `CompletableFuture<Result<SemaphoreLease>>` (см. [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) и [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). Если семафор с указанным именем не существует, операция завершится исключением (см. javadoc метода).
 
   ```java
   import java.time.Duration;
@@ -557,7 +559,7 @@
 
 - Java
 
-  Метод `describeSemaphore` принимает имя семафора и режим [`DescribeSemaphoreMode`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
+  Метод `describeSemaphore` принимает имя семафора и режим [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
 
   ```java
   import tech.ydb.coordination.description.SemaphoreDescription;
@@ -571,7 +573,7 @@
 
   У элементов списков владельцев и ожидающих (`getOwnersList`, `getWaitersList`) доступны идентификатор сессии, таймаут, запрошенный `count`, данные операции и `orderId` (см. вложенный тип `SemaphoreDescription.Session` в исходниках).
 
-  Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [`WatchSemaphoreMode`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [`SemaphoreWatcher`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture` с `Result` [`SemaphoreChangedEvent`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java) (`isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
+  Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
 {% endlist %}
 
@@ -634,7 +636,7 @@
 
 - Java
 
-  Освобождение — через [`SemaphoreLease.release()`](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (асинхронно, `CompletableFuture<Status>`).
+  Освобождение — через [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (асинхронно, `CompletableFuture<Status>`).
 
   ```java
   lease.release().join().expectSuccess("release failed");

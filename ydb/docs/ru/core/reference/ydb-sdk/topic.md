@@ -1435,11 +1435,11 @@
     
     ```java
     ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)
+          .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
           .addTopic(TopicReadSettings.newBuilder()
                   .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
-                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // читать с этой временной метки (опционально)
+                  .setMaxLag(Duration.ofMinutes(30)) // максимальное отставание от конца очереди (опционально)
                   .build())
           .build();
     ```
@@ -1475,11 +1475,11 @@
 
     ```java
     ReaderSettings settings = ReaderSettings.newBuilder()
-          .setConsumerName(consumerName)
+          .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
           .addTopic(TopicReadSettings.newBuilder()
                   .setPath(topicPath)
-                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
-                  .setMaxLag(Duration.ofMinutes(30)) // Optional
+                  .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // читать с этой временной метки (опционально)
+                  .setMaxLag(Duration.ofMinutes(30)) // максимальное отставание от конца очереди (опционально)
                   .build())
           .build();
     ```
@@ -1493,9 +1493,10 @@
           .build();
     ```
     
-    Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений.
-    Для реализации объекта-наследника ReadEventHandler можно воспользоваться дефолтным абстрактным классом `AbstractReadEventHandler`.
-    Достаточно переопределить метод onMessages, отвечающий за обработку самих сообщений. Пример реализации:
+    Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений; по умолчанию используется внутренний поток SDK.
+
+    Для реализации обработчика событий можно унаследоваться от `AbstractReadEventHandler` и переопределить метод `onMessages`.
+    Метод `onMessages` вызывается каждый раз, когда SDK получает очередной пакет сообщений от сервера. В рамках одного вызова приходит один или несколько сообщений, которые можно подтвердить (`commit`) как по отдельности, так и после обработки всего пакета. Пример реализации:
     
     ```java
     private class Handler extends AbstractReadEventHandler {

@@ -1,6 +1,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <cctype>
+#include <regex>
 #include "http_proxy.h"
 
 namespace NHttp {
@@ -24,84 +25,44 @@ inline EURIScheme GetScheme(const TString& uri) {
     }
 }
 
-bool IsPortCorrect(const TIpPort port) {
-    return port >= 0 && port <= 65535;
-}
-
-// format: ipv6:address[:port]
-// Calling site should keep correctnes of hostname and port on return value
+// formats: ipv6:address or ipv6:[address]:port
+// Calling site should keep correctness of hostname and port on return value
 bool CrackIPv6Address(const TString& address, TString& hostname, TIpPort& port) {
-    const size_t firstColonPos = address.find(':');
-    const size_t lastColonPos = address.rfind(':');
+    static const std::regex ipv6(R"(ipv6:(.+))"); // ipv6:address
+    static const std::regex ipv6WithPort(R"(ipv6:\[(.+)\]:(\d+))"); // ipv6:[address]:port
 
-    if (lastColonPos == TString::npos) {
-        // Strange format: does not have any colons
-        return false;
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv6WithPort) && match.ready() && match.size() == 3) {
+        hostname = match.str(1);
+        port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && IsIPv6(hostname);
     }
 
-    const size_t firstBracketPos = address.find('[');
-    const size_t lastBracketPos = address.rfind(']');
-
-    if (firstBracketPos == TString::npos && lastBracketPos == TString::npos) {
-        // format: ipv6:address
-        hostname = address.substr(firstColonPos + 1);
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv6) && match.ready() && match.size() == 2) {
+        hostname = match.str(1);
         return IsIPv6(hostname);
     }
 
-    if (firstBracketPos == TString::npos && lastBracketPos != TString::npos) {
-        // Strange format: open bracket exists, but closed does not exist
-        return false;
-    }
-    if (firstBracketPos != TString::npos && lastBracketPos == TString::npos) {
-        // Strange format: open bracket does not exist, but closed exists
-        return false;
-    }
-
-    // Both brackets exist
-    if (std::count(address.begin(), address.end(), '[') > 1) {
-        // Strange format: more than 1 opened bracket
-        return false;
-    }
-    if (std::count(address.begin(), address.end(), ']') > 1) {
-        // Strange format: more than 1 closed bracket
-        return false;
-    }
-    if (firstBracketPos >= lastBracketPos) {
-        // Strange format: opened bracket is after closed bracket
-        return false;
-    }
-    if (firstColonPos == lastColonPos || lastColonPos <= lastBracketPos) {
-        // Strange format: only one colon or last colon is inside brackets
-        return false;
-    }
-
-    // format: ipv6:[address]:port
-    port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
-    hostname = address.substr(firstBracketPos + 1, lastBracketPos - firstBracketPos - 1);
-    return IsPortCorrect(port) && IsIPv6(hostname);
+    return false;
 }
 
-// format: ipv4:address[:port]
+// formats: ipv4:address or ipv4:address:port
 // Calling site should keep correctness of hostname and port on return value
 bool CrackIPv4Address(const TString& address, TString& hostname, TIpPort& port) {
-    const size_t firstColonPos = address.find(':');
-    const size_t lastColonPos = address.rfind(':');
+    static const std::regex ipv4(R"(ipv4:(.+))"); // ipv4:address
+    static const std::regex ipv4WithPort(R"(ipv4:(.+):(\d+))"); // ipv4:address:port
 
-    if (lastColonPos == TString::npos) {
-        // Strange format: does not have any colons
-        return false;
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv4WithPort) && match.ready() && match.size() == 3) {
+        hostname = match.str(1);
+        port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && IsIPv4(hostname);
     }
 
-    if (lastColonPos == firstColonPos) {
-        // format: ipv4:address
-        hostname = address.substr(firstColonPos + 1);
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv4) && match.ready() && match.size() == 2) {
+        hostname = match.str(1);
         return IsIPv4(hostname);
     }
 
-    // format: ipv4:address:port
-    port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
-    hostname = address.substr(firstColonPos + 1, lastColonPos - firstColonPos - 1);
-    return IsPortCorrect(port) && IsIPv4(hostname);
+    return false;
 }
 
 // Fallback to old impl
@@ -658,4 +619,3 @@ bool IsValidHeaderData(TStringBuf s) {
 }
 
 }
-

@@ -34,152 +34,84 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT(!IsIPv4(""));
     }
 
-    Y_UNIT_TEST(TestCrackAddressIPv4Format) {
-        // Test IPv4 scheme
+    void TestIpPort(const TString& address,
+                    const TString& expectedHostname,
+                    const TIpPort expectedPort) {
         TString hostname = "";
         TIpPort port = 0;
-
-        // Without port part
-
-        CrackAddress("ipv4:192.168.1.1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv4:not-valid", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "not-valid"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv4:101.100.1.1.1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "101.100.1.1.1"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv4:101.100.:1.1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "101.100."); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0); // Get wrong value on error
-
-        // With port part
-
-        CrackAddress("ipv4:101.29.8.1:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "101.29.8.1");
-        UNIT_ASSERT_EQUAL(port, 1234);
-
-        CrackAddress("ipv4:not-valid:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "not-valid"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 123);
-
-        CrackAddress("ipv4:[192.168.1.1]:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "[192.168.1.1]"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 1234); // Get wrong value on error
+        CrackAddress(address, hostname, port);
+        UNIT_ASSERT_EQUAL(expectedHostname, hostname);
+        UNIT_ASSERT_EQUAL(expectedPort, port);
     }
 
-    Y_UNIT_TEST(TestCrackAddressIPv6Format) {
-        TString hostname;
-        TIpPort port = 0;
-        
+    // TODO(vlad-serikov): I don't want to cement buggy behavior here.
+    // So uncomment wrong tests and add new ones
+    // in https://github.com/ydb-platform/ydb/issues/37129 to fix the contract
+    Y_UNIT_TEST(TestCrackAddressIPv4Format) {
         // Without port part
-
-        CrackAddress("ipv6:::1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "::1");
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv6:2a07::ff:1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv6:2a07::ff:1:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv6:deadbeef", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv6:[2a07::ff:1:100]", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0);
-
-        CrackAddress("ipv6:][2a07::ff:1:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 0);
+        TestIpPort("ipv4:192.168.1.1", "192.168.1.1", 0);
+        // TestIpPort("ipv4:", "", 0); // TODO(vlad-serikov);
+        // TestIpPort("ipv4:not-valid3", "not-valid3", 0);
+        // TestIpPort("ipv4:101.100.1.1.4", "101.100.1.1.4", 0);
+        // TestIpPort("ipv4:101.100.:1.5", "101.100.:1.5", 0);
 
         // With port part
+        TestIpPort("ipv4:101.29.8.1:6", "101.29.8.1", 6);
+        TestIpPort("ipv4:192.168.1.3:65535", "192.168.1.3", 65535);
+        // TestIpPort("ipv4::7", ":7", 0);
+        // TestIpPort("ipv4:127.0.0.8:", "127.0.0.8:", 0);
+        // TestIpPort("ipv4:not-valid:9", "not-valid", 9);
+        // TestIpPort("ipv4:[192.168.1.1]:10", "[192.168.1.1]", 10);
+        // TestIpPort("ipv4:192.168.1.1:not-valid", "192.168.1.1:not-valid", 0);
+        // TestIpPort("ipv4:192.168.1.2:-1", "192.168.1.2:-1", 0);
+        // TestIpPort("ipv4:192.168.1.4:65536", "192.168.1.4", 0);
+    }
 
-        CrackAddress("ipv6:[::1]:12", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "::1");
-        UNIT_ASSERT_EQUAL(port, 12);
+    // TODO(vlad-serikov): I don't want to cement buggy behavior here.
+    // So uncomment wrong tests and add new ones
+    // in https://github.com/ydb-platform/ydb/issues/37129 to fix the contract
+    Y_UNIT_TEST(TestCrackAddressIPv6Format) {
+        // Without port part
+        TestIpPort("ipv6:::1", "::1", 0);
+        TestIpPort("ipv6:2a07::ff:2", "2a07::ff:2", 0);
+        TestIpPort("ipv6:2a07::ff:1:3", "2a07::ff:1:3", 0);
+        // TestIpPort("ipv6:deadbeef4", "deadbeef4", 0);
+        // TestIpPort("ipv6:[2a07::ff:1:105]", "[2a07::ff:1:105]", 0);
+        // TestIpPort("ipv6:][2a07::ff:1:106", "][2a07::ff:1:106", 0);
 
-        CrackAddress("ipv6:[2a07::ff:1]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
-
-        CrackAddress("ipv6:[2a00::0abf]:8977]:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 123);
-
-        CrackAddress("ipv6:2a00::[0abf:8977]:12345", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:[2a00::0abf[:8977:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:2a00::0abf:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:[2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:2a00::0abf]:8977[:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 12345);
-
-        CrackAddress("ipv6:[not-valid:2a07::ff:1]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 123);
-
-        CrackAddress("ipv6:[2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 123);
-
-        CrackAddress("ipv6:[2a00:[:0abf:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
-        UNIT_ASSERT_EQUAL(port, 123);
+        // With port part
+        TestIpPort("ipv6:[::1]:7", "::1", 7);
+        TestIpPort("ipv6:[2a07::ff:1]:8", "2a07::ff:1", 8);
+        TestIpPort("ipv6:[2a00::0abf:8978]:65535", "2a00::0abf:8978", 65535);
+        // TestIpPort("ipv6:[2a00::0abf]:8977]:9", "2a00::0abf]:8977", 9);
+        // TestIpPort("ipv6:2a00::[0abf:8977]:10", "2a00::[0abf:8977]:10", 0);
+        // TestIpPort("ipv6:[2a00::0abf[:8977:11", "[2a00::0abf[:8977:11", 0);
+        // TestIpPort("ipv6:2a00::0abf:8977]:12", "2a00::0abf:8977]:12", 0);
+        // TestIpPort("ipv6:2a00::0abf]:8977]:13", "2a00::0abf]:8977]:13", 0);
+        // TestIpPort("ipv6:[2a00::0abf]:8977]:14", "2a00::0abf]:8977", 14);
+        // TestIpPort("ipv6:2a00::0abf]:8977[:15", "2a00::0abf]:8977[:15", 0);
+        // TestIpPort("ipv6:[not-valid:2a07::ff:1]:16", "not-valid:2a07::ff:1", 16);
+        // TestIpPort("ipv6:[2a00::0abf]:8977]:17", "2a00::0abf]:8977", 17);
+        // TestIpPort("ipv6:[2a00:[:0abf:8977]:18", "2a00:[:0abf:8977", 18);
+        // TestIpPort("ipv6:[2a00::0abf:8976]:not-valid", "[2a00::0abf:8976]:not-valid", 0);
+        // TestIpPort("ipv6:[2a00::0abf:8977]:-1", "[2a00::0abf:8977]:-1", 0);
+        // TestIpPort("ipv6:[2a00::0abf:8979]:65536", "2a00::0abf:8979", 0);
     }
 
     Y_UNIT_TEST(TestCrackAddressLegacyFormat) {
-        TString hostname = "";
-        TIpPort port = 0;
+        // Without port part
+        TestIpPort("::1", "::1", 0);
+        TestIpPort("2a02:6b8:c02:1410:0:5a59:eb1e:fe7a", "2a02:6b8:c02:1410:0:5a59:eb1e:fe7a", 0);
+        TestIpPort("192.168.0.1", "192.168.0.1", 0);
+        TestIpPort("not-valid", "not-valid", 0); // TODO(vlad-serikov): check wrong parsing
 
-        CrackAddress("example.com:12345", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "example.com");
-        UNIT_ASSERT_EQUAL(port, 12345);
-        
-        CrackAddress("[::1]:23456", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "::1");
-        UNIT_ASSERT_EQUAL(port, 23456);
+        // With port part
+        TestIpPort("example.com:12345", "example.com", 12345); // TODO(vlad-serikov): check wrong parsing
+        TestIpPort("127.0.0.1:12346", "127.0.0.1", 12346);
+        TestIpPort("[::1]:23457", "::1", 23457);
+        TestIpPort("[2a07::ff:1]:23456", "2a07::ff:1", 23456);
+        TestIpPort("[2a02:6b8:c02:1410:0:5a59:eb1e:fe7a]:3456", "2a02:6b8:c02:1410:0:5a59:eb1e:fe7a", 3456);
 
-        CrackAddress("[2a07::ff:1]:23456", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 23456);
-
-        CrackAddress("[2a02:6b8:c02:1410:0:5a59:eb1e:fe7a]:3456", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a02:6b8:c02:1410:0:5a59:eb1e:fe7a");
-        UNIT_ASSERT_EQUAL(port, 3456);
-
-        CrackAddress("::1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "::1");
-        UNIT_ASSERT_EQUAL(port, 3456); // Fallback keeps previous values
-
-        CrackAddress("2a02:6b8:c02:1410:0:5a59:eb1e:fe7a", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a02:6b8:c02:1410:0:5a59:eb1e:fe7a");
-        UNIT_ASSERT_EQUAL(port, 3456); // Fallback keeps previous values
     }
 
     Y_UNIT_TEST(TestUrlHandlerGetHandler) {

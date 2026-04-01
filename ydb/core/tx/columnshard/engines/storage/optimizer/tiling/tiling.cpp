@@ -14,6 +14,88 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
+// ---------------------------------------------------------------------------
+// TSettings — configurable knobs for the new tiling compaction planner.
+//
+// JSON keys (all optional, validated on parse):
+//   "initial_blob_bytes"    – ui64, minimum total-data budget for level-1 (default 128 MiB)
+//   "last_level_bytes"      – ui64, stop adding levels when budget drops below this (default 1 MiB)
+//   "k"                     – ui8,  fan-out factor between consecutive levels (default 10)
+//   "portion_expected_size" – ui64, target portion size produced by compaction (default 4 MiB)
+// ---------------------------------------------------------------------------
+struct TSettings {
+    // Production defaults — aggressive test values must be set explicitly via JSON.
+    ui64 InitialBlobBytes    = 1ULL * 1025 * 1024 * 1024;  // 1 GiB
+    ui64 LastLevelBytes      = 10ULL  * 1024 * 1024;   // 10 MiB
+    ui8  K                   = 10;
+    ui64 PortionExpectedSize = 4ULL  * 1024 * 1024;   // 4 MiB
+
+    // Serialise to the TTilingOptimizer proto (stores as JSON blob).
+    void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["initial_blob_bytes"]    = InitialBlobBytes;
+        json["last_level_bytes"]      = LastLevelBytes;
+        json["k"]                     = (ui64)K;
+        json["portion_expected_size"] = PortionExpectedSize;
+        proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
+    }
+
+    TConclusionStatus DeserializeFromProto(
+        const NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto)
+    {
+        if (!proto.HasJson()) {
+            return TConclusionStatus::Success();
+        }
+        NJson::TJsonValue jsonInfo;
+        if (!NJson::ReadJsonFastTree(proto.GetJson(), &jsonInfo)) {
+            return TConclusionStatus::Fail("tiling: cannot parse previously serialised JSON");
+        }
+        return DeserializeFromJson(jsonInfo);
+    }
+
+    TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+        if (!jsonInfo.IsMap()) {
+            return TConclusionStatus::Fail("tiling: FEATURES must be a JSON object");
+        }
+        for (const auto& [name, value] : jsonInfo.GetMapSafe()) {
+            if (name == "initial_blob_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: initial_blob_bytes must be an unsigned integer");
+                }
+                InitialBlobBytes = value.GetUInteger();
+            } else if (name == "last_level_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: last_level_bytes must be an unsigned integer");
+                }
+                LastLevelBytes = value.GetUInteger();
+            } else if (name == "k") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: k must be an unsigned integer");
+                }
+                const ui64 kv = value.GetUInteger();
+                if (kv < 2 || kv > 255) {
+                    return TConclusionStatus::Fail("tiling: k must be in [2, 255]");
+                }
+                K = static_cast<ui8>(kv);
+            } else if (name == "portion_expected_size") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: portion_expected_size must be an unsigned integer");
+                }
+                PortionExpectedSize = value.GetUInteger();
+            } else {
+                return TConclusionStatus::Fail(TStringBuilder() << "tiling: unknown setting '" << name << "'");
+            }
+        }
+        if (InitialBlobBytes < LastLevelBytes * K) {
+            return TConclusionStatus::Fail(
+                "tiling: initial_blob_bytes must be at least k * last_level_bytes");
+        }
+        return TConclusionStatus::Success();
+    }
+};
+
+// ---------------------------------------------------------------------------
+
 struct TSimpleKeyCompare {
     std::partial_ordering operator()(const NArrow::TSimpleRow& a, const NArrow::TSimpleRow& b) const {
         return a.CompareNotNull(b);
@@ -22,9 +104,8 @@ struct TSimpleKeyCompare {
 
 struct TLevel {
     TIntersectionTree<NArrow::TSimpleRow, ui64, TSimpleKeyCompare> Intersections;
-    ui8 MaxHeight = 9;       // set in Actualize(levelIdx, …) per tier
+    ui8 MaxHeight = 9;
     ui8 OverloadHeight = 11;
-    ui64 SmallPortionsOverloadBlobBytes = 10 * 1024 * 1024; // 10MB
     ui64 MaxBlobBytes = 0;
     ui64 MaxRecordsCount = 0;
     ui64 TotalBlobBytes = 0;
@@ -96,7 +177,6 @@ struct TLevel {
         }
         auto height = Intersections.GetMaxCount();
         if (height > 1) {
-            // Intersection exceeds the soft limit but not the overload threshold yet
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_level_needs_soft_compaction")(
                 "level", (ui32)LevelIdx)(
@@ -186,10 +266,14 @@ struct TLevel {
 class TOptimizerPlanner : public IOptimizerPlanner {
 public:
     TOptimizerPlanner(
-        const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+        const TInternalPathId pathId,
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
+        const TSettings& settings)
         : IOptimizerPlanner(pathId, std::nullopt)
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
+        , Settings(settings)
         , Counters(std::make_shared<TCounters>())
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>()) {
         AFL_VERIFY(StoragesManager);
@@ -205,46 +289,42 @@ public:
     virtual bool DoIsOverloaded() const override {
         for (auto& [_, level] : Levels) {
             if (level.IsOverloaded()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("state", "OVERLOADED");
                 return true;
             }
         }
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("state", "UNDERLOADED");
         return false;
     }
 
 private:
-    // Lowered thresholds to fill levels faster in tests and expose stuck conditions sooner.
-    // Production-scale values would be 128MB initial, 8MB last-level, K=10.
-    // With K=5 and LastLevelBytes=16KB, InitialBlobBytes=4MB creates 4 active levels:
-    //   level1=4MB, level2=800KB, level3=160KB, level4=32KB → LastLevel=4
-    ui64 InitialBlobBytes = 128 * 1024 * 1024;    // 4MB (was 128MB)
-    ui64 LastLevelBytes = 1024 * 1024;             // 16KB — with K=5 gives 4 levels from 4MB initial
-    ui64 TotalBlobBytes = 0;
-    ui64 TotalRecordsCount = 0;
-    ui8 K = 5;                                   // reduced from 10 to create more levels with less data
-    ui8 LastLevel = 1;
-
     TMap<ui8, TLevel> Levels;
     THashMap<ui64, ui8> InternalLevel;
 
     std::shared_ptr<IStoragesManager> StoragesManager;
     std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
 
+    TSettings Settings;
+    ui64 TotalBlobBytes = 0;
+    ui64 TotalRecordsCount = 0;
+    ui8 LastLevel = 1;
+
     std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
 
     void Actualize() {
-        ui64 currentBlobBytes = std::max(TotalBlobBytes, InitialBlobBytes);
+        ui64 currentBlobBytes = std::max(TotalBlobBytes, Settings.InitialBlobBytes);
         // Reset all level budgets first
         for (auto& [_, level] : Levels) {
             level.Actualize(0);
         }
-        ui8 newLastLevel = 1;
-        for (ui8 i = 1; currentBlobBytes > LastLevelBytes; ++i) {
+        ui8 i = 1;
+        for (;currentBlobBytes > Settings.LastLevelBytes; ++i) {
             AFL_VERIFY(Levels.contains(i))(
                 "event", "tiling_actualize_missing_level")(
                 "level", (ui32)i)(
                 "current_blob_bytes", currentBlobBytes)(
-                "last_level_bytes", LastLevelBytes);
+                "last_level_bytes", Settings.LastLevelBytes);
             Levels.at(i).Actualize(currentBlobBytes);
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_actualize_level")(
@@ -252,17 +332,23 @@ private:
                 "budget_bytes", currentBlobBytes)(
                 "total_planner_bytes", TotalBlobBytes)(
                 "total_planner_records", TotalRecordsCount);
-            currentBlobBytes /= K;
-            newLastLevel = i;
+            currentBlobBytes /= Settings.K;
         }
-        LastLevel = newLastLevel;
+        Levels.at(i).Actualize(Settings.LastLevelBytes);
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            "event", "tiling_actualize_level")(
+            "level", (ui32)i)(
+            "budget_bytes", Settings.LastLevelBytes)(
+            "total_planner_bytes", TotalBlobBytes)(
+            "total_planner_records", TotalRecordsCount);
+        LastLevel = i;
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
             "event", "tiling_actualize_done")(
             "last_level", (ui32)LastLevel)(
             "total_blob_bytes", TotalBlobBytes)(
             "total_records", TotalRecordsCount)(
-            "initial_blob_bytes", InitialBlobBytes)(
-            "last_level_bytes", LastLevelBytes);
+            "initial_blob_bytes", Settings.InitialBlobBytes)(
+            "last_level_bytes", Settings.LastLevelBytes);
         // Warn about non-empty levels that have no budget (potential stuck source)
         for (auto& [idx, level] : Levels) {
             if (!level.IsEmpty() && level.MaxBlobBytes == 0) {
@@ -282,8 +368,8 @@ private:
                     "last_level", (ui32)LastLevel)(
                     "total_blob_bytes", TotalBlobBytes)(
                     "total_records", TotalRecordsCount)(
-                    "initial_blob_bytes", InitialBlobBytes)(
-                    "last_level_bytes", LastLevelBytes);
+                    "initial_blob_bytes", Settings.InitialBlobBytes)(
+                    "last_level_bytes", Settings.LastLevelBytes);
 
                 std::vector<TPortionInfo::TPtr> to_promote;
                 int i = 0;
@@ -420,7 +506,7 @@ private:
                     "intersection_height", levelData.Intersections.GetMaxCount())(
                     "overload_height", (ui32)levelData.OverloadHeight)(
                     "portions_count", levelData.Portions.size());
-                AFL_VERIFY(!levelData.Portions.size())(
+                AFL_VERIFY(levelData.Portions.size())(
                     "event", "tiling_critical_empty_level")(
                     "level", (ui32)level)(
                     "total_bytes", levelData.TotalBlobBytes)(
@@ -428,8 +514,7 @@ private:
                     "intersection_height", levelData.Intersections.GetMaxCount())(
                     "overload_height", (ui32)levelData.OverloadHeight)(
                     "portions_count", levelData.Portions.size());
-            }
-            else {
+            } else {
                 std::vector<TPortionInfo::TConstPtr> constPortions;
                 constPortions.reserve(tasks.size());
                 for (const auto& ptr : tasks) {
@@ -439,7 +524,7 @@ private:
                 auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, constPortions, saverContext);
                 const ui32 targetLevel = std::max<ui32>(ui32(level) - 1, 1);
                 result->SetTargetCompactionLevel(targetLevel);
-                result->SetPortionExpectedSize(ui64(64 * 1024));  // 512KB (was 4MB) to fill faster
+                result->SetPortionExpectedSize(Settings.PortionExpectedSize);
                 AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_schedule_critical_compaction")(
                     "source_level", (ui32)level)(
@@ -472,7 +557,7 @@ private:
             auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, constPortions, saverContext);
             const ui32 targetLevel = std::max<ui32>(ui32(level) - 1, 1);
             result->SetTargetCompactionLevel(targetLevel);
-            result->SetPortionExpectedSize(ui64(64 * 1024));  // 512KB (was 4MB) to fill faster
+            result->SetPortionExpectedSize(Settings.PortionExpectedSize);
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_schedule_soft_compaction")(
                 "source_level", (ui32)level)(
@@ -509,6 +594,7 @@ private:
     }
 
     void DoActualize(const TInstant /*currentInstant*/) override {
+        Actualize();
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions() const override {
@@ -520,6 +606,11 @@ private:
     }
 };
 
+// ---------------------------------------------------------------------------
+// TOptimizerPlannerConstructor — registered as "tiling".
+// Supports COMPACTION_PLANNER.FEATURES JSON with keys:
+//   initial_blob_bytes, last_level_bytes, k, portion_expected_size
+// ---------------------------------------------------------------------------
 class TOptimizerPlannerConstructor : public IOptimizerPlannerConstructor {
 public:
     static TString GetClassNameStatic() {
@@ -534,15 +625,28 @@ private:
     static inline const TFactory::TRegistrator<TOptimizerPlannerConstructor> Registrator =
         TFactory::TRegistrator<TOptimizerPlannerConstructor>(GetClassNameStatic());
 
-    void DoSerializeToProto(TProto& /*proto*/) const override {
+    TSettings Settings;
+
+    void DoSerializeToProto(TProto& proto) const override {
+        Settings.SerializeToProto(*proto.MutableTiling());
     }
 
-    bool DoDeserializeFromProto(const TProto& /*proto*/) override {
+    bool DoDeserializeFromProto(const TProto& proto) override {
+        if (!proto.HasTiling()) {
+            return true;
+        }
+        auto status = Settings.DeserializeFromProto(proto.GetTiling());
+        if (!status.IsSuccess()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "error", "cannot parse tiling compaction optimizer from proto")(
+                "description", status.GetErrorDescription());
+            return false;
+        }
         return true;
     }
 
-    TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& /*jsonInfo*/) override {
-        return TConclusionStatus::Success();
+    TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override {
+        return Settings.DeserializeFromJson(jsonInfo);
     }
 
     bool DoApplyToCurrentObject(IOptimizerPlanner& /*current*/) const override {
@@ -550,8 +654,8 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer (intersection-tree)");
-        return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema());
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer (intersection-tree)");
+        return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 };
 

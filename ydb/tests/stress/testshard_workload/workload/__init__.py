@@ -169,12 +169,8 @@ class TestShardStatsCollector:
 
 
 class YdbTestShardWorkload(WorkloadBase):
-<<<<<<< HEAD
-    def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_port=35000):
-=======
     def __init__(self, endpoint, database, duration, owner_idx, count, config_path=None, channels=None, tsserver_host='localhost',
                  tsserver_port=35000, stats_interval=10, monitoring_port=8765):
->>>>>>> 9c4b9dde26e (Add test shard error statistics in mon page (#34947))
         self.tsserver_process = None
         self.tempdir = None
         super().__init__(None, '', 'testshard', None)
@@ -186,13 +182,10 @@ class YdbTestShardWorkload(WorkloadBase):
         self.custom_config_path = config_path
         self.channels = channels
         self.tsserver_port = tsserver_port
-<<<<<<< HEAD
-=======
         self.tsserver_host = tsserver_host
         self.stats_interval = stats_interval
         self.monitoring_port = monitoring_port
         self.tablet_ids = []
->>>>>>> 9c4b9dde26e (Add test shard error statistics in mon page (#34947))
         self._unpack_resource('ydb_cli')
         self._unpack_resource('tsserver')
         self._prepare_config()

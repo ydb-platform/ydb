@@ -16,12 +16,9 @@ if __name__ == '__main__':
     parser.add_argument('--channels', default=None, help='Comma-separated list of storage channels (e.g., /Root/db1:ssd,/Root/db1:ssd,/Root/db1:ssd). \
                                                           Required, if database is /Root')
     parser.add_argument('--tsserver-port', default=35000, type=lambda x: int(x), help='Port for TestShard validation server')
-<<<<<<< HEAD
-=======
     parser.add_argument('--tsserver-host', default='localhost', help='Host of a TestShard validation server')
     parser.add_argument('--stats-interval', default=10, type=lambda x: int(x), help='Interval in seconds between stats output')
     parser.add_argument('--monitoring-port', default=8765, type=lambda x: int(x), help='YDB monitoring HTTP port for fetching tablet stats')
->>>>>>> 9c4b9dde26e (Add test shard error statistics in mon page (#34947))
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
     args = parser.parse_args()
@@ -57,12 +54,9 @@ if __name__ == '__main__':
         config_path=args.config,
         channels=channels,
         tsserver_port=args.tsserver_port,
-<<<<<<< HEAD
-=======
         tsserver_host=args.tsserver_host,
         stats_interval=args.stats_interval,
         monitoring_port=args.monitoring_port,
->>>>>>> 9c4b9dde26e (Add test shard error statistics in mon page (#34947))
     )
     workload.start()
     workload.join()

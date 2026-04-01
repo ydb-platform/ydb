@@ -51,6 +51,12 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         FalsePositiveProbability = jsonInfo[NIndexParameters::FalsePositiveProbability].GetDouble();
     }
 
+    const bool hasDeprecatedSizingParams = jsonInfo.Has(NIndexParameters::FilterSizeBytes) || jsonInfo.Has(NIndexParameters::RecordsCount) || jsonInfo.Has(NIndexParameters::HashesCount);
+    if (hasFpp && hasDeprecatedSizingParams) {
+        return TConclusionStatus::Fail(
+            "cannot mix false_positive_probability with filter_size_bytes or records_count or hashes_count in bloom ngramm filter features");
+    }
+
     if (!jsonInfo[NIndexParameters::NGrammSize].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }

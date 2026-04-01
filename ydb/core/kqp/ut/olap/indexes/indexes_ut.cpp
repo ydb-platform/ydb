@@ -243,6 +243,158 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         ExecQuery(kikimr, UseQueryService, "ALTER TABLE `/Root/olapTableCreateNgram` DROP INDEX idx_ngram;");
     }
 
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAddIndexThenUpsertIndexChangesFilterParams, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomNgramAddThenUpsert`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/olapTableBloomNgramAddThenUpsert`
+            ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                ON (resource_id)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+
+        auto readBloomNGramm = [&](double& fppOut, ui32& filterBytesOut) -> decltype(auto) {
+            auto desc = client.Ls("/Root/olapTableBloomNgramAddThenUpsert");
+            UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
+            const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (auto&& idx : schema.GetIndexes()) {
+                if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                    const auto& f = idx.GetBloomNGrammFilter();
+                    fppOut = f.GetFalsePositiveProbability();
+                    filterBytesOut = f.GetFilterSizeBytes();
+                    return;
+                }
+            }
+
+            UNIT_ASSERT_C(false, "idx_ngram with BloomNGrammFilter not found in table schema");
+        };
+
+        double fppBefore = 0;
+        ui32 filterBytesBefore = 0;
+        readBloomNGramm(fppBefore, filterBytesBefore);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapTableBloomNgramAddThenUpsert` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, "records_count" : 50000, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+        )");
+
+        double fppAfter = 0;
+        ui32 filterBytesAfter = 0;
+        readBloomNGramm(fppAfter, filterBytesAfter);
+
+        UNIT_ASSERT_C(
+            fppBefore != fppAfter || filterBytesBefore != filterBytesAfter,
+            TStringBuilder() << "After ADD INDEX, ALTER OBJECT ... UPSERT_INDEX with filter_size_bytes/records_count should change schema; before fpp="
+                             << fppBefore << " filter_size_bytes=" << filterBytesBefore << " after fpp=" << fppAfter
+                             << " filter_size_bytes=" << filterBytesAfter);
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramIndexCreatedViaAlterObjectWithFalsePositiveProbability, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomNgramAlterObjectFpp`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapTableBloomNgramAlterObjectFpp` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.05, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+        )");
+
+        auto desc = client.Ls("/Root/olapTableBloomNgramAlterObjectFpp");
+        UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
+        const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
+        bool found = false;
+        for (const auto& idx : schema.GetIndexes()) {
+            if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
+                found = true;
+                UNIT_ASSERT_DOUBLES_EQUAL_C(idx.GetBloomNGrammFilter().GetFalsePositiveProbability(), 0.05, 1e-9,
+                    "false_positive_probability from ALTER OBJECT UPSERT_INDEX FEATURES");
+                break;
+            }
+        }
+        UNIT_ASSERT_C(found, "idx_ngram bloom ngram index should appear after UPSERT_INDEX with false_positive_probability");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BloomNgramAlterObjectUpsertRejectsMixingFppAndFilterSizeBytes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableBloomNgramMixFppSize`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        const TString alterMixFilterSize = R"(
+            ALTER OBJECT `/Root/olapTableBloomNgramMixFppSize` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.05, "filter_size_bytes" : 512, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+        )";
+        const TString alterMixHashesCount = R"(
+            ALTER OBJECT `/Root/olapTableBloomNgramMixFppSize` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.05, "hashes_count" : 2, "case_sensitive" : true, "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+        )";
+
+        auto assertMixRejected = [&](const TString& alterQuery) {
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains("cannot mix"),
+                    "Expected mix validation error, got: " << result.GetIssues().ToString());
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains("cannot mix"),
+                    "Expected mix validation error, got: " << result.GetIssues().ToString());
+            }
+        };
+
+        assertMixRejected(alterMixFilterSize);
+        assertMixRejected(alterMixHashesCount);
+    }
+
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
@@ -589,13 +741,13 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
                 auto result = session.ExecuteQuery(createWithDeprecatedInNewSyntax, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().Contains("filter_size_bytes"),
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains("filter_size_bytes"),
                     "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
             } else {
                 auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
                 auto result = session.ExecuteSchemeQuery(createWithDeprecatedInNewSyntax).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().Contains("filter_size_bytes"),
+                UNIT_ASSERT_C(result.GetIssues().ToString().contains("filter_size_bytes"),
                     "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
             }
         }

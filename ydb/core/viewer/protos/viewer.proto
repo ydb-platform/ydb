@@ -567,7 +567,7 @@ message TNodeInfo {
     float CpuUsage = 5;
     float DiskSpaceUsage = 6;
     optional uint32 Connections = 7; // total number of live connections
-    EFlag ConnectStatus = 10; // Max
+    optional EFlag ConnectStatus = 10; // Max
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;
     optional string PileName = 13;

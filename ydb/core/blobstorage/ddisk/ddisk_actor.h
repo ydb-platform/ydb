@@ -491,7 +491,7 @@ namespace NKikimr::NDDisk {
             if constexpr (NPrivate::THasSelectorField<TRecord>::value) {
                 const TBlockSelector selector(record.GetSelector());
 
-                if (!DiskFormat || selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
+                if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
                     TStringStream ss;
                     ss << "offset and size must be multiple of sector size and size must be nonzero: ";
                     selector.Print(ss);

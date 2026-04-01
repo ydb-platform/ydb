@@ -388,13 +388,64 @@ public:
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, key, "Not implemented");
     }
 
+    void ListFilesRecursive(const TFsPath& dir, TVector<TString>& result) {
+        TVector<TString> children;
+        dir.ListNames(children);
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                ListFilesRecursive(child, result);
+            } else if (child.IsFile()) {
+                result.push_back(child.GetPath());
+            }
+        }
+    }
+
     void Handle(TEvListObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString prefix = TString(request.GetPrefix().data(), request.GetPrefix().size());
-        FS_LOG_W("ListObjects"
-            << ": prefix# " << prefix
-            << ", not implemented");
-        ReplyError<TEvListObjectsResponse>(ev->Sender, "Not implemented");
+
+        FS_LOG_D("ListObjects"
+            << ": prefix# " << prefix);
+
+        try {
+            TFsPath prefixPath(prefix);
+            TFsPath dirPath = prefixPath;
+            TString filePrefix;
+
+            if (!dirPath.Exists() || !dirPath.IsDirectory()) {
+                dirPath = prefixPath.Parent();
+                filePrefix = TString(prefixPath.GetName());
+            }
+
+            TVector<TString> files;
+            if (dirPath.Exists() && dirPath.IsDirectory()) {
+                ListFilesRecursive(dirPath, files);
+            }
+
+            Aws::S3::Model::ListObjectsResult awsResult;
+            for (const auto& filePath : files) {
+                if (filePath.StartsWith(prefix)) {
+                    Aws::S3::Model::Object obj;
+                    obj.SetKey(Aws::String(filePath.data(), filePath.size()));
+                    awsResult.AddContents(std::move(obj));
+                }
+            }
+            awsResult.SetIsTruncated(false);
+
+            Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
+            auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));
+            Send(ev->Sender, response.release());
+
+            FS_LOG_I("ListObjects"
+                << ": prefix# " << prefix
+                << ", found# " << files.size() << " files");
+        } catch (const std::exception& ex) {
+            FS_LOG_E("ListObjects failed"
+                << ": prefix# " << prefix
+                << ", error# " << ex.what());
+            ReplyError<TEvListObjectsResponse>(ev->Sender, TString("ListObjects error: ") + ex.what());
+        }
     }
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {

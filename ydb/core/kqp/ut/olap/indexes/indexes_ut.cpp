@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
-    Y_UNIT_TEST(MinMaxIndexUsedInQueries) {
+    Y_UNIT_TEST_DUO(MinMaxIndexUsedInQueries, UseQueryService) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
@@ -164,27 +164,39 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        auto runSchemeQuery = [&](TString query) {
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            return session.ExecuteSchemeQuery(query).GetValueSync();
-        };
 
-        auto assertSchemeQueryOk = [&](TString query) {
-            auto res = runSchemeQuery(query);
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
-        };
-
-        auto runNonSchemeQuery = [&](TString query) -> TString {
-
-            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            if (result.GetResultSets().empty()) {
-                return "[]";
+        auto assertDDLQueryOk = [&](TString query) {
+            if (UseQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
-            return FormatResultSetYson(result.GetResultSet(0));
         };
 
-        assertSchemeQueryOk(R"(
+
+        auto runDMLQuery = [&] (TString query) -> TString {
+            if (/*UseQueryService*/ true) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            } else {
+                NYdb::NTable::TDataQueryResult result = tableClient.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            }
+        };
+
+        assertDDLQueryOk(R"(
             CREATE TABLE `/Root/minmax_test_applied_applied` (
                 `key` Int32 NOT NULL,
                 `value` String NOT NULL,
@@ -196,22 +208,22 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             );
         )");
 
-        assertSchemeQueryOk(R"(
+        assertDDLQueryOk(R"(
             ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "value"}`);
 
         )");
 
-        assertSchemeQueryOk(R"(
+        assertDDLQueryOk(R"(
             ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
 
-        runNonSchemeQuery(R"(
+        runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
             SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item+1 AS String) AS `value` FROM AS_TABLE($data1);
         )");
 
-        runNonSchemeQuery(R"(
+        runDMLQuery(R"(
             $data2 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
             SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item AS String) AS `value` FROM AS_TABLE($data2);
@@ -221,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
 
-        CompareYson(runNonSchemeQuery(R"(
+        CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
         )"), "[[944450u]]");
         Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
@@ -229,21 +241,21 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
-        CompareYson(runNonSchemeQuery(R"(
+        CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
         )"), "[[555549u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
-        CompareYson(runNonSchemeQuery(R"(
+        CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
         )"), "[[944451u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
         skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
 
-        CompareYson(runNonSchemeQuery(R"(
+        CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
         )"), "[[555550u]]");
 

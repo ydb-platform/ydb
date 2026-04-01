@@ -1274,8 +1274,8 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateDqScalarHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // ScalarHashJoinCore expects 7 args: leftFlow, rightFlow, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames
-    if (!EnsureArgsCount(*node, 7, ctx)) {
+    // ScalarHashJoinCore expects 8 args: leftFlow, rightFlow, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
+    if (!EnsureArgsCount(*node, 8, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 

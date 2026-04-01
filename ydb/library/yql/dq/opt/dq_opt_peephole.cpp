@@ -1063,6 +1063,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
             .Add(5, blockHashJoin.LeftJoinKeyNames().Ptr())
             .Add(6, blockHashJoin.RightJoinKeyNames().Ptr())
+            .Add(7, blockHashJoin.Settings().Ptr())
         .Seal()
         .Build();
 

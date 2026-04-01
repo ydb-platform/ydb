@@ -502,7 +502,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("ScalarHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 7, "ScalarHashJoinCore should have 7 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 8, "ScalarHashJoinCore should have 8 arguments");
 
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto rightInput = MkqlBuildExpr(*node.Child(1), buildCtx);

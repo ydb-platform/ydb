@@ -73,6 +73,7 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() == PersistentBufferAllocatedChunks.size()) {
             STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
+            UpdateFreeSpaceInfo();
             return;
         }
         for (ui32 pos = 0; pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight; pos++) {
@@ -95,7 +96,6 @@ namespace NKikimr::NDDisk {
             op->PrepareRead(ChunkSize, offset, chunkIdx, 0);
             DirectUringOp(op);
         }
-        UpdateFreeSpaceInfo();
     }
 
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,

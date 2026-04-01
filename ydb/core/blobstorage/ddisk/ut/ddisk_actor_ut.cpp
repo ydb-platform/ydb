@@ -156,9 +156,6 @@ public:
             "",
             Owner);
         SendPDiskResponse(disk, *readLog, readLogReply.release());
-        auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
-        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
-        SendPDiskResponse(disk, *checkSpace, res);
 
         // DDisk bootstrap starts persistent buffer initialization in background.
         // Burn these PDisk requests here, so later client-only phases don't see unsolicited PDisk traffic.
@@ -177,6 +174,9 @@ public:
             logReply->Results.emplace_back(log->Get()->Lsn, log->Get()->Cookie);
             SendPDiskResponse(disk, *log, logReply.release());
         }
+        auto checkSpace = WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
+        auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+        SendPDiskResponse(disk, *checkSpace, res);
     }
 };
 
@@ -674,30 +674,23 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const ui64 lsn = 10;
         const TString payload = MakeData('P', BlockSize);
         const NDDisk::TBlockSelector selector{3, 0, BlockSize};
-        Cerr << "!!!!! 1" <<Endl;
         auto checkSpace = ctx.WaitPDiskRequest<NPDisk::TEvCheckSpace>(disk);
-        Cerr << "!!!!! 2" <<Endl;
         auto res = new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
         double expected = 0.123;
         res->NormalizedOccupancy = expected;
         ctx.SendPDiskResponse(disk, *checkSpace, res);
-        Cerr << "!!!!! 3" <<Endl;
 
         auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
         write->AddPayload(TRope(payload));
         SendToDDisk(ctx, disk.PBServiceId, write.release());
-        Cerr << "!!!!! 4" <<Endl;
 
         auto pbWriteRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         UNIT_ASSERT(pbWriteRaw->Get()->Data.size() > 0);
         ctx.SendPDiskResponse(disk, *pbWriteRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-        Cerr << "!!!!! 5" <<Endl;
 
         auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResult, TReplyStatus::OK);
         UNIT_ASSERT(writeResult->Get()->Record.GetPDiskNormalizedOccupancy() == expected);
-        Cerr << "!!!!! 6" <<Endl;
-
 
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(creds, lsn, 1));
 

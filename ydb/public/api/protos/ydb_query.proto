@@ -46,13 +46,15 @@ message AttachSessionRequest {
 }
 
 // Sent by server when this session is being gracefully terminated.
-// Server will complete all in-flight requests within the grace period.
+// Server will attempt to complete in-flight requests within the soft deadline; 
+// requests still running at the hard deadline will be cancelled.
 // Client should not reuse the session after receiving this hint.
 message SessionShutdownHint {
 }
 
 // Sent by server when the node is being gracefully shut down.
-// Server will complete all in-flight requests within the grace period.
+// Server will attempt to complete in-flight requests within the soft deadline;
+// requests still running at the hard deadline will be cancelled.
 // Client should not create new sessions on this node.
 message NodeShutdownHint {
 }

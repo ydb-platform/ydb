@@ -87,9 +87,10 @@ def start_cluster_with_meta_table(
 
 
 class MetaSupportLinksEnv(BaseHttpEnv):
-    def __init__(self, meta_service):
+    def __init__(self, meta_service, grafana_service=None):
         super().__init__(meta_service)
         self.meta_service = meta_service
+        self.grafana_service = grafana_service
 
     def get_support_links(self, cluster_name=None, database=None):
         params = {}
@@ -114,14 +115,16 @@ class MetaSupportLinksEnv(BaseHttpEnv):
         return response.json()
 
 
-def write_meta_support_links_config(
-    config_path,
-    http_port,
-    grpc_endpoint,
-    url=GRAFANA_DASHBOARD_PATH,
-    include_grafana_endpoint=True,
-):
-    config_lines = [
+def _meta_support_links_grpc_endpoint(cluster):
+    return f"{cluster.nodes[1].host}:{cluster.nodes[1].port}"
+
+
+def _meta_support_links_config_path():
+    return os.path.join(yatest.common.output_path(), "meta_support_links.yaml")
+
+
+def _base_meta_config_lines(http_port, grpc_endpoint):
+    return [
         "generic:",
         '  access_service_type: "nebius_v1"',
         "  logging:",
@@ -134,12 +137,17 @@ def write_meta_support_links_config(
         f'  meta_database: "{ROOT_DATABASE}"',
         "",
     ]
-    if include_grafana_endpoint:
-        config_lines.extend([
-            "  grafana:",
-            '    endpoint: "https://grafana.example.test"',
-            "",
-        ])
+
+
+def _append_grafana_config_lines(config_lines, grafana_endpoint):
+    config_lines.extend([
+        "  grafana:",
+        f'    endpoint: "{grafana_endpoint}"',
+        "",
+    ])
+
+
+def _append_dashboard_support_links_config_lines(config_lines, url):
     config_lines.extend([
         "  support_links:",
         "    cluster:",
@@ -152,16 +160,35 @@ def write_meta_support_links_config(
         f'        url: "{url}"',
         "",
     ])
+
+
+def write_meta_support_links_config(
+    config_path,
+    http_port,
+    grpc_endpoint,
+    url=GRAFANA_DASHBOARD_PATH,
+    include_grafana_endpoint=True,
+):
+    config_lines = _base_meta_config_lines(http_port=http_port, grpc_endpoint=grpc_endpoint)
+    if include_grafana_endpoint:
+        _append_grafana_config_lines(config_lines, grafana_endpoint="https://grafana.example.test")
+    _append_dashboard_support_links_config_lines(config_lines, url=url)
+
     with open(config_path, "w") as config:
         config.write("\n".join(config_lines))
 
 
-def start_meta_support_links_service(cluster, http_port, url=GRAFANA_DASHBOARD_PATH, include_grafana_endpoint=True):
-    config_path = os.path.join(yatest.common.output_path(), "meta_support_links.yaml")
+def start_meta_support_links_service(
+    cluster,
+    http_port,
+    url=GRAFANA_DASHBOARD_PATH,
+    include_grafana_endpoint=True,
+):
+    config_path = _meta_support_links_config_path()
     write_meta_support_links_config(
         config_path=config_path,
         http_port=http_port,
-        grpc_endpoint=f"{cluster.nodes[1].host}:{cluster.nodes[1].port}",
+        grpc_endpoint=_meta_support_links_grpc_endpoint(cluster),
         url=url,
         include_grafana_endpoint=include_grafana_endpoint,
     )
@@ -175,6 +202,7 @@ def started_meta_support_links_env(
     datasource=DATASOURCE_ID,
     url=GRAFANA_DASHBOARD_PATH,
     include_grafana_endpoint=True,
+    grafana_service=None,
 ):
     cluster, driver = start_cluster_with_meta_table(
         cluster_name=cluster_name,
@@ -191,7 +219,7 @@ def started_meta_support_links_env(
                 include_grafana_endpoint=include_grafana_endpoint,
             )
             try:
-                yield MetaSupportLinksEnv(meta)
+                yield MetaSupportLinksEnv(meta, grafana_service=grafana_service)
             finally:
                 meta.stop()
     finally:

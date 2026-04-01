@@ -10,6 +10,81 @@ namespace NKikimr::NKqp::NOpt {
 using namespace NYql;
 using namespace NYql::NNodes;
 
+<<<<<<< HEAD
+=======
+TExprBase KqpApplyLimitToFullTextIndex(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    Y_UNUSED(kqpCtx);
+
+    if (!node.Maybe<TCoTake>()) {
+        return node;
+    }
+    auto take = node.Cast<TCoTake>();
+
+    auto maybeSkip = take.Input().Maybe<TCoSkip>();
+    if (maybeSkip) {
+        return node;
+    }
+
+    auto input = maybeSkip ? maybeSkip.Cast().Input() : take.Input();
+
+    bool isReadTable = input.Maybe<TKqpReadTableFullTextIndex>().IsValid();
+
+    if (!isReadTable) {
+        return node;
+    }
+
+    auto settings = TKqpReadTableFullTextIndexSettings::Parse(input.Cast<TKqpReadTableFullTextIndex>().Settings());
+
+    if (settings.ItemsLimit) {
+        return node; // already set?
+    }
+
+    settings.SetItemsLimit(take.Count().Ptr());
+
+    auto newSettings = settings.BuildNode(ctx, input.Pos());
+
+    auto newInput = ctx.ChangeChild(
+        input.Ref(), TKqpReadTableFullTextIndex::idx_Settings, newSettings.Ptr());
+
+    return Build<TCoTake>(ctx, take.Pos())
+        .Input(newInput)
+        .Count(take.Count())
+        .Done();
+}
+
+namespace {
+bool IsSuitableToDisableOlapBlocks(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+    if (columnsLimit == 0 || !node.Maybe<TCoTake>() || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
+        return false;
+    }
+
+    return !!FindNode(node.Ptr(), [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpReadOlapTableRanges>(node); });
+}
+} // namespace
+
+TExprBase KqpDisableOlapBlocksOnLimit(TExprBase node, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+    if (!IsSuitableToDisableOlapBlocks(node, typesCtx, columnsLimit)) {
+        return node;
+    }
+
+    const auto takeType = node.Ref().GetTypeAnn();
+    if (!takeType || takeType->GetKind() != ETypeAnnotationKind::List) {
+        return node;
+    }
+
+    const auto maybeStructType = takeType->Cast<TListExprType>()->GetItemType();
+    if (!maybeStructType || maybeStructType->GetKind() != ETypeAnnotationKind::Struct) {
+        return node;
+    }
+
+    if (maybeStructType->Cast<TStructExprType>()->GetItems().size() >= static_cast<size_t>(columnsLimit)) {
+        typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+    }
+
+    return node;
+}
+
+>>>>>>> 3af2cec0720 ([Optimizers] Disable blocks on column limit. (#36835))
 TExprBase KqpApplyLimitToReadTable(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoTake>()) {
         return node;

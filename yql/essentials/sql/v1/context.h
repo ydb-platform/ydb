@@ -202,7 +202,7 @@ public:
     TString AddSimpleUdf(const TString& udf);
     void SetPackageVersion(const TString& packageName, ui32 version);
 
-    bool IsStreamingService(const TStringBuf service) const;
+    bool IsStreamingService(TStringBuf service) const;
 
     bool CheckColumnReference(TPosition pos, const TString& name) {
         const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;

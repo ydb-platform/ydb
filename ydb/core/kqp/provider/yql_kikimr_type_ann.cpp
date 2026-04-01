@@ -1401,16 +1401,6 @@ private:
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    const bool hasNewSyntax = localBloomNgramFilterDescription.FalsePositiveProbability.has_value();
-                    const bool hasOldSyntax = localBloomNgramFilterDescription.FilterSizeBytes.has_value()
-                        || localBloomNgramFilterDescription.RecordsCount.has_value()
-                        || localBloomNgramFilterDescription.HashesCount.has_value();
-                    if (hasNewSyntax && hasOldSyntax) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
-                            "Cannot mix false_positive_probability with deprecated hashes_count/filter_size_bytes/records_count parameters"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
                 }

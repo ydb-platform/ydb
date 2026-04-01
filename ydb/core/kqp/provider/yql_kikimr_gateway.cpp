@@ -49,26 +49,6 @@ static void CreateDirs(std::shared_ptr<TVector<TString>> partsHolder, size_t ind
     createDir(basePath, parts[index], partPromise);
 }
 
-// DEPRECATED: old syntax
-// https://en.wikipedia.org/wiki/Bloom_filter (Optimal number of hash functions)
-double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount) {
-    const double m = static_cast<double>(filterSizeBytes) * 8;
-    const double n = static_cast<double>(recordsCount);
-    if (m <= 0 || n <= 0) {
-        return 0.1;
-    }
-
-    const double optimalK = (m / n) * std::log(2.0);
-    const double k = std::max(1.0, optimalK);
-
-    const double fpp = (k > 1.0) ? std::pow(0.5, k) : 1.0 - std::exp(-n / m);
-    if (fpp <= 0.0 || !std::isfinite(fpp)) {
-        return 0.1;
-    }
-
-    return std::min(fpp, 0.99);
-}
-
 TKikimrPathId TKikimrPathId::Parse(const TStringBuf& str) {
     TStringBuf ownerStr;
     TStringBuf idStr;

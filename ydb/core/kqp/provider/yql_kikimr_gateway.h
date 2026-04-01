@@ -76,10 +76,6 @@ struct TIndexDescription {
         std::optional<ui32> NgramSize;
         std::optional<double> FalsePositiveProbability;
         std::optional<bool> CaseSensitive;
-        std::optional<ui32> HashesCount;
-        // DEPRECATED: old syntax
-        std::optional<ui32> FilterSizeBytes;
-        std::optional<ui32> RecordsCount;
     };
 
     enum class EType : ui32 {
@@ -353,8 +349,6 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
 
 void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterDescription& desc,
     const TString& name, const TString& value, TString& error);
-
-double ComputeFalsePositiveProbabilityFromDeprecatedParams(ui32 filterSizeBytes, ui32 recordsCount);
 
 struct TColumnFamily {
     TString Name;

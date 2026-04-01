@@ -371,7 +371,7 @@ class Test(TestBase):
         builder = (
             BaseConfigBuilder()
             .add_node(node_id=1)
-            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=16, enforced_dynamic_slot_size=int(200e9)) # 3.2 TB
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=16, enforced_dynamic_slot_size=int(200e9))  # 3.2 TB
             .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
             .add_vslot(
                 node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001,

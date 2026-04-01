@@ -1,10 +1,10 @@
+import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+
 # XXX: setting of pytest_plugins should work if specified directly in test modules
 # but somehow it does not
 #
 # for ydb_{cluster, database, ...} fixture family
 pytest_plugins = 'ydb.tests.library.fixtures'
-
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
 
 
 class BaseConfigBuilder:
@@ -93,9 +93,7 @@ class BaseConfigBuilder:
 
     def update_vslot(self, node_id, pdisk_id, vslot_id, available_size=None, allocated_size=None):
         for vslot in self._base_config.VSlot:
-            if (vslot.VSlotId.NodeId == node_id and
-                vslot.VSlotId.PDiskId == pdisk_id and
-                vslot.VSlotId.VSlotId == vslot_id):
+            if (vslot.VSlotId.NodeId == node_id and vslot.VSlotId.PDiskId == pdisk_id and vslot.VSlotId.VSlotId == vslot_id):
                 if available_size is not None:
                     vslot.VDiskMetrics.AvailableSize = available_size
                 if allocated_size is not None:

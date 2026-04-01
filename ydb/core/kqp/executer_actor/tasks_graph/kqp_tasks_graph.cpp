@@ -1773,8 +1773,10 @@ void TKqpTasksGraph::MergeReadInfoToTaskMeta(TTaskMeta& meta, ui64 shardId, TMay
             switch (readOlapRange.GetReadType()) {
                 case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
                     meta.ReadInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Rows;
+                    break;
                 case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
                     meta.ReadInfo.ReadType = TTaskMeta::TReadInfo::EReadType::Blocks;
+                    break;
                 default:
                     YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
             }

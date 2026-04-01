@@ -80,8 +80,8 @@ namespace NYdbWorkload {
         TStringBuilder ddl;
         ddl << "--!syntax_v1\n";
         ddl << "CREATE TABLE `" << Params.GetFullTableName(Params.TableName.c_str()) << "` (\n";
-        ddl << "    `id` Uint64,\n";
-        ddl << "    `text` String,\n";
+        ddl << "    `id` Uint64 NOT NULL,\n";
+        ddl << "    `text` String NOT NULL,\n";
         ddl << "    PRIMARY KEY (`id`)\n";
         ddl << ") WITH (\n";
         ddl << "    AUTO_PARTITIONING_BY_SIZE = ENABLED,\n";

@@ -192,7 +192,7 @@ namespace NYdbWorkload {
                 0,
                 FulltextParams.TableName,
                 DataFiles,
-                TVector<TString>{"id", "text"},
+                TVector<TString>(),
                 TDataGenerator::EPortionSizeUnit::Line)};
     }
 

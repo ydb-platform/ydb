@@ -88,14 +88,15 @@ public:
     }
 
     void GenerateBash(NLastGetopt::TFormattedOutput& out) const override {
-        out.Line() << "IFS=$'\\n'";
-        out.Line() << "items=( $(${words[@]} " << SpecialFlag << " "
+        out.Line() << "local _scheme_lines";
+        out.Line() << "mapfile -t _scheme_lines < <(${words[@]} " << SpecialFlag << " "
                     << Completer_->GetUniqueName()
-                    << " \"${cword}\" \"\" \"\" 2> /dev/null) )";
-        out.Line() << "candidates=$(compgen -W \"${items[*]:1}\" -- \"$cur\")";
-        out.Line() << "COMPREPLY+=( $candidates )";
-        out.Line() << "[[ $candidates == *\"${items[1]}\" ]] && need_space=\"\"";
-        out.Line() << "IFS=$' \\t\\n'";
+                    << " \"${cword}\" \"\" \"\" 2> /dev/null)";
+        out.Line() << "for _item in \"${_scheme_lines[@]:2}\"; do";
+        out.Line() << "  [[ -z \"$_item\" ]] && continue";
+        out.Line() << "  [[ \"$_item\" == \"$cur\"* ]] && COMPREPLY+=( \"$_item\" )";
+        out.Line() << "done";
+        out.Line() << "[[ ${#COMPREPLY[@]} -eq 1 && \"${COMPREPLY[0]}\" == */ ]] && need_space=\"\"";
     }
 
     TStringBuf GenerateZshAction(NLastGetopt::NComp::TCompleterManager& manager) const override {

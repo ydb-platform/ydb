@@ -45,20 +45,17 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
         CrackAddress("ipv4:not-valid", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
+        UNIT_ASSERT_EQUAL(hostname, "not-valid"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
         CrackAddress("ipv4:101.100.1.1.1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
+        UNIT_ASSERT_EQUAL(hostname, "101.100.1.1.1"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
         CrackAddress("ipv4:101.100.:1.1", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "192.168.1.1");
-        UNIT_ASSERT_EQUAL(port, 0);
+        UNIT_ASSERT_EQUAL(hostname, "101.100."); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 0); // Get wrong value on error
 
         // With port part
 
@@ -66,15 +63,13 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "101.29.8.1");
         UNIT_ASSERT_EQUAL(port, 1234);
 
-        // Keeps previous values on error
         CrackAddress("ipv4:not-valid:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "101.29.8.1");
-        UNIT_ASSERT_EQUAL(port, 1234);
+        UNIT_ASSERT_EQUAL(hostname, "not-valid"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 123);
 
-        // Keeps previous values on error
         CrackAddress("ipv4:[192.168.1.1]:1234", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "101.29.8.1");
-        UNIT_ASSERT_EQUAL(port, 1234);
+        UNIT_ASSERT_EQUAL(hostname, "[192.168.1.1]"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 1234); // Get wrong value on error
     }
 
     Y_UNIT_TEST(TestCrackAddressIPv6Format) {
@@ -95,19 +90,16 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
-        CrackAddress("ipv6:not-valid", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
+        CrackAddress("ipv6:deadbeef", hostname, port);
+        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[2a07::ff:1:100]", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
+        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 0);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:][2a07::ff:1:100", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1:100");
+        UNIT_ASSERT_EQUAL(hostname, "deadbeef"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 0);
 
         // With port part
@@ -120,54 +112,44 @@ Y_UNIT_TEST_SUITE(HttpProxyHelpers) {
         UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
         UNIT_ASSERT_EQUAL(port, 123);
 
-        // Keeps previous values on error
-        CrackAddress("ipv6:[2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
+        CrackAddress("ipv6:[2a00::0abf]:8977]:1234", hostname, port);
+        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 123);
 
-        // Keeps previous values on error
-        CrackAddress("ipv6:2a00::[0abf:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        CrackAddress("ipv6:2a00::[0abf:8977]:12345", hostname, port);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[2a00::0abf[:8977:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:2a00::0abf:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:2a00::0abf]:8977[:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
-        UNIT_ASSERT_EQUAL(port, 123);
+        UNIT_ASSERT_EQUAL(hostname, "0abf:8977"); // Get wrong value on error
+        UNIT_ASSERT_EQUAL(port, 12345);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[not-valid:2a07::ff:1]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
+        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 123);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[2a00::0abf]:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
+        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 123);
 
-        // Keeps previous values on error
         CrackAddress("ipv6:[2a00:[:0abf:8977]:123", hostname, port);
-        UNIT_ASSERT_EQUAL(hostname, "2a07::ff:1");
+        UNIT_ASSERT_EQUAL(hostname, "not-valid:2a07::ff:1"); // Get wrong value on error
         UNIT_ASSERT_EQUAL(port, 123);
     }
 

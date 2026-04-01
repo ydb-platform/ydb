@@ -497,35 +497,18 @@ bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& 
     return true;
 }
 
-// Saves the previous values in case of an error for the new functionality.
-// Does not guarantee consistency of values in the deprecated function.
+// Does not guarantee consistency of hostname and port if parsing failed.
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
-    auto originalHostname = std::exchange(hostname, "");
-    auto originalPort = std::exchange(port, 0);
-
     switch (GetScheme(address)) {
         case EURIScheme::IPV6: {
-            if (!CrackIPv6Address(address, hostname, port)) {
-                // return previous values on error
-                hostname = std::move(originalHostname);
-                port = originalPort;
-            }
+            CrackIPv6Address(address, hostname, port);
             return;
         }
         case EURIScheme::IPV4: {
-            if (!CrackIPv4Address(address, hostname, port)) {
-                // return previous values on error
-                hostname = std::move(originalHostname);
-                port = originalPort;
-            }
+            CrackIPv4Address(address, hostname, port);
             return;
         }
-        default: {
-            // Keep legacy behavior (do not clear input hostname and port)
-            hostname = std::move(originalHostname);
-            port = originalPort;
-            return CrackAddressLegacy(address, hostname, port);
-        }
+        default: return CrackAddressLegacy(address, hostname, port);
     }
 }
 

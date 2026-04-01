@@ -635,8 +635,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
                 const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
-                const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
-                UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+                ui32 readValue = 0;
+                std::memcpy(&readValue, actual.data(), sizeof(readValue));
+                UNIT_ASSERT_VALUES_EQUAL_C(readValue, tabletId,
                     "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
                 UNIT_ASSERT_VALUES_EQUAL(actual, expected);
             }

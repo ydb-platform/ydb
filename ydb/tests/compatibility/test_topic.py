@@ -87,7 +87,6 @@ class Workload:
         if self.processed_message_count != total_count:
             raise Exception(f"Received {self.processed_message_count} messages but written {self.message_count}")
 
-
     def _read_from_topic(self, total_count: int, reader: ydb.TopicReader):
         while True:
             try:

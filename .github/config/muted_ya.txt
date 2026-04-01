@@ -1,11 +1,10 @@
+ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
-ydb/core/blobstorage/ut_blobstorage/ut_replication Replication.Phantoms_block4_2
-ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ScalarFederativeWriting
-ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
@@ -14,27 +13,19 @@ ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Overlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/library/actors/interconnect/ut_fat InterconnectUnstableConnection.InterconnectTestWithProxyTlsReestablishWithXdc
+ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.KeyedWriteSession_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestWriteWithRateLimiterWithUserPayloadRateLimit
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueCommonTest.TestWriteWithRateLimiterWithUserPayloadRateLimit
-ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_olap[rolling_stable-25-4-1_to_prestable-26-1]
-ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_prestable-26-1_and_stable-25-4-1]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_prestable-26-1-column]
-ydb/tests/compatibility test_rolling.py.TestRolling.test_kv[rolling_stable-25-4-1_to_prestable-26-1-row]
-ydb/tests/compatibility test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-25-4-1_to_prestable-26-1-row-False]
-ydb/tests/compatibility test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-25-4-1_to_prestable-26-1]
-ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-25-4-1_to_prestable-26-1]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-async-False-1-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-async-False-1-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-async-False-2-1-fq_client0-mvp_external_ydb_endpoint0]

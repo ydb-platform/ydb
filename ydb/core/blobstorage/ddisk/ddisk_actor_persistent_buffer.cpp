@@ -21,7 +21,6 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
-        UpdateFreeSpaceInfo();
     }
 
     void TDDiskActor::UpdateFreeSpaceInfo() {
@@ -96,7 +95,7 @@ namespace NKikimr::NDDisk {
             op->PrepareRead(ChunkSize, offset, chunkIdx, 0);
             DirectUringOp(op);
         }
-
+        UpdateFreeSpaceInfo();
     }
 
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,

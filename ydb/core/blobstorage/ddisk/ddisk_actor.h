@@ -212,6 +212,10 @@ namespace NKikimr::NDDisk {
                 EvWritePersistentBufferPart,
                 EvReadPersistentBufferPart,
                 EvInternalSyncWriteResult,
+                EvIssuePersistentBufferChunkAllocation,
+            };
+
+            struct TEvIssuePersistentBufferChunkAllocation : TEventLocal<TEvIssuePersistentBufferChunkAllocation, EvIssuePersistentBufferChunkAllocation> {
             };
 
             struct TEvHandleEventForChunk : TEventLocal<TEvHandleEventForChunk, EvHandleEventForChunk> {
@@ -300,13 +304,29 @@ namespace NKikimr::NDDisk {
             WakeupUpdateFreeSpaceInfo = 2,
         };
 
+        const bool IsPersistentBufferActor = false;
+
     public:
+        NKikimrServices::TActivity::EType ActorActivityType() const {
+            if (IsPersistentBufferActor) {
+                return NKikimrServices::TActivity::BS_PERSISTENT_BUFFER;
+            }
+            return NKikimrServices::TActivity::BS_DDISK;
+        }
+
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
             TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, bool isPersistentBufferActor = false);
+
+        TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+            TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+            TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const std::vector<ui32>& initPersistentBufferChunks,
+            TIntrusivePtr<TPDiskParams> pDiskParams, NPDisk::TDiskFormatPtr diskFormat, TFileHandle&& diskFd);
+
         ~TDDiskActor();
         void Bootstrap();
-        STFUNC(StateFunc);
+        STFUNC(StateFuncDDisk);
+        STFUNC(StateFuncPersistentBuffer);
         void PassAway() override;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -411,7 +431,7 @@ namespace NKikimr::NDDisk {
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
             ui64 *startingPointLsnPtr, std::function<void()> callback);
 
-        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot(const std::vector<ui64>& newChunkIdxs = {});
+        NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
             TChunkIdx chunkIdx);
@@ -680,6 +700,7 @@ namespace NKikimr::NDDisk {
         std::unordered_map<ui64, TPersistentBufferDiskOperationInFlight> PersistentBufferDiskOperationInflight;
 
         ui32 PersistentBufferRestoreChunksInflight = 0;
+        std::vector<ui32> PersistentBufferChunks;
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
 
@@ -692,7 +713,9 @@ namespace NKikimr::NDDisk {
         std::unordered_set<ui32> PersistentBufferRestoringChunks;
 
         TActorId WritePersistentBuffersActor;
+        TActorId PersistentBufferActorId;
 
+        void CreatePersistentBuffer();
         void InitPersistentBuffer();
         void IssuePersistentBufferChunkAllocation();
         void ProcessPersistentBufferQueue();
@@ -712,6 +735,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvWriteResult::TPtr ev);
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
 
         void Handle(TEvWritePersistentBuffers::TPtr ev);
 

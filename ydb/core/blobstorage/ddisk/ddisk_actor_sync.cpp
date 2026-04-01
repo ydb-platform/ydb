@@ -17,6 +17,10 @@ namespace NKikimr::NDDisk {
             return actor.Counters.Interface.SyncWithPersistentBuffer;
         }
 
+        static TActorId MakeSourceActorId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+            return MakeBlobStoragePersistentBufferId(node, pdiskId, ddiskSlotId);
+        }
+
         static std::unique_ptr<IEventBase> MakeResult(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
@@ -37,6 +41,10 @@ namespace NKikimr::NDDisk {
 
         static auto& GetCounters(TDDiskActor& actor) {
             return actor.Counters.Interface.SyncWithDDisk;
+        }
+
+        static TActorId MakeSourceActorId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+            return MakeBlobStorageDDiskId(node, pdiskId, ddiskSlotId);
         }
 
         static std::unique_ptr<IEventBase> MakeResult(
@@ -125,7 +133,7 @@ namespace NKikimr::NDDisk {
 
         const auto& ddiskId = record.GetDDiskId();
         const TQueryCredentials sourceCreds(creds.TabletId, creds.Generation, record.GetDDiskInstanceGuid(), true);
-        const TActorId sourceDDiskId = MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
+        const TActorId sourceDDiskId = TPolicy::MakeSourceActorId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
         std::optional<ui64> vChunkIndex;
 
         sync.Requests.reserve(record.SegmentsSize());

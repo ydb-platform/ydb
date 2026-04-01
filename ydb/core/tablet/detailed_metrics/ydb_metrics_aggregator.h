@@ -12,7 +12,7 @@ namespace NKikimr {
  * which combines the same metrics from different sources into a single target value.
  *
  * @note Typically, this class is responsible for maintaining detailed metrics
- *       for the given table type. The detailed metrics are defined in the corresponding
+ *       for the given tablet type. The detailed metrics are defined in the corresponding
  *       .proto file and are divided into 3 groups: simple, cumulative and histogram
  *       counters. This class creates exactly one target counter for each metric,
  *       defined in the .proto file. For example, the metrics may look like this:
@@ -46,8 +46,10 @@ public:
     /**
      * Add a new group of source counters to the given group of target counters.
      *
-     * @note All target counters are automatically recalculated to account
-     *       for the new values coming from the new group of source counters.
+     * @warning The target counters are NOT automatically recalculated by this
+     *          function. To update the target counters to account for the new values,
+     *          the RecalculateAllTargetCounters() function must be called explicitly
+     *          after adding all the necessary source groups.
      *
      * @warning All source counters must exist in the given source counter group
      *          when this function is called.
@@ -63,8 +65,10 @@ public:
     /**
      * Remove an existing group of source counters from the given group of target counters.
      *
-     * @note All target counters are automatically recalculated to account
-     *       for the removed values coming from the removed group of source counters.
+     * @warning The target counters are NOT automatically recalculated by this
+     *          function. To update the target counters to account for the removed values,
+     *          the RecalculateAllTargetCounters() function must be called explicitly
+     *          after removing all the necessary source groups.
      *
      * @param[in] sourceGroupId The ID of the source group to remove
      */

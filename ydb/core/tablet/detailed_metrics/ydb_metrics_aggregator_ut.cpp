@@ -301,6 +301,7 @@ R"json(
         // TEST 2: Add first two source groups and make sure the target counters are updated
         aggregator->AddSourceCountersGroup("source-group-1", sourceCountersGroup1);
         aggregator->AddSourceCountersGroup("source-group-2", sourceCountersGroup2);
+        aggregator->RecalculateAllTargetCounters();
 
         countersJson = NormalizeJson(NMonitoring::ToJson(*targetCountersGroup));
         Cerr << "TEST Target counters (2 source groups added):" << Endl << countersJson << Endl;
@@ -462,6 +463,7 @@ R"json(
 
         // TEST 3: Add the third source groups and make sure the target counters are updated
         aggregator->AddSourceCountersGroup("source-group-3", sourceCountersGroup3);
+        aggregator->RecalculateAllTargetCounters();
 
         countersJson = NormalizeJson(NMonitoring::ToJson(*targetCountersGroup));
         Cerr << "TEST Target counters (all source groups added):" << Endl << countersJson << Endl;
@@ -785,6 +787,7 @@ R"json(
 
         // TEST 5: Remove the first source group and make sure the target counters are updated
         aggregator->RemoveSourceCountersGroup("source-group-1");
+        aggregator->RecalculateAllTargetCounters();
 
         countersJson = NormalizeJson(NMonitoring::ToJson(*targetCountersGroup));
         Cerr << "TEST Target counters (the first source group removed):" << Endl << countersJson << Endl;
@@ -947,6 +950,7 @@ R"json(
         // TEST 6: Remove all remaining source group and make sure the target counters are all zeros
         aggregator->RemoveSourceCountersGroup("source-group-2");
         aggregator->RemoveSourceCountersGroup("source-group-3");
+        aggregator->RecalculateAllTargetCounters();
 
         countersJson = NormalizeJson(NMonitoring::ToJson(*targetCountersGroup));
         Cerr << "TEST Target counters (all source group removed):" << Endl << countersJson << Endl;

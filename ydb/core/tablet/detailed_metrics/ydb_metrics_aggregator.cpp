@@ -128,8 +128,6 @@ public:
             sourceCounterGroup,
             result.first->second.PercentileCounters
         );
-
-        RecalculateAllTargetCounters();
     }
 
     virtual void RemoveSourceCountersGroup(const TString& sourceGroupId) override {
@@ -140,8 +138,6 @@ public:
             "The source counter group %s does not exist",
             sourceGroupId.c_str()
         );
-
-        RecalculateAllTargetCounters();
     }
 
     virtual void RecalculateAllTargetCounters() override {

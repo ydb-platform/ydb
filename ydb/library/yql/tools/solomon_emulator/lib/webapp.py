@@ -220,6 +220,9 @@ class SolomonEmulator(object):
         self._api_calls = 0
         return web.Response(status=200)
 
+    def inc_api_calls(self):
+        self._api_calls += 1
+
 
 class DataService(DataServiceServicer):
     def __init__(self, emulator):
@@ -227,6 +230,8 @@ class DataService(DataServiceServicer):
 
     def Read(self, request: ReadRequest, context) -> ReadResponse:
         logger.debug('ReadRequest: %s', request)
+
+        self._emulator.inc_api_calls()
 
         if request.container.HasField("project_id") and request.container.project_id in Shard.DEPRECATED_TESTS_PROJECTS:
             return self.DeprecatedTestsLogic(request, context)

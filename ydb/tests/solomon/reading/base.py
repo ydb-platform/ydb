@@ -97,14 +97,25 @@ class SolomonReadingTestBase(object):
 
         elif test_name == "backpressure_test":
             cls.backpressure_test_metrics_size = 100
-            cls.backpressure_test_max_data_inflight = 5
 
-            config.yaml_config["query_service_config"]["solomon"]["default_settings"].append(
+            config.yaml_config["query_service_config"]["solomon"]["default_settings"].extend([
                 {
-                    "name": "MaxDataInflight",
-                    "value": cls.backpressure_test_max_data_inflight
+                    "name": "MaxDataInflightBytes",
+                    "value": 1
+                },
+                {
+                    "name": "MetricsQueuePrefetchSize",
+                    "value": 1
+                },
+                {
+                    "name": "MetricsQueueBatchCountLimit",
+                    "value": 1
+                },
+                {
+                    "name": "ComputeActorBatchSize",
+                    "value": 1
                 }
-            )
+            ])
 
             add_solomon_metrics("backpressure_test", "backpressure_test", "my_service", {"metrics": [
                 *cls._generate_backpressure_test_metrics(cls.backpressure_test_metrics_size)

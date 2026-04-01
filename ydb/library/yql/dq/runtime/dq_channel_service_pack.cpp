@@ -9,7 +9,7 @@
 #include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
 
 #include <ydb/library/actors/core/log.h>
-#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+
 namespace NYql::NDq {
 
 template<bool fast>
@@ -62,13 +62,13 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        //Y_ENSURE(false);
-         Cerr << "TNarrowSerializer Push checkpoint" << Endl;
-        Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
     }
     
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -115,13 +115,13 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        //Y_ENSURE(false);
-         Cerr << "TWideSerializer Push checkpoint" << Endl;
-        Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
+        Flush(false);
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
@@ -163,11 +163,11 @@ public:
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-        Buffer->Push(TDataChunk(std::move(checkpoint), TransportVersion, PackerVersion));
+        Buffer->Push(TDataChunk(std::move(checkpoint), Buffer->GetLeading()));
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        Buffer->Push(TDataChunk(std::move(watermark), TransportVersion, PackerVersion));
+        Buffer->Push(TDataChunk(std::move(watermark), Buffer->GetLeading()));
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
@@ -239,20 +239,16 @@ std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& se
             }
 
             if (local || chunkSizeLimit == 0) {
-                Cerr << "Make TBlockSerializer" << Endl;
                 return std::make_unique<TBlockSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion,
                     settings.BufferPageAllocSize, local ? Nothing() : settings.ArrayBufferMinFillPercentage);
             } else {
-                Cerr << "Make TChunkedSerializer" << Endl;
                 auto splitter = NArrow::CreateBlockSplitter(settings.RowType, chunkSizeLimit);
                 return std::make_unique<TChunkedSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, settings.BufferPageAllocSize, settings.ArrayBufferMinFillPercentage, *settings.HolderFactory, splitter);
             }
         } else {
-            Cerr << "Make TWideSerializer" << Endl;
             return std::make_unique<TWideSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
         }
     } else {
-        Cerr << "Make TNarrowSerializer" << Endl;
         return std::make_unique<TNarrowSerializer<fast>>(buffer, settings.RowType, settings.TransportVersion, settings.PackerVersion, std::min(settings.MaxStoredBytes, settings.MaxChunkBytes), settings.BufferPageAllocSize);
     }
 }

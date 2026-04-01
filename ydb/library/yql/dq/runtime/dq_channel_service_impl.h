@@ -780,14 +780,12 @@ public:
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        Cerr << "TFastDqOutputChannel Push watermark" << Endl;
         if (!Serializer->Buffer->IsFinished()) {
             Serializer->Push(std::move(watermark));
         }
     }
 
     void Push(NDqProto::TCheckpoint&& checkpoint) override {
-         Cerr << "TFastDqOutputChannel Push checkpoint" << Endl;
         if (!Serializer->Buffer->IsFinished()) {
             Serializer->Push(std::move(checkpoint));
         }

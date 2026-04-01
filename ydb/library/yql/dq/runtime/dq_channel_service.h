@@ -65,10 +65,8 @@ public:
 
     TDataChunk(
         NDqProto::TCheckpoint&& checkpoint,
-        NDqProto::EDataTransportVersion transportVersion,
-        NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
-        : TransportVersion(transportVersion)
-        , PackerVersion(packerVersion)
+        bool leading)
+        : Leading(leading)
         , Checkpoint(std::move(checkpoint)) {
             Bytes = 1;
         Timestamp = TInstant::Now();
@@ -76,10 +74,8 @@ public:
 
     TDataChunk(
         NDqProto::TWatermark&& watermark,
-        NDqProto::EDataTransportVersion transportVersion,
-        NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
-        : TransportVersion(transportVersion)
-        , PackerVersion(packerVersion)
+        bool leading)
+        : Leading(leading)
         , Watermark(std::move(watermark)) {
             Bytes = 1;
         Timestamp = TInstant::Now();

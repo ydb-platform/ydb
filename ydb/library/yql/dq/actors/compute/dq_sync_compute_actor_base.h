@@ -205,13 +205,10 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
     }
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) override final {
-
-        CA_LOG_D("InjectBarrierToOutputs map size " << this->OutputChannelsMap.size());
         Y_ABORT_UNLESS(this->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
         for (const auto& [id, channelInfo] : this->OutputChannelsMap) {
             if (!channelInfo.IsTransformOutput) {
                 channelInfo.Channel->Push(NDqProto::TCheckpoint(checkpoint));
-                CA_LOG_D("InjectBarrierToOutputs Push checkpoint" );
             }
         }
         for (const auto& [outputIndex, sink] : this->SinksMap) {
@@ -322,7 +319,6 @@ protected:
             TaskRunner->GetReadRanges(),
             TaskRunner->GetRandomProvider()
         );
-        CA_LOG_D("FillIoMaps: SourcesMap size " << this->SourcesMap.size());
     }
 
     const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
@@ -437,10 +433,9 @@ protected:
     }
 
     virtual void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) override {
-        CA_LOG_D("Take checkpoint ");
+        CA_LOG_T("Take checkpoint from channelId: " << channelId << ", checkpoint: " << checkpoint.ShortDebugString());
         auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
-
         inputChannel->Pause(checkpoint);
         this->Checkpoints->RegisterCheckpoint(checkpoint, channelId);
     }

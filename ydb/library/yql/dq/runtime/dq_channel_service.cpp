@@ -135,9 +135,6 @@ void TLocalBuffer::Push(TDataChunk&& data) {
 
 void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
-
-    Cerr << "TLocalBuffer PushDataChunk" << Endl;
-
     if (PushStats.CollectBasic()) {
         PushStats.Chunks++;
         PushStats.Rows += data.Rows;
@@ -204,6 +201,7 @@ bool TLocalBuffer::IsEmpty() {
 
 bool TLocalBuffer::Pop(TDataChunk& data) {
     std::lock_guard lock(Mutex);
+
     if (Queue.empty()) {
         PushStats.TryPause();
         NeedToNotifyInput.store(true);
@@ -630,7 +628,6 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 
 void TOutputBuffer::Push(TDataChunk&& data) {
     if (!Descriptor->IsTerminatedOrAborted() && !Descriptor->IsFinished()) {
-        Cerr << "TOutputBuffer Push" << Endl;
         Descriptor->PushDataChunk(std::move(data), NodeState.get(), Descriptor);
     }
 }
@@ -951,12 +948,10 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     ev->Record.SetConfirmedPopBytes(item->Descriptor->RemotePopBytes.load());
 
     if (item->Data.Checkpoint) {
-        Cerr << "SendMessage with checkpoint" << Endl;
         ev->Record.MutableCheckpoint()->CopyFrom(item->Data.Checkpoint.GetRef());
     }
 
     if (item->Data.Watermark) {
-        Cerr << "SendMessage with watermark" << Endl;
         ev->Record.MutableWatermark()->CopyFrom(item->Data.Watermark.GetRef());
     }
 

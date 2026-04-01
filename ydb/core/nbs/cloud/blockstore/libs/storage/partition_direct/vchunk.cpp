@@ -128,6 +128,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -171,6 +173,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
+         writeMode,
+         pbufferReplyTimeoutMicroseconds,
          lsn,
          span = std::move(span)]() mutable
         {
@@ -183,6 +187,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     vchunkRange,
                     std::move(callContext),
                     std::move(request),
+                    writeMode,
+                    pbufferReplyTimeoutMicroseconds,
                     lsn,
                     std::move(span));
             } else {
@@ -319,6 +325,8 @@ void TVChunk::DoWriteBlocksLocal(
     TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
     ui64 lsn,
     std::shared_ptr<NWilson::TSpan> span)
 {
@@ -355,7 +363,7 @@ void TVChunk::DoWriteBlocksLocal(
         });
 
     span->Event("Run");
-    writeExecutor->Run();
+    writeExecutor->Run(writeMode, pbufferReplyTimeoutMicroseconds);
 }
 
 void TVChunk::OnWriteBlocksResponse(

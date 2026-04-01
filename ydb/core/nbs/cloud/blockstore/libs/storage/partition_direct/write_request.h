@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 #include "vchunk_config.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
@@ -11,6 +12,17 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+enum class EWriteMode: ui32
+{
+    PBufferReplication,
+    DirectPBuffersFilling,
+};
+
+EWriteMode GetWriteModeFromProto(
+    NProto::TStorageServiceConfig::TWriteMode writeMode);
+NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
+    EWriteMode writeMode);
 
 class TWriteRequestExecutor
     : public std::enable_shared_from_this<TWriteRequestExecutor>
@@ -38,16 +50,20 @@ public:
 
     ~TWriteRequestExecutor();
 
-    void Run();
+    void Run(EWriteMode writeMode, ui32 pbufferReplyTimeoutMicroseconds);
 
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
     void SendWriteRequest(ELocation location);
+    void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnWriteToManyPBuffersResponse(
+        const TDBGWriteBlocksToManyPBuffersResponse& response);
+
     void Reply(NProto::TError error);
 
     NActors::TActorSystem* ActorSystem;

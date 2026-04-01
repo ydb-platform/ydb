@@ -109,6 +109,13 @@ void TReadRequestExecutor::OnReadResponse(
         return;
     }
 
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        TryNumber,
+        FormatError(response.Error).c_str());
+
     ++TryNumber;
     Run();
 }

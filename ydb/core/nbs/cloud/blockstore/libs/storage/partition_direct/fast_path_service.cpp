@@ -17,6 +17,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
+constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
     NMonitoring::TDynamicCounterPtr counters,
@@ -92,6 +93,11 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = storageConfig.GetStripeSize()
                                  ? storageConfig.GetStripeSize()
                                  : DefaultStripeSize}))
+    , WriteMode(GetWriteModeFromProto(storageConfig.GetWriteMode()))
+    , PBufferReplyTimeoutMicroseconds(
+          storageConfig.GetPBufferReplyTimeoutMicroseconds()
+              ? storageConfig.GetPBufferReplyTimeoutMicroseconds()
+              : DefaultPBufferReplyTimeoutMicroseconds)
 {
     Y_UNUSED(ActorSystem);
 }
@@ -159,6 +165,8 @@ TFastPathService::WriteBlocksLocal(
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
+        WriteMode,
+        PBufferReplyTimeoutMicroseconds,
         GenerateSequenceNumber(),
         span->GetTraceId());
 

@@ -12,7 +12,7 @@ namespace NYdb::inline Dev::NTopic {
 
 namespace {
 
-static constexpr auto CHOOSE_PARTITION_KEY_META_KEY = "choose_partition_key";
+static constexpr auto YDB_PARTITION_KEY_META_KEY = "__ydb_partition_key";
 
 } // namespace
 
@@ -66,7 +66,7 @@ TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string&
     }
 
     if (!choosePartitionKey.empty()) {
-        MessageMeta.Fields.emplace_back(CHOOSE_PARTITION_KEY_META_KEY, choosePartitionKey);
+        MessageMeta.Fields.emplace_back(YDB_PARTITION_KEY_META_KEY, choosePartitionKey);
     }
 }
 

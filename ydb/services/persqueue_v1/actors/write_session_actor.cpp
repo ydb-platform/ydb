@@ -36,7 +36,7 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
-static constexpr auto CHOOSE_PARTITION_KEY_META_KEY = "choose_partition_key";
+static constexpr auto YDB_PARTITION_KEY_META_KEY = "__ydb_partition_key";
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
@@ -1231,7 +1231,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
-            if (metaItem.key() == CHOOSE_PARTITION_KEY_META_KEY) {
+            if (metaItem.key() == YDB_PARTITION_KEY_META_KEY) {
                 w->SetChoosePartitionKey(metaItem.value());
             }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();

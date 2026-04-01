@@ -1,7 +1,6 @@
 #include <util/string/subst.h>
 
 #include "completion.h"
-#include "completion_generator.h"
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -44,7 +43,7 @@ void TYdbCommandTreeAutoCompletionWrapper::RegisterModes(TModChooser &chooser) {
 }
 
 
-TString MakeInfo(TStringBuf command, TStringBuf flag) {
+TString MakeCompletionInfo(TStringBuf command, TStringBuf flag) {
   TString info = (
       "This command generates shell script with completion function and prints it to `stdout`, "
       "allowing one to re-direct the output to the file of their choosing. "
@@ -116,37 +115,6 @@ TString MakeInfo(TStringBuf command, TStringBuf flag) {
   SubstGlobal(info, "{B}", NColorizer::StdErr().LightDefault());
   SubstGlobal(info, "{R}", NColorizer::StdErr().Reset());
   return info;
-}
-
-
-TClientCommandOption& ConfigureCompletionOption(TClientCommandOption& option, TStringBuf command, TClientCommandTree *commandTree, TClientCommand::TConfig& config) {
-  option.GetOpt()
-          .Help("generate tab completion script for zsh or bash")
-          .CompletionHelp("generate tab completion script")
-          .OptionalArgument("shell-syntax")
-          .CompletionArgHelp("shell syntax for completion script")
-          .IfPresentDisableCompletion()
-          .Completer(NLastGetopt::NComp::Choice({{"zsh"}, {"bash"}}));
-  return option.Handler([command, commandTree, config](TStringBuf shell) {
-            if (shell.empty()) {
-              Cerr << MakeInfo(command, "--completion") << Endl;
-              throw TNeedToExitWithCode(EXIT_SUCCESS);
-            }
-            
-            auto modChooser = TModChooser();
-            auto rootWrapper = TYdbCommandTreeAutoCompletionWrapper(commandTree, config);
-            rootWrapper.RegisterModes(modChooser);
-
-            if (shell == "bash") {
-              NLastGetoptFork::TBashCompletionGenerator(&modChooser, &config.Opts->GetOpts()).Generate(command, Cout);
-            } else if (shell == "zsh") {
-              NLastGetoptFork::TZshCompletionGenerator(&modChooser, &config.Opts->GetOpts()).Generate(command, Cout);
-            } else {
-              Cerr << "Unknown shell name " << TString{shell}.Quote() << Endl;
-              throw TNeedToExitWithCode(EXIT_FAILURE);
-            }
-            throw TNeedToExitWithCode(EXIT_SUCCESS);
-          });
 }
 } // namespace NConsoleClient
 } // namespace NYdb

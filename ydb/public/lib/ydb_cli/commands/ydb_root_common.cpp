@@ -1,4 +1,5 @@
 #include "ydb_root_common.h"
+#include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
 #include "ydb_debug.h"
@@ -24,7 +25,6 @@
 #include <ydb/core/base/backtrace.h>
 #endif
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
-#include <ydb/public/lib/ydb_cli/common/completion.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
@@ -228,7 +228,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandImport>());
     AddCommand(std::make_unique<TCommandMonitoring>());
     AddCommand(std::make_unique<TCommandOperation>());
-    AddCommand(std::make_unique<TCommandConfig>());
+    AddCommand(std::make_unique<TCommandConfig>(this));
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandSql>());
     AddCommand(std::make_unique<TCommandTopic>());
@@ -622,9 +622,6 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         ydbUserAuth,
         oauth2TokenExchangeAuth
     );
-
-    ConfigureCompletionOption(opts.AddLongOption("completion"), "ydb", this, config)
-            .Hidden();
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());
     TStringStream stream;

@@ -146,6 +146,7 @@
 /ydb/core/public_http/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/tests/compatibility/streaming @ydb-platform/fq
+/ydb/core/external_sources/s3 @ydb-platform/fq
 
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend

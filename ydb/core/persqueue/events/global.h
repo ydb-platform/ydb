@@ -68,11 +68,8 @@ namespace NKikimr::TEvPersQueue {
     static_assert(
         EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ),
         "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PQ)");
-<<<<<<< HEAD
-=======
     static_assert(EvInternalEvents == InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL));
     static_assert(EvPartitionUpdateReadMetrics < EvResponse, "EvPartitionUpdateReadMetrics must be in the first PQ global event block");
->>>>>>> 21e58b696a2 (YDBREQUESTS-7455 Fix incompatibility)
 
     struct TEvRequest : public TEventPB<TEvRequest,
             NKikimrClient::TPersQueueRequest, EvRequest> {

@@ -426,7 +426,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Last", &TProgramBuilder::Last},
 
         {"ToList", &TProgramBuilder::ToList},
-        {"ToFlow", &TProgramBuilder::ToFlow},
         {"FromFlow", &TProgramBuilder::FromFlow},
 
         {"WideToBlocks", &TProgramBuilder::WideToBlocks},
@@ -1486,6 +1485,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Switch(stream, inputs, [&](ui32 index, TRuntimeNode item) -> TRuntimeNode {
             return MkqlBuildLambda(*node.Child(2 + 2 * index + 1), ctx, {item});
         }, memoryLimitBytes, returnType);
+    });
+
+    AddCallable("ToFlow", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto arg = MkqlBuildExpr(node.Head(), ctx);
+        const auto& args = GetArgumentsFrom<1U>(node, ctx);
+        return ctx.ProgramBuilder.ToFlow(arg, args);
     });
 
     AddCallable("ToStream", [](const TExprNode& node, TMkqlBuildContext& ctx) {

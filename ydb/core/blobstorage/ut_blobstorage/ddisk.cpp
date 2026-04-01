@@ -115,17 +115,17 @@ Y_UNIT_TEST_SUITE(DDisk) {
             const ui32 size = numBlocks * BlockSize;
             UNIT_ASSERT(offset < Surface.size() && offset + size <= Surface.size());
 
-            TString update = TString::Uninitialized(size);
+            auto buf = TRcBuf::UninitializedPageAligned(size);
             char letter = Letters[LetterIndex++ % Letters.size()];
-            memset(update.Detach(), letter, update.size());
+            memset(buf.GetDataMut(), letter, buf.size());
 
-            memcpy(Surface.Detach() + offset, update.data(), update.size());
+            memcpy(Surface.Detach() + offset, buf.data(), buf.size());
 
             Cerr << "write offset# " << offset << " size# " << size << " letter# " << letter << "\n";
 
             std::unique_ptr<NDDisk::TEvWrite> ev(new NDDisk::TEvWrite(Creds,
                 {VChunkIndex, offset, size}, {0}));
-            ev->AddPayload(TRope(std::move(update)));
+            ev->AddPayload(TRope(std::move(buf)));
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(Edge, false);
 

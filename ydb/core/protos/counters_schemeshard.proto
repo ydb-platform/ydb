@@ -727,4 +727,6 @@ enum ETxTypes {
     TXTYPE_GET_FORCED_COMPACTION = 113      [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
     TXTYPE_LIST_FORCED_COMPACTION = 114     [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
     TXTYPE_PROGRESS_FORCED_COMPACTION = 115 [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
+
+    TXTYPE_USER_HASHES_MIGRATION = 116 [(TxTypeOpts) = {Name: "TTxUserHashesMigration"}];
 }

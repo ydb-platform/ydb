@@ -2890,6 +2890,32 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
         "PARALLEL FOR is not available before language version 2026.01");
 }
 
+Y_UNIT_TEST(FunctionLangVer) {
+    {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT FormatType(AsOptionalType(Int32));
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(
+            Err2Str(res),
+            "AsOptionalType is not available before language version 2026.01");
+    }
+    {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.LangVer = NYql::MakeLangVersion(2026, 1);
+        NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+            SELECT FormatType(AsOptionalType(Int32));
+        )sql", settings);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+    {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            SELECT FormatType(OptionalType(Int32));
+        )sql");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+}
+
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
     NYql::TAstParseResult res2 = SqlToYql(R"foo(SELECT "a\\";)foo");
@@ -13109,6 +13135,272 @@ Y_UNIT_TEST(AutoGroupByCompactHint) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
     UNIT_ASSERT_VALUES_EQUAL(stat["Aggregate"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["compact"], 1);
+}
+
+Y_UNIT_TEST(GroupByExprAliasUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a1 FROM plato.x GROUP BY a + 1 AS a1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: GROUP BY aliases");
+}
+
+Y_UNIT_TEST(GroupByExprUnnamed) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a + 1 FROM plato.x GROUP BY a + 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unnamed expressions are not supported here");
+}
+
+Y_UNIT_TEST(GroupByExprAllowUnnamed) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+        SELECT a + 1 FROM plato.x GROUP BY a + 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(LegacyGroupByExprAllowUnnamed) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+        SELECT a + 1 FROM plato.x GROUP BY a + 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Error: Column `a` must either be a key column");
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsOneColumn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a, Sum(z) FROM plato.x GROUP BY GROUPING SETS (a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsTwoColumn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY GROUPING SETS (a, b);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsOneEmptyTuple) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY GROUPING SETS (());
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsOneTuple1) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY GROUPING SETS ((a, b));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsTwoTuple1) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY GROUPING SETS ((a, b, c), (a, b));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsOneTuple2) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+        SELECT (a, b) FROM plato.x GROUP BY GROUPING SETS (((a, b)));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsOneExpr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+        SELECT a + 1 FROM plato.x GROUP BY GROUPING SETS (a + 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+}
+
+Y_UNIT_TEST(GroupByGroupingSetsNestedSpecUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY GROUPING SETS (GROUPING SETS (a));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: GROUPING SETS with nested ROLLUP/CUBE/GROUPING SETS");
+}
+
+Y_UNIT_TEST(GroupByHopUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY HOP(a, "PT10S", "PT30S", "PT20S");
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: hopping_window_specification");
+}
+
+Y_UNIT_TEST(GroupByRollup) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY ROLLUP (a, b, c);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet", "rollup"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["rollup"], 1);
+}
+
+Y_UNIT_TEST(GroupByRollupSublists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY ROLLUP (a, (b, c));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: ROLLUP/CUBE sublists of elements in parenthesis");
+}
+
+Y_UNIT_TEST(GroupByCube) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY CUBE (a, b, c);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroupingSet", "cube"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["cube"], 1);
+}
+
+Y_UNIT_TEST(GroupByCubeSublists) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x GROUP BY CUBE (a, (b, c));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "YqlSelect unsupported: ROLLUP/CUBE sublists of elements in parenthesis");
+}
+
+Y_UNIT_TEST(GroupByMixedSpecs) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM plato.x
+        GROUP BY
+            a,
+            GROUPING SETS (b, c),
+            ROLLUP (a, b, c),
+            CUBE (a, b, c);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlGroup", "YqlGroupingSet", "sets", "rollup", "cube"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroup"] - stat["YqlGroupingSet"], 4);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlGroupingSet"], 3);
+    UNIT_ASSERT_VALUES_EQUAL(stat["sets"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["rollup"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["cube"], 1);
 }
 
 Y_UNIT_TEST(DiagnosticMandatoryAsColumn) {

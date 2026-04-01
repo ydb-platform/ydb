@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_cost_function.h>
 
 namespace NKikimr::NKqp::NOpt {
 

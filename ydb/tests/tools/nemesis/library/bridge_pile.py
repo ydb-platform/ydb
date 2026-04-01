@@ -18,6 +18,10 @@ logger.info("=== BRIDGE_PILE.PY LOADED ===")
 
 VALID_FAILOVER_STATES = {PileState.PRIMARY, PileState.SYNCHRONIZED, PileState.NOT_SYNCHRONIZED}
 VALID_REJOIN_STATES = {PileState.DISCONNECTED}
+HEALTHY_STATES = {PileState.PRIMARY, PileState.SYNCHRONIZED}
+
+DEFAULT_POLL_INTERVAL = 60
+DEFAULT_POLL_TIMEOUT = 1200
 
 PILE_STATE_NAMES = {
     PileState.UNSPECIFIED: "UNSPECIFIED",
@@ -287,7 +291,52 @@ class AbstractBridgePileNemesis(Nemesis, AbstractMonitoredNemesis):
             self.logger.error("Failed to rejoin pile %d", self._current_pile_id)
             raise Exception("Failed to rejoin pile")
 
-        self.logger.info("Bridge state restored successfully")
+        self.logger.info("Bridge state restored, waiting for all piles to become healthy")
+        self._wait_for_healthy_piles(another_pile_id)
+
+    def _wait_for_healthy_piles(self, bridge_client_pile_id,
+                                poll_interval=DEFAULT_POLL_INTERVAL,
+                                poll_timeout=DEFAULT_POLL_TIMEOUT):
+        """
+        Poll until all piles are in a healthy state (PRIMARY or SYNCHRONIZED).
+
+        Args:
+            bridge_client_pile_id: Pile ID whose bridge client to use for querying state.
+            poll_interval: Seconds between polling attempts.
+            poll_timeout: Maximum seconds to wait before giving up.
+
+        Raises:
+            Exception: If piles do not reach healthy state within the timeout.
+        """
+        bridge_client = self._bridge_clients[bridge_client_pile_id]
+        deadline = time.time() + poll_timeout
+
+        while True:
+            pile_states = bridge_client.per_pile_state
+            if pile_states is None:
+                self.logger.warning("Could not retrieve pile states, will retry")
+            else:
+                state_summary = [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states]
+                all_healthy = all(p.state in HEALTHY_STATES for p in pile_states)
+
+                if all_healthy:
+                    self.logger.info("All piles are healthy: %s", state_summary)
+                    return
+
+                self.logger.info("Waiting for piles to become healthy: %s", state_summary)
+
+            if time.time() >= deadline:
+                self.logger.error(
+                    "Timed out after %ds waiting for all piles to reach healthy state "
+                    "(PRIMARY or SYNCHRONIZED). Last observed states: %s",
+                    poll_timeout,
+                    [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown"
+                )
+                raise Exception(
+                    "Timed out waiting for all piles to reach healthy state (PRIMARY or SYNCHRONIZED)"
+                )
+
+            time.sleep(poll_interval)
 
 
 class BridgePileStopNodesNemesis(AbstractBridgePileNemesis):

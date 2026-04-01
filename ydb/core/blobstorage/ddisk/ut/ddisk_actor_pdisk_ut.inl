@@ -159,6 +159,7 @@ TString MakeData(char ch, ui32 size) {
 
 TRope MakeAlignedRope(const TString& data) {
     auto buf = TRcBuf::UninitializedPageAligned(data.size());
+    std::memset(buf.GetDataMut(), 0, data.size());
     memcpy(buf.GetDataMut(), data.data(), data.size());
     return TRope(std::move(buf));
 }
@@ -285,7 +286,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
 // writeSeed=0 means sequential writes, readSeed=0 means sequential reads.
 // Non-zero seeds shuffle the respective order with std::mt19937.
 [[maybe_unused]] void TestBatchWriteThenRead(NDDisk::TDDiskConfig ddiskConfig, ui32 totalWrites,
-        ui32 writeSeed, ui32 readSeed, NLog::EPriority ddiskLogPriority = NLog::PRI_DEBUG) {
+        ui32 writeSeed, ui32 readSeed, NLog::EPriority ddiskLogPriority = NLog::PRI_INFO) {
     TTestContext ctx(std::move(ddiskConfig), ddiskLogPriority);
     NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
@@ -434,7 +435,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
 // 10 tablets, each writing across 5 vchunks. Data encodes tablet id and block index.
 // writeSeed=0 means sequential writes; non-zero seeds shuffle the write order.
 [[maybe_unused]] void TestBatchWriteThenReadMultiTabletInterleaved(NDDisk::TDDiskConfig ddiskConfig,
-        ui32 writeSeed, NLog::EPriority ddiskLogPriority = NLog::PRI_DEBUG) {
+        ui32 writeSeed, NLog::EPriority ddiskLogPriority = NLog::PRI_INFO) {
     constexpr ui32 numTablets = 10;
     constexpr ui32 numVChunks = 5;
     constexpr ui32 blocksPerVChunk = 8;

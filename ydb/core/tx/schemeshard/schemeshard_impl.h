@@ -417,6 +417,8 @@ public:
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
+    bool IsOldArgonHashFormatMigrationCompleted = false;
+
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
@@ -1047,6 +1049,9 @@ public:
 
     struct TTxCleanDroppedPaths;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
+
+    struct TTxUserHashesMigration;
+    NTabletFlatExecutor::ITransaction* CreateTxUserHashesMigration();
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);

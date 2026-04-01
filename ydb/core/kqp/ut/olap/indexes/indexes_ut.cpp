@@ -336,7 +336,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table path");
         const auto& schema = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema();
         bool found = false;
-        for (const auto& idx : schema.GetIndexes()) {
+        for (auto&& idx : schema.GetIndexes()) {
             if (idx.GetName() == "idx_ngram" && idx.HasBloomNGrammFilter()) {
                 found = true;
                 UNIT_ASSERT_DOUBLES_EQUAL_C(idx.GetBloomNGrammFilter().GetFalsePositiveProbability(), 0.05, 1e-9,
@@ -344,6 +344,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 break;
             }
         }
+
         UNIT_ASSERT_C(found, "idx_ngram bloom ngram index should appear after UPSERT_INDEX with false_positive_probability");
     }
 

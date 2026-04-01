@@ -658,24 +658,37 @@ class WriterAsyncIOReconnector:
             messages = list(self._messages)
 
             last_seq_no = 0
-            for m in messages:
-                writer.write([m])
+            if messages:
+                writer.write(messages)
+                last_seq_no = messages[-1].seq_no
                 logger.debug(
-                    "writer reconnector %s sent buffered message seqno=%s",
+                    "writer reconnector %s sent %s buffered messages seqno=%s..%s",
                     self._id,
-                    m.seq_no,
+                    len(messages),
+                    messages[0].seq_no,
+                    messages[-1].seq_no,
                 )
-                last_seq_no = m.seq_no
 
             while True:
                 new_msg: InternalMessage = await self._new_messages.get()
-                if new_msg.seq_no > last_seq_no:
-                    writer.write([new_msg])
-                    logger.debug(
-                        "writer reconnector %s sent message seqno=%s",
-                        self._id,
-                        new_msg.seq_no,
-                    )
+                if new_msg.seq_no <= last_seq_no:
+                    continue
+
+                batch = [new_msg]
+                while not self._new_messages.empty():
+                    next_msg = self._new_messages.get_nowait()
+                    if next_msg.seq_no > last_seq_no:
+                        batch.append(next_msg)
+
+                writer.write(batch)
+                last_seq_no = batch[-1].seq_no
+                logger.debug(
+                    "writer reconnector %s sent %s messages seqno=%s..%s",
+                    self._id,
+                    len(batch),
+                    batch[0].seq_no,
+                    batch[-1].seq_no,
+                )
         except asyncio.CancelledError:
             # the loop task cancelled be parent code, for example for reconnection
             # no need to stop all work.

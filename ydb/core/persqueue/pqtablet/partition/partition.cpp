@@ -904,6 +904,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetWriteBytesQuota(TotalPartitionWriteSpeed);
 
+    auto setMLPConsumerState = [&](auto* clientInfo, const auto& consumerName) {
+        auto it = MLPConsumers.find(consumerName);
+        if (it != MLPConsumers.end()) {
+            clientInfo->SetUseForReading(it->second.UseForReading);
+            clientInfo->SetMLPLockedMessageCount(it->second.LockedMessageCount);
+            clientInfo->SetMLPDelayedMessageCount(it->second.DelayedMessageCount);
+            clientInfo->SetMLPMessageCount(it->second.MessageCount);
+        }
+    };
+
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
     ui64 maxQuota = 0;
@@ -931,12 +941,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                     clientInfo->SetCommittedMetadata(*userInfo.CommittedMetadata);
                 }
 
-                auto it = MLPConsumers.find(userInfo.User);
-                if (it != MLPConsumers.end()) {
-                    clientInfo->SetMLPLockedMessageCount(it->second.LockedMessageCount);
-                    clientInfo->SetMLPDelayedMessageCount(it->second.DelayedMessageCount);
-                    clientInfo->SetMLPMessageCount(it->second.MessageCount);
-                }
+                setMLPConsumerState(clientInfo, userInfo.User);
 
                 requiredConsumers.extract(userInfo.User);
             }
@@ -1000,10 +1005,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
             clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
 
-            auto mit = MLPConsumers.find(userInfo.User);
-            if (mit != MLPConsumers.end()) {
-                clientInfo->SetUseForReading(mit->second.UseForReading);
-            }
+            setMLPConsumerState(clientInfo, userInfo.User);
         }
     }
 

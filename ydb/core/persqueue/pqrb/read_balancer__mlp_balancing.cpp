@@ -26,8 +26,14 @@ const TPartitionGraph::Node* TMLPConsumer::NextPartition() {
     return GetPartitionGraph().GetPartition(PartitionsForBalancing[partitionId]);
 }
 
-bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readingIsFinished,
-    std::optional<bool> useForReading, const TMLPConsumer::TMetrics& metrics, ui32 generation, ui64 cookie) {
+bool TMLPConsumer::SetUseForReading(
+    ui32 partitionId,
+    std::optional<bool> readingIsFinished,
+    std::optional<bool> useForReading,
+    const std::optional<TMetrics>& metrics,
+    ui32 generation,
+    ui64 cookie
+) {
     auto& status = Partitions[partitionId];
 
     if (status.Generation < generation || (status.Generation == generation && status.Cookie < cookie)) {
@@ -47,10 +53,12 @@ bool TMLPConsumer::SetUseForReading(ui32 partitionId, std::optional<bool> readin
             return v > currentValue ? v - currentValue : 0;
         };
 
-        Metrics.Messages = calc(Metrics.Messages, status.Metrics.Messages, metrics.Messages);
-        Metrics.DelayedMessages = calc(Metrics.DelayedMessages, status.Metrics.DelayedMessages, metrics.DelayedMessages);
-        Metrics.LockedMessages = calc(Metrics.LockedMessages, status.Metrics.LockedMessages, metrics.LockedMessages);
-        status.Metrics = metrics;
+        if (metrics) {
+            Metrics.Messages = calc(Metrics.Messages, status.Metrics.Messages, metrics->Messages);
+            Metrics.DelayedMessages = calc(Metrics.DelayedMessages, status.Metrics.DelayedMessages, metrics->DelayedMessages);
+            Metrics.LockedMessages = calc(Metrics.LockedMessages, status.Metrics.LockedMessages, metrics->LockedMessages);
+            status.Metrics = *metrics;
+        }
 
         status.Generation = generation;
         status.Cookie = cookie;
@@ -257,7 +265,7 @@ void TMLPBalancer::UpdateConfig(const std::vector<ui32>& addedPartitions) {
 
         if (mlpConsumers.contains(consumerName)) {
             for (const auto& partitionId : addedPartitions) {
-                consumer.SetUseForReading(partitionId, false, false, {}, 0, 0);
+                consumer.SetUseForReading(partitionId, false, false, std::nullopt, 0, 0);
             }
             if (!addedPartitions.empty()) {
                 consumer.Rebuild();
@@ -279,7 +287,7 @@ void TMLPBalancer::SetUseForReading(const TString& consumerName,
                                     ui32 partitionId,
                                     std::optional<bool> readingIsFinished,
                                     std::optional<bool> useForReading,
-                                    const TMLPConsumer::TMetrics& metrics,
+                                    const std::optional<TMLPConsumer::TMetrics>& metrics,
                                     ui32 generation,
                                     ui64 cookie) {
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);

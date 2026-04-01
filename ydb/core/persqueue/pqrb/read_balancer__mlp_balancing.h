@@ -22,8 +22,14 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
 
-    bool SetUseForReading(ui32 partitionId, std::optional<bool> readingIsFinished,
-        std::optional<bool> useForReading, const TMetrics& metrics, ui32 generation, ui64 cookie);
+    bool SetUseForReading(
+        ui32 partitionId,
+        std::optional<bool> readingIsFinished,
+        std::optional<bool> useForReading,
+        const std::optional<TMetrics>& metrics,
+        ui32 generation,
+        ui64 cookie
+    );
     void Rebuild();
 
     const TMetrics& GetMetrics() const;
@@ -64,7 +70,7 @@ public:
                           ui32 partitionId,
                           std::optional<bool> readingIsFinished,
                           std::optional<bool> useForReading,
-                          const TMLPConsumer::TMetrics& metrics,
+                          const std::optional<TMLPConsumer::TMetrics>& metrics,
                           ui32 generation,
                           ui64 cookie);
 

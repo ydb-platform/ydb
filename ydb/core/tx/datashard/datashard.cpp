@@ -888,6 +888,20 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
     return it->second.Changes.back().LockOffset + 1;
 }
 
+void TDataShard::BuildUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId) {
+    if (userCtx != nullptr) {
+        userSID = userCtx->GetUserSID();
+        if (userCtx->GetUserTraceId()) {
+            NActorsProto::TTraceId serializedTraceId;
+            userCtx->GetUserTraceId().Serialize(&serializedTraceId);
+            userTraceId = serializedTraceId.GetData();
+        }
+    } else {
+        userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
+        userTraceId.clear();
+    }
+}
+
 void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record) {
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "PersistChangeRecord"
         << ": record: " << (GetChangeRecordDebugPrint() ? ChangeRecordDebugSerializer->DebugString(record) : ToString(record))
@@ -908,17 +922,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
         TString userSID;
         TString userTraceId;
-
-        if (auto userCtx = record.GetUserCtx(); userCtx != nullptr) {
-            userSID = userCtx->GetUserSID();
-            if (userCtx->GetUserTraceId()) {
-                NActorsProto::TTraceId serializedTraceId;
-                userCtx->GetUserTraceId().Serialize(&serializedTraceId);
-                userTraceId = serializedTraceId.GetData();
-            }
-        } else {
-            userSID = BUILTIN_ACL_CDC_WITHOUT_USER_SID;
-        }
+        BuildUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
 
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
@@ -997,7 +1001,6 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .LockOffset = record.GetLockOffset(),
         });
 
-        auto userCtx = record.GetUserCtx();
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
@@ -1006,18 +1009,15 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
 
+        TString userSID;
         TString userTraceId;
-        if (userCtx != nullptr && userCtx->GetUserTraceId()) {
-            NActorsProto::TTraceId serializedTraceId;
-            userCtx->GetUserTraceId().Serialize(&serializedTraceId);
-            userTraceId = serializedTraceId.data();
-        }
+        BuildUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
 
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Body>(record.GetBody()),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Source>(record.GetSource()),
-            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userCtx != nullptr ? userCtx->GetUserSID() : BUILTIN_ACL_CDC_WITHOUT_USER_SID),
+            NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserSID>(userSID),
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::UserTraceId>(userTraceId));
     }
 }

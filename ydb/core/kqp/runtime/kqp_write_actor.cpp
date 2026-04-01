@@ -5597,15 +5597,9 @@ void RegisterKqpWriteActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<
         TString(NYql::KqpTableSinkName),
         [counters] (NKikimrKqp::TKqpTableSinkSettings&& settings, NYql::NDq::TDqAsyncIoFactory::TSinkArguments&& args) {
 
-            NACLib::TUserContextBuilder builder;
-            builder.WithUserSID(settings.GetUserSID());
-
-            TString userTraceId = settings.GetUserTraceId().GetData();
-            if (userTraceId.size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
-                auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(userTraceId.data());
-                builder.WithUserTraceId(NWilson::TTraceId(*data));
-            }
-            auto userCtx = builder.Build();
+            auto userCtx = NACLib::TUserContextBuilder()
+                .WithUserSID(settings.GetUserSID())
+                .Build();
 
             if (!ActorIdFromProto(settings.GetBufferActorId())) {
                 auto* actor = new TKqpDirectWriteActor(std::move(settings), std::move(args), counters, userCtx);

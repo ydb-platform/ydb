@@ -122,7 +122,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
             const auto value = details.template GetValue<typename TDetailsTable::UserTraceId>();
 
             NActorsProto::TTraceId serializedTraceId;
-            *serializedTraceId.mutable_data() = value;
+            serializedTraceId.SetData(value);
             userCtxBuilder.WithUserTraceId(NWilson::TTraceId(serializedTraceId));
         }
         builder.WithUserCtx(userCtxBuilder.Build());

@@ -48,8 +48,8 @@ bool TMLPConsumer::SetUseForReading(
             status.UseForReading = *useForReading;
         }
 
-        auto calc = [](ui64 value, ui64 currentValue, ui64 newValue) {
-            auto v = value + newValue;
+        auto calc = [](ui64 aggregatedValue, ui64 currentValue, ui64 newValue) {
+            auto v = aggregatedValue + newValue;
             return v > currentValue ? v - currentValue : 0;
         };
 

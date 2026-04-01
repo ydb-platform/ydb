@@ -368,22 +368,33 @@ class Test(TestBase):
         ]
 
     def test_pool_estimated_usage(self):
-        base_config = (
+        builder = (
             BaseConfigBuilder()
             .add_node(node_id=1)
-            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8, enforced_dynamic_slot_size=int(400e9))
-            .add_group(box_id=1, group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=16, enforced_dynamic_slot_size=int(200e9)) # 3.2 TB
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
             .add_vslot(
                 node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001,
                 allocated_size=int(40e9),
-                available_size=int(360e9),
+                available_size=0,
             )
             .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
-            .build()
         )
 
+        def _trace_pool_list():
+            return self._trace('pool', 'list', '-H', '--format=json', '--show-vdisk-estimated-usage', mock_base_config=builder.build())
+
         return [
-            self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage', mock_base_config=base_config),
+            _trace_pool_list(),
+
+            # Replace pdisk 3.2 -> 6.4 TB and markup SlotSizeInUnits = 2
+            builder.update_pdisk(node_id=1, pdisk_id=1001, slot_size_in_units=2, enforced_dynamic_slot_size=int(400e9)) and None,
+            builder.update_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, available_size=int(360e9)) and None,
+            _trace_pool_list(),
+
+            # Change GroupSizeInUnits = 4
+            builder.update_group(group_id=0x80000001, group_size_in_units=4) and None,
+            _trace_pool_list(),
         ]
 
 
@@ -430,12 +441,12 @@ class BaseConfigBuilder:
         vslot.VDiskMetrics.AvailableSize = available_size
         return self
 
-    def add_group(self, box_id, group_id, group_generation=1, erasure_species='none',
+    def add_group(self, group_id, erasure_species='none',
                   group_size_in_units=0, vslot_ids=None,
-                  storage_pool_id=1):
+                  box_id=1, storage_pool_id=1):
         group = self._base_config.Group.add()
         group.GroupId = group_id
-        group.GroupGeneration = group_generation
+        group.GroupGeneration = 1
         group.ErasureSpecies = erasure_species
         group.GroupSizeInUnits = group_size_in_units
         group.BoxId = box_id
@@ -458,6 +469,37 @@ class BaseConfigBuilder:
         sp.Kind = kind
         sp.DefaultGroupSizeInUnits = default_group_size_in_units
         self._storage_pools.append(sp)
+        return self
+
+    def update_pdisk(self, node_id, pdisk_id, slot_size_in_units=None, enforced_dynamic_slot_size=None):
+        for pdisk in self._base_config.PDisk:
+            if pdisk.NodeId == node_id and pdisk.PDiskId == pdisk_id:
+                if slot_size_in_units is not None:
+                    pdisk.PDiskConfig.SlotSizeInUnits = slot_size_in_units
+                    pdisk.PDiskMetrics.SlotSizeInUnits = slot_size_in_units
+                if enforced_dynamic_slot_size is not None:
+                    pdisk.PDiskMetrics.EnforcedDynamicSlotSize = enforced_dynamic_slot_size
+                break
+        return self
+
+    def update_vslot(self, node_id, pdisk_id, vslot_id, available_size=None, allocated_size=None):
+        for vslot in self._base_config.VSlot:
+            if (vslot.VSlotId.NodeId == node_id and
+                vslot.VSlotId.PDiskId == pdisk_id and
+                vslot.VSlotId.VSlotId == vslot_id):
+                if available_size is not None:
+                    vslot.VDiskMetrics.AvailableSize = available_size
+                if allocated_size is not None:
+                    vslot.VDiskMetrics.AllocatedSize = allocated_size
+                break
+        return self
+
+    def update_group(self, group_id, group_size_in_units=None):
+        for group in self._base_config.Group:
+            if group.GroupId == group_id:
+                if group_size_in_units is not None:
+                    group.GroupSizeInUnits = group_size_in_units
+                break
         return self
 
     def build(self):

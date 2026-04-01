@@ -145,6 +145,15 @@
     "test_canonical_requests.Test.test_pool_estimated_usage": [
         {
             "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt"
+        },
+        null,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.1"
         }
     ]
 }

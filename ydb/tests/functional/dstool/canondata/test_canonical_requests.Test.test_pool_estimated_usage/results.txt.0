@@ -11,9 +11,9 @@ Exit Status: 0
     "Groups_TOTAL": 1,
     "GroupsForEstimatedUsage@85": 1,
     "VDisks_TOTAL": 1,
-    "EstimatedUsage": "20.0%",
-    "MaxVDiskEstimatedUsage": "20.0%",
-    "MeanVDiskEstimatedUsage": "20.0%",
+    "EstimatedUsage": "10.0%",
+    "MaxVDiskEstimatedUsage": "10.0%",
+    "MeanVDiskEstimatedUsage": "10.0%",
     "StdDevVDiskEstimatedUsage": "0.0%"
   }
 ]
@@ -23,12 +23,12 @@ PDisk {
   PDiskId: 1001
   PDiskConfig {
     ExpectedSlotCount: 16
-    SlotSizeInUnits: 0
+    SlotSizeInUnits: 2
   }
   PDiskMetrics {
-    EnforcedDynamicSlotSize: 200000000000
+    EnforcedDynamicSlotSize: 400000000000
     SlotCount: 16
-    SlotSizeInUnits: 0
+    SlotSizeInUnits: 2
   }
 }
 VSlot {
@@ -39,7 +39,7 @@ VSlot {
   }
   GroupId: 2147483649
   VDiskMetrics {
-    AvailableSize: 0
+    AvailableSize: 360000000000
     AllocatedSize: 40000000000
   }
   Status: "READY"

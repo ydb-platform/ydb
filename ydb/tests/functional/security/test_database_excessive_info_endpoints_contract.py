@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
 
-import test_mon_endpoints_auth as mon_endpoints_auth
-
-certificates = mon_endpoints_auth.certificates
-ydb_cluster_with_enforce_user_token = mon_endpoints_auth.ydb_cluster_with_enforce_user_token
-
 
 EXCESSIVE_INFO_ENDPOINTS = [
     '/viewer/bscontrollerinfo',
@@ -72,3 +67,18 @@ def test_excessive_info_endpoints_require_database_parameter_for_database_token(
         'database@builtin should access excessive-info endpoints with '
         f'database parameter, but got non-200 for: {denied_with_database}'
     )
+
+
+def test_viewer_graph_is_forbidden_for_database_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+
+    response = requests.get(
+        f'{base_url}/viewer/graph?target=cpu',
+        headers={'Authorization': 'database@builtin'},
+        verify=False,
+    )
+    assert response.status_code == 403, response.text

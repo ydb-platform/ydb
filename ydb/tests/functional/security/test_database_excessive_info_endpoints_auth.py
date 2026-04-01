@@ -3,11 +3,6 @@ import json
 import pytest
 import requests
 
-import test_mon_endpoints_auth as mon_endpoints_auth
-
-certificates = mon_endpoints_auth.certificates
-ydb_cluster_with_enforce_user_token = mon_endpoints_auth.ydb_cluster_with_enforce_user_token
-
 
 EXCESSIVE_INFO_ENDPOINTS = [
     '/viewer/bscontrollerinfo',
@@ -190,3 +185,18 @@ def test_excessive_info_endpoints_require_database_context_for_database_token(
         with_database=False,
     )
     assert all(status != 200 for status in database_without_db.values())
+
+
+def test_viewer_graph_returns_forbidden_for_database_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+
+    response = requests.get(
+        f'{base_url}/viewer/graph?target=cpu',
+        headers={'Authorization': 'database@builtin'},
+        verify=False,
+    )
+    assert response.status_code == 200, response.text

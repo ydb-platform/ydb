@@ -268,17 +268,6 @@ message TPersQueueRequest {
 }
 
 
-message TPersQueueUpdateReadMetricsRequest {
-    optional string ClientId = 1; // mandatory
-    optional uint64 InFlightLimitReachedDurationMs = 2; // if not set, then treat as 0
-}
-
-message TPersQueuePartitionUpdateReadMetrics {
-    optional int32 Partition = 1;
-    optional TPersQueueUpdateReadMetricsRequest UpdateReadMetrics = 2;
-}
-
-
 message TPersQueueMetaResponse {
     message TCmdGetPartitionOffsetsResult {
         message TTopicResult {

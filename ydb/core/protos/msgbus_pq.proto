@@ -275,9 +275,7 @@ message TPersQueueUpdateReadMetricsRequest {
 
 message TPersQueuePartitionUpdateReadMetrics {
     optional int32 Partition = 1;
-    optional uint64 Cookie = 2;
-    optional NActorsProto.TActorId PipeClient = 3;
-    optional TPersQueueUpdateReadMetricsRequest UpdateReadMetrics = 4;
+    optional TPersQueueUpdateReadMetricsRequest UpdateReadMetrics = 2;
 }
 
 

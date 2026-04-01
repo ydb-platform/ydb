@@ -12,7 +12,10 @@
 
 #include <library/cpp/colorizer/colors.h>
 
+#include <library/cpp/streams/factory/open_by_signature/factory.h>
+
 #include <util/folder/path.h>
+#include <util/stream/file.h>
 #include <util/string/builder.h>
 
 #include <random>
@@ -20,6 +23,16 @@
 namespace NYdbWorkload {
 
     namespace {
+
+        ui64 CountFileLines(const TFsPath& path) {
+            ui64 count = 0;
+            TString line;
+            auto input = OpenOwnedMaybeCompressedInput(MakeHolder<TFileInput>(path));
+            while (input->ReadLine(line)) {
+                ++count;
+            }
+            return count > 0 ? count - 1 : 0;
+        }
 
         TString BuildIndexDDL(const TFulltextWorkloadParams& params) {
             TStringBuilder ddl;
@@ -185,11 +198,12 @@ namespace NYdbWorkload {
     }
 
     TBulkDataGeneratorList TFulltextFilesDataInitializer::DoGetBulkInitialData() {
+        const ui64 lineCount = CountFileLines(DataFiles);
         return {
             std::make_shared<TDataGenerator>(
                 *this,
                 FulltextParams.TableName,
-                0,
+                lineCount,
                 FulltextParams.TableName,
                 DataFiles,
                 TVector<TString>(),

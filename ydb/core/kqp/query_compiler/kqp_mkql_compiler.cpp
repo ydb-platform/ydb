@@ -427,13 +427,11 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 10, "BlockHashJoinCore should have 10 arguments");
 
-            // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto rightInput = MkqlBuildExpr(*node.Child(1), buildCtx);
 
-            // Get join kind from atom
             auto joinKindNode = node.Child(2);
             YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
             auto joinKindStr = joinKindNode->Content();
@@ -453,7 +451,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
             }
 
-            // Extract key column indices from tuple literals
             auto extractColumnIndices = [](const TExprNode* tupleNode) -> TVector<ui32> {
                 YQL_ENSURE(tupleNode->IsList(), "Expected tuple of atoms");
                 TVector<ui32> indices;
@@ -466,23 +463,40 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto leftKeyColumns = extractColumnIndices(node.Child(3));
             auto rightKeyColumns = extractColumnIndices(node.Child(4));
 
-            // Get return type from node annotation
             TStringStream errorStream;
             auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
 
             auto graceJoinRenames = [&]{
-                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
-                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
+                struct RenameEntry {
+                    ui32 outIdx;
+                    ui32 inIdx;
+                    EJoinSide side;
                 };
-                TDqUserRenames renames{};
-                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, EJoinSide::kLeft);
+                std::vector<RenameEntry> entries;
+
+                const auto* leftRenamesNode = node.Child(8);
+                for (ui32 i = 0; i < leftRenamesNode->ChildrenSize(); i += 2) {
+                    auto inIdx = FromString<ui32>(leftRenamesNode->Child(i)->Content());
+                    auto outIdx = FromString<ui32>(leftRenamesNode->Child(i + 1)->Content());
+                    entries.push_back({outIdx, inIdx, EJoinSide::kLeft});
                 }
-                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
-                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                        renames.emplace_back(index, EJoinSide::kRight);       
-                    }
+
+                const auto* rightRenamesNode = node.Child(9);
+                for (ui32 i = 0; i < rightRenamesNode->ChildrenSize(); i += 2) {
+                    auto inIdx = FromString<ui32>(rightRenamesNode->Child(i)->Content());
+                    auto outIdx = FromString<ui32>(rightRenamesNode->Child(i + 1)->Content());
+                    entries.push_back({outIdx, inIdx, EJoinSide::kRight});
+                }
+
+                std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) {
+                    return a.outIdx < b.outIdx;
+                });
+
+                TDqUserRenames renames;
+                renames.reserve(entries.size());
+                for (const auto& e : entries) {
+                    renames.emplace_back(e.inIdx, e.side);
                 }
                 return TGraceJoinRenames::FromDq(renames);
             }();

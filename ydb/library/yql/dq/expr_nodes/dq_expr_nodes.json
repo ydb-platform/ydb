@@ -78,7 +78,9 @@
             {"Index": 4, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
             {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
             {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
-            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+            {"Index": 8, "Name": "LeftRenames", "Type": "TCoAtomList"},
+            {"Index": 9, "Name": "RightRenames", "Type": "TCoAtomList"}
         ]
     },
     {

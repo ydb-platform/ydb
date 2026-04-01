@@ -3198,33 +3198,8 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
-}
-
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
-        return ctx.Builder(node->Pos())
-            .Callable("Block")
-                .Lambda(0)
-                    .Param("parent")
-                    .Callable("Collect")
-                        .Apply(0, node->Tail())
-                            .With(0)
-                                .Callable("Iterator")
-                                    .Add(0, node->HeadPtr())
-                                    .Callable(1, "DependsOn")
-                                        .Arg(0, "parent")
-                                    .Seal()
-                                .Seal()
-                            .Done()
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-    }
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -7353,6 +7328,21 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx,
                     .Add(0, ctx.ChangeChildren(input, std::move(children)))
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
+        } else if (input.IsCallable("BlockHashJoinCore")) {
+            const auto blockSizeIdx = node->Tail().Head().ChildrenSize() - 1U;
+            auto actualUnused = unused;
+            actualUnused.erase(std::remove(actualUnused.begin(), actualUnused.end(), blockSizeIdx), actualUnused.end());
+            if (!actualUnused.empty()) {
+                YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content() << " with " << actualUnused.size() << " unused fields.";
+                auto children = input.ChildrenList();
+                DropUnusedRenames(children[8U], actualUnused, ctx);
+                DropUnusedRenames(children[9U], actualUnused, ctx);
+                return ctx.Builder(node->Pos())
+                    .Callable(node->Content())
+                        .Add(0, ctx.ChangeChildren(input, std::move(children)))
+                        .Add(1, DropUnusedArgs(node->Tail(), actualUnused, ctx))
+                    .Seal().Build();
+            }
         } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
@@ -7605,6 +7595,48 @@ TExprNode::TPtr OptimizeGraceSelfJoinCore(const TExprNode::TPtr& node, TExprCont
         UpdateInputIndexes<false>(children[TCoGraceSelfJoinCore::idx_RightKeysColumns], vector, ctx);
         UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_LeftRenames], vector, ctx);
         UpdateInputIndexes<true>(children[TCoGraceSelfJoinCore::idx_RightRenames], vector, ctx);
+        return ctx.ChangeChildren(*node, std::move(children));
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // Children: 0=LeftInput, 1=RightInput, 2=JoinKind, 3=LeftKeyColumns,
+    //           4=RightKeyColumns, 5=LeftKeyNames, 6=RightKeyNames,
+    //           7=Settings, 8=LeftRenames, 9=RightRenames
+    constexpr ui32 idxLeftInput = 0, idxRightInput = 1;
+    constexpr ui32 idxLeftKeys = 3, idxRightKeys = 4;
+    constexpr ui32 idxLeftRenames = 8, idxRightRenames = 9;
+
+    auto leftUnused = FillAllIndexes(GetSeqItemType(*node->Child(idxLeftInput)->GetTypeAnn()));
+    auto rightUnused = FillAllIndexes(GetSeqItemType(*node->Child(idxRightInput)->GetTypeAnn()));
+
+    // block_size (last column) must never be pruned
+    if (!leftUnused.empty()) leftUnused.erase(std::prev(leftUnused.end()));
+    if (!rightUnused.empty()) rightUnused.erase(std::prev(rightUnused.end()));
+
+    RemoveUsedIndexes<false>(*node->Child(idxLeftKeys), leftUnused);
+    RemoveUsedIndexes<false>(*node->Child(idxRightKeys), rightUnused);
+    RemoveUsedIndexes<true>(*node->Child(idxLeftRenames), leftUnused);
+    RemoveUsedIndexes<true>(*node->Child(idxRightRenames), rightUnused);
+
+    if (!(leftUnused.empty() && rightUnused.empty())) {
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " with " << leftUnused.size() << " left and " << rightUnused.size() << " right unused columns.";
+
+        auto children = node->ChildrenList();
+        if (!leftUnused.empty()) {
+            const std::vector<ui32> unused(leftUnused.cbegin(), leftUnused.cend());
+            children[idxLeftInput] = MakeWideMapForDropUnused(std::move(children[idxLeftInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[idxLeftKeys], unused, ctx);
+            UpdateInputIndexes<true>(children[idxLeftRenames], unused, ctx);
+        }
+        if (!rightUnused.empty()) {
+            const std::vector<ui32> unused(rightUnused.cbegin(), rightUnused.cend());
+            children[idxRightInput] = MakeWideMapForDropUnused(std::move(children[idxRightInput]), unused, ctx);
+            UpdateInputIndexes<false>(children[idxRightKeys], unused, ctx);
+            UpdateInputIndexes<true>(children[idxRightRenames], unused, ctx);
+        }
         return ctx.ChangeChildren(*node, std::move(children));
     }
 
@@ -9386,6 +9418,9 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
+        {"LMap", &ExpandLMapOrShuffleByKeys},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9397,6 +9432,7 @@ struct TPeepHoleRules {
         {"MapJoinCore", &OptimizeMapJoinCore},
         {"GraceJoinCore", &OptimizeGraceJoinCore},
         {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
+        {"BlockHashJoinCore", &OptimizeBlockHashJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
         {"Unordered", &DropAssume},
@@ -9415,9 +9451,6 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

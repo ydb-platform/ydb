@@ -1,3 +1,4 @@
+* Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.
 * Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
 * Added `--compact` option to `ydb workload tpcc import` command.
 * When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.

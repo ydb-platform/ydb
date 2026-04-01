@@ -44,26 +44,27 @@ TListPBufferResponse MakeListPBufferResponse(
 ////////////////////////////////////////////////////////////////////////////////
 
 TDBGWriteBlocksToManyPBuffersResponse
-TDBGWriteBlocksToManyPBuffersResponse::MakeFatalError(
+TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
     EWellKnownResultCodes code,
     TString reason)
 {
     TDBGWriteBlocksToManyPBuffersResponse result;
-    result.FatalError = MakeError(code, std::move(reason));
+    result.OverallError = MakeError(code, std::move(reason));
     return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TDDiskIdLess::operator()(const Type& lhs, const Type& rhs) const
+bool TDDiskIdLess::operator()(const TDDiskId& lh, const TDDiskId& rh) const
 {
-    if (lhs.GetNodeId() != rhs.GetNodeId()) {
-        return lhs.GetNodeId() < rhs.GetNodeId();
-    }
-    if (lhs.GetPDiskId() != rhs.GetPDiskId()) {
-        return lhs.GetPDiskId() < rhs.GetPDiskId();
-    }
-    return lhs.GetDDiskSlotId() < rhs.GetDDiskSlotId();
+    auto makeTuple = [](const TDDiskId& item)
+    {
+        return std::make_tuple(
+            item.GetNodeId(),
+            item.GetPDiskId(),
+            item.GetDDiskSlotId());
+    };
+    return makeTuple(lh) < makeTuple(rh);
 }
 
 const TFuture<NProto::TError>&
@@ -364,7 +365,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
 
     if (!Initialized) {
         return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(
-            TDBGWriteBlocksToManyPBuffersResponse::MakeFatalError(
+            TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
                 E_REJECTED,
                 "Connections are not established"));
     }
@@ -415,7 +416,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
                     } else {
                         promise.SetValue(
                             TDBGWriteBlocksToManyPBuffersResponse::
-                                MakeFatalError(
+                                MakeOverallError(
                                     E_FAIL,
                                     "WriteBlocksToManyPBuffersResponse: DBG is "
                                     "destroyed already."));

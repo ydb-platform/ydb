@@ -125,14 +125,12 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
 void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
     const TDBGWriteBlocksToManyPBuffersResponse& response)
 {
-    if (response.FatalError.has_value() &&
-        HasError(response.FatalError.value()))
-    {
+    if (HasError(response.OverallError)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
             "OnWriteToManyPBuffersResponse fatal error: %s",
-            FormatError(response.FatalError.value()).c_str());
+            FormatError(response.OverallError).c_str());
         // The error will be set and replied below.
     } else {
         for (const auto& pbufferResponse: response.Responses) {

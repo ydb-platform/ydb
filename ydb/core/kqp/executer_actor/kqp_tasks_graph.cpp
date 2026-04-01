@@ -399,6 +399,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     meta.TableId = MakeTableId(input.GetStreamLookup().GetTable());
                     meta.TablePath = input.GetStreamLookup().GetTable().GetPath();
+                    meta.AccessCheckOperations.insert(TKeyDesc::ERowOperation::Read);
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                     YQL_ENSURE(meta.TableConstInfo);
                     meta.TableKind = meta.TableConstInfo->TableKind;
@@ -407,6 +408,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages() {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve) {
                     meta.TableId = MakeTableId(input.GetVectorResolve().GetTable());
                     meta.TablePath = input.GetVectorResolve().GetTable().GetPath();
+                    meta.AccessCheckOperations.insert(TKeyDesc::ERowOperation::Read);
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                     YQL_ENSURE(meta.TableConstInfo);
                     meta.TableKind = meta.TableConstInfo->TableKind;
@@ -2017,6 +2019,11 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 tasksReason = TTaskType::PREV_STAGE_COMPUTE;
                 partitionsCount = originStageInfo.Tasks.size();
                 unknownAffectedShardCount = true;
+                break;
+            }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                tasksReason = TTaskType::PREV_STAGE_COMPUTE;
+                partitionsCount = originStageInfo.Tasks.size();
                 break;
             }
             default:

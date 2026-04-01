@@ -1674,7 +1674,6 @@ public:
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
 
-        AFL_ENSURE(BufferedBatches.empty()); // At current time fwd<->buffer inflight = 1
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
             BufferedBatches.push_back(std::move(data));

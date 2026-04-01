@@ -1777,8 +1777,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto res = session.ExecuteSchemeQuery(R"(
             CREATE TABLE `/Root/t1` (
-                a Int64	NOT NULL,
-                b Int32,
+                a Uint64 NOT NULL,
+                b Uint32 NOT NULL,
+                c Timestamp NOT NULL,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1787,6 +1788,24 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(res.IsSuccess());
 
         std::vector<TString> queries = {
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (cast(c as Timestamp?) > $some_time)
+            )",
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (just(c) > $some_time)
+            )",
             R"(
                 $sub = (select distinct (b) from `/Root/t1` where b > 10);
 
@@ -4448,8 +4467,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             if (AddNull) {
                 testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
-                    "'length')");
+                    "Bulk upsert to table '/Root/ttt' Received NULL value for not null column: length");
             } else {
                 testHelper.BulkUpsert(testTable, rowsBuilder);
             }

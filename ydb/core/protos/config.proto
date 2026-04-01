@@ -1,7 +1,7 @@
 import "google/protobuf/descriptor.proto";
 import "ydb/core/config/protos/marker.proto";
 import "ydb/core/fq/libs/config/protos/fq_config.proto";
-import "ydb/core/nbs/cloud/blockstore/config/storage.proto";
+import "ydb/core/nbs/cloud/blockstore/config/protos/storage.proto";
 import "ydb/core/protos/alloc.proto";
 import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
@@ -2687,14 +2687,14 @@ message TDataErasureConfig {
     message TTenantDataErasureConfig {
         optional double MaxRate = 1 [default = 1]; // unlimited
         optional uint64 InflightLimit = 2 [default = 10];
-        // After this interval started data erasure in shard is considered as finished
-        optional uint64 TimeoutSeconds = 3 [default = 15];
+
+        optional uint64 TimeoutSeconds = 3 [default = 15, deprecated = true]; // ignored
     }
 
     optional double MaxRate = 1 [default = 0]; // unlimited
     optional uint64 InflightLimit = 2 [default = 10];
-    // After this interval started data erasure in tenant is considered as finished
-    optional uint64 TimeoutSeconds = 3 [default = 600];
+
+    optional uint64 TimeoutSeconds = 3 [default = 600, deprecated = true]; // ignored
     // Run data erasure every week
     optional uint64 DataErasureIntervalSeconds = 4 [default = 604800];
     // Every 10 m do request to BSC
@@ -2979,6 +2979,7 @@ message TSystemTabletBackupConfig {
     }
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+    optional uint64 MaxBackupsLimit = 4 [default = 3];
 }
 
 message TClusterDiagnosticsConfig {

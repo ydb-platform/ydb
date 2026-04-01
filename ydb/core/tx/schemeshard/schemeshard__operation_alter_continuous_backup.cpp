@@ -64,6 +64,9 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     
     for (auto& column : *desc.MutableColumns()) {
         column.SetNotNull(false);
+        if (column.HasDefaultFromSequence()) {
+            column.ClearDefaultFromSequence();
+        }
     }
     
     auto* changeMetadataCol = desc.AddColumns();

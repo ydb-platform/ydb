@@ -2,6 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/nodewarden)
 
 FORK_SUBTESTS()
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

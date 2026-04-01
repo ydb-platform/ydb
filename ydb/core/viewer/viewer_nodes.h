@@ -504,6 +504,8 @@ class TJsonNodes : public TViewerPipeClient {
             if (Disconnected) {
                 if (SystemState.HasDisconnectTime()) {
                     return static_cast<int>(GetDisconnectTime().Seconds()) - static_cast<int>(now.Seconds()); // negative for disconnected nodes
+                } else if (SystemState.HasStartTime()) {
+                    return static_cast<int>(now.Seconds()) - static_cast<int>(GetStartTime().Seconds());
                 } else {
                     return std::nullopt;
                 }
@@ -764,6 +766,9 @@ class TJsonNodes : public TViewerPipeClient {
 
         void MergeFrom(const NKikimrWhiteboard::TSystemStateInfo& systemState, TInstant now) {
             SystemState.MergeFrom(systemState);
+            // we received valid data, so the node should not be considered disconnected
+            Disconnected = false;
+            Problems = false;
             Cleanup();
             CalcDatabase();
             CalcCpuUsage();
@@ -1684,8 +1689,8 @@ public:
         }
     }
 
-    void ApplyLimit() {
-        if (FilterDone() && !NeedSort && !NeedGroup && NeedLimit) {
+    void ApplyLimitForced() {
+        if (NeedLimit) {
             if (Offset) {
                 NodeView.erase(NodeView.begin(), NodeView.begin() + std::min(*Offset, NodeView.size()));
                 InvalidateNodes();
@@ -1696,6 +1701,12 @@ public:
             }
             NeedLimit = false;
             AddEvent("Limit Applied");
+        }
+    }
+
+    void ApplyLimit() {
+        if (FilterDone() && !NeedSort && !NeedGroup) {
+            ApplyLimitForced();
         }
     }
 
@@ -3279,6 +3290,7 @@ public:
     void ReplyAndPassAway() override {
         AddEvent("ReplyAndPassAway");
         ApplyEverything();
+        ApplyLimitForced(); // in case we had a problem and don't want to return too much data
         NKikimrViewer::TNodesInfo json;
         for (const auto& batch : OriginalNodeBatches) {
             auto* jsonBatch = json.AddOriginalNodeBatches();

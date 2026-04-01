@@ -16,6 +16,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)

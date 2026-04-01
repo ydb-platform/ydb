@@ -279,10 +279,10 @@ message THugeKeeperEntryPoint {
 }
 
 message TMetadataEntryPoint {
-    optional bool IsTinyDisk = 1;
+    reserved 1;
     optional uint32 HullCompLevel0MaxSstsAtOnce = 2;
     optional uint32 HullCompSortedPartsNum = 3;
-    optional uint32 HugeBlobOverhead = 4;
+    reserved 4;
 }
 
 message TChunkKeeperEntryPoint {

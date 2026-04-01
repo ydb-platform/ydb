@@ -131,7 +131,6 @@ protected:
     virtual NJson::TJsonValue DoSerializeToJsonVisual() const {
         return NJson::JSON_NULL;
     }
-    virtual bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const = 0;
     virtual TConclusionStatus DoCheckWriteData() const {
         return TConclusionStatus::Success();

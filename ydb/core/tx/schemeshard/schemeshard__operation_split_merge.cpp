@@ -1,4 +1,4 @@
-#include "schemeshard__shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
@@ -296,7 +296,7 @@ public:
         // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
-        if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+        if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
             context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
         }
         context.SS->PersistTablePartitioning(db, tableId, tableInfo);

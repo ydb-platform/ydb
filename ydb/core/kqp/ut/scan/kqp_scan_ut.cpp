@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/base/hive.h>
+
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1767,6 +1769,87 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
         for (const auto& resultSet : response.GetResultSets()) {
             UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyTableLimitMultiNode) {
+        auto appCfg = AppCfg();
+        auto settings = TKikimrSettings(appCfg)
+            .SetNodeCount(2)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/EmptyTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+        )").GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        // Drain node 1 so the shard moves to node 2.
+        // gRPC/session is pinned to node 1, so executer runs on node 1
+        // while the datashard leader is on node 2.
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto firstNodeId = runtime->GetFirstNodeId();
+
+        {
+            auto sender = runtime->AllocateEdgeActor();
+            runtime->SendToPipe(runtime->GetAppData().DomainsInfo->GetHive(), sender,
+                new TEvHive::TEvDrainNode(firstNodeId), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+        }
+
+        // Wait until the shard leader is on node 2
+        {
+            TDescribeTableSettings describeSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            bool done = false;
+            for (int i = 0; i < 10; i++) {
+                auto res = session.DescribeTable("Root/EmptyTable", describeSettings).ExtractValueSync();
+                UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+                const auto& stats = res.GetTableDescription().GetPartitionStats();
+                if (stats.size() == 1 && stats[0].LeaderNodeId == firstNodeId + 1) {
+                    done = true;
+                    break;
+                }
+                Sleep(TDuration::Seconds(5));
+            }
+            UNIT_ASSERT_C(done, "shard did not move to node 2");
+        }
+
+        // Scan query: SELECT * FROM EmptyTable LIMIT 1
+        {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.ClientTimeout(TDuration::Seconds(30));
+
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )", scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(it));
+        }
+
+        // Query service: SELECT * FROM EmptyTable LIMIT 1
+        {
+            auto db = kikimr.GetQueryClient();
+            NQuery::TExecuteQuerySettings querySettings;
+            querySettings.ClientTimeout(TDuration::Seconds(30));
+            auto response = db.ExecuteQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )", NQuery::TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
+            UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL(response.GetResultSets()[0].RowsCount(), 0);
         }
     }
 

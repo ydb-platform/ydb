@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/services/ydb)
 FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -11,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    ydb_bulk_upsert_csv_ut.cpp
     ydb_bulk_upsert_ut.cpp
     ydb_bulk_upsert_olap_ut.cpp
     ydb_coordination_ut.cpp

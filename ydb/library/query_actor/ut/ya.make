@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/library/query_actor)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
+    REQUIREMENTS(cpu:2)
     SIZE(MEDIUM)
 ELSE()
     SIZE(SMALL)

@@ -22,6 +22,8 @@
 #include "schemeshard_shard_deleter.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
+#include "schemeshard__root_shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/hive.h>
@@ -86,8 +88,6 @@ namespace NSchemeShard {
 
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
-
-class TShredManager;
 
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
@@ -1172,7 +1172,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxShredManagerInit();
 
     struct TTxRunShred;
-    NTabletFlatExecutor::ITransaction* CreateTxRunShred(bool isNewShred);
+    NTabletFlatExecutor::ITransaction* CreateTxRunShred();
 
     struct TTxAddNewShardToShred;
     NTabletFlatExecutor::ITransaction* CreateTxAddNewShardToShred(TEvPrivate::TEvAddNewShardToShred::TPtr& ev);
@@ -1284,7 +1284,8 @@ public:
         const TString& relativeTablePath,
         const TString& indexName,
         const TString& targetTablePath,
-        const TActorContext& ctx);
+        const TActorContext& ctx,
+        const TString& specificImplTableName = "");
 
     TString FindTargetTablePath(
         const TBackupCollectionInfo::TPtr& backupCollectionInfo,
@@ -1336,6 +1337,7 @@ public:
     void Handle(TEvDataShard::TEvMigrateSchemeShardResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);
@@ -1866,11 +1868,10 @@ public:
     void ConnectToSA();
     TDuration SendBaseStatsToSA();
 
-    THolder<TShredManager> CreateShredManager(const NKikimrConfig::TDataErasureConfig& config);
     void ConfigureShredManager(const NKikimrConfig::TDataErasureConfig& config);
     void StartStopShred();
-    void MarkFirstRunRootShredManager();
-    void RunShred(bool isNewShred);
+    void InitRootShred();
+    void RunRootShred();
 
 public:
     void ChangeStreamShardsCount(i64 delta) override;
@@ -1896,7 +1897,8 @@ public:
     NLogin::TLoginProvider LoginProvider;
     TActorId LoginHelper;
 
-    THolder<TShredManager> ShredManager = nullptr;
+    THolder<TRootShredManager> RootShredManager = nullptr;
+    THolder<TTenantShredManager> TenantShredManager = nullptr;
 
     THashSet<TActorId> RunningContinuousBackupCleaners;
 

@@ -24,82 +24,103 @@ inline EURIScheme GetScheme(const TString& uri) {
     }
 }
 
+bool IsPortCorrect(const TIpPort port) {
+    return port >= 0 && port <= 65535;
+}
+
 // format: ipv6:address[:port]
+// Calling site should keep correctnes of hostname and port on return value
 bool CrackIPv6Address(const TString& address, TString& hostname, TIpPort& port) {
-    const size_t first_colon_pos = address.find(':');
-    const size_t last_colon_pos = address.rfind(':');
+    const size_t firstColonPos = address.find(':');
+    const size_t lastColonPos = address.rfind(':');
 
-    if (last_colon_pos == TString::npos) {
-        // WTF format: just return!
+    if (lastColonPos == TString::npos) {
+        // Strange format: does not have any colons
         return false;
     }
 
-    const size_t first_bracket_pos = address.find('[');
-    const size_t last_bracket_pos = address.rfind(']');
+    const size_t firstBracketPos = address.find('[');
+    const size_t lastBracketPos = address.rfind(']');
 
-    if (first_bracket_pos == TString::npos || last_bracket_pos == TString::npos || first_bracket_pos >= last_bracket_pos) {
+    if (firstBracketPos == TString::npos && lastBracketPos == TString::npos) {
         // format: ipv6:address
-        hostname = address.substr(first_colon_pos + 1);
-    } else {
-        // format: ipv6:[address]:port
-        port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
-        hostname = address.substr(first_bracket_pos + 1, last_bracket_pos - first_bracket_pos - 1);
+        hostname = address.substr(firstColonPos + 1);
+        return IsIPv6(hostname);
     }
 
-    if (!IsIPv6(hostname)) {
-        hostname.clear();
-        port = 0;
+    if (firstBracketPos == TString::npos && lastBracketPos != TString::npos) {
+        // Strange format: open bracket exists, but closed does not exist
         return false;
-    } else {
-        return true;
     }
+    if (firstBracketPos != TString::npos && lastBracketPos == TString::npos) {
+        // Strange format: open bracket does not exist, but closed exists
+        return false;
+    }
+
+    // Both brackets exist
+    if (std::count(address.begin(), address.end(), '[') > 1) {
+        // Strange format: more than 1 opened bracket
+        return false;
+    }
+    if (std::count(address.begin(), address.end(), ']') > 1) {
+        // Strange format: more than 1 closed bracket
+        return false;
+    }
+    if (firstBracketPos >= lastBracketPos) {
+        // Strange format: opened bracket is after closed bracket
+        return false;
+    }
+    if (firstColonPos == lastColonPos || lastColonPos <= lastBracketPos) {
+        // Strange format: only one colon or last colon is inside brackets
+        return false;
+    }
+
+    // format: ipv6:[address]:port
+    port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
+    hostname = address.substr(firstBracketPos + 1, lastBracketPos - firstBracketPos - 1);
+    return IsPortCorrect(port) && IsIPv6(hostname);
 }
 
 // format: ipv4:address[:port]
+// Calling site should keep correctness of hostname and port on return value
 bool CrackIPv4Address(const TString& address, TString& hostname, TIpPort& port) {
-    const size_t first_colon_pos = address.find(':');
-    const size_t last_colon_pos = address.rfind(':');
+    const size_t firstColonPos = address.find(':');
+    const size_t lastColonPos = address.rfind(':');
 
-    if (last_colon_pos == TString::npos) {
-        // WTF format: just return!
+    if (lastColonPos == TString::npos) {
+        // Strange format: does not have any colons
         return false;
     }
 
-    if (last_colon_pos != first_colon_pos) {
-        // format: ipv4:address:port
-        port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
-        hostname = address.substr(first_colon_pos + 1, last_colon_pos - first_colon_pos - 1);
-    } else {
+    if (lastColonPos == firstColonPos) {
         // format: ipv4:address
-        hostname = address.substr(first_colon_pos + 1);
+        hostname = address.substr(firstColonPos + 1);
+        return IsIPv4(hostname);
     }
 
-    if (!IsIPv4(hostname)) {
-        hostname.clear();
-        port = 0;
-        return false;
-    } else {
-        return true;
-    }
+    // format: ipv4:address:port
+    port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
+    hostname = address.substr(firstColonPos + 1, lastColonPos - firstColonPos - 1);
+    return IsPortCorrect(port) && IsIPv4(hostname);
 }
 
 // Fallback to old impl
 void CrackAddressLegacy(const TString& address, TString& hostname, TIpPort& port) {
-    size_t first_colon_pos = address.find(':');
-    if (first_colon_pos != TString::npos) {
-        size_t last_colon_pos = address.rfind(':');
-        if (last_colon_pos == first_colon_pos) {
+    size_t firstColonPos = address.find(':');
+    if (firstColonPos != TString::npos) {
+        size_t lastColonPos = address.rfind(':');
+        if (lastColonPos == firstColonPos) {
             // only one colon, simple case
-            port = FromStringWithDefault<TIpPort>(address.substr(first_colon_pos + 1), 0);
-            hostname = address.substr(0, first_colon_pos);
+            port = FromStringWithDefault<TIpPort>(address.substr(firstColonPos + 1), 0);
+            hostname = address.substr(0, firstColonPos);
         } else {
             size_t closing_bracket_pos = address.rfind(']');
-            if (closing_bracket_pos == TString::npos || closing_bracket_pos > last_colon_pos) {
+            if (closing_bracket_pos == TString::npos || closing_bracket_pos > lastColonPos) {
                 // whole address is ipv6 host
                 hostname = address;
             } else {
-                port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
-                hostname = address.substr(0, last_colon_pos);
+                port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
+                hostname = address.substr(0, lastColonPos);
             }
             if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
                 hostname = hostname.substr(1, hostname.size() - 2);
@@ -479,30 +500,30 @@ bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& 
 // Saves the previous values in case of an error for the new functionality.
 // Does not guarantee consistency of values in the deprecated function.
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
-    auto prev_hostname = std::exchange(hostname, "");
-    auto prev_port = std::exchange(port, 0);
+    auto originalHostname = std::exchange(hostname, "");
+    auto originalPort = std::exchange(port, 0);
 
     switch (GetScheme(address)) {
         case EURIScheme::IPV6: {
             if (!CrackIPv6Address(address, hostname, port)) {
                 // return previous values on error
-                hostname = std::move(prev_hostname);
-                port = prev_port;
+                hostname = std::move(originalHostname);
+                port = originalPort;
             }
             return;
         }
         case EURIScheme::IPV4: {
             if (!CrackIPv4Address(address, hostname, port)) {
-                // return previos values on error
-                hostname = std::move(prev_hostname);
-                port = prev_port;
+                // return previous values on error
+                hostname = std::move(originalHostname);
+                port = originalPort;
             }
             return;
         }
         default: {
             // Keep legacy behavior (do not clear input hostname and port)
-            hostname = std::move(prev_hostname);
-            port = prev_port;
+            hostname = std::move(originalHostname);
+            port = originalPort;
             return CrackAddressLegacy(address, hostname, port);
         }
     }

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import os
-import posixpath
-import time
 import ydb
-from collections import Counter
 from ydb_wrapper import YDBWrapper
+
+from upload_tests_results import get_codeowners_for_tests
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.normpath(os.path.join(_SCRIPT_DIR, '..', '..', '..'))
+TESTOWNERS_FILE = os.path.join(_REPO_ROOT, '.github', 'TESTOWNERS')
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -81,10 +84,11 @@ def main():
                 'suite_folder': row['suite_folder'],
                 'test_name': row['test_name'],
                 'full_name': row['full_name'],
-                'owners': row['owners'],
                 'run_timestamp_last': row['run_timestamp_last'],
             })
-        
+
+        test_list = get_codeowners_for_tests(TESTOWNERS_FILE, test_list)
+
         print('upserting testowners')
         create_tables(ydb_wrapper, table_path)
         

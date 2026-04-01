@@ -1,6 +1,6 @@
 #include "ddisk_actor_pdisk_ut.inl"
 
-Y_UNIT_TEST_SUITE(TDDiskActorSyncWithPb) {
+Y_UNIT_TEST_SUITE(TDDiskActorSyncWithPersistentBuffer) {
     Y_UNIT_TEST(EmptySegments) {
         TTestContext ctx;
         NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);

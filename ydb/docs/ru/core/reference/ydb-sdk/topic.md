@@ -585,7 +585,7 @@
       ```java
       try {
           writer.initAndWait();
-          logger.info("Init finished succsessfully");
+          logger.info("Init finished successfully");
       } catch (Exception exception) {
           logger.error("Exception while initializing writer: ", exception);
           return;

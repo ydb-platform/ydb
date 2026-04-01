@@ -213,7 +213,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV2(
     return stats;
 }
 
-double ComputeSelectivityCorrection(
+TMaybe<double> ComputeSelectivityCorrection(
     const TOptimizerStatistics& leftStats,
     const TOptimizerStatistics& rightStats,
     const TVector<TJoinColumn>& leftJoinKeys,
@@ -231,7 +231,7 @@ double ComputeSelectivityCorrection(
         auto rhsIt = rightData.find(rhs);
 
         if (lhsIt == leftData.end() || rhsIt == rightData.end()) {
-            return 1.0;
+            return Nothing();
         }
 
         auto leftHist = lhsIt->second.EqWidthHistogramEstimator;
@@ -251,7 +251,7 @@ double ComputeSelectivityCorrection(
             }
         }
     }
-    return 1.0;
+    return Nothing();
 }
 
 std::pair<TMaybe<double>, TMaybe<double>> GetJoinKeyUniqueVals(
@@ -377,9 +377,12 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 newByteSize = ComputeOneSideByteSize(newCard, leftStats);
                 break;
             default: { // when left side is FK
-                selectivity = leftStats.Selectivity * rightStats.Selectivity;
-                double correction = ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
-                selectivity = std::min(1.0, selectivity * correction);
+                TMaybe<double> correction = ComputeSelectivityCorrection(rightStats, leftStats, rightJoinKeys, leftJoinKeys);
+                if (correction.Defined()) {
+                    selectivity = correction.GetRef();
+                } else {
+                    selectivity = leftStats.Selectivity * rightStats.Selectivity;
+                }
                 newCard = leftStats.Nrows * selectivity;
                 newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
@@ -399,9 +402,12 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
                 newByteSize = ComputeOneSideByteSize(newCard, rightStats);
                 break;
             default: { // when right side is FK
-                selectivity = leftStats.Selectivity * rightStats.Selectivity;
-                double correction = ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
-                selectivity = std::min(1.0, selectivity * correction);
+                TMaybe<double> correction = ComputeSelectivityCorrection(leftStats, rightStats, leftJoinKeys, rightJoinKeys);
+                if (correction.Defined()) {
+                    selectivity = correction.GetRef();
+                } else {
+                    selectivity = leftStats.Selectivity * rightStats.Selectivity;
+                }
                 newCard = rightStats.Nrows * selectivity;
                 newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
             }
@@ -477,8 +483,14 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
                                        leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
 
-    // result.Selectivity = std::pow(selectivity, 0.7); // to avoid selectivity underflow
-    result.Selectivity = selectivity;
+    /*
+        - to avoid selectivity underflow and stop over-propagation
+        - prevent exponential collapse
+        - avoid keeping early joins from dominating plan choice
+    */ 
+    result.Selectivity = std::min(1.0, std::pow(selectivity, 0.2));
+    result.Selectivity = std::max(result.Selectivity, 1e-4);
+
     return result;
 }
 

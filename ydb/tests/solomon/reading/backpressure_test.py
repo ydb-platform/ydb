@@ -25,8 +25,8 @@ class TestBackpressure(SolomonReadingTestBase):
             return False, "Result size differs from expected: have {}, should be 1".format(len(rows))
 
         api_call_count = get_api_calls_count()
-        if api_call_count >= self.backpressure_test_max_inflight + 3:
-            return False, "Solomon emulator received too many api calls, shouldnt be hugher then {}, have {}".format(self.backpressure_test_max_inflight + 3, api_call_count)
+        if api_call_count >= self.backpressure_test_max_data_inflight + 3:
+            return False, "Solomon emulator received too many API calls, shouldn't be higher then {}, have {}".format(self.backpressure_test_max_data_inflight + 3, api_call_count)
 
         return True, None
 

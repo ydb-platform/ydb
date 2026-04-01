@@ -374,7 +374,7 @@ public:
         auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
-        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(true);
+        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
         sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
 
         auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);

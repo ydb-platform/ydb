@@ -742,7 +742,7 @@ ISolomonAccessorClient::Make(
     std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
     const auto& settings = source.settings();
 
-    bool enableSolomonClientPostApi = true;
+    bool enableSolomonClientPostApi = false;
     if (auto it = settings.find("enableSolomonClientPostApi"); it != settings.end()) {
         enableSolomonClientPostApi = FromString<bool>(it->second);
     }

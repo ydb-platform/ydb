@@ -13,6 +13,7 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
 #define LOG_E(name, stream) \

@@ -203,7 +203,7 @@ class SolomonEmulator(object):
         return web.Response(status=200)
 
     async def get_api_calls(self, request):
-        return web.json_response(text=json.dumps({ "api_calls": self._api_calls }))
+        return web.json_response({ "api_calls": self._api_calls })
 
     async def cleanup(self, request):
         cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query.get('folderId', None)

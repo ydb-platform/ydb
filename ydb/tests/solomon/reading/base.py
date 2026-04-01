@@ -97,12 +97,12 @@ class SolomonReadingTestBase(object):
 
         elif test_name == "backpressure_test":
             cls.backpressure_test_metrics_size = 100
-            cls.backpressure_test_max_inflight = 5
+            cls.backpressure_test_max_data_inflight = 5
 
             config.yaml_config["query_service_config"]["solomon"]["default_settings"].append(
                 {
                     "name": "MaxDataInflight",
-                    "value": cls.backpressure_test_max_inflight
+                    "value": cls.backpressure_test_max_data_inflight
                 }
             )
 

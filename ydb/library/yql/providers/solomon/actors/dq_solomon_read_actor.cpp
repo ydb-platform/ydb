@@ -40,6 +40,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 #include <util/system/compiler.h>
 
 #define SOURCE_LOG_T(s) \
@@ -361,7 +362,7 @@ public:
         TInstant to = TInstant::Seconds(ReadParams.Source.GetTo());
 
         while (!MetricsData.empty()) {
-            const auto data = MetricsData.front();
+            const auto& data = MetricsData.front();
             auto& labels = data.Metric.Selectors;
 
             auto dictValueBuilder = HolderFactory.NewDict(DictType, 0);

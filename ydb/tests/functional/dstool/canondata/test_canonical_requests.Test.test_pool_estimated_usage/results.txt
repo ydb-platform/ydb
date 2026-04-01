@@ -1,0 +1,62 @@
+dstool -e <endpoint> --mon-port <mon_port> pool list -H --show-vdisk-estimated-usage
+Exit Status: 0
+===== stdout =====
+┌──────────────┬───────────┬────────────────┬──────┬──────────────────┬──────────────┬────────────────────────────┬──────────────┬────────────────┬────────────────────────┬─────────────────────────┬───────────────────────────┐
+│ BoxId:PoolId │ PoolName  │ ErasureSpecies │ Kind │ TotalSizeInUnits │ Groups_TOTAL │ GroupsForEstimatedUsage@85 │ VDisks_TOTAL │ EstimatedUsage │ MaxVDiskEstimatedUsage │ MeanVDiskEstimatedUsage │ StdDevVDiskEstimatedUsage │
+├──────────────┼───────────┼────────────────┼──────┼──────────────────┼──────────────┼────────────────────────────┼──────────────┼────────────────┼────────────────────────┼─────────────────────────┼───────────────────────────┤
+│ [1:1]        │ test-pool │ none           │ hdd  │ 1                │ 1            │ 1                          │ 1            │ 10.0%          │ 10.0%                  │ 10.0%                   │ 0.0%                      │
+└──────────────┴───────────┴────────────────┴──────┴──────────────────┴──────────────┴────────────────────────────┴──────────────┴────────────────┴────────────────────────┴─────────────────────────┴───────────────────────────┘
+
+===== mock_base_config =====
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 0
+  }
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 400000000000
+    SlotCount: 8
+    SlotSizeInUnits: 0
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  GroupId: 2147483649
+  VDiskMetrics {
+    AvailableSize: 360000000000
+    AllocatedSize: 40000000000
+  }
+  Status: "READY"
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1000
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+
+===== DefineStoragePool =====
+BoxId: 1
+StoragePoolId: 1
+Name: "test-pool"
+ErasureSpecies: "none"
+Kind: "hdd"

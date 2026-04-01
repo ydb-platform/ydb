@@ -532,7 +532,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
         return;
     }
 
-    // DEPRECATED: old syntax is intentionally unavailable in SQL ADD INDEX path.
+    // DEPRECATED: old syntax.
     if (name == "hashes_count" || name == "filter_size_bytes" || name == "records_count") {
         error = TStringBuilder()
             << name << " is supported only via ALTER OBJECT ... ACTION=UPSERT_INDEX compatibility path";

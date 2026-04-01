@@ -612,19 +612,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 ngram->SetColumnId(columnIdIt->second);
                 ngram->SetNGrammSize(settings.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
                 ngram->SetCaseSensitive(settings.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
-                double fpp;
-                if (settings.FalsePositiveProbability) {
-                    fpp = *settings.FalsePositiveProbability;
-                } else if (settings.FilterSizeBytes || settings.RecordsCount) {
-                    const ui32 filterSizeBytes = settings.FilterSizeBytes.value_or(
-                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(0.1));
-                    const ui32 recordsCount = settings.RecordsCount.value_or(
-                        NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::DeprecatedRecordsCount);
-                    fpp = NYql::ComputeFalsePositiveProbabilityFromDeprecatedParams(filterSizeBytes, recordsCount);
-                } else {
-                    fpp = NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                }
-
+                const double fpp = settings.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
                 ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
                 ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
                 ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));

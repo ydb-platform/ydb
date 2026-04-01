@@ -69,7 +69,7 @@ public:
                 return list;
             }
         }
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 
 #ifndef MKQL_DISABLE_CODEGEN

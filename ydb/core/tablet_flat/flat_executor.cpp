@@ -5222,7 +5222,7 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
-    if (ev->Sender != SelfId() && ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
         return;
     }
 

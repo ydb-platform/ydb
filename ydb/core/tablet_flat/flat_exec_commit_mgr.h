@@ -105,7 +105,7 @@ namespace NTabletFlatExecutor {
                     auto error = TStringBuilder()
                         << "Backup changelog in flight bytes limit exceeded: "
                         << InFlightBytes + evTotalSize << " > " << InFlightBytesLimit;
-                    Ops->Send(Owner, new NBackup::TEvChangelogFailed(error));
+                    TActivationContext::Send(new IEventHandle(Owner, Writer, new NBackup::TEvChangelogFailed(error)));
                 }
             }
 

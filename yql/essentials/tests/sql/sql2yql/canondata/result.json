@@ -4003,6 +4003,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-pickle_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-positionof]": [
+        {
+            "checksum": "b44a8fc294af80cdaabeca842a871872",
+            "size": 1045,
+            "uri": "https://{canondata_backend}/1942671/a90af93968e1eb8989b9b3a6fead9fa649a51d5b/resource.tar.gz#test_sql2yql.test_expr-positionof_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-replace_member]": [
         {
             "checksum": "273dfee28f8715e48ceb6dc414dfc53d",
@@ -4372,6 +4379,27 @@
             "checksum": "d76cd817a6d1ccc65117cc7b815d2b41",
             "size": 1660,
             "uri": "https://{canondata_backend}/1809005/a91bd43ede1e3194ebdd265654e7e41d80753937/resource.tar.gz#test_sql2yql.test_expr-weakfield_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-with_issue_expr]": [
+        {
+            "checksum": "f80d2985ea8010bad5fad7a70bab1b08",
+            "size": 1070,
+            "uri": "https://{canondata_backend}/1937367/17a2d93d9a610ac091356ac9d692cdb9ff5b2668/resource.tar.gz#test_sql2yql.test_expr-with_issue_expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-with_issue_ok]": [
+        {
+            "checksum": "2e519871151be9aba8cac6a1a13bdb54",
+            "size": 1074,
+            "uri": "https://{canondata_backend}/1775059/93f0d495e0cc7d20dd98d94c299d4fcde86f671c/resource.tar.gz#test_sql2yql.test_expr-with_issue_ok_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-with_issue_subquery]": [
+        {
+            "checksum": "69b44227e18a4a32b29d0efecf3ddf48",
+            "size": 1388,
+            "uri": "https://{canondata_backend}/1937367/17a2d93d9a610ac091356ac9d692cdb9ff5b2668/resource.tar.gz#test_sql2yql.test_expr-with_issue_subquery_/sql.yql"
         }
     ],
     "test_sql2yql.test[expr-with_optional_args]": [
@@ -13772,6 +13800,11 @@
             "uri": "file://test_sql_format.test_expr-pickle_/formatted.sql"
         }
     ],
+    "test_sql_format.test[expr-positionof]": [
+        {
+            "uri": "file://test_sql_format.test_expr-positionof_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[expr-replace_member]": [
         {
             "uri": "file://test_sql_format.test_expr-replace_member_/formatted.sql"
@@ -14035,6 +14068,21 @@
     "test_sql_format.test[expr-weakfield]": [
         {
             "uri": "file://test_sql_format.test_expr-weakfield_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-with_issue_expr]": [
+        {
+            "uri": "file://test_sql_format.test_expr-with_issue_expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-with_issue_ok]": [
+        {
+            "uri": "file://test_sql_format.test_expr-with_issue_ok_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-with_issue_subquery]": [
+        {
+            "uri": "file://test_sql_format.test_expr-with_issue_subquery_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-with_optional_args]": [

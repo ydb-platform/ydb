@@ -1192,6 +1192,11 @@
     "kind": "Agg"
   },
   {
+    "name": "PositionOf",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "QuoteCode",
     "kind": "Normal"
   },
@@ -1714,6 +1719,11 @@
   {
     "name": "WeakField",
     "kind": "Normal"
+  },
+  {
+    "name": "WithIssue",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
   },
   {
     "name": "WithSideEffects",

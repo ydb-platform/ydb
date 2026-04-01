@@ -655,6 +655,34 @@ public:
     }
 };
 
+class TYqlWithIssue final: public TCallNode {
+public:
+    TYqlWithIssue(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "WithIssue", 5, 5, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        for (ui32 i = 1; i < 5; ++i) {
+            if (!Args_[i]->Init(ctx, src)) {
+                return false;
+            }
+
+            Args_[i] = MakeAtomFromExpression(Pos_, ctx, Args_[i]).Build();
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlWithIssue(Pos_, CloneContainer(Args_));
+    }
+};
+
 class TYqlPgType: public TCallNode {
 public:
     TYqlPgType(TPosition pos, const TVector<TNodePtr>& args)
@@ -3233,6 +3261,8 @@ struct TBuiltinFuncData {
             {"pgarray", {"PgArray", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PgArray", 1, -1)}},
             {"typeof", {"TypeOf", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1)}},
             {"instanceof", {"InstanceOf", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1)}},
+            {"positionof", {"PositionOf", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("PositionOf", 1, 1), NYql::MakeLangVersion(2026, 1)}},
+            {"withissue", {"WithIssue", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlWithIssue>(), NYql::MakeLangVersion(2026, 1)}},
             {"datatype", {"DataType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlDataType>()}},
             {"optionaltype", {"OptionalType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalType", 1, 1)}},
             {"asoptionaltype", {"AsOptionalType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsOptionalType", 1, 1), NYql::MakeLangVersion(2026, 1)}},

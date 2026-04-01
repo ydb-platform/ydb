@@ -2,6 +2,8 @@
 
 #include "dq_opt.h"
 
+#include <functional>
+
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
@@ -14,7 +16,7 @@ namespace NDq {
 
 NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, const TOptimizerHints& hints = {});
 
-NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, int& joinCounter, const TOptimizerHints& hints = {});
+NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, int& joinCounter, const TOptimizerHints& hints = {}, std::function<void(const TExprNode*, const TExprNode*)> transferStats = {});
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true);
 

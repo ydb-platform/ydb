@@ -540,7 +540,8 @@ TExprBase DqRewriteEquiJoin(
     TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
     int& joinCounter,
-    const TOptimizerHints& hints
+    const TOptimizerHints& hints,
+    std::function<void(const TExprNode*, const TExprNode*)> transferStats
 ) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
@@ -566,8 +567,12 @@ TExprBase DqRewriteEquiJoin(
         return node;
     }
 
-    auto equiJoinStats = typeCtx.GetStats(equiJoin.Raw());
-    typeCtx.SetStats(result->Input.Raw(), equiJoinStats);
+    if (transferStats) {
+        transferStats(equiJoin.Raw(), result->Input.Raw());
+    } else {
+        auto equiJoinStats = typeCtx.GetStats(equiJoin.Raw());
+        typeCtx.SetStats(result->Input.Raw(), equiJoinStats);
+    }
 
     THashMap<TStringBuf, TVector<TStringBuf>> columnsToRename;
     THashSet<TStringBuf> columnsToDrop;

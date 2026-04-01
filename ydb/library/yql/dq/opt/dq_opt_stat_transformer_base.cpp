@@ -18,9 +18,19 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     const bool useFSMForSortElimination
 )
     : TypeCtx(typeCtx)
-    , Pctx(ctx)
+    , Pctx(&ctx)
     , Hints(hints)
     , ShufflingOrderingsByJoinLabels(shufflingOrderingsByJoinLabels)
+    , UseFSMForSortElimination(useFSMForSortElimination)
+{ }
+
+TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
+    TTypeAnnotationContext* typeCtx,
+    const bool useFSMForSortElimination
+)
+    : TypeCtx(typeCtx)
+    , Pctx(nullptr)
+    , ShufflingOrderingsByJoinLabels(nullptr)
     , UseFSMForSortElimination(useFSMForSortElimination)
 { }
 
@@ -73,7 +83,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
             // we need to take each generic callable and see if it includes a lambda
             // if so - we will map the input to the callable to the argument of the lambda
             if (input->IsCallable()) {
-                PropagateStatisticsToLambdaArgument(input, TypeCtx);
+                OnPropagateToLambdaArgument(input);
             }
 
             return true;
@@ -81,7 +91,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         [&](const TExprNode::TPtr& input) {
             AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
             if (UseFSMForSortElimination) {
-                PropogateTableAliasesFromChildren(input, TypeCtx);
+                OnPropagateTableAliases(input);
             }
 
             return true;
@@ -115,16 +125,16 @@ bool TDqStatisticsTransformerBase::BeforeLambdas(const TExprNode::TPtr& input, T
 
     // Join matchers
     else if(TCoMapJoinCore::Match(input.Get())) {
-        InferStatisticsForMapJoin(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForMapJoin(input, TypeCtx, *Pctx, Hints);
     }
     else if(TCoGraceJoinCore::Match(input.Get())) {
-        InferStatisticsForGraceJoin(input, TypeCtx, Pctx, Hints, ShufflingOrderingsByJoinLabels);
+        InferStatisticsForGraceJoin(input, TypeCtx, *Pctx, Hints, ShufflingOrderingsByJoinLabels);
     }
     else if(TDqBlockHashJoinCore::Match(input.Get())) {
-        InferStatisticsForBlockHashJoin(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForBlockHashJoin(input, TypeCtx, *Pctx, Hints);
     }
     else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
-        InferStatisticsForDqJoinBase(input, TypeCtx, Pctx, Hints);
+        InferStatisticsForDqJoinBase(input, TypeCtx, *Pctx, Hints);
     }
     // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
     else if(TCoEquiJoin::Match(input.Get())){
@@ -188,5 +198,13 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
 }
 
 void TDqStatisticsTransformerBase::Rewind() { }
+
+void TDqStatisticsTransformerBase::OnPropagateToLambdaArgument(const TExprNode::TPtr& input) {
+    PropagateStatisticsToLambdaArgument(input, TypeCtx);
+}
+
+void TDqStatisticsTransformerBase::OnPropagateTableAliases(const TExprNode::TPtr& input) {
+    PropogateTableAliasesFromChildren(input, TypeCtx);
+}
 
 } // namespace NYql::NDq

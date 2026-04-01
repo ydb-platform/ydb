@@ -57,21 +57,79 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
-        struct TBackupState {
+        class TBackupLogic {
+        public:
+            void Start(IOps *ops, TActorId owner, TActorId changelogWriter, ui64 inFlightBytesLimit) {
+                Ops = ops;
+                Owner = owner;
+                Writer = changelogWriter;
+                InFlightBytesLimit = inFlightBytesLimit;
+                Running = true;
+            }
+
+            void Stop() {
+                if (Running) {
+                    Ops->Send(Owner, new TEvents::TEvPoisonPill);
+                }
+                *this = TBackupLogic();
+            }
+
+            bool IsRunning() const {
+                return Running;
+            }
+
+            bool ShouldBackupCommit(const TLogCommit &commit) const {
+                if (!Running) {
+                    return false;
+                }
+
+                if (InFlightOverflow) {
+                    return false;
+                }
+
+                return commit.Type == ECommit::Redo;
+            }
+
+            void BackupCommit(const TLogCommit &commit) {
+                if (!ShouldBackupCommit(commit)) {
+                    return;
+                }
+
+                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
+                ui64 evTotalSize = ev->GetTotalSize();
+                if (InFlightBytes + evTotalSize <= InFlightBytesLimit) {
+                    InFlightBytes += evTotalSize;
+                    Ops->Send(Writer, ev.Release());
+                } else {
+                    InFlightOverflow = true;
+                    auto error = TStringBuilder()
+                        << "Backup changelog in flight bytes limit exceeded: "
+                        << InFlightBytes + evTotalSize << " > " << InFlightBytesLimit;
+                    Ops->Send(Owner, new NBackup::TEvChangelogFailed(error));
+                }
+            }
+
+            void OnProcessedBytes(ui64 bytes) {
+                Y_ENSURE(InFlightBytes >= bytes);
+                InFlightBytes -= bytes;
+            }
+
+            void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+                Ops->Send(Writer, ev->ReleaseBase().Release());
+            }
+
+            TActorId GetWriter() const {
+                return Writer;
+            }
+
+        private:
+            IOps* Ops = nullptr;
             TActorId Owner;
             TActorId Writer;
-            ui64 SeqNo = 0;
+            bool Running = false;
             ui64 InFlightBytes = 0;
             ui64 InFlightBytesLimit = Max<ui64>();
-
-            TBackupState() = default;
-            TBackupState(TActorId owner, TActorId writer, ui64 seqNo, ui64 inFlightBytesLimit)
-                : Owner(owner)
-                , Writer(writer)
-                , SeqNo(seqNo)
-                , InFlightBytes(0)
-                , InFlightBytesLimit(inFlightBytesLimit)
-            {}
+            bool InFlightOverflow = false;
         };
 
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
@@ -106,31 +164,13 @@ namespace NTabletFlatExecutor {
             *Step0 = Head = Tail = 1;
         }
 
-        void Stop() const
+        void Stop()
         {
             Y_ENSURE(Ops, "Commit manager is not started");
-            Ops->Send(BackupState.Writer, new TEvents::TEvPoisonPill());
+            BackupLogic.Stop();
         }
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
-
-        void StartBackup(TActorId backupOwner, TActorId backupWriter, ui64 seqNo, ui64 inFlightBytesLimit) {
-            StopBackup();
-            BackupState = TBackupState(backupOwner, backupWriter, seqNo, inFlightBytesLimit);
-        }
-
-        void StopBackup() {
-            if (BackupState.Writer) {
-                Y_ENSURE(Ops, "Commit manager is not started");
-                Ops->Send(BackupState.Writer, new TEvents::TEvPoisonPill());
-            }
-            BackupState = TBackupState();
-        }
-
-        void DecBackupInFlight(ui64 bytes) {
-            Y_ENSURE(BackupState.InFlightBytes >= bytes);
-            BackupState.InFlightBytes -= bytes;
-        }
 
         ui64 Stamp() const noexcept
         {
@@ -207,20 +247,7 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
-            if (BackupState.Writer && commit.Type == ECommit::Redo) {
-                auto backupEv = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
-                ui64 backupEvSize = backupEv->GetTotalSize();
-                if (BackupState.InFlightBytes + backupEvSize <= BackupState.InFlightBytesLimit) {
-                    BackupState.InFlightBytes += backupEvSize;
-                    Ops->Send(BackupState.Writer, backupEv.Release());
-                } else {
-                    auto error = TStringBuilder()
-                        << "Backup changelog in flight bytes limit exceeded: "
-                        << BackupState.InFlightBytes + backupEvSize << " > " << BackupState.InFlightBytesLimit;
-                    Ops->Send(BackupState.Owner, new NBackup::TEvChangelogFailed(BackupState.SeqNo, error));
-                    StopBackup();
-                }
-            }
+            BackupLogic.BackupCommit(commit);
 
             const bool snap = (commit.Type == ECommit::Snap);
 
@@ -255,10 +282,10 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-        TBackupState BackupState;
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;
+        TBackupLogic BackupLogic;
     };
 
 }

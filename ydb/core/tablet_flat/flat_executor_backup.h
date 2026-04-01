@@ -91,42 +91,22 @@ struct TEvWriteChangelog : public TEventLocal<TEvWriteChangelog, EvWriteChangelo
 };
 
 struct TEvWriteChangelogAck : public TEventLocal<TEvWriteChangelogAck, EvWriteChangelogAck> {
-    TEvWriteChangelogAck(ui64 seqNo, ui64 processedBytes)
-        : SeqNo(seqNo)
-        , ProcessedBytes(processedBytes)
+    TEvWriteChangelogAck(ui64 processedBytes)
+        : ProcessedBytes(processedBytes)
     {}
 
-    ui64 SeqNo;
     ui64 ProcessedBytes;
 };
 
 struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFailed> {
-    TEvChangelogFailed(ui64 seqNo, const TString& error)
-        : SeqNo(seqNo)
-        , Error(error)
+    TEvChangelogFailed(const TString& error)
+        : Error(error)
     {}
 
-    ui64 SeqNo;
     TString Error;
 };
 
-struct TEvStartNewBackup : public TEventLocal<TEvStartNewBackup, EvStartNewBackup> {
-    TEvStartNewBackup() = default;
-
-    TEvStartNewBackup(ui64 seqNo)
-        : SeqNo(seqNo)
-    {}
-
-    ui64 SeqNo = 0;
-};
-
-struct TBackupInfo {
-    ui64 ChangelogWriterSeqNo = 0;
-    bool SnapshotCompleted = false;
-
-    TActorId SnapshotWriter;
-    TActorId ChangelogWriter;
-};
+struct TEvStartNewBackup : public TEventLocal<TEvStartNewBackup, EvStartNewBackup> {};
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                              const THashMap<ui32, NTable::TScheme::TTableInfo>& tables,
@@ -136,7 +116,7 @@ IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletB
 NTable::IScan* CreateSnapshotScan(TActorId snapshotWriter, ui32 tableId, const THashMap<ui32, NTable::TColumn>& columns,
                                   TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 
-IActor* CreateChangelogWriter(TActorId owner, ui64 seqNo, const NKikimrConfig::TSystemTabletBackupConfig& config,
+IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,
                               TTabletTypes::EType tabletType, ui64 tabletId, ui32 generation, ui32 step,
                               const NTable::TScheme& schema, TIntrusiveConstPtr<NTable::TBackupExclusion> exclusion);
 

@@ -29,7 +29,7 @@ using NKikimrBlobStorage::NDDisk::TReplyStatus;
 constexpr ui32 MinBlockSize = 4096;
 constexpr ui32 PDiskId = 1;
 constexpr ui32 SlotId = 1;
-constexpr ui32 ChunkSize = 16u << 20; // note, that PDisk allocates slightly bigger chunk
+constexpr ui32 ChunkSize = 16u << 20; // note that PDisk allocates slightly bigger chunk
 constexpr ui32 ChunkCount = 1000;
 constexpr ui64 DiskSize = (ui64)ChunkSize * ChunkCount;
 constexpr ui64 DefaultPDiskSequence = 0x7e5700007e570000;

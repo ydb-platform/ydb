@@ -24,7 +24,7 @@ def _do_request(method, url, json=None):
     return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json}, tries=max_tries, delay=2)
 
 
-def config_solomon(response_code): # deprecated
+def config_solomon(response_code):  # deprecated
     pass
 
 

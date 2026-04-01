@@ -29,7 +29,7 @@
     Передать логин и пароль можно в составе строки подключения. Например, так:
 
     ```shell
-    "grpcs://login:password@localohost:2135/local"
+    "grpcs://login:password@localhost:2135/local"
     ```
 
     Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:

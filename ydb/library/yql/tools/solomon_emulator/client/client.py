@@ -24,6 +24,10 @@ def _do_request(method, url, json=None):
     return retry_call(_do_request_inner, fkwargs={"method": method, "url": url, "json": json}, tries=max_tries, delay=2)
 
 
+def config_solomon(response_code): # deprecated
+    pass
+
+
 def cleanup_emulator():
     _do_request("POST", "{url}/cleanup".format(url=get_api_url()))
 

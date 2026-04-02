@@ -185,8 +185,14 @@ public:
                      ui64 tabletId);
 
     void SetSkipConflictCheck(bool skipConflictCheck);
+    void SetTrackProducerId(bool trackProducerId);
 
 private:
+    void MergeSkipConflictCheck(const TMaybe<bool>& rhs);
+    void MergeTrackProducerId(const TMaybe<bool>& rhs);
+
+    bool CalcSkipConflictCheck() const;
+
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
     bool HasWriteOperations_ = false;
@@ -197,7 +203,8 @@ private:
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
-    bool SkipConflictCheck_ = false;
+    TMaybe<bool> SkipConflictCheck_;
+    TMaybe<bool> TrackProducerId_;
 };
 
 }

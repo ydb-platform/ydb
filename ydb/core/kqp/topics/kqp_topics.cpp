@@ -615,7 +615,7 @@ void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCache
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
-        operations.BuildTopicTxs(txs, SkipConflictCheck_);
+        operations.BuildTopicTxs(txs, CalcSkipConflictCheck());
     }
 }
 
@@ -629,6 +629,9 @@ void TTopicOperations::Merge(const TTopicOperations& rhs)
     HasReadOperations_ |= rhs.HasReadOperations_;
     HasWriteOperations_ |= rhs.HasWriteOperations_;
     HasKafkaOperations_ |= rhs.HasKafkaOperations_;
+
+    MergeSkipConflictCheck(rhs.SkipConflictCheck_);
+    MergeTrackProducerId(rhs.TrackProducerId_);
 }
 
 TSet<ui64> TTopicOperations::GetReceivingTabletIds() const
@@ -645,7 +648,7 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
         if (!operations.HasReadOperations() &&
-            operations.HasWriteOperations() && SkipConflictCheck_) {
+            operations.HasWriteOperations() && CalcSkipConflictCheck()) {
             continue;
         }
 
@@ -673,6 +676,48 @@ size_t TTopicOperations::GetSize() const
 void TTopicOperations::SetSkipConflictCheck(bool skipConflictCheck)
 {
     SkipConflictCheck_ = skipConflictCheck;
+}
+
+void TTopicOperations::SetTrackProducerId(bool trackProducerId)
+{
+    TrackProducerId_ = trackProducerId;
+}
+
+void TTopicOperations::MergeSkipConflictCheck(const TMaybe<bool>& rhs)
+{
+    if (!SkipConflictCheck_.Defined()) {
+        SkipConflictCheck_ = rhs;
+        return;
+    }
+
+    if (!rhs.Defined()) {
+        return;
+    }
+
+    SkipConflictCheck_ = *SkipConflictCheck_ && *rhs;
+}
+
+void TTopicOperations::MergeTrackProducerId(const TMaybe<bool>& rhs)
+{
+    if (!TrackProducerId_.Defined()) {
+        TrackProducerId_ = rhs;
+        return;
+    }
+
+    if (!rhs.Defined()) {
+        return;
+    }
+
+    TrackProducerId_ = *TrackProducerId_ || *rhs;
+}
+
+bool TTopicOperations::CalcSkipConflictCheck() const
+{
+    if (!TrackProducerId_.Defined() || !SkipConflictCheck_.Defined()) {
+        return false;
+    }
+
+    return !*TrackProducerId_ && *SkipConflictCheck_;
 }
 
 }

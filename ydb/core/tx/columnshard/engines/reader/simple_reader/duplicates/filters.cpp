@@ -111,7 +111,7 @@ TFiltersStore::TFiltersStore(const bool reverse, const std::shared_ptr<NColumnSh
 
 NArrow::TColumnFilter TFiltersStore::MakeOrderedFilter(NArrow::TColumnFilter&& filter) {
     if (IsReverse) {
-        return filter.Reverse();
+        return filter.CreateReversed();
     }
     return std::move(filter);
 }

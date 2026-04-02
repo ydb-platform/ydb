@@ -1,6 +1,6 @@
 # Fulltext Indexes
 
-Fulltext indexes are specialized data structures that enable efficient text search within table columns. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, fulltext indexes allow searching by words, phrases, and (with n-grams) by substrings.
+Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words, phrases, and (with n-grams) by substrings.
 
 For the general idea of fulltext search, see [Fulltext search](../concepts/fulltext_search.md).
 
@@ -67,7 +67,12 @@ LIMIT 10;
 
 ### Substring search (n-grams) {#substr}
 
-If you need substring search, create the index with n-grams (`use_filter_ngram` / `use_filter_edge_ngram`). This enables:
+If you need substring search, create the index with n-grams. Two types of n-grams are available:
+
+* **Regular n-grams** (`use_filter_ngram`) — split words into all possible substrings of specified length, allowing matches anywhere within a word. For example, the word "search" will be split into "sea", "ear", "arc", "rch", etc.
+* **Edge n-grams** (`use_filter_edge_ngram`) — create substrings only from the beginning of words, which is ideal for autocomplete functionality. For example, the word "search" will be split into "se", "sea", "sear", "searc", "search".
+
+When using n-grams, the following becomes available:
 
 * `FulltextMatch(..., "Wildcard" AS Mode)` (patterns with `%` / `_`)
 * `LIKE` / `ILIKE` predicates over the indexed text column (they use the index)
@@ -127,6 +132,8 @@ Functions and expressions for fulltext search:
 The optimizer doesn't select a fulltext index automatically, so you must specify it explicitly using `VIEW IndexName`.
 
 If the `VIEW` expression is not used, `FulltextMatch` / `FulltextScore` queries will fail.
+
+This limitation may be removed in future versions of {{ ydb-short-name }}.
 
 {% endnote %}
 

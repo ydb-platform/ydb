@@ -2,7 +2,7 @@
 
 ## Concept of fulltext search
 
-**Fulltext search** is a way to find documents by text content (in a string/UTF-8 column): by words, phrases, and (with special indexing) by substrings. Unlike simple string predicates, fulltext search typically involves **tokenization** and **normalization** (for example, lowercasing), so queries operate on “terms” rather than raw byte substrings. Typical use cases include:
+**Fulltext search** is a way to find documents by text content in a `String` or `Utf8` column: by words, phrases, and (with special indexing) by substrings. Unlike simple string predicates, fulltext search typically involves **tokenization** and **normalization** (for example, lowercasing), so queries operate on “terms” rather than raw byte substrings. Typical use cases include:
 
 * search in product catalogs and knowledge bases
 * log/message search

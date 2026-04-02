@@ -25,13 +25,13 @@ You can copy the contents of columns into a covering index. This eliminates the 
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
+Unlike traditional secondary indexes, which optimize equality or range searches, vector indexes allow [vector search](../query_execution/vector_search.md) based on distance or similarity functions.
 
 ## Fulltext Index
 
 [Fulltext index](../../dev/fulltext-indexes.md) is a special type of secondary index.
 
-Unlike secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../fulltext_search.md).
+Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../fulltext_search.md).
 
 ### Creating a Secondary Index Online {#index-add}
 

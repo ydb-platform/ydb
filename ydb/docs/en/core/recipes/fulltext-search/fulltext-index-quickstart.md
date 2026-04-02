@@ -36,6 +36,14 @@ WHERE FulltextMatch(body, "machine learning")
 LIMIT 20;
 ```
 
+Query execution result:
+
+```bash
+id title
+1  Intro
+3  Notes
+```
+
 ## Rank documents
 
 ```yql
@@ -44,6 +52,14 @@ FROM articles VIEW ft_idx
 WHERE FulltextScore(body, "machine learning") > 0
 ORDER BY relevance DESC
 LIMIT 10;
+```
+
+Query execution result:
+
+```bash
+id title relevance
+1  Intro  0.8762718444094963
+3  Notes  0.8762718444094963
 ```
 
 For more details, see:

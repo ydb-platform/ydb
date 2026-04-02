@@ -36,6 +36,13 @@ WHERE FulltextMatch(body, "машинное обучение")
 LIMIT 20;
 ```
 
+Результат выполнения запроса:
+
+```bash
+id title
+1  Введение
+```
+
 ## Ранжирование документов
 
 ```yql
@@ -44,6 +51,13 @@ FROM articles VIEW ft_idx
 WHERE FulltextScore(body, "машинное обучение") > 0
 ORDER BY relevance DESC
 LIMIT 10;
+```
+
+Результат выполнения запроса:
+
+```bash
+id title relevance
+1  Введение 1.6215210957338408
 ```
 
 Подробнее:

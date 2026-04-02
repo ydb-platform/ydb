@@ -2599,7 +2599,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update us ignored, TSS is preferred"
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred"
                 << ": self# " << SelfId()
                 << ", path# " << notify.Path
                 << ", pathId# " << notify.PathId);

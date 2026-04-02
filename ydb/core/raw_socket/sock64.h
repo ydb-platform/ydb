@@ -145,9 +145,10 @@ protected:
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
 public:
     struct TServerMtlsCreds {
-        TSslHolder<X509> ServerCert;
+        std::vector<TSslHolder<X509>> ServerCertChain;
         TSslHolder<EVP_PKEY> ServerPrivateKey;
-        TSslHolder<X509> CACert;
+        std::vector<TSslHolder<X509>> CaCertChain;
+        bool AllowSelfSignedCerts = false;
     };
 
     TInet64SecureStreamSocket(const TSocketSettings& socketSettings = {})
@@ -182,16 +183,28 @@ public:
         BIO_set_nbio(Bio.get(), 1);
 
         if (UseMtlsAuth) {
-            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CACert) {
+            if (!ServerCreds || ServerCreds->ServerCertChain.empty() || !ServerCreds->ServerPrivateKey || ServerCreds->CaCertChain.empty()) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
                 return false;
             }
-            SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::Verify);
+            if (ServerCreds->AllowSelfSignedCerts) {
+                SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,&TInet64SecureStreamSocket::VerifyAllowSelfSignedCerts);
+            } else {
+                SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            }
 
-            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
+            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCertChain[0].get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
+            }
+
+            for (size_t i = 1; i < ServerCreds->ServerCertChain.size(); ++i) {
+                int retServerCertChain = SSL_CTX_add0_chain_cert(ctx, ServerCreds->ServerCertChain[i].get());
+                if (retServerCertChain != 1) {
+                    LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load additional server certificate from file to ssl context, it might be incorrect.");
+                    return false;
+                }
             }
 
             if (!ServerCreds->ServerPrivateKey) {
@@ -207,13 +220,18 @@ public:
             X509_STORE* store = SSL_CTX_get_cert_store(ctx);
             if (!store) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
-
+                return false;
+            }
+            if (ServerCreds->CaCertChain.empty()) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "CA file is empty. Check its correctness.");
                 return false;
             }
 
-            if (X509_STORE_add_cert(store, ServerCreds->CACert.get()) != 1) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
-                return false;
+            for (auto& cert : ServerCreds->CaCertChain) {
+                if (X509_STORE_add_cert(store, cert.get()) != 1) {
+                    LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load one of CA files. Check its correctness.");
+                    return false;
+                }
             }
 
             SSL_CTX_set_verify_depth(ctx, 9);
@@ -294,12 +312,9 @@ public:
         return TString();
     }
 
-    static int Verify(int preverify, X509_STORE_CTX *ctx) {
-        X509* current = X509_STORE_CTX_get_current_cert(ctx);
+    static int VerifyAllowSelfSignedCerts(int preverify, X509_STORE_CTX *ctx) {
         if (!preverify) {
             int err = X509_STORE_CTX_get_error(ctx);
-            char buffer[1024];
-            X509_NAME_oneline(X509_get_subject_name(current), buffer, sizeof(buffer));
             if (err == X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT) {
                 // Allow self-signed certificates
                 preverify = 1;

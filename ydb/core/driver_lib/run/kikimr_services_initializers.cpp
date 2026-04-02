@@ -3184,14 +3184,19 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         TString serverCert = readFile(settings.CertificateFile);
         TString serverPrivateKey = readFile(settings.PrivateKeyFile);
-        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+        TString caCertChain = readFile(Config.GetKafkaProxyConfig().GetCA());
+        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
 
         {
             TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
             if (bio) {
-                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->ServerCert = TSslHolder<X509>();
+                while(true) {
+                    X509* cert = PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr);
+                    if (cert == nullptr) {
+                        break;
+                    }
+                    serverCreds->ServerCertChain.emplace_back(cert);
+                }
             }
         }
 
@@ -3205,14 +3210,18 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         }
 
         {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+            TSslHolder<BIO> bio(BIO_new_mem_buf(caCertChain.data(), caCertChain.size()));
             if (bio) {
-                serverCreds->CACert = TSslHolder<X509>(
-                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->CACert = TSslHolder<X509>();
+                while(true) {
+                    X509* ca = PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr);
+                    if (ca == nullptr) {
+                        break;
+                    }
+                    serverCreds->CaCertChain.emplace_back(ca);
+                }
             }
         }
+
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),

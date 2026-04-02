@@ -272,7 +272,7 @@ public:
             maybeExtractMembers
             ? maybeExtractMembers.Cast().Input().Maybe<TDqSourceWrap>()
             : flatmap.Input().Maybe<TDqSourceWrap>();
-        ;
+
         if (!maybeDqSourceWrap) {
             return node;
         }
@@ -287,14 +287,21 @@ public:
             return node;
         }
 
-        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
+        // FlatMap lambda may still be Void (stub) before lambda is filled in later passes тАФ do not cast to TCoLambda yet.
+        const TExprNode* const flatMapLambdaNode = flatmap.Ref().Child(flatmap.Ref().ChildrenSize() - 1);
+        if (TCoVoid::Match(flatMapLambdaNode) || !TCoLambda::Match(flatMapLambdaNode)) {
+            return node;
+        }
+        const TCoLambda flatMapLambda(flatMapLambdaNode);
+
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatMapLambda, ctx, node.Pos(), TPushdownSettings());
         if (predicate.IsEmpty()) {
             return node;
         }
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
+        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatMapLambda.Args().Arg(0), &predicateProto, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }

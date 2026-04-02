@@ -187,6 +187,7 @@ public:
         if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
             const auto w = input->ChildPtr(TPqReadTopic::idx_Watermark);
             if (!TCoVoid::Match(w.Get())) {
+                YQL_ENSURE(TCoLambda::Match(w.Get()));
                 watermarkNode = w;
             }
         }

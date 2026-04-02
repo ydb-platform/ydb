@@ -282,6 +282,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_csv_with_names(self, kikimr, s3, client, unique_prefix):
+        """PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_custom_csv_delimiter_csv_with_names`."""
         fruits = '''Fruit;Price;Weight
     Banana;3;100
     Apple;2;22
@@ -314,7 +315,10 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_csv(self, kikimr, s3, client, unique_prefix):
-        """Same as test_custom_csv_delimiter_csv_with_names but format=csv (no header row; SCHEMA defines order)."""
+        """Same as test_custom_csv_delimiter_csv_with_names but format=csv (no header row; SCHEMA defines order).
+
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_custom_csv_delimiter_csv`.
+        """
         fruits = '''Banana;3;100
 Apple;2;22
 Pear;15;33'''
@@ -349,6 +353,7 @@ Pear;15;33'''
         """csv_with_names: header order b,a in file; SCHEMA lists a,b; SELECT a,b checks values by name.
 
         Locks ClickHouseClient.ParseFormat reading parsed columns by name (not only by position).
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_with_names_projection_column_order`.
         """
         self.create_bucket_and_upload_file_body("b,a\nbb,aa\n", "two_cols.csv", s3, kikimr)
 
@@ -383,7 +388,7 @@ Pear;15;33'''
     def test_csv_projection_column_order(self, kikimr, s3, client, unique_prefix):
         """csv (no header row): SCHEMA fixes field order; SELECT b, a only reorders output columns.
 
-        Same idea as streaming test_read_topic_csv_projection_column_order.
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_projection_column_order`.
         """
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_two_cols.csv", s3, kikimr)
 
@@ -416,7 +421,10 @@ Pear;15;33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_empty_schema_rejected(self, kikimr, s3, client, unique_prefix):
-        """csv (headerless): SCHEMA = () тАФ ╨╜╨╡╤В ╨╕╨╝╤С╨╜ ╨║╨╛╨╗╨╛╨╜╨╛╨║ ╨┤╨╗╤П ╨┐╨╛╤А╤П╨┤╨║╨░ ╨┐╨╛╨╗╨╡╨╣ ╨▓ ╤Д╨░╨╣╨╗╨╡."""
+        """csv (headerless): SCHEMA = () тАФ ╨╜╨╡╤В ╨╕╨╝╤С╨╜ ╨║╨╛╨╗╨╛╨╜╨╛╨║ ╨┤╨╗╤П ╨┐╨╛╤А╤П╨┤╨║╨░ ╨┐╨╛╨╗╨╡╨╣ ╨▓ ╤Д╨░╨╣╨╗╨╡.
+
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_empty_schema_rejected`.
+        """
         self.create_bucket_and_upload_file_body("x", "empty_schema.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "emptyschemabucket"
@@ -452,6 +460,7 @@ Pear;15;33'''
         """csv (no header): full SCHEMA (a,b) and two fields in file; SELECT only one column (b).
 
         Ensures columns_list / parse still maps file positions to names when output is a strict subset.
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_projection_single_column`.
         """
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_select_one_col.csv", s3, kikimr)
 
@@ -485,6 +494,7 @@ Pear;15;33'''
         """Same as test_csv_projection_column_order but SCHEMA lists b, a (not alphabetical a, b).
 
         First CSV field binds to b, second to a; SELECT a, b only reorders output columns.
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_projection_column_order_non_alphabetical_schema`.
         """
         self.create_bucket_and_upload_file_body("bb,aa", "headerless_b_a.csv", s3, kikimr)
 
@@ -781,6 +791,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_no_header(self, kikimr, s3, client, unique_prefix):
+        """PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_no_header_three_rows`."""
         self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
@@ -808,6 +819,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_no_header_project_non_first_alphabetic_column(self, kikimr, s3, client, unique_prefix):
+        """PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_no_header_select_price`."""
         # Same file as test_csv_format_no_header (3 columns, no header row).
         # Request a single column that is not the first in alphabetical order
         # (Fruit < Price < Weight тЖТ Price is the middle column).
@@ -845,6 +857,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_schema_order_differs_from_alphabet(self, kikimr, s3, client, unique_prefix):
+        """PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_csv_physical_column_order`."""
         # Physical file columns are Weight,Price,Fruit (first row 100,3,Banana).
         # SCHEMA lists Weight, Price, Fruit тАФ parser must map by position, not by name
         # matching alphabetical order. Result column order from API may be sorted by name.
@@ -887,6 +900,10 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_custom_delimiter(self, kikimr, s3, client, unique_prefix):
+        """csv + csv_delimiter (same scenario as `test_custom_csv_delimiter_csv`).
+
+        PQ streaming analog: `test_streaming.TestStreamingInYdb.test_read_topic_custom_csv_delimiter_csv`.
+        """
         # csv format with custom delimiter (semicolon)
         fruits = '''Banana;3;100
 Apple;2;22

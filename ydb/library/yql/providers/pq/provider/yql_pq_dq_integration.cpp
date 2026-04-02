@@ -44,6 +44,7 @@ TMaybe<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
     if (TCoVoid::Match(w)) {
         return Nothing();
     }
+    YQL_ENSURE(TCoLambda::Match(w));
     return TCoLambda(w);
 }
 

@@ -5238,7 +5238,7 @@ Y_UNIT_TEST(CreateSecretCorrect) {
     }
 }
 
-Y_UNIT_TEST(CreateSecretWithExpression) {
+Y_UNIT_TEST(CreateSecretWithExpressionOk) {
     { // Named node on other named nodes
         const auto res = SqlToYql(R"sql(
             USE plato;
@@ -5247,16 +5247,6 @@ Y_UNIT_TEST(CreateSecretWithExpression) {
             CREATE SECRET `secret-name` WITH (VALUE = $sec1 || $sec2);
         )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    }
-
-    { // Named node on literal: $x = 1; value = $x
-        auto res = SqlToYql(R"sql(
-            USE plato;
-            $x = 1;
-            CREATE SECRET `x` WITH (VALUE = $x);
-        )sql");
-        // FIXME broken test
-        // UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     }
 
     { // Named node on pure inline subquery: $x = (SELECT 1); value = $x
@@ -5277,17 +5267,6 @@ Y_UNIT_TEST(CreateSecretWithExpression) {
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     }
 
-    { // Named node on named node: $y = 1; $x = $y; value = $x
-        auto res = SqlToYql(R"sql(
-            USE plato;
-            $y = 1;
-            $x = $y;
-            CREATE SECRET `x` WITH (VALUE = $x);
-        )sql");
-        // FIXME broken test
-        // UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    }
-
     { // Pure inline subquery: value = (SELECT 1)
         NSQLTranslation::TTranslationSettings settings;
         settings.LangVer = NYql::MakeLangVersion(2025, 4);
@@ -5306,6 +5285,29 @@ Y_UNIT_TEST(CreateSecretWithExpression) {
             CREATE SECRET `x` WITH (VALUE = (SELECT Max(value) FROM secrets));
         )sql", settings);
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(CreateSecretWithExpressionFail) {
+    { // Named node on literal: $x = 1; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $x = 1;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:45: Error: Unsupported type for parameter: VALUE. String was expected\n");
+    }
+
+    { // Named node on named node: $y = 1; $x = $y; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $y = 1;
+            $x = $y;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:45: Error: Unsupported type for parameter: VALUE. String was expected\n");
     }
 }
 

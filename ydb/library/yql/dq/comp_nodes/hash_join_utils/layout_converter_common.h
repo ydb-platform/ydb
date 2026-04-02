@@ -49,21 +49,36 @@ struct TPackResult {
         using element_type = const TSingleTuple;
         using pointer = element_type *;
         using reference = element_type &;
+        using iterator_category = std::random_access_iterator_tag;
     private:
         const TPackResult* base;
         i32 index;
-        i32 Width() const {
-            return base->PackedTuples.size() / base->NTuples;
-        }
+        i32 Width_;  // cached to avoid per-element division
     public:
         Iterator() { MKQL_ENSURE(false,"Not implemented"); }
-        Iterator(const TPackResult& pack, i32 idx) : base(&pack), index(idx) {}
-        element_type operator*() const { return {.PackedData = base->PackedTuples.data() + Width()*index, .OverflowBegin = base->Overflow.data()}; }
+        Iterator(const TPackResult& pack, i32 idx)
+            : base(&pack)
+            , index(idx)
+            , Width_(pack.NTuples > 0 ? static_cast<i32>(pack.PackedTuples.size() / pack.NTuples) : 0)
+        {}
+        element_type operator*() const { return {.PackedData = base->PackedTuples.data() + static_cast<size_t>(Width_)*index, .OverflowBegin = base->Overflow.data()}; }
         auto &operator++() { index++; return *this; }
         auto operator++(int) { auto tmp = *this; ++(*this); return tmp; }
+        auto &operator--() { index--; return *this; }
+        auto operator--(int) { auto tmp = *this; --(*this); return tmp; }
+        Iterator& operator+=(difference_type n) { index += n; return *this; }
+        Iterator& operator-=(difference_type n) { index -= n; return *this; }
+        Iterator operator+(difference_type n) const { auto tmp = *this; tmp.index += n; return tmp; }
+        Iterator operator-(difference_type n) const { auto tmp = *this; tmp.index -= n; return tmp; }
+        difference_type operator-(const Iterator& other) const { return static_cast<difference_type>(index) - other.index; }
+        friend Iterator operator+(difference_type n, const Iterator& it) { return it + n; }
         auto begin() {return Iterator(*base, 0);}
         auto end() {return Iterator(*base, base->NTuples);}
         bool operator==(const Iterator& other) const = default;
+        bool operator<(const Iterator& other) const { return index < other.index; }
+        bool operator>(const Iterator& other) const { return index > other.index; }
+        bool operator<=(const Iterator& other) const { return index <= other.index; }
+        bool operator>=(const Iterator& other) const { return index >= other.index; }
     };
 
     auto begin() const {return Iterator(*this, 0);}

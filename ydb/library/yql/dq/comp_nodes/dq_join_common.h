@@ -295,11 +295,10 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (FetchedPack_.has_value()) {
-            ui32 idx = 0;
-            for (TSingleTuple probeTuple : *FetchedPack_) {
-                if (idx++ < ResumeIndex_) {
-                    continue;
-                }
+            ui32 idx = ResumeIndex_;
+            for (auto it = FetchedPack_->begin() + ResumeIndex_; it != FetchedPack_->end(); ++it) {
+                TSingleTuple probeTuple = *it;
+                ++idx;
                 Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                 });
@@ -321,7 +320,7 @@ template <typename Source> class TInMemoryHashJoin {
                 ResumeIndex_ = 0;
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
-                    idx++;
+                    ++idx;
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
@@ -692,11 +691,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
-                    if (idx++ < state.ResumeIndex) {
-                        continue;
-                    }
+                ui32 idx = state.ResumeIndex;
+                for (auto it = state.FetchedPack->begin() + state.ResumeIndex; it != state.FetchedPack->end(); ++it) {
+                    TSingleTuple tuple = *it;
+                    ++idx;
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
@@ -767,11 +765,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        ui32 idx = 0;
-                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
-                            if (idx++ < table->ProbeResumeIndex) {
-                                continue;
-                            }
+                        ui32 idx = table->ProbeResumeIndex;
+                        for (auto it = table->CurrentProbePack->begin() + table->ProbeResumeIndex; it != table->CurrentProbePack->end(); ++it) {
+                            TSingleTuple probeTuple = *it;
+                            ++idx;
                             lookupToTable(table->Table, probeTuple);
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;

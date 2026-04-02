@@ -36,6 +36,13 @@ struct IColumnDataExtractor {
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
+
+    // Direct extraction from a packed row byte pointer (null check is caller's responsibility).
+    // Only valid for fixed-size columns — callers must check SupportsDirectExtract() first.
+    virtual NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* ptr) const = 0;
+
+    // Returns true if this extractor supports ExtractFixed() (i.e., is fixed-size and single-column).
+    virtual bool SupportsDirectExtract() const = 0;
 };
 
 // ------------------------------------------------------------
@@ -129,6 +136,12 @@ public:
         packers.push_back(this);
     }
 
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* ptr) const override {
+        return NYql::NUdf::TUnboxedValuePod(ReadUnaligned<TLayout>(ptr));
+    }
+
+    bool SupportsDirectExtract() const override { return true; }
+
 protected:
     TType* Type_;
 };
@@ -196,6 +209,12 @@ public:
         packers.push_back(this);
     }
 
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* ptr) const override {
+        return *reinterpret_cast<const NYql::NUdf::TUnboxedValue*>(ptr);
+    }
+
+    bool SupportsDirectExtract() const override { return true; }
+
 protected:
     TType* Type_;
 };
@@ -238,6 +257,12 @@ public:
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
+
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* /*ptr*/) const override {
+        return NYql::NUdf::TUnboxedValuePod::Void();
+    }
+
+    bool SupportsDirectExtract() const override { return true; }
 };
 
 template <bool Nullable>
@@ -395,6 +420,13 @@ public:
         packers.push_back(this);
     }
 
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* /*ptr*/) const override {
+        Y_ENSURE(false, "String columns do not support direct extraction");
+        return {};
+    }
+
+    bool SupportsDirectExtract() const override { return false; }
+
 protected:
     TType* Type_;
 };
@@ -468,6 +500,13 @@ public:
         }
     }
 
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* /*ptr*/) const override {
+        Y_ENSURE(false, "Tuple columns do not support single-pointer direct extraction");
+        return {};
+    }
+
+    bool SupportsDirectExtract() const override { return false; }
+
 protected:
     std::vector<IColumnDataExtractor::TPtr> Children_;
     TType* Type_;
@@ -521,6 +560,12 @@ public:
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
+
+    NYql::NUdf::TUnboxedValue ExtractFixed(const ui8* ptr) const override {
+        return Inner_->ExtractFixed(ptr);
+    }
+
+    bool SupportsDirectExtract() const override { return Inner_->SupportsDirectExtract(); }
 
 private:
     IColumnDataExtractor::TPtr Inner_;
@@ -637,6 +682,25 @@ public:
         // For tempStorage we need approximately 3 buffers per column
         // (data + bitmap + optional offset/string data)
         ReusableTempStorage_.reserve(InnerExtractors_.size() * 3);
+
+        // Precompute direct-extraction info for each outer column.
+        // Requires: exactly one inner column per outer, all fixed-size.
+        bool canDirect = true;
+        DirectExtractInfo_.reserve(Extractors_.size());
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            const auto& mapping = InnerMapping_[i];
+            if (mapping.size() != 1) { canDirect = false; break; }
+            ui32 innerIdx = mapping[0];
+            if (!InnerExtractors_[innerIdx]->SupportsDirectExtract()) { canDirect = false; break; }
+            // OrigColumns[innerIdx].Offset   = byte offset of value in packed row
+            // OrigColumns[innerIdx].ColumnIndex = bitmask bit position (1 = not null)
+            DirectExtractInfo_.push_back({
+                TupleLayout_->OrigColumns[innerIdx].Offset,
+                TupleLayout_->OrigColumns[innerIdx].ColumnIndex,
+                InnerExtractors_[innerIdx],
+            });
+        }
+        CanDirectExtract_ = canDirect;
     }
 
     void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) override {
@@ -788,11 +852,104 @@ public:
         }
     }
 
+    void UnpackAll(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) override {
+        if (packed.NTuples == 0) {
+            return;
+        }
+
+        // O(N): compute column sizes once for all tuples
+        std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
+        TupleLayout_->CalculateColumnSizes(
+            packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
+
+        Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
+            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << InnerExtractors_.size());
+
+        TVector<TVector<ui8>> columnsDataStorage;
+        TVector<TVector<ui8>> columnsNullBitmapStorage;
+        TVector<ui8*> columnsData;
+        TVector<ui8*> columnsNullBitmap;
+
+        for (size_t i = 0; i < InnerExtractors_.size(); ++i) {
+            auto* packer = InnerExtractors_[i];
+            if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                columnsDataStorage.emplace_back((packed.NTuples + 1) * sizeof(ui32));
+                std::memset(columnsDataStorage.back().data(), 0, (packed.NTuples + 1) * sizeof(ui32));
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                columnsNullBitmapStorage.emplace_back(1);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            } else {
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            }
+        }
+
+        // Unpack all N tuples at once — the key O(N) step
+        TupleLayout_->Unpack(
+            columnsData.data(), columnsNullBitmap.data(),
+            packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
+
+        // Pre-compute pointer offsets for each extractor (done once, not per tuple)
+        std::vector<size_t> pointerOffsets(Extractors_.size());
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            const auto& mapping = InnerMapping_[i];
+            size_t off = 0;
+            for (size_t j = 0; j < mapping.front(); ++j) {
+                off += (InnerExtractors_[j]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) ? 2 : 1;
+            }
+            pointerOffsets[i] = off;
+        }
+
+        const ui32 numColumns = static_cast<ui32>(Extractors_.size());
+        for (ui32 tupleIndex = 0; tupleIndex < static_cast<ui32>(packed.NTuples); ++tupleIndex) {
+            for (size_t i = 0; i < Extractors_.size(); ++i) {
+                values[tupleIndex * numColumns + i] = Extractors_[i]->CreateFromUnpack(
+                    columnsData.data() + pointerOffsets[i],
+                    columnsNullBitmap.data() + pointerOffsets[i],
+                    tupleIndex,
+                    HolderFactory_);
+            }
+        }
+    }
+
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
     }
 
+    bool CanDirectExtract() const override {
+        return CanDirectExtract_;
+    }
+
+    NYql::NUdf::TUnboxedValue ExtractSingleValue(TSingleTuple tuple, int outerColIdx) const override {
+        Y_DEBUG_ABORT_UNLESS(CanDirectExtract_);
+        const auto& info = DirectExtractInfo_[outerColIdx];
+        // Bitmask convention: bit = 1 means NOT null. Check null before reading value.
+        ui8 bitmaskByte = tuple.PackedData[TupleLayout_->BitmaskOffset + info.BitmaskBit / 8];
+        if (!(bitmaskByte & (1u << (info.BitmaskBit % 8)))) {
+            return NYql::NUdf::TUnboxedValuePod();
+        }
+        return info.Extractor->ExtractFixed(tuple.PackedData + info.ValueOffset);
+    }
+
 private:
+    struct TDirectExtractInfo {
+        ui32 ValueOffset;  // byte offset of the value within the packed row
+        ui32 BitmaskBit;   // bit index in the bitmask for the null flag (bit=1 → not null)
+        IColumnDataExtractor* Extractor;
+    };
+
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
@@ -804,6 +961,10 @@ private:
     TVector<const ui8*> ReusableColumnsNullBitmap_;
     TVector<TVector<ui8>> ReusableTempStorage_;
     size_t MaxPointersNeeded_;
+
+    // Precomputed info for direct extraction (valid when CanDirectExtract_ == true)
+    TVector<TDirectExtractInfo> DirectExtractInfo_;
+    bool CanDirectExtract_ = false;
 };
 
 } // anonymous namespace

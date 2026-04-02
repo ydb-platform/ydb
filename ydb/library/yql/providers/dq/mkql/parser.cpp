@@ -153,10 +153,6 @@ TRuntimeNode BuildParseCall(
     bool useBlocks,
     const TVector<TString>* csvHeaderlessColumnOrder)
 {
-    TString formatFull(format);
-    const size_t bracePos = formatFull.find('{');
-    const TStringBuf formatBase = bracePos == TString::npos ? TStringBuf(formatFull) : TStringBuf(formatFull.data(), bracePos);
-
     const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
     const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
@@ -216,7 +212,7 @@ TRuntimeNode BuildParseCall(
         input = WrapWithDecompress(input, inputItemType, compression, ctx);
     }
 
-    if (formatBase == "raw"sv) {
+    if (format == "raw"sv) {
         auto parseLambda = [&](TRuntimeNode item) {
             if (parseItemStructType->GetMembersCount() == 0) {
                 return ctx.ProgramBuilder.NewStruct(parseItemType, {});
@@ -257,7 +253,7 @@ TRuntimeNode BuildParseCall(
                 return parseLambda(item);
             }
         );
-    } else if (formatBase == "json_list"sv) {
+    } else if (format == "json_list"sv) {
         auto parseToListLambda = [&](TRuntimeNode blob) {
             const auto json = ctx.ProgramBuilder.StrictFromString(
                 blob,
@@ -327,8 +323,6 @@ TRuntimeNode BuildParseCall(
         }
 
         const bool csvVirtualHeader = csvHeaderlessColumnOrder && !csvHeaderlessColumnOrder->empty();
-        MKQL_ENSURE(!csvVirtualHeader || bracePos == TString::npos,
-            "csv format with virtual column list (columns_list) must not use {...} suffix on format name");
         if (csvVirtualHeader) {
             writer.Write("with_names_use_header", false);
             writer.Write("empty_as_default", true);
@@ -346,12 +340,12 @@ TRuntimeNode BuildParseCall(
             settingsAsJson.clear();
         }
 
-        TString formatForCh = TString{formatBase};
+        TString formatForCh(format);
         if (csvVirtualHeader && formatForCh == "csv"sv) {
             formatForCh = "csv_with_names";
         }
 
-        TString typeConfig = csvVirtualHeader ? formatForCh : formatFull;
+        TString typeConfig = csvVirtualHeader ? formatForCh : TString(format);
         if (!settingsAsJson.empty()) {
             typeConfig += settingsAsJson;
         }

@@ -2357,6 +2357,14 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+
+        // format=csv (no header row): SCHEMA supplies names via file_column_names. If with_names_use_header
+        // stays true, CSVRowInputFormat reads the first data line as header; values like "aa" are then
+        // treated as column names and NOT NULL columns from SCHEMA are reported missing.
+        if (format == "csv" && !readSpec->Settings.csv.file_column_names.empty()) {
+            readSpec->Settings.with_names_use_header = false;
+        }
+
         ui64 sizeLimit = std::numeric_limits<ui64>::max();
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
             sizeLimit = FromString<ui64>(it->second);

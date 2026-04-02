@@ -127,6 +127,9 @@ std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::DoGetChunkedArray(c
         chunks.insert(chunks.end(), arr->chunks().begin(), arr->chunks().end());
         pos += i->GetRecordsCount();
     }
+    if (chunks.empty()) {
+        return std::make_shared<arrow::ChunkedArray>(arrow::ArrayVector(), GetDataType());
+    }
     return std::make_shared<arrow::ChunkedArray>(std::move(chunks));
 }
 

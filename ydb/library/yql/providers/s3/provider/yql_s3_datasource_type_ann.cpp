@@ -560,10 +560,19 @@ public:
                 return TStatus::Error;
             }
 
-            if (format == "csv"sv && input->ChildrenSize() <= TS3ReadObject::idx_ColumnOrder) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    "csv format requires SCHEMA with explicitly listed column names to determine column order"));
-                return TStatus::Error;
+            if (format == "csv"sv) {
+                static constexpr TStringBuf CsvRequiresExplicitSchemaColumnNames =
+                    "csv format requires SCHEMA with explicitly listed column names to determine column order"sv;
+                if (input->ChildrenSize() <= TS3ReadObject::idx_ColumnOrder) {
+                    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                    return TStatus::Error;
+                }
+                const auto* columnOrder = input->Child(TS3ReadObject::idx_ColumnOrder);
+                // userschema can supply an empty atom list as the column-order tail (SCHEMA = ()) тАФ same as missing order.
+                if (!columnOrder->IsList() || columnOrder->ChildrenSize() == 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(columnOrder->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                    return TStatus::Error;
+                }
             }
 
             // Filter

@@ -10,6 +10,7 @@
 
 #include <compare>
 #include <functional>
+#include <tuple>
 
 namespace NKikimr::NPQ {
 

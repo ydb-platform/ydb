@@ -2308,7 +2308,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         }
 
         if (format == "csv") {
-            const auto& columnNames = params.GetColumnNames();
+            const auto& columnNames = params.GetUserSchemaColumns();
             readSpec->Settings.csv.file_column_names.assign(columnNames.begin(), columnNames.end());
         }
 

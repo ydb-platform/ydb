@@ -454,9 +454,9 @@ public:
                         if (key == UserSchemaColumnsSetting) {
                             // Value is a list of column name atoms тАФ iterate without string parsing.
                             const auto columnCount = valueNode.ChildrenSize();
-                            srcDesc.MutableColumnNames()->Reserve(columnCount);
+                            srcDesc.MutableUserSchemaColumns()->Reserve(columnCount);
                             for (size_t j = 0U; j < columnCount; ++j) {
-                                srcDesc.AddColumnNames(TString(valueNode.Child(j)->Content()));
+                                srcDesc.AddUserSchemaColumns(TString(valueNode.Child(j)->Content()));
                             }
                         } else {
                             srcDesc.MutableSettings()->insert(

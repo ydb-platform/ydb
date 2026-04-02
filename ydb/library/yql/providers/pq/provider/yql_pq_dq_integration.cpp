@@ -320,7 +320,7 @@ public:
                             YQL_ENSURE(list.IsList(), "UserSchemaColumns must be a list of atoms");
                             for (ui32 j = 0; j < list.ChildrenSize(); ++j) {
                                 YQL_ENSURE(list.Child(j)->IsAtom(), "UserSchemaColumns must be a list of atoms");
-                                srcDesc.AddColumnNames(TString(list.Child(j)->Content()));
+                                srcDesc.AddUserSchemaColumns(TString(list.Child(j)->Content()));
                             }
                         }
                     }
@@ -368,7 +368,7 @@ public:
                 }
 
                 // Proto Columns / ColumnTypes: same order as annotated row struct (fullRowType), not DqPqTopicSource.Columns expr.
-                // ColumnNames from UserSchemaColumns: userschema order for headerless csv (same role as S3 TSource.ColumnNames).
+                // UserSchemaColumns from UserSchemaColumns setting: userschema order for headerless csv.
                 for (const auto* item : fullRowType->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));

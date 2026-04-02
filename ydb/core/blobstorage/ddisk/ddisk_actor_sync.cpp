@@ -149,7 +149,7 @@ namespace NKikimr::NDDisk {
                 return;
             }
 
-            if (selector.OffsetInBytes % BlockSize || selector.Size % BlockSize || !selector.Size) {
+            if (selector.OffsetInBytes % DiskFormat->SectorSize || selector.Size % DiskFormat->SectorSize || !selector.Size) {
                 reject(NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     "offset and size must be multiple of block size and size must be nonzero");
                 return;

@@ -1150,7 +1150,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const ui32 srcPDiskId = 98;
         const ui32 srcSlotId = 1;
         TActorId fakeSourceEdge = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
-        TActorId fakeSourceServiceId = MakeBlobStorageDDiskId(NodeId, srcPDiskId, srcSlotId);
+        TActorId fakeSourceServiceId = MakeBlobStoragePersistentBufferId(NodeId, srcPDiskId, srcSlotId);
         ctx.Runtime.RegisterService(fakeSourceServiceId, fakeSourceEdge);
 
         const TString payload = MakeData('P', BlockSize);

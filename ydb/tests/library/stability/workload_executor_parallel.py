@@ -36,13 +36,14 @@ class ParallelWorkloadTestBase:
     event_process_mode: str = get_external_param('event_process_mode', None)  # one of: save, send, both
     ignore_stderr_content: str = external_param_is_true('ignore_stderr_content')
     ydb_database = get_external_param('ydb-db', '/Root/db1').lstrip('/')
+    static_location = get_external_param('nemesis-static-location', None)
 
     @pytest.fixture(autouse=True, scope="session")
     def binary_deployer(self):
         binaries_deploy_path: str = (
             "/tmp/stress_binaries/"
         )
-        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location='/home/pefavel/ydbwork/ydb/ydb/tests/stability/nemesis/static')
+        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location=self.static_location)
         yield deployer
         teardown_log: list[str] = []
         deployer._manage_nemesis(False, [], 'teardown', teardown_log)

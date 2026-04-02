@@ -8,7 +8,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/http/simple/http_client.h>
 
-#include <util/system/spinlock.h>
+#include <mutex>
 
 using namespace yandex::cloud::iam::v1;
 
@@ -28,13 +28,15 @@ public:
     std::string GetAuthInfo() const override {
         std::string ticket;
         TInstant nextTicketUpdate;
-        with_lock (Lock_) {
+        {
+            std::lock_guard lock(Lock_);
             ticket = Ticket_;
             nextTicketUpdate = NextTicketUpdate_;
         }
         if (TInstant::Now() >= nextTicketUpdate) {
             GetTicket();
-            with_lock (Lock_) {
+            {
+                std::lock_guard lock(Lock_);
                 ticket = Ticket_;
             }
         }
@@ -48,7 +50,7 @@ public:
 private:
     TSimpleHttpClient HttpClient_;
     std::string Request_;
-    mutable TAdaptiveLock Lock_;
+    mutable std::mutex Lock_;
     mutable std::string Ticket_;
     mutable TInstant NextTicketUpdate_;
     TDuration RefreshPeriod_;
@@ -70,25 +72,33 @@ private:
             else if (ticket = it->second.GetStringSafe(); ticket.empty())
                 ythrow yexception() << "Got empty ticket";
 
+            const auto now = TInstant::Now();
             TInstant nextUpdate;
             TDuration expiresIn;
-            if (auto it = respMap.find("expires_in"); it != respMap.end() && it->second.GetUInteger() > 0) {
-                expiresIn = TDuration::Seconds(it->second.GetUInteger());
+            if (auto it = respMap.find("expires_in"); it != respMap.end()) {
+                auto seconds = it->second.GetUInteger();
+                if (seconds > 0) {
+                    expiresIn = TDuration::Seconds(seconds);
+                }
             } else if (auto it = respMap.find("expiry"); it != respMap.end()) {
-                TInstant expiry;
-                if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > TInstant::Now()) {
-                    expiresIn = expiry - TInstant::Now();
+                try {
+                    TInstant expiry;
+                    if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > now) {
+                        expiresIn = expiry - now;
+                    }
+                } catch (...) {
                 }
             }
             if (expiresIn > TDuration::Zero()) {
                 const auto halfLife = expiresIn / 2;
                 const auto interval = std::max(std::min(halfLife, RefreshPeriod_), TDuration::MilliSeconds(100));
-                nextUpdate = TInstant::Now() + interval;
+                nextUpdate = now + interval;
             } else {
-                nextUpdate = TInstant::Now() + std::min(RefreshPeriod_, TDuration::Minutes(30));
+                nextUpdate = now + std::min(RefreshPeriod_, TDuration::Minutes(30));
             }
 
-            with_lock (Lock_) {
+            {
+                std::lock_guard lock(Lock_);
                 Ticket_ = std::move(ticket);
                 NextTicketUpdate_ = nextUpdate;
             }

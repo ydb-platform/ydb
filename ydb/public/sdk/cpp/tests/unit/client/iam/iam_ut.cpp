@@ -3,10 +3,13 @@
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/http/server/response.h>
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/testing/unittest/registar.h>
+
 #include <library/cpp/testing/unittest/tests_data.h>
 
-#include <util/system/thread.h>
+#include <gtest/gtest.h>
+
+#include <mutex>
+#include <thread>
 
 using namespace NYdb;
 
@@ -19,7 +22,8 @@ public:
         {}
 
         bool DoReply(const TReplyParams& params) override {
-            with_lock (Server->Lock) {
+            {
+                std::lock_guard lock(Server->Lock);
                 ++Server->RequestCount;
             }
 
@@ -48,21 +52,19 @@ public:
         return new TRequest(this);
     }
 
-    void SetResponse(HttpCodes code, const TString& response) {
+    void SetResponse(HttpCodes code, const std::string& response) {
         StatusCode = code;
         Response = response;
     }
 
     int GetRequestCount() const {
-        with_lock (Lock) {
-            return RequestCount;
-        }
+        std::lock_guard lock(Lock);
+        return RequestCount;
     }
 
     void ResetRequestCount() {
-        with_lock (Lock) {
-            RequestCount = 0;
-        }
+        std::lock_guard lock(Lock);
+        RequestCount = 0;
     }
 
     TPortManager PortManager;
@@ -70,12 +72,12 @@ public:
     THttpServer::TOptions HttpOptions;
     THttpServer HttpServer;
     HttpCodes StatusCode = HTTP_OK;
-    TString Response;
-    mutable TAdaptiveLock Lock;
+    std::string Response;
+    mutable std::mutex Lock;
     int RequestCount = 0;
 };
 
-static TString MakeTokenResponse(const TString& token, int expiresIn) {
+static std::string MakeTokenResponse(const std::string& token, int expiresIn) {
     TStringStream ss;
     NJson::TJsonWriter w(&ss, false);
     w.OpenMap();
@@ -90,7 +92,7 @@ static TString MakeTokenResponse(const TString& token, int expiresIn) {
     return ss.Str();
 }
 
-static TString MakeTokenResponseWithExpiry(const TString& token, const TInstant& expiry) {
+static std::string MakeTokenResponseWithExpiry(const std::string& token, const TInstant& expiry) {
     TStringStream ss;
     NJson::TJsonWriter w(&ss, false);
     w.OpenMap();
@@ -105,7 +107,7 @@ static TString MakeTokenResponseWithExpiry(const TString& token, const TInstant&
     return ss.Str();
 }
 
-static TString MakeTokenResponseNoExpiry(const TString& token) {
+static std::string MakeTokenResponseNoExpiry(const std::string& token) {
     TStringStream ss;
     NJson::TJsonWriter w(&ss, false);
     w.OpenMap();
@@ -118,117 +120,114 @@ static TString MakeTokenResponseNoExpiry(const TString& token) {
     return ss.Str();
 }
 
-Y_UNIT_TEST_SUITE(IamCredentialsProvider) {
-    Y_UNIT_TEST(BasicTokenFetch) {
-        TMetadataServer server;
-        server.SetResponse(HTTP_OK, MakeTokenResponse("test-token-123", 3600));
+TEST(IamCredentialsProvider, BasicTokenFetch) {
+    TMetadataServer server;
+    server.SetResponse(HTTP_OK, MakeTokenResponse("test-token-123", 3600));
 
-        TIamHost params;
-        params.Host = "localhost";
-        params.Port = server.Port;
-        params.RefreshPeriod = TDuration::Hours(1);
+    TIamHost params;
+    params.Host = "localhost";
+    params.Port = server.Port;
+    params.RefreshPeriod = TDuration::Hours(1);
 
-        auto factory = CreateIamCredentialsProviderFactory(params);
-        auto provider = factory->CreateProvider();
+    auto factory = CreateIamCredentialsProviderFactory(params);
+    auto provider = factory->CreateProvider();
 
-        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "test-token-123");
-    }
+    EXPECT_EQ(provider->GetAuthInfo(), "test-token-123");
+}
 
-    Y_UNIT_TEST(ExpiryFieldSupport) {
-        TMetadataServer server;
-        auto expiry = TInstant::Now() + TDuration::Hours(12);
-        server.SetResponse(HTTP_OK, MakeTokenResponseWithExpiry("expiry-token", expiry));
+TEST(IamCredentialsProvider, ExpiryFieldSupport) {
+    TMetadataServer server;
+    auto expiry = TInstant::Now() + TDuration::Hours(12);
+    server.SetResponse(HTTP_OK, MakeTokenResponseWithExpiry("expiry-token", expiry));
 
-        TIamHost params;
-        params.Host = "localhost";
-        params.Port = server.Port;
-        params.RefreshPeriod = TDuration::Hours(1);
+    TIamHost params;
+    params.Host = "localhost";
+    params.Port = server.Port;
+    params.RefreshPeriod = TDuration::Hours(1);
 
-        auto factory = CreateIamCredentialsProviderFactory(params);
-        auto provider = factory->CreateProvider();
+    auto factory = CreateIamCredentialsProviderFactory(params);
+    auto provider = factory->CreateProvider();
 
-        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "expiry-token");
+    EXPECT_EQ(provider->GetAuthInfo(), "expiry-token");
 
-        // Second call should not trigger refresh (token is still valid)
-        int countBefore = server.GetRequestCount();
-        provider->GetAuthInfo();
-        UNIT_ASSERT_VALUES_EQUAL(server.GetRequestCount(), countBefore);
-    }
+    // Second call should not trigger refresh (token is still valid)
+    int countBefore = server.GetRequestCount();
+    provider->GetAuthInfo();
+    EXPECT_EQ(server.GetRequestCount(), countBefore);
+}
 
-    Y_UNIT_TEST(NoExpiryFieldFallback) {
-        TMetadataServer server;
-        server.SetResponse(HTTP_OK, MakeTokenResponseNoExpiry("no-expiry-token"));
+TEST(IamCredentialsProvider, NoExpiryFieldFallback) {
+    TMetadataServer server;
+    server.SetResponse(HTTP_OK, MakeTokenResponseNoExpiry("no-expiry-token"));
 
-        TIamHost params;
-        params.Host = "localhost";
-        params.Port = server.Port;
-        params.RefreshPeriod = TDuration::Hours(1);
+    TIamHost params;
+    params.Host = "localhost";
+    params.Port = server.Port;
+    params.RefreshPeriod = TDuration::Hours(1);
 
-        auto factory = CreateIamCredentialsProviderFactory(params);
-        auto provider = factory->CreateProvider();
+    auto factory = CreateIamCredentialsProviderFactory(params);
+    auto provider = factory->CreateProvider();
 
-        // Token should be saved even without expires_in/expiry
-        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "no-expiry-token");
+    // Token should be saved even without expires_in/expiry
+    EXPECT_EQ(provider->GetAuthInfo(), "no-expiry-token");
 
-        // Should not immediately refresh (fallback interval should be > 0)
-        int countBefore = server.GetRequestCount();
-        provider->GetAuthInfo();
-        UNIT_ASSERT_VALUES_EQUAL(server.GetRequestCount(), countBefore);
-    }
+    // Should not immediately refresh (fallback interval should be > 0)
+    int countBefore = server.GetRequestCount();
+    provider->GetAuthInfo();
+    EXPECT_EQ(server.GetRequestCount(), countBefore);
+}
 
-    Y_UNIT_TEST(ServerError) {
-        TMetadataServer server;
-        server.SetResponse(HTTP_INTERNAL_SERVER_ERROR, "");
+TEST(IamCredentialsProvider, ServerError) {
+    TMetadataServer server;
+    server.SetResponse(HTTP_INTERNAL_SERVER_ERROR, "");
 
-        TIamHost params;
-        params.Host = "localhost";
-        params.Port = server.Port;
+    TIamHost params;
+    params.Host = "localhost";
+    params.Port = server.Port;
 
-        auto factory = CreateIamCredentialsProviderFactory(params);
-        auto provider = factory->CreateProvider();
+    auto factory = CreateIamCredentialsProviderFactory(params);
+    auto provider = factory->CreateProvider();
 
-        // Constructor GetTicket() fails, token should be empty
-        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), "");
-    }
+    // Constructor GetTicket() fails, token should be empty
+    EXPECT_EQ(provider->GetAuthInfo(), "");
+}
 
-    Y_UNIT_TEST(ConcurrentAccess) {
-        TMetadataServer server;
-        server.SetResponse(HTTP_OK, MakeTokenResponse("concurrent-token", 3600));
+TEST(IamCredentialsProvider, ConcurrentAccess) {
+    TMetadataServer server;
+    server.SetResponse(HTTP_OK, MakeTokenResponse("concurrent-token", 3600));
 
-        TIamHost params;
-        params.Host = "localhost";
-        params.Port = server.Port;
-        params.RefreshPeriod = TDuration::MilliSeconds(1); // Force frequent refreshes
+    TIamHost params;
+    params.Host = "localhost";
+    params.Port = server.Port;
+    params.RefreshPeriod = TDuration::MilliSeconds(1); // Force frequent refreshes
 
-        auto factory = CreateIamCredentialsProviderFactory(params);
-        auto provider = factory->CreateProvider();
+    auto factory = CreateIamCredentialsProviderFactory(params);
+    auto provider = factory->CreateProvider();
 
-        constexpr int NUM_THREADS = 8;
-        constexpr int ITERATIONS = 100;
+    constexpr int NUM_THREADS = 8;
+    constexpr int ITERATIONS = 100;
 
-        std::vector<THolder<TThread>> threads;
-        std::atomic<int> errors{0};
+    std::vector<std::unique_ptr<std::thread>> threads;
+    std::atomic<int> errors{0};
 
-        for (int i = 0; i < NUM_THREADS; ++i) {
-            threads.push_back(MakeHolder<TThread>([&]() {
-                for (int j = 0; j < ITERATIONS; ++j) {
-                    try {
-                        auto token = provider->GetAuthInfo();
-                        if (token != "concurrent-token") {
-                            errors.fetch_add(1);
-                        }
-                    } catch (...) {
+    for (int i = 0; i < NUM_THREADS; ++i) {
+        threads.push_back(std::make_unique<std::thread>([&]() {
+            for (int j = 0; j < ITERATIONS; ++j) {
+                try {
+                    auto token = provider->GetAuthInfo();
+                    if (token != "concurrent-token") {
                         errors.fetch_add(1);
                     }
+                } catch (...) {
+                    errors.fetch_add(1);
                 }
-            }));
-            threads.back()->Start();
-        }
-
-        for (auto& t : threads) {
-            t->Join();
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(errors.load(), 0);
+            }
+        }));
     }
+
+    for (auto& t : threads) {
+        t->join();
+    }
+
+    EXPECT_EQ(errors.load(), 0);
 }

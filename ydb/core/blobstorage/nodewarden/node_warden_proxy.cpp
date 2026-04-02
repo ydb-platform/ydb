@@ -142,31 +142,15 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
     } else if (groupId.ConfigurationType() == EGroupConfigurationType::Static && !Groups.count(id)) {
-        // for static groups, try to find the group configuration in Cfg and apply it
-        bool found = false;
-        if (Cfg->BlobStorageConfig.HasServiceSet()) {
-            for (const auto& groupProto : Cfg->BlobStorageConfig.GetServiceSet().GetGroups()) {
-                if (groupProto.GetGroupID() == id) {
-                    ApplyGroupInfo(id, groupProto.GetGroupGeneration(), &groupProto, true, false);
-                    found = true;
-                    break;
-                }
-            }
+        const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
+        auto& queue = it->second;
+        TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
+        if (queue.empty()) {
+            TimeoutToQueue.emplace(expiration, &*it);
         }
-        if (!found) {
-            // group not found in static config, put request in pending queue
-            const auto [it, inserted] = GroupPendingQueue.try_emplace(id);
-            auto& queue = it->second;
-            TMonotonic expiration = TActivationContext::Monotonic() + TDuration::Seconds(5);
-            if (queue.empty()) {
-                TimeoutToQueue.emplace(expiration, &*it);
-            }
-            queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
-            return;
-        }
-    }
-
-    if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
+        queue.emplace_back(expiration, std::unique_ptr<IEventHandle>(ev.Release()));
+        return;
+    } else if (TGroupRecord& group = Groups[id]; !group.ProxyId) {
         if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
             StartVirtualGroupAgent(id);
         } else {

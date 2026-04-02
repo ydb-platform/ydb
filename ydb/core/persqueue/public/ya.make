@@ -11,9 +11,12 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/protos
+    #ydb/core/grpc_services
+    ydb/core/metering
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cloud_events
+    ydb/core/protos
+    ydb/core/tx/scheme_board
 )
 
 END()

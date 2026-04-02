@@ -1062,23 +1062,39 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, const TStructExprT
 }
 
 TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprContext& ctx, bool pgSyntax, TPositionHandle pos) {
-    if (limit->ChildrenSize() < 2 || pgSyntax) {
+    if (pgSyntax) {
         return input;
     }
+    Y_ENSURE(input->ChildrenSize() > 1);
 
     auto count = limit->ChildPtr(1);
     if (count->IsCallable("Just")) {
         count = count->ChildPtr(0);
     }
 
-    // clang-format off
-    count = Build<TCoConvert>(ctx, pos)
-        .Input(count)
-        .Type<TCoAtom>()
-            .Value("Uint64")
-        .Build()
-    .Done().Ptr();
+    if (count->IsCallable("Convert")) {
+        count = count->ChildPtr(0);
+    }
 
+    auto maybeData = TExprBase(count).Maybe<TCoDataCtor>();
+    if (maybeData) {
+        // clang-format off
+        count = Build<TCoUint64>(ctx, pos)
+            .Literal(maybeData.Cast().Literal())
+        .Done().Ptr();
+        // clang-format on
+    } else {
+        // clang-format off
+        count = Build<TCoConvert>(ctx, pos)
+            .Input(count)
+            .Type<TCoAtom>()
+                .Value("Uint64")
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+    }
+
+    // clang-format off
     return Build<TKqpOpLimit>(ctx, pos)
         .Input(input)
         .Count(count)

@@ -43,12 +43,18 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 processLambda = Read->OlapFilterLambda;
             }
 
+            TKqpReadTableSettings settings;
+            if (Read->Limit) {
+                settings.SequentialInFlight = 1;
+                settings.SetItemsLimit(Read->Limit);
+            }
+
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
                 .Ranges<TCoVoid>().Build()
                 .Columns().Add(columns).Build()
-                .Settings<TCoNameValueTupleList>().Build()
+                .Settings(settings.BuildNode(Ctx, Pos))
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Process(processLambda)
             .Done().Ptr();

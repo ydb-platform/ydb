@@ -99,7 +99,7 @@ class TestTpch10000(TpchSuiteBase):
 
 class TestTpch100000(TpchSuiteBase):
     tables_size: dict[str, int] = {
-        'lineitem': 626874358185,
+        'lineitem': 599999969200,
     }
 
     scale: int = 100000

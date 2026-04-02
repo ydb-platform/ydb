@@ -1001,28 +1001,6 @@ void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContex
     ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
 }
 
-void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
-    auto inFlightLimitReachedDuration = PartitionInFlightMemoryController.GetLimitReachedDuration();
-
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " update read metrics " << Partition
-                        << " inFlightLimitReachedDuration " << inFlightLimitReachedDuration.MilliSeconds());
-
-    NKikimrClient::TPersQueueRequest request;
-    auto req = request.MutablePartitionRequest();
-    req->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightLimitReachedDurationMs(inFlightLimitReachedDuration.MilliSeconds());
-    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetClientId(ClientId);
-
-    TAutoPtr<TEvPersQueue::TEvRequest> persqueueRequest(new TEvPersQueue::TEvRequest);
-    persqueueRequest->Record.Swap(&request);
-
-    ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
-    if (!PipeClient)
-        return;
-
-    NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());
-}
-
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
     ClientReadOffset = ev->Get()->ReadOffset;
     ClientCommitOffset = ev->Get()->CommitOffset;

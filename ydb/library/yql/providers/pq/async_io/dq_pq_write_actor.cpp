@@ -26,12 +26,11 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
-#include <util/string/cast.h>
 
 #include <algorithm>
-#include <optional>
 #include <queue>
 #include <variant>
 
@@ -102,7 +101,6 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 }
 
 } // anonymous namespace
-
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     struct TMetrics {
@@ -211,12 +209,7 @@ public:
             Finished = true;
         }
 
-        try {
-            CreateSessionIfNotExists();
-        } catch (const std::exception& e) {
-            Fail(TStringBuilder() << "Failed to initialize write session: " << e.what());
-            return;
-        }
+        CreateSessionIfNotExists();
 
         Y_ABORT_UNLESS(!batch.IsWide(), "Wide batch is not supported");
         if (!batch.ForEachRow([&](const auto& value) {

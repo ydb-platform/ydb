@@ -90,6 +90,8 @@ public:
             switch (DescribeResult->GetRecord().GetStatus()) {
                 case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                     return HandleBadRequest(ctx, "The path is not found");
+                case NKikimrScheme::EStatus::StatusAccessDenied:
+                    return HandleAccessDenied(ctx, "Access denied");
                 default:
                     return HandleBadRequest(ctx, "Error getting schema information");
             }

@@ -12,6 +12,9 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
     }
     NavigateResponse->Set(std::move(ev));
     if (NavigateResponse->IsError()) {
+        if (NavigateResponse->GetError() == "AccessDenied") {
+            return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
+        }
         return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", NavigateResponse->GetError()));
     }
     Y_ABORT_UNLESS(NavigateResponse->Get());

@@ -136,13 +136,21 @@ public:
             return;
         }
         if (SchemeCacheResponse->IsError()) {
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + SchemeCacheResponse->GetError()));
+            if (SchemeCacheResponse->GetError() == "AccessDenied") {
+                ReplyAndPassAway(TBase::GETHTTPACCESSDENIED("text/plain", "Access denied"));
+            } else {
+                ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + SchemeCacheResponse->GetError()));
+            }
             return RequestDone();
         }
         auto navigate = *SchemeCacheResponse->Get()->Request;
         auto& info = navigate.ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+            if (info.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied) {
+                ReplyAndPassAway(TBase::GETHTTPACCESSDENIED("text/plain", "Access denied"));
+            } else {
+                ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+            }
             return RequestDone();
         }
 

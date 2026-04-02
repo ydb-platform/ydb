@@ -133,7 +133,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
     TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     TVector<TString>& subtreeLabels,
-    const NYql::TOptimizerHints& hints,
+    const TEquiJoinCallbacks& callbacks,
     bool useCBO
 )
 {
@@ -147,7 +147,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         leftLabel = joinTuple.LeftScope().Cast<TCoAtom>().Value();
         YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
     } else {
-        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, lhsLabels, hints, useCBO);
+        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, lhsLabels, callbacks, useCBO);
         if (!left) {
             return {};
         }
@@ -161,7 +161,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         rightLabel = joinTuple.RightScope().Cast<TCoAtom>().Value();
         YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
     } else {
-        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, rhsLabels, hints, useCBO);
+        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, rhsLabels, callbacks, useCBO);
         if (!right) {
             return {};
         }
@@ -172,13 +172,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
 
     auto options = joinTuple.Options();
     auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
-    for (auto& hint: hints.JoinAlgoHints->Hints) {
-        if (
-            std::unordered_set<std::string>(hint.JoinLabels.begin(), hint.JoinLabels.end()) ==
-            std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
-        ) {
-            linkSettings.JoinAlgo = hint.Algo;
-            hint.Applied = true;
+    if (callbacks.GetAlgoHint) {
+        auto algo = callbacks.GetAlgoHint(subtreeLabels);
+        if (algo != EJoinAlgoType::Undefined) {
+            linkSettings.JoinAlgo = algo;
+            if (callbacks.OnAlgoHintApplied) {
+                callbacks.OnAlgoHintApplied(subtreeLabels);
+            }
         }
     }
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
@@ -522,10 +522,10 @@ TExprBase DqRewriteEquiJoin(
     bool useCBO,
     TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
-    const TOptimizerHints& hints
+    const TEquiJoinCallbacks& callbacks
 ) {
     int dummyJoinCounter = 0;
-    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter, hints);
+    return DqRewriteEquiJoin(node, mode, useCBO, ctx, typeCtx, dummyJoinCounter, callbacks);
 }
 
 /**
@@ -540,8 +540,7 @@ TExprBase DqRewriteEquiJoin(
     TExprContext& ctx,
     TTypeAnnotationContext& typeCtx,
     int& joinCounter,
-    const TOptimizerHints& hints,
-    std::function<void(const TExprNode*, const TExprNode*)> transferStats
+    const TEquiJoinCallbacks& callbacks
 ) {
     if (!node.Maybe<TCoEquiJoin>()) {
         return node;
@@ -562,13 +561,13 @@ TExprBase DqRewriteEquiJoin(
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
     TVector<TString> dummy;
-    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx, typeCtx, dummy, hints, useCBO);
+    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx, typeCtx, dummy, callbacks, useCBO);
     if (!result) {
         return node;
     }
 
-    if (transferStats) {
-        transferStats(equiJoin.Raw(), result->Input.Raw());
+    if (callbacks.TransferStats) {
+        callbacks.TransferStats(equiJoin.Raw(), result->Input.Raw());
     } else {
         auto equiJoinStats = typeCtx.GetStats(equiJoin.Raw());
         typeCtx.SetStats(result->Input.Raw(), equiJoinStats);

@@ -14,9 +14,15 @@ struct TOptimizerStatistics;
 
 namespace NDq {
 
-NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, const TOptimizerHints& hints = {});
+struct TEquiJoinCallbacks {
+    std::function<EJoinAlgoType(const TVector<TString>&)>   GetAlgoHint       = {};
+    std::function<void(const TVector<TString>&)>            OnAlgoHintApplied = {};
+    std::function<void(const TExprNode*, const TExprNode*)> TransferStats     = {};
+};
 
-NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, int& joinCounter, const TOptimizerHints& hints = {}, std::function<void(const TExprNode*, const TExprNode*)> transferStats = {});
+NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, const TEquiJoinCallbacks& callbacks = {});
+
+NNodes::TExprBase DqRewriteEquiJoin(const NNodes::TExprBase& node, EHashJoinMode mode, bool useCBO, TExprContext& ctx, TTypeAnnotationContext& typeCtx, int& joinCounter, const TEquiJoinCallbacks& callbacks = {});
 
 NNodes::TExprBase DqBuildPhyJoin(const NNodes::TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage=true);
 

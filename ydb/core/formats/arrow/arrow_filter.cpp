@@ -720,7 +720,7 @@ TColumnFilter TColumnFilter::Cut(const ui32 totalRecordsCount, const ui32 limit,
     return result;
 }
 
-TColumnFilter TColumnFilter::Reverse() const {
+TColumnFilter TColumnFilter::CreateReversed() const {
     if (IsTotalDenyFilter() || IsTotalAllowFilter()) {
         return *this;
     }

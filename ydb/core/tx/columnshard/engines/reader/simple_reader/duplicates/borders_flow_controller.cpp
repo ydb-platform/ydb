@@ -31,11 +31,12 @@ void TBordersFlowController::BuildExclusivePortions() {
         }
 
         openIntervals += currentIt->second.Start.size();
+        AFL_VERIFY(openIntervals >= currentIt->second.Finish.size());
         openIntervals -= currentIt->second.Finish.size();
     }
 
     for (auto it = Borders.begin(); it != Borders.end();) {
-        if (it->second.Start.size() == 1 && it->second.Finish.size() == 0 && ExclusivePortions.count(it->second.Start.front())) {
+        if (it->second.Start.size() == 1 && it->second.Finish.size() == 0 && ExclusivePortions.contains(it->second.Start.front())) {
             it = Borders.erase(it);
             continue;
         }

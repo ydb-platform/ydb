@@ -243,7 +243,7 @@ void TWriteRequestExecutor::SendWriteRequestsToHandoffPBuffers()
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Send write request to HOPBuffer0 since we "
+            "TWriteRequestExecutor. Send write request to HOPBuffer1 since we "
             "have %lu completed writes",
             CompletedWrites.Count());
 

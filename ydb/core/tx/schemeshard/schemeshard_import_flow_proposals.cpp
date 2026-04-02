@@ -10,8 +10,9 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+
+#include <google/protobuf/util/time_util.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -429,6 +430,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
+    using google::protobuf::util::TimeUtil;
+
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
@@ -466,6 +469,38 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         addedConsumer.SetName(consumerName);
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
+        }
+
+        addedConsumer.SetAvailabilityPeriodMs(TimeUtil::DurationToMilliseconds(consumer.availability_period()));
+        if (consumer.has_shared_consumer_type()) {
+            const auto& sharedConsumerType = consumer.shared_consumer_type();
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP);
+            addedConsumer.SetKeepMessageOrder(sharedConsumerType.keep_messages_order());
+            addedConsumer.SetDefaultProcessingTimeoutSeconds(TimeUtil::DurationToSeconds(sharedConsumerType.default_processing_timeout()));
+            addedConsumer.SetDefaultDelayMessageTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_delay()));
+            addedConsumer.SetDefaultReceiveMessageWaitTimeMs(TimeUtil::DurationToMilliseconds(sharedConsumerType.receive_message_wait_time()));
+            const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+
+            if (sharedConsumerType.has_dead_letter_policy() && deadLetterPolicy.enabled()) {
+                const auto& deadLetterPolicy = sharedConsumerType.dead_letter_policy();
+                addedConsumer.SetDeadLetterPolicyEnabled(true);
+                if (deadLetterPolicy.has_condition()) {
+                    addedConsumer.SetMaxProcessingAttempts(deadLetterPolicy.condition().max_processing_attempts());
+                }
+
+                if (deadLetterPolicy.has_move_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_MOVE);
+                    addedConsumer.SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
+                } else if (deadLetterPolicy.has_delete_action()) {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_DELETE);
+                } else {
+                    addedConsumer.SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig_EDeadLetterPolicy::TPQTabletConfig_EDeadLetterPolicy_DEAD_LETTER_POLICY_UNSPECIFIED);
+                }
+            } else {
+                addedConsumer.SetDeadLetterPolicyEnabled(false);
+            }
+        } else {
+            addedConsumer.SetType(::NKikimrPQ::TPQTabletConfig_EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING);
         }
     }
 

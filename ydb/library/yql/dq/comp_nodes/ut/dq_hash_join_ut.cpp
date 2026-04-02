@@ -740,6 +740,92 @@ TJoinTestData InnerJoinRenamesTestData() {
     return td;
 }
 
+// INNER on join column: left key is Uint64, right key is Optional<Uint64>. A NULL on the right must not match
+// a non-null left key (same row position does not imply match).
+TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKeys = {10, 20, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> expLeftIds = {1, 3};
+    TVector<ui64> expLeftKeys = {10, 30};
+    TVector<ui64> expRightIds = {1, 3};
+    TVector<std::optional<ui64>> expRightKeys = {10, 30};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData SwappedKeyColumnsInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {10, 20, 30};
+    TVector<ui64> leftCol1 = {100, 200, 300};
+    TVector<TString> leftCol2 = {"a", "b", "c"};
+
+    TVector<ui64> rightCol0 = {100, 200, 999};
+    TVector<ui64> rightCol1 = {10, 20, 99};
+    TVector<TString> rightCol2 = {"x", "y", "z"};
+
+    TVector<ui64> expLeftCol0 = {10, 20};
+    TVector<ui64> expLeftCol1 = {100, 200};
+    TVector<TString> expLeftCol2 = {"a", "b"};
+    TVector<ui64> expRightCol0 = {100, 200};
+    TVector<ui64> expRightCol1 = {10, 20};
+    TVector<TString> expRightCol2 = {"x", "y"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1, rightCol2);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2,
+                                       expRightCol0, expRightCol1, expRightCol2);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {1, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData SwappedKeyColumnsLeftSemiTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftCol0 = {10, 20, 30};
+    TVector<ui64> leftCol1 = {100, 200, 300};
+    TVector<TString> leftCol2 = {"a", "b", "c"};
+
+    TVector<ui64> rightCol0 = {100, 200, 999};
+    TVector<ui64> rightCol1 = {10, 20, 99};
+
+    TVector<ui64> expLeftCol0 = {10, 20};
+    TVector<ui64> expLeftCol1 = {100, 200};
+    TVector<TString> expLeftCol2 = {"a", "b"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftCol0, leftCol1, leftCol2);
+    td.Right = ConvertVectorsToTuples(setup, rightCol0, rightCol1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftCol0, expLeftCol1, expLeftCol2);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {1, 0};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}};
+    td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
 TJoinTestData SpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -907,6 +993,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(MixedKeysInnerTestData(), BlockJoin);
     }
 
+    Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
+        Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
+    }
+
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
         Test(EmptyInnerJoinTestData(), BlockJoin);
     }
@@ -1020,6 +1110,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     // }
     Y_UNIT_TEST_TWIN(TestInnerRenamesKind, BlockJoin) {
         Test(InnerJoinRenamesTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestSwappedKeyColumnsInner) {
+        Test(SwappedKeyColumnsInnerTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestSwappedKeyColumnsLeftSemi) {
+        Test(SwappedKeyColumnsLeftSemiTestData(), true);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

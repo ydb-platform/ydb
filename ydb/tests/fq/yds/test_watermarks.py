@@ -75,7 +75,7 @@ class TestWatermarks(TestYdsBase):
                         ts String NOT NULL,
                         pass Uint64
                     )
-                    , WATERMARK AS ({ts} - Interval("PT0.1S"))
+                    , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_GRANULARITY = "PT0.5S"
                 );
 
@@ -145,7 +145,7 @@ class TestWatermarks(TestYdsBase):
                         ts String NOT NULL,
                         pass Uint64
                     )
-                    , WATERMARK AS ({ts} - Interval("PT0.1S"))
+                    , WATERMARK = {ts} - Interval("PT0.1S")
                     , WATERMARK_IDLE_TIMEOUT = "PT0.2S"
                     , WATERMARK_GRANULARITY = "PT0.5S"
                 );

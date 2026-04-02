@@ -17,12 +17,11 @@ namespace NKikimr::NDDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Direct I/O operation context passed through io_uring.
-// Allocated on the actor thread (new), freed in OnComplete callback (delete).
+// Allocated via TDDiskActor::AllocateOp (pool-backed) or new,
+// recycled back to the pool via SelfRecycle / TDDiskActor::ReturnOp.
 class TDDiskActor::TDirectIoOpBase : public NPDisk::TUringOperationBase {
 public:
-    TDirectIoOpBase(const TActorId& ddiskId,
-                    TCounters& counters,
-                    const IEventHandle* ev = nullptr);
+    explicit TDirectIoOpBase(TDDiskActor& actor);
 
     virtual ~TDirectIoOpBase();
 
@@ -32,10 +31,15 @@ public:
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept = 0;
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept = 0;
+
+    virtual void ClearForRecycle() noexcept;
 
     void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
     void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
+
+    void Reinit(const IEventHandle* ev = nullptr);
 
     void SetSpan(NWilson::TSpan&& span) { Span = std::move(span); }
     NWilson::TSpan& GetSpan() { return Span; }
@@ -62,8 +66,10 @@ public:
     void SetResult(i32 result, TRope&& data);
 
 protected:
+    TDDiskActor& Actor;
     const TActorId DDiskId;
-    TCounters& Counters; // shared with DDisk actor
+
+    virtual void SelfRecycle() noexcept { delete this; }
 
 private:
     NHPTimer::STime StartTs;
@@ -89,12 +95,15 @@ private:
 
 class TDDiskActor::TDDiskIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TDDiskIoOp(const TActorId& ddiskId, TCounters& counters, const IEventHandle* ev = nullptr)
-    : TDirectIoOpBase(ddiskId, counters, ev)
+    explicit TDDiskIoOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
     {}
 
-    virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+
+    void SelfRecycle() noexcept override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -103,12 +112,16 @@ public:
 
 class TDDiskActor::TPersistentBufferPartIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TPersistentBufferPartIoOp(const TActorId& ddiskId, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, counters)
+    explicit TPersistentBufferPartIoOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
     {}
 
-    virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+
+    void ClearForRecycle() noexcept override;
+    void SelfRecycle() noexcept override;
 
     void SetPartCookie(ui64 partCookie) {
         PartCookie = partCookie;
@@ -130,12 +143,16 @@ private:
 
 class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
 public:
-    TInternalSyncWriteOp(const TActorId& ddiskId, TCounters& counters)
-        : TDirectIoOpBase(ddiskId, counters)
+    explicit TInternalSyncWriteOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
     {}
 
-    virtual void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status) noexcept override;
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+
+    void ClearForRecycle() noexcept override;
+    void SelfRecycle() noexcept override;
 
     void SetRequestId(ui64 requestId) {
         RequestId = requestId;

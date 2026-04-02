@@ -635,6 +635,9 @@ private:
     void ClearTaskAndPartIds(const TString& taskId) {
         TTask::TPtr task;
         with_lock(Mutex_) {
+            if (!Tasks_.contains(taskId)) {
+                return;
+            }
             task = Tasks_[taskId].Task;
         }
         ClearPreviousPartIdsForTask(task);
@@ -763,6 +766,7 @@ private:
                 if (partIdsToKeep.contains(GetTableDataServiceGroup(group.TableId, group.PartId))) {
                     continue;
                 }
+                PartIdStats_.erase(group.PartId);
                 auto tableIt = PartIdsForTables_.find(group.TableId);
                 if (tableIt != PartIdsForTables_.end()) {
                     auto& partIds = tableIt->second;

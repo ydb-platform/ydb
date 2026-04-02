@@ -5,6 +5,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -53,6 +54,12 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
 
             shared->set_keep_messages_order(in.GetKeepMessageOrder());
             shared->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+
+            shared->mutable_receive_message_wait_time()->set_seconds(in.GetDefaultReceiveMessageWaitTimeMs() / 1'000);
+            shared->mutable_receive_message_wait_time()->set_nanos((in.GetDefaultReceiveMessageWaitTimeMs() % 1'000) * 1'000'000);
+
+            shared->mutable_receive_message_delay()->set_seconds(in.GetDefaultDelayMessageTimeMs() / 1'000);
+            shared->mutable_receive_message_delay()->set_nanos((in.GetDefaultDelayMessageTimeMs() % 1'000) * 1'000'000);
 
             auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
             deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
@@ -134,6 +141,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(config.GetPartitionStrategy().GetScaleThresholdSeconds());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_down_utilization_percent(config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent());
     out.mutable_partitioning_settings()->mutable_auto_partitioning_settings()->mutable_partition_write_speed()->set_up_utilization_percent(config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent());
+
+    out.set_content_based_deduplication(config.GetContentBasedDeduplication());
 
     if (!config.GetRequireAuthWrite()) {
         (*out.mutable_attributes())["_allow_unauthenticated_write"] = "true";

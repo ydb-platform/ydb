@@ -1269,12 +1269,16 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
                 }
                 TString normalizedClusterName;
                 auto foundProvider = Ctx_.GetClusterProvider(clusterName, normalizedClusterName);
-                if (!foundProvider) {
+                if (!foundProvider && !service) {
                     Ctx_.Error() << "Unknown cluster: " << clusterName;
                     return false;
                 }
 
-                if (service && *foundProvider != service) {
+                if (!foundProvider && service) {
+                    normalizedClusterName = clusterName;
+                }
+
+                if (service && foundProvider && *foundProvider != service) {
                     Ctx_.Error() << "Mismatch of cluster " << clusterName << " service, expected: "
                                  << *foundProvider << ", got: " << service;
                     return false;
@@ -5637,33 +5641,21 @@ bool TSqlTranslation::StoreSecretInheritPermissions(
         Error() << "Duplicate parameter: " << key;
         return false;
     }
-    const NSQLv1Generated::TToken* errToken = nullptr;
-    switch (value.Alt_case()) {
-        // secret_setting_value: STRING_VALUE | bool_value | bind_parameter
-        case TRule_secret_setting_value::kAltSecretSettingValue2: {
-            if (auto inheritPermissions = ParseBool(Ctx_, value.GetAlt_secret_setting_value2().GetRule_bool_value1())) {
-                secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), *inheritPermissions ? "1" : "0");
-            } else {
-                errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
-            }
-            break;
-        }
-        case TRule_secret_setting_value::kAltSecretSettingValue1: {
-            errToken = &value.GetAlt_secret_setting_value1().GetToken1();
-            break;
-        }
-        case TRule_secret_setting_value::kAltSecretSettingValue3: {
-            errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
-            break;
-        }
-        default: {
-            return false;
-        }
-    }
-    if (errToken) {
-        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". Bool was expected";
+
+    TSqlExpression sqlExpr(*this);
+    TNodePtr exprNode = Unwrap(sqlExpr.Build(value.GetRule_expr1()));
+    if (!exprNode) {
         return false;
     }
+    bool boolVal = false;
+    if (!exprNode->IsLiteral() ||
+        exprNode->GetLiteralType() != "Bool" ||
+        !TryFromString<bool>(exprNode->GetLiteralValue(), boolVal)) {
+        Ctx_.Error(Ctx_.Pos()) << "Unsupported value for parameter: " << key << ". Bool was expected";
+        return false;
+    }
+
+    secretParams.InheritPermissions = TDeferredAtom(Ctx_.Pos(), boolVal ? "1" : "0");
     return true;
 }
 
@@ -5675,38 +5667,20 @@ bool TSqlTranslation::StoreSecretValue(
         Error() << "Duplicate parameter: " << key;
         return false;
     }
-    const NSQLv1Generated::TToken* errToken = nullptr;
-    switch (value.Alt_case()) {
-        case TRule_secret_setting_value::kAltSecretSettingValue1: {
-            const auto& token = value.GetAlt_secret_setting_value1().GetToken1();
-            auto content = StringContent(Ctx_, Ctx_.Pos(), Ctx_.Token(token));
-            if (!content) {
-                errToken = &value.GetAlt_secret_setting_value1().GetToken1();
-            } else {
-                secretParams.Value = TDeferredAtom(Ctx_.Pos(), std::move(content->Content));
-            }
-            break;
-        }
-        case TRule_secret_setting_value::kAltSecretSettingValue3: {
-            TDeferredAtom result;
-            if (!BindParameterClause(value.GetAlt_secret_setting_value3().GetRule_bind_parameter1(), result)) {
-                errToken = &value.GetAlt_secret_setting_value3().GetRule_bind_parameter1().GetToken1();
-            } else {
-                secretParams.Value = std::move(result);
-            }
-            break;
-        }
-        case TRule_secret_setting_value::kAltSecretSettingValue2: {
-            errToken = &value.GetAlt_secret_setting_value2().GetRule_bool_value1().GetToken1();
-            break;
-        }
-        default: {
-            return false;
-        }
-    }
-    if (errToken) {
-        Ctx_.Error(Ctx_.TokenPosition(*errToken)) << "Unsupported type for parameter: " << key << ". String (or named expression with type String) was expected";
+
+    TSqlExpression sqlExpr(*this);
+    TNodePtr exprNode = Unwrap(sqlExpr.Build(value.GetRule_expr1()));
+    if (!exprNode) {
         return false;
+    }
+    if (exprNode->IsLiteral() && exprNode->GetLiteralType() != "String") {
+        Ctx_.Error(Ctx_.Pos()) << "Unsupported type for parameter: " << key << ". String was expected";
+        return false;
+    }
+    if (exprNode->IsLiteral()) {
+        secretParams.Value = TDeferredAtom(Ctx_.Pos(), exprNode->GetLiteralValue());
+    } else {
+        secretParams.Value = exprNode;
     }
     return true;
 }

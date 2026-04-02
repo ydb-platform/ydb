@@ -1,9 +1,14 @@
 #pragma once
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 #include <util/string/split.h>
 
 constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
+
+namespace NKikimr::NPQ::NMLP {
+    struct TMessageId;
+} // namespace NKikimr::NPQ::NMLP
 
 namespace NKikimr::NSQS {
     static inline bool IsPrivateRequest(const TStringBuf& path) {
@@ -30,4 +35,6 @@ namespace NKikimr::NSQS {
     static inline TString ExtractAccountNameFromPath(const TStringBuf path, bool isPrivateRequest) {
         return GetRequestPathPart(path, 1, isPrivateRequest);
     }
-}
+
+    TString ToMessageId(const NPQ::NMLP::TMessageId& messageId);
+} // namespace NKikimr::NSQS

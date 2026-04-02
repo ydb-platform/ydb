@@ -531,6 +531,20 @@
             "uri": "https://{canondata_backend}/1946324/9898e072203c4590ddcf3e6e2d440006136310fd/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSort2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-ToFlowOverIteratorWithDepends-default.txt-Debug]": [
+        {
+            "checksum": "ed3f1bde797ed84ed8b5764178e3d60e",
+            "size": 413,
+            "uri": "https://{canondata_backend}/1600758/ecf2726f7930b115a0c4ffd3f2abe59dcab7d5fd/resource.tar.gz#test.test_Optimizers-ToFlowOverIteratorWithDepends-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-ToFlowOverIteratorWithDepends-default.txt-Results]": [
+        {
+            "checksum": "6c6b846f69026bbadd9e13b5594ae601",
+            "size": 407,
+            "uri": "https://{canondata_backend}/1925842/63e3c670acdeea54e226d0c8024c49261696fddc/resource.tar.gz#test.test_Optimizers-ToFlowOverIteratorWithDepends-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-UseEmptyDict-default.txt-Debug]": [
         {
             "checksum": "ea3d4ee0bd335b9503c5839c9769406a",

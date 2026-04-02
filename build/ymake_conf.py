@@ -1330,7 +1330,7 @@ class GnuToolchain(Toolchain):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
-                (target.is_linux and target.is_armv8, ['-march=armv8a']),
+                (target.is_linux and target.is_armv8, ['-march=armv8-a']),
                 (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
                 (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
                 (target.is_iossim, ['-mios-simulator-version-min={}'.format(IOS_VERSION_MIN)]),
@@ -2627,6 +2627,8 @@ class Cuda(object):
         if version < (13, 0):
             architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
 
+        architectures.append('sm_75')
+
         if version >= (11, 0):
             architectures.append('sm_80')
 
@@ -2641,6 +2643,9 @@ class Cuda(object):
 
         if version >= (12, 8):
             architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
+        if version >= (12, 9):
+            architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
 
         return ':'.join(architectures)
 
@@ -2715,7 +2720,7 @@ class CuDNN(object):
         return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
 
     def auto_cudnn_version(self):
-        return '9.10.2'
+        return '9.12.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

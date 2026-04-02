@@ -774,7 +774,7 @@ public:
         return *this;
     }
 
-    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other)
+    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other) noexcept
     {
         RowData_ = std::move(other.RowData_);
         StringData_ = std::move(other.StringData_);

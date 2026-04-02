@@ -74,33 +74,38 @@
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = NopAuthProvider.INSTANCE;
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = NopAuthProvider.INSTANCE;
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      // Подключение без дополнительных опций будет осуществляться с анонимной аутентификацией
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-        doWork(connection);
-      }
-  }
-  ```
+    ```java
+    public void work() throws SQLException {
+        // Подключение без дополнительных опций — с анонимной аутентификацией
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC подключение задаётся той же JDBC-строкой подключения, что и выше (например, `spring.datasource.url`).
+
+  {% endlist %}
 
 - JavaScript
 
@@ -179,4 +184,4 @@
   $ydb = new Ydb($config);
   ```
 
-- {% endlist %}
+{% endlist %}

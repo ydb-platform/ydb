@@ -34,4 +34,8 @@
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  Функциональность на данный момент не поддерживается.
+
 {% endlist %}

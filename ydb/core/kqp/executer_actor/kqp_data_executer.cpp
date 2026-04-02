@@ -1134,18 +1134,6 @@ private:
         }
     }
 
-    // Extract broken lock info from the first TxLock in a DataShard response.
-    void FillBrokenLockInfo(const NKikimrDataEvents::TLock& brokenLock) {
-        ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-            brokenLock.GetSchemeShard(),
-            brokenLock.GetPathId());
-        auto victimSpanId = TxManager->LookupVictimQuerySpanId(brokenLock.GetDataShard(), brokenLock);
-        if (victimSpanId) {
-            TxManager->SetVictimQuerySpanId(*victimSpanId);
-            ResponseEv->BrokenLockQuerySpanId = *victimSpanId;
-        }
-    }
-
     void FillLocksFromExtraData() {
         auto addLocks = [this](const ui64 taskId, const auto& data) {
             if (data.GetData().template Is<NKikimrTxDataShard::TEvKqpInputActorResultInfo>()) {

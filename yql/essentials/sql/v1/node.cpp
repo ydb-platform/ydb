@@ -265,10 +265,11 @@ TAggregationPtr INode::GetAggregation() const {
     return {};
 }
 
-void INode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+bool INode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     Y_UNUSED(ctx);
     Y_UNUSED(src);
     Y_UNUSED(exprs);
+    return true;
 }
 
 INode::TPtr INode::WindowSpecFunc(const TPtr& type) const {
@@ -542,8 +543,8 @@ TAggregationPtr IProxyNode::GetAggregation() const {
     return Inner_->GetAggregation();
 }
 
-void IProxyNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
-    Inner_->CollectPreaggregateExprs(ctx, src, exprs);
+bool IProxyNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+    return Inner_->CollectPreaggregateExprs(ctx, src, exprs);
 }
 
 INode::TPtr IProxyNode::WindowSpecFunc(const TPtr& type) const {
@@ -853,10 +854,13 @@ TAstListNodeImpl::TAstListNodeImpl(TPosition pos, TVector<TNodePtr> nodes)
     Nodes_.swap(nodes);
 }
 
-void TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+bool TAstListNodeImpl::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     for (auto& node : Nodes_) {
-        node->CollectPreaggregateExprs(ctx, src, exprs);
+        if (!node->CollectPreaggregateExprs(ctx, src, exprs)) {
+            return false;
+        }
     }
+    return true;
 }
 
 const TString* TAstListNodeImpl::GetSourceName() const {
@@ -920,10 +924,13 @@ TString TCallNode::GetCallExplain() const {
     return std::move(sb);
 }
 
-void TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+bool TCallNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     for (auto& arg : Args_) {
-        arg->CollectPreaggregateExprs(ctx, src, exprs);
+        if (!arg->CollectPreaggregateExprs(ctx, src, exprs)) {
+            return false;
+        }
     }
+    return true;
 }
 
 bool TCallNode::ValidateArguments(TContext& ctx) const {
@@ -2415,10 +2422,13 @@ TNodePtr TTupleNode::DoClone() const {
     return new TTupleNode(Pos_, CloneContainer(Exprs_));
 }
 
-void TTupleNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+bool TTupleNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     for (auto& expr : Exprs_) {
-        expr->CollectPreaggregateExprs(ctx, src, exprs);
+        if (!expr->CollectPreaggregateExprs(ctx, src, exprs)) {
+            return false;
+        }
     }
+    return true;
 }
 
 const TString* TTupleNode::GetSourceName() const {
@@ -2469,10 +2479,13 @@ const TStructNode* TStructNode::GetStructNode() const {
     return this;
 }
 
-void TStructNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
+bool TStructNode::CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) {
     for (auto& expr : Exprs_) {
-        expr->CollectPreaggregateExprs(ctx, src, exprs);
+        if (!expr->CollectPreaggregateExprs(ctx, src, exprs)) {
+            return false;
+        }
     }
+    return true;
 }
 
 const TString* TStructNode::GetSourceName() const {
@@ -2749,12 +2762,13 @@ protected:
         return AccessOpName_;
     }
 
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         for (auto& id : Ids_) {
-            if (id.Expr) {
-                id.Expr->CollectPreaggregateExprs(ctx, src, exprs);
+            if (id.Expr && !id.Expr->CollectPreaggregateExprs(ctx, src, exprs)) {
+                return false;
             }
         }
+        return true;
     }
 
 private:
@@ -3372,12 +3386,11 @@ public:
         FuncNode_->VisitTree(func, visited);
     }
 
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (ctx.DistinctOverWindow) {
-            FuncNode_->CollectPreaggregateExprs(ctx, src, exprs);
-        } else {
-            INode::CollectPreaggregateExprs(ctx, src, exprs);
+            return FuncNode_->CollectPreaggregateExprs(ctx, src, exprs);
         }
+        return INode::CollectPreaggregateExprs(ctx, src, exprs);
     }
 
 protected:
@@ -3698,7 +3711,7 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 
 bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
     if (!Value) {
-        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
+        ctx.Error(stmBeginPos) << "Parameter VALUE must be set";
         return false;
     }
     if (mode == EOperationMode::Alter) {

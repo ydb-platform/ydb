@@ -272,7 +272,8 @@ def _get_user_dirs_folder(key: str) -> str | None:
     See https://freedesktop.org/wiki/Software/xdg-user-dirs/.
 
     """
-    user_dirs_config_path = Path(os.path.expanduser("~/.config")) / "user-dirs.dirs"  # noqa: PTH111
+    config_home = os.environ.get("XDG_CONFIG_HOME", "").strip() or os.path.expanduser("~/.config")  # noqa: PTH111
+    user_dirs_config_path = Path(config_home) / "user-dirs.dirs"
     if user_dirs_config_path.exists():
         parser = ConfigParser()
 

@@ -538,6 +538,16 @@ namespace NActors {
                 TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                 break;
 
+            case TEvForwardSubscribeSession::EventType: {
+                auto msg = ev->Release<TEvForwardSubscribeSession>();
+                if (msg->Event) {
+                    Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                    TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                        TEvents::TEvUndelivered::Disconnected));
+                }
+                break;
+            }
+
             case TEvInterconnect::TEvConnectNode::EventType:
             case TEvents::TEvSubscribe::EventType:
                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);

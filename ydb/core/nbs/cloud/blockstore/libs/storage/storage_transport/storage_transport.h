@@ -12,6 +12,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 struct THostConnection
 {
+    enum class EConnectionType
+    {
+        DDisk,
+        PBuffer,
+    };
+
+    EConnectionType ConnectionType;
     NKikimr::NBsController::TDDiskId DDiskId;
     NKikimr::NDDisk::TQueryCredentials Credentials;
 
@@ -30,6 +37,8 @@ public:
     using TEvReadResult = NKikimrBlobStorage::NDDisk::TEvReadResult;
     using TEvWritePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult;
+    using TEvWriteToManyPersistentBuffersResult =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
     using TEvSyncWithPersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
     using TEvErasePersistentBufferResult =
@@ -64,6 +73,17 @@ public:
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
+        const TGuardedSgList& data,
+        NWilson::TSpan& span) = 0;
+
+    virtual NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
+    WriteToManyPBuffers(
+        const THostConnection& connection,
+        const NKikimr::NDDisk::TBlockSelector& selector,
+        const ui64 lsn,
+        const NKikimr::NDDisk::TWriteInstruction instruction,
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& data,
         NWilson::TSpan& span) = 0;
 

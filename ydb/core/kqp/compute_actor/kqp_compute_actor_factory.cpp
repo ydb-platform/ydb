@@ -77,6 +77,17 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 
+    std::atomic<bool> VerboseMemoryLimitException = false;
+
+    // shard scanning policy
+    std::atomic<ui32> AggregationGroupByLimit = 256;
+    std::atomic<ui32> AggregationNoGroupLimit = 1024;
+    std::atomic<ui32> ScanLimit = 3;
+    std::atomic<bool> IsParallelScanningAvailable = false;
+    std::atomic<ui32> ShardSplitFactor = 5;
+    std::atomic<ui32> CriticalTotalRetriesCount = 20;
+    std::atomic<ui32> ReaskShardRetriesCount = 5;
+
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
     std::atomic<ui64> MinChannelBufferSize = 0;
@@ -100,12 +111,32 @@ public:
 
     void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) override
     {
+        const auto& policy = config.GetShardsScanningPolicy();
+        AggregationGroupByLimit.store(policy.GetAggregationGroupByLimit());
+        AggregationNoGroupLimit.store(policy.GetAggregationNoGroupLimit());
+        ScanLimit.store(policy.GetScanLimit());
+        IsParallelScanningAvailable.store(policy.GetParallelScanningAvailable());
+        ShardSplitFactor.store(policy.GetShardSplitFactor());
+        CriticalTotalRetriesCount.store(policy.GetCriticalTotalRetriesCount());
+        ReaskShardRetriesCount.store(policy.GetReaskShardRetriesCount());
+
+        VerboseMemoryLimitException.store(config.GetVerboseMemoryLimitException());
+
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
+    }
+
+    bool GetVerboseMemoryLimitException() override {
+        return VerboseMemoryLimitException.load();
+    }
+
+    TShardsScanningPolicy GetShardsScanningPolicy() override {
+        return TShardsScanningPolicy(AggregationGroupByLimit.load(), AggregationNoGroupLimit.load(), ScanLimit.load(),
+            IsParallelScanningAvailable.load(), ShardSplitFactor.load(), CriticalTotalRetriesCount.load(), ReaskShardRetriesCount.load());
     }
 
     TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
@@ -169,7 +200,9 @@ public:
             std::move(task),
             limit);
 
-        auto runtimeSettings = args.RuntimeSettings;
+        NYql::NDq::TComputeRuntimeSettings runtimeSettings;
+
+        runtimeSettings.ReportStatsSettings = args.ReportStatsSettings;
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
@@ -188,13 +221,13 @@ public:
         }
 
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
-        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 if (auto manager = memoryQuotaManager.lock()) {
                     static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
                 }
                 if (state) {
-                    state->OnTaskFinished(txId, taskId, success);
+                    state->OnTaskFinished(txId, executerId, taskId, success);
                 }
             };
 

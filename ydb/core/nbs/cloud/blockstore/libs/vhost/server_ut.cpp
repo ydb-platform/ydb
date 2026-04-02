@@ -54,6 +54,7 @@ private:
 
     IServerPtr VhostServer;
     IVHostStatsPtr VHostStats;
+    std::shared_ptr<TTestPartitionDirectService> TestService;
     std::shared_ptr<TTestStorage> TestStorage;
     std::shared_ptr<ITestVhostDevice> VhostDevice;
     std::shared_ptr<TTestVhostQueueFactory> VhostQueueFactory;
@@ -115,6 +116,7 @@ private:
     void InitVhostDeviceEnvironment()
     {
         VHostStats = std::make_shared<TTestVHostStats>();
+        TestService = std::make_shared<TTestPartitionDirectService>();
         TestStorage = std::make_shared<TTestStorage>();
         TestStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -126,12 +128,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::WriteBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -158,12 +161,13 @@ private:
             UNIT_ASSERT(guard);
             auto sglist = guard.Get();
             UNIT_ASSERT(
-                request->Range.Size() * BlockSize == SgListGetSize(sglist));
+                request->Headers.Range.Size() * BlockSize ==
+                SgListGetSize(sglist));
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ReadBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = std::move(sglist)});
 
             if (ServiceFrozen.test()) {
@@ -189,8 +193,8 @@ private:
 
             RequestQueue.Enqueue(
                 {.Type = EBlockStoreRequest::ZeroBlocks,
-                 .StartIndex = request->Range.Start,
-                 .BlocksCount = request->Range.Size(),
+                 .StartIndex = request->Headers.Range.Start,
+                 .BlocksCount = request->Headers.Range.Size(),
                  .SgList = {}});
 
             if (ServiceFrozen.test()) {
@@ -238,6 +242,7 @@ private:
 
             auto future = VhostServer->StartEndpoint(
                 SocketPath.GetPath(),
+                TestService,
                 TestStorage,
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -301,6 +306,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTestPartitionDirectService>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -352,6 +358,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 sockets[i],
+                std::make_shared<TTestPartitionDirectService>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -450,6 +457,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto future = vhostServer->StartEndpoint(
             socketPath,
+            std::make_shared<TTestPartitionDirectService>(),
             std::make_shared<TTestStorage>(),
             options);
 
@@ -497,6 +505,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTestPartitionDirectService>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -536,6 +545,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTestPartitionDirectService>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -580,6 +590,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = vhostServer->StartEndpoint(
                 socket.GetPath(),
+                std::make_shared<TTestPartitionDirectService>(),
                 std::make_shared<TTestStorage>(),
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -600,6 +611,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<void>();
 
+        auto testService = std::make_shared<TTestPartitionDirectService>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -671,8 +683,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         options.UnalignedRequestsDisabled = false;
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }
@@ -728,8 +743,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         UNIT_ASSERT_VALUES_EQUAL(0, fatalErrorCount);
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }
@@ -842,6 +860,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
             ++requestCounter;
         };
 
+        auto testService = std::make_shared<TTestPartitionDirectService>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -890,6 +909,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
             auto future = server->StartEndpoint(
                 CreateGuidAsString() + ".sock",
+                testService,
                 testStorage,
                 options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
@@ -972,6 +992,7 @@ Y_UNIT_TEST_SUITE(TServerTest)
 
         auto promise = NewPromise<TWriteBlocksLocalResponse>();
 
+        auto testService = std::make_shared<TTestPartitionDirectService>();
         auto testStorage = std::make_shared<TTestStorage>();
         testStorage->WriteBlocksLocalHandler =
             [&](TCallContextPtr ctx,
@@ -1012,8 +1033,11 @@ Y_UNIT_TEST_SUITE(TServerTest)
         options.UnalignedRequestsDisabled = false;
 
         {
-            auto future =
-                server->StartEndpoint(unixSocketPath, testStorage, options);
+            auto future = server->StartEndpoint(
+                unixSocketPath,
+                testService,
+                testStorage,
+                options);
             const auto& error = future.GetValue(TDuration::Seconds(5));
             UNIT_ASSERT_C(!HasError(error), error);
         }

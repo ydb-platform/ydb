@@ -15,7 +15,7 @@ void TFmrSortingBlockReader::GetBlocks(const std::vector<IBlockIterator::TPtr>& 
     for (auto blockIterator: inputs) {
         TIndexedBlock curBlock;
         while (blockIterator->NextBlock(curBlock)) {
-            Blocks_.emplace_back(curBlock);
+            Blocks_.emplace_back(std::move(curBlock));
         }
     }
 }
@@ -31,7 +31,7 @@ size_t TFmrSortingBlockReader::DoRead(void* buf, size_t len) {
     size_t remaining = len;
     while (remaining > 0 && !IsFinished()) {
         auto rowPos = RowOrdering_[Position_];
-        auto block = Blocks_[rowPos.BlockIndex];
+        const auto& block = Blocks_[rowPos.BlockIndex];
         TStringBuf row = block.GetRowBytes(rowPos.RowIndex);
 
         const size_t available = row.size() - ActiveOffset_;

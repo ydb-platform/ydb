@@ -45,9 +45,21 @@ message AttachSessionRequest {
     string session_id = 1 [(Ydb.length).le = 1024];
 }
 
+message SessionShutdownHint {
+}
+
+message NodeShutdownHint {
+}
+
 message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
+    
+    // The reason the session is ending, for SDK-side handling
+     oneof session_hint {
+        SessionShutdownHint session_shutdown = 3;
+        NodeShutdownHint node_shutdown = 4;
+    }
 }
 
 message SerializableModeSettings {

@@ -18,7 +18,6 @@ private:
     ui64 TabletId;
     TIntrusivePtr<NKikimr::NPDisk::TSectorMap> SectorMap;
     ui32 BlockSize;
-    std::atomic<ui64> LsnGenerator;   // TODO
 
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
@@ -37,9 +36,7 @@ public:
 
     TExecutorPtr GetExecutor() override;
 
-    ui64 GenerateLsn() override;
-
-    NThreading::TFuture<void> EstablishConnections() override;
+    void EstablishConnections() override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(
         ui32 vChunkIndex,

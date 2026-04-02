@@ -1159,7 +1159,7 @@ void Splice(
 #endif
 }
 
-TFuture<void> SpliceAsync(
+TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
     bool pipeIsSrc,
@@ -1196,6 +1196,7 @@ TFuture<void> SpliceAsync(
             : NConcurrency::EPollControl::Write);
 
     auto completionPromise = NewPromise<void>();
+    auto bytesSpliced = std::make_shared<i64>();
 
     // NB: it is important that src and dst are captured by value here (instead of,
     // say, simply their handles) so that they don't get destroyed prematurely.
@@ -1214,6 +1215,7 @@ TFuture<void> SpliceAsync(
                 SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
 
             if (result > 0) {
+                *bytesSpliced += result;
                 continue;
             } else if (result == 0) {
                 completionPromise.TrySet();
@@ -1245,9 +1247,12 @@ TFuture<void> SpliceAsync(
 
     return completionPromise.ToFuture().Apply(BIND([=] (const TError& result) {
         poller->Unarm(fdPipe, pollable);
-        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([result](const TError& inner) {
+        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([=] (const TError& inner) {
             YT_VERIFY(inner.IsOK());
-            return result;
+            return TSpliceResult{
+                .BytesSpliced = *bytesSpliced,
+                .Error = result,
+            };
         }));
     }));
 #else

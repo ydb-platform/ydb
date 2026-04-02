@@ -8,5 +8,6 @@ RECURSE(
     oauth2_token_exchange
     params
     result
+    table
     value
 )

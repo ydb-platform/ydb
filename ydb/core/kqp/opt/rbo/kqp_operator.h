@@ -11,7 +11,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
-#include <yql/essentials/core/yql_cost_function.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -54,7 +54,7 @@ struct TPhysicalOpProps {
 
     std::optional<TRBOMetadata> Metadata;
     std::optional<TRBOStatistics> Statistics;
-    std::optional<EJoinAlgoType> JoinAlgo;
+    std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
 };
 
@@ -219,7 +219,7 @@ public:
     virtual TString ToString(TExprContext& ctx) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
-    bool NeedsMap();
+    bool NeedsMap() const;
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
@@ -236,6 +236,7 @@ public:
 
 class TMapElement {
 public:
+    TMapElement() = default;
     TMapElement(const TInfoUnit& elementName, const TExpression& expr);
     TMapElement(const TInfoUnit& elementName, const TInfoUnit& rename, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
@@ -275,6 +276,8 @@ public:
         return Ordered;
     }
 
+    TVector<TMapElement>& GetMapElements() { return MapElements; }
+
     TVector<TMapElement> MapElements;
     bool Project = true;
     bool Ordered = false;
@@ -288,8 +291,13 @@ class TOpAddDependencies: public IUnaryOperator {
 public:
     TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TInfoUnit>& columns,
                        const TVector<const TTypeAnnotationNode*>& types);
+    TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
+
+    TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> GetDependencyPairs();
+    void SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
+    
 
     TVector<TInfoUnit> Dependencies;
     TVector<const TTypeAnnotationNode*> Types;
@@ -442,6 +450,61 @@ public:
     TVector<TIntrusivePtr<IOperator>> TreeNodes;
 };
 
+class TOpRoot;
+
+struct TOpIterator {
+    struct TIteratorItem {
+        TIteratorItem(TIntrusivePtr<IOperator> curr, TIntrusivePtr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
+            : Current(curr)
+            , Parent(parent)
+            , ChildIndex(idx)
+            , SubplanIU(subplanIU) {
+        }
+
+        TIntrusivePtr<IOperator> Current;
+        TIntrusivePtr<IOperator> Parent;
+        size_t ChildIndex;
+        std::shared_ptr<TInfoUnit> SubplanIU;
+    };
+
+    using iterator_category = std::input_iterator_tag;
+    using difference_type = std::ptrdiff_t;
+
+    // Build a default iterator for the root of the plan
+    // It will visit all the subplans in their DFS order first and then the main plan
+    TOpIterator(TOpRoot* ptr);
+
+    // Build an iterator for traversing the children of specific operator
+    TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent);
+
+    // Build an iterator to travese the children of a specific iterator, recursing into
+    // subplans, as their UIs are encountered
+    TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, TPlanProps* props);
+
+    TIteratorItem operator*() const;
+
+    // Prefix increment
+    TOpIterator& operator++();
+
+    // Postfix increment
+    TOpIterator operator++(int);
+
+    friend bool operator==(const TOpIterator& a, const TOpIterator& b) {
+        return a.CurrElement == b.CurrElement;
+    };
+    friend bool operator!=(const TOpIterator& a, const TOpIterator& b) {
+        return a.CurrElement != b.CurrElement;
+    };
+
+private:
+    void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
+                        std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans = false);
+
+    TVector<TIteratorItem> DfsList;
+    size_t CurrElement;
+    TPlanProps* PlanProps;
+};
+
 class TOpRoot: public IUnaryOperator {
 public:
     TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TString>& columnOrder);
@@ -456,97 +519,17 @@ public:
     void ComputePlanMetadata(TRBOContext& ctx);
     void ComputePlanStatistics(TRBOContext& ctx);
 
+    TOpIterator begin() {
+        return TOpIterator(this);
+    }
+
+    TOpIterator end() {
+        return TOpIterator(nullptr);
+    }
+
     TPlanProps PlanProps;
     TExprNode::TPtr Node;
     TVector<TString> ColumnOrder;
-
-    struct Iterator {
-        struct IteratorItem {
-            IteratorItem(TIntrusivePtr<IOperator> curr, TIntrusivePtr<IOperator> parent, size_t idx, std::shared_ptr<TInfoUnit> subplanIU)
-                : Current(curr)
-                , Parent(parent)
-                , ChildIndex(idx)
-                , SubplanIU(subplanIU) {
-            }
-
-            TIntrusivePtr<IOperator> Current;
-            TIntrusivePtr<IOperator> Parent;
-            size_t ChildIndex;
-            std::shared_ptr<TInfoUnit> SubplanIU;
-        };
-
-        using iterator_category = std::input_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-
-        Iterator(TOpRoot* ptr) {
-            if (!ptr) {
-                CurrElement = -1;
-                return;
-            }
-            Root = ptr;
-
-            std::unordered_set<IOperator*> visited;
-            for (const auto& subplan : Root->PlanProps.Subplans.Get()) {
-                BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
-            }
-            auto child = ptr->GetInput();
-            BuildDfsList(child, {}, size_t(0), visited, nullptr);
-            CurrElement = 0;
-        }
-
-        IteratorItem operator*() const {
-            return DfsList[CurrElement];
-        }
-
-        // Prefix increment
-        Iterator& operator++() {
-            if (CurrElement >= 0) {
-                CurrElement++;
-            }
-            if (CurrElement == DfsList.size()) {
-                CurrElement = -1;
-            }
-            return *this;
-        }
-
-        // Postfix increment
-        Iterator operator++(int) {
-            Iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        friend bool operator==(const Iterator& a, const Iterator& b) {
-            return a.CurrElement == b.CurrElement;
-        };
-        friend bool operator!=(const Iterator& a, const Iterator& b) {
-            return a.CurrElement != b.CurrElement;
-        };
-
-    private:
-        void BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
-                          std::shared_ptr<TInfoUnit> subplanIU) {
-            const auto& children = current->GetChildren();
-            for (size_t idx = 0, e = children.size(); idx < e; ++idx) {
-                BuildDfsList(children[idx], current, idx, visited, subplanIU);
-            }
-            if (!visited.contains(current.get())) {
-                DfsList.push_back(IteratorItem(current, parent, childIdx, subplanIU));
-            }
-            visited.insert(current.get());
-        }
-
-        TVector<IteratorItem> DfsList;
-        size_t CurrElement;
-        TOpRoot* Root;
-    };
-
-    Iterator begin() {
-        return Iterator(this);
-    }
-    Iterator end() {
-        return Iterator(nullptr);
-    }
 
 private:
     void ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const;

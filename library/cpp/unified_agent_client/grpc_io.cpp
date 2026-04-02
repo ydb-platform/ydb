@@ -2,7 +2,7 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 #include <contrib/libs/grpc/src/core/lib/config/core_configuration.h>
-#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/exec_ctx.h>
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 #include <contrib/libs/grpc/src/core/lib/surface/completion_queue.h>

@@ -6671,6 +6671,10 @@ IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input,
 
     for (auto item = begin; item != end; ++item) {
         auto node = *item;
+        if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTupleMinSize(*node, 1, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }

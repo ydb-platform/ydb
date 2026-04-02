@@ -3091,7 +3091,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 systemDirectory,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
 
@@ -3104,7 +3104,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 session,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
     }
@@ -3249,7 +3249,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* systemDirectory = "/Root/.sys";
         constexpr const char* sysView = "/Root/.sys/partition_stats";
 
-        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true).ReplaceSysACL(true);
 
         cleanup();
         TestTableContentIsPreserved(table, querySession,

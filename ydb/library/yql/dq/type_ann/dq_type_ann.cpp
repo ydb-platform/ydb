@@ -484,6 +484,10 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     auto leftInputType = join.LeftInput().Ref().GetTypeAnn();
     auto rightInputType = join.RightInput().Ref().GetTypeAnn();
+    if (!leftInputType || !rightInputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Lambda is not allowed as join input"));
+        return nullptr;
+    }
 
     if (stream) {
         if (!EnsureNewSeqType<false, false, true>(join.Pos(), *leftInputType, ctx)) {
@@ -817,8 +821,8 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     auto cnMerge = TDqCnMerge(node);
-
-    if (!EnsureTupleMinSize(*cnMerge.SortColumns().Ptr(), 1, ctx)) {
+    auto sortColumns = node->Child(TDqCnMerge::idx_SortColumns);
+    if (!EnsureTupleMinSize(*sortColumns, 1, ctx)) {
         return TStatus::Error;
     }
 

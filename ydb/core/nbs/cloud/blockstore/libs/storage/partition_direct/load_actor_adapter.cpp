@@ -1,5 +1,6 @@
 #include "load_actor_adapter.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
 
@@ -11,14 +12,6 @@
 using namespace NThreading;
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t BlockSize = 4096;
-
-}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,16 +40,15 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
     const ui64 startIndex = msg->Record.GetStartIndex();
     const auto& blocks = msg->Record.GetBlocks();
 
-    size_t totalSize = 0;
+    ui32 totalSize = 0;
     for (const auto& buffer: blocks.GetBuffers()) {
         totalSize += buffer.size();
     }
 
-    // Round up
-    // Move to separate function
-    totalSize = (totalSize + BlockSize - 1) / BlockSize * BlockSize;
+    totalSize = AlignUp(totalSize, DefaultBlockSize);
 
-    Y_ABORT_UNLESS(totalSize == 4096);
+    Y_ABORT_UNLESS(totalSize > 0);
+    Y_ABORT_UNLESS(totalSize % DefaultBlockSize == 0);
 
     auto data = std::make_shared<TString>(TString::Uninitialized(totalSize));
     char* ptr = data->Detach();
@@ -68,9 +60,11 @@ void TLoadActorAdapter::HandleWriteBlocksRequest(
 
     TSgList sglist = {TBlockDataRef(data->data(), data->size())};
 
-    auto request = std::make_shared<TWriteBlocksLocalRequest>(
-        TRequestHeaders{},
-        TBlockRange64::WithLength(startIndex, totalSize / BlockSize));
+    auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
+        .Range = TBlockRange64::WithLength(
+            startIndex,
+            totalSize / DefaultBlockSize)});
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->WriteBlocksLocal(
@@ -103,16 +97,18 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
 {
     const auto* msg = ev->Get();
 
-    Y_ABORT_UNLESS(msg->Record.GetBlocksCount() == 1);
+    const ui32 blocksCount = msg->Record.GetBlocksCount();
+    Y_ABORT_UNLESS(blocksCount > 0);
 
-    auto data = std::make_shared<TString>(TString::Uninitialized(4096));
-    TSgList sglist = {TBlockDataRef(data->data(), data->size())};
+    auto buffer = std::make_shared<TString>(
+        TString::Uninitialized(blocksCount * DefaultBlockSize));
+    TSgList sglist = {TBlockDataRef(buffer->data(), buffer->size())};
 
-    auto request = std::make_shared<TReadBlocksLocalRequest>(
-        TRequestHeaders{},
-        TBlockRange64::WithLength(
+    auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = FastPathService->GetVolumeConfig(),
+        .Range = TBlockRange64::WithLength(
             msg->Record.GetStartIndex(),
-            msg->Record.GetBlocksCount()));
+            blocksCount)});
     request->Sglist = TGuardedSgList(std::move(sglist));
 
     auto future = FastPathService->ReadBlocksLocal(
@@ -125,17 +121,17 @@ void TLoadActorAdapter::HandleReadBlocksRequest(
          selfId = ctx.SelfID,
          cookie = ev->Cookie,
          request,
-         data](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
+         buffer](const NThreading::TFuture<TReadBlocksLocalResponse>& f)
         {
             auto response = std::make_unique<TEvService::TEvReadBlocksResponse>(
                 f.GetValue().Error);
 
             if (auto guard = request->Sglist.Acquire()) {
                 const auto& sglist = guard.Get();
-                for (const auto& block: sglist) {
+                for (const auto& data: sglist) {
                     response->Record.MutableBlocks()->AddBuffers(
-                        block.Data(),
-                        block.Size());
+                        data.Data(),
+                        data.Size());
                 }
             } else {
                 Y_ABORT_UNLESS(false);

@@ -10,6 +10,7 @@ SRCS(
     load_actor_adapter.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
+    range_translate.cpp
     read_request.cpp
     region.cpp
     restore_request.cpp
@@ -36,6 +37,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    dirty_map
+)
 
 RECURSE_FOR_TESTS(
     ut

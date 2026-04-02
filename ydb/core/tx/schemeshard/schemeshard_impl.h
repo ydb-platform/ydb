@@ -89,8 +89,6 @@ namespace NSchemeShard {
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 extern ui64 gVectorIndexSeed; // for tests only
 
-class TShredManager;
-
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
@@ -411,12 +409,15 @@ public:
     bool EnableResourcePoolsOnServerless = false;
     bool EnableInitialUniqueIndex = false;
     bool EnableAddUniqueIndex = false;
+    bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
     bool EnableJsonIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
+
+    bool IsOldArgonHashFormatMigrationCompleted = false;
 
     TShardDeleter ShardDeleter;
 
@@ -539,6 +540,7 @@ public:
     }
 
     TTxId GetCachedTxId(const TActorContext& ctx);
+    void ReturnTxIdToCache(const TTxId txId);
 
     EAttachChildResult AttachChild(TPathElement::TPtr child);
     bool PathIsActive(TPathId pathId) const;
@@ -1047,6 +1049,9 @@ public:
 
     struct TTxCleanDroppedPaths;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
+
+    struct TTxUserHashesMigration;
+    NTabletFlatExecutor::ITransaction* CreateTxUserHashesMigration();
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);

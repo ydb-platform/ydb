@@ -620,8 +620,8 @@ void TPhysicalAggregationBuilder::BuildPhysicalAggregationTraits(const TVector<T
                                                                  TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& renameMap,
                                                                  const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType) {
     Y_ENSURE(inputType && outputType);
-    const auto* inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto* outputStructType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    const auto outputStructType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     THashMap<TString, TVector<std::tuple<TString, TString, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>> aggColumns;
     for (const auto& aggregationTraits : aggregationTraitsList) {

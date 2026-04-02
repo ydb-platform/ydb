@@ -1,8 +1,10 @@
+#include "flat_executor_backup.h"
+
 #include "flat_backup.h"
 #include "flat_boot_cookie.h"
 #include "flat_dbase_apply.h"
 #include "flat_dbase_scheme.h"
-#include "flat_executor_backup.h"
+#include "flat_executor_backup_common.h"
 #include "flat_redo_player.h"
 #include "flat_row_state.h"
 #include "flat_sausage_slicer.h"
@@ -19,14 +21,12 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-#include <library/cpp/openssl/crypto/sha.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/protobuf/json/util.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
-#include <util/string/hex.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
@@ -201,14 +201,14 @@ ui64 NewBackupChangelogMinBytes() {
 
 } // anonymous namespace
 
-class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter> {
+class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActorExceptionHandler {
 public:
     using TBase = TActorBootstrapped<TSnapshotWriter>;
 
     struct TTableFile {
         TString Name;
         TFile File;
-        std::unique_ptr<NOpenSsl::NSha256::TCalcer> Sha256;
+        TSha256Hasher Sha256;
     };
 
     TSnapshotWriter(TActorId owner, const TFsPath& path,
@@ -227,7 +227,7 @@ public:
         , Exclusion(exclusion)
     {
         for (const auto& [tableId, table] : tables) {
-            Tables.emplace(tableId, TTableFile{table.Name, {}, std::make_unique<NOpenSsl::NSha256::TCalcer>()});
+            Tables.emplace(tableId, TTableFile{table.Name, {}, {}});
         }
     }
 
@@ -254,7 +254,7 @@ public:
             SchemaFile.Write(stringOut.Data(), stringOut.Size());
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
-        } catch (const TIoException& e) {
+        } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
@@ -348,7 +348,7 @@ public:
         if (!msg->SnapshotData.Empty()) {
             try {
                 it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
-                it->second.Sha256->Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
+                it->second.Sha256.Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
                 WrittenBytes += msg->SnapshotData.Size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
@@ -382,15 +382,10 @@ public:
         }
     }
 
-    static TString FinalizeDigest(NOpenSsl::NSha256::TCalcer& calcer) {
-        auto digest = calcer.Final();
-        return to_lower(HexEncode(digest.data(), digest.size()));
-    }
-
-    static NJson::TJsonValue MakeFileEntry(const TString& name, NOpenSsl::NSha256::TCalcer& calcer) {
+    static NJson::TJsonValue MakeFileEntry(const TString& name, TSha256Hasher& hasher) {
         NJson::TJsonValue entry;
         entry["name"] = name;
-        entry["sha256"] = FinalizeDigest(calcer);
+        entry["sha256"] = hasher.Final();
         return entry;
     }
 
@@ -422,7 +417,7 @@ public:
             files.SetType(NJson::JSON_ARRAY);
             files.AppendValue(MakeFileEntry("schema.json", SchemaSha256));
             for (auto& [_, table] : Tables) {
-                files.AppendValue(MakeFileEntry(table.Name + ".json", *table.Sha256));
+                files.AppendValue(MakeFileEntry(table.Name + ".json", table.Sha256));
             }
 
             const TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/ false);
@@ -432,14 +427,13 @@ public:
             manifestFile.Write(manifestStr.data(), manifestStr.size());
             manifestFile.Flush();
 
-            const auto manifestDigest = NOpenSsl::NSha256::Calc(manifestStr);
-            const TString manifestChecksum = to_lower(HexEncode(manifestDigest.data(), manifestDigest.size()));
+            const TString manifestChecksum = TSha256Hasher::Hash(manifestStr);
 
             auto checksumPath = SnapshotPath.Child("manifest.json.sha256");
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
             checksumFile.Write(manifestChecksum.data(), manifestChecksum.size());
             checksumFile.Flush();
-        } catch (const TIoException& e) {
+        } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to write manifest: " << e.what());
         }
 
@@ -472,6 +466,11 @@ public:
         return ReplyAndDie(false, TStringBuilder() << "Snapshot scan for " << tableName << " failed: " << error);
     }
 
+    bool OnUnhandledException(const std::exception& exc) override {
+        ReplyAndDie(false, TStringBuilder() << "Unhandled exception: " << exc.what());
+        return true;
+    }
+
 private:
     TActorId Owner;
 
@@ -488,7 +487,7 @@ private:
     THashSet<ui32> DoneTables;
 
     TFile SchemaFile;
-    NOpenSsl::NSha256::TCalcer SchemaSha256;
+    TSha256Hasher SchemaSha256;
     TAutoPtr<TSchemeChanges> Schema;
 
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
@@ -749,7 +748,7 @@ private:
     std::function<void()> BeginCommit;
 };
 
-class TChangelogWriter : public TActorBootstrapped<TChangelogWriter> {
+class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
     struct TEvPrivate {
         enum EEv {
             EvMailboxCleaned = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -773,6 +772,7 @@ public:
                      TIntrusiveConstPtr<TBackupExclusion> exclusion)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
+        , ChangelogChecksumPath(path.Child("changelog.json.sha256"))
         , Schema(schema)
         , Exclusion(exclusion)
     {}
@@ -785,6 +785,12 @@ public:
             ChangelogFile = TFile(ChangelogPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
         } catch (const TIoException& e) {
             return ReplyAndDie(TStringBuilder() << "Failed to create changelog file " << ChangelogPath << ": " << e.what());
+        }
+
+        try {
+            WriteChangelogChecksum();
+        } catch (const std::exception& e) {
+            return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
         }
 
         Become(&TThis::StateWork);
@@ -804,6 +810,7 @@ public:
     void Handle(TEvWriteChangelog::TPtr& ev) {
         LOG_D("Handle " << ev->ToString());
 
+        size_t changesStart = Buffer.Size();
         TBufferOutput out(Buffer);
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
@@ -897,8 +904,13 @@ public:
         }
 
         if (hasCommit) {
+            b.WriteKey("prev_sha256");
+            b.WriteString(Checksum.Intermediate());
             b.EndObject();
             out << '\n';
+
+            size_t changesSize = Buffer.Size() - changesStart;
+            Checksum.Update(Buffer.data() + changesStart, changesSize);
         }
 
         if (Buffer.Size() >= 1_MB) {
@@ -932,12 +944,18 @@ public:
         if (!Buffer.Empty()) {
             try {
                 ChangelogFile.Write(Buffer.data(), Buffer.size());
-                ChangelogFile.Flush(); // TODO(pixcc): fsync on parent folder?
+                ChangelogFile.Flush();
                 WrittenBytes += Buffer.size();
             } catch (const TIoException& e) {
                 return ReplyAndDie(TStringBuilder() << "Failed to write changelog data " << ChangelogFile.GetName() << ": " << e.what());
             }
             Buffer.Clear();
+
+            try {
+                WriteChangelogChecksum();
+            } catch (const std::exception& e) {
+                return ReplyAndDie(TStringBuilder() << "Failed to write changelog checksum " << ChangelogChecksumPath << ": " << e.what());
+            }
 
             if (Dying) {
                 return;
@@ -965,10 +983,25 @@ public:
         PassAway();
     }
 
+    void WriteChangelogChecksum() {
+        TFsPath tmpPath(ChangelogChecksumPath.GetPath() + ".tmp");
+        TFileOutput out(tmpPath);
+        out.Write(Checksum.Intermediate());
+        out.Flush();
+        tmpPath.RenameTo(ChangelogChecksumPath);
+        TFile(ChangelogChecksumPath.Parent(), EOpenModeFlag::RdOnly).Flush();
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        ReplyAndDie(TStringBuilder() << "Unhandled exception: " << exc.what());
+        return true;
+    }
+
 private:
     TActorId Owner;
 
     TFsPath ChangelogPath;
+    TFsPath ChangelogChecksumPath;
     TFile ChangelogFile;
 
     TScheme Schema;
@@ -980,6 +1013,8 @@ private:
     bool Dying = false;
     ui64 WrittenBytes = 0;
     std::optional<ui64> SnapshotWrittenBytes;
+
+    TSha256Hasher Checksum;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,

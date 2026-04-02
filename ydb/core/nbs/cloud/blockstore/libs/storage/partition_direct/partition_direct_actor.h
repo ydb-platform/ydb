@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/executor_pool.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 
@@ -40,9 +41,13 @@ class TPartitionActor
     };
 
 private:
-    TExecutorPool ExecutorPool{4};
+    TExecutorPool ExecutorPool{32};
     NYdb::NBS::NProto::TStorageServiceConfig StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
+
+    TString DiskId;
+    ui32 BlockSize;
+    ui64 BlockCount;
 
     NActors::TActorId BSControllerPipeClient;
 

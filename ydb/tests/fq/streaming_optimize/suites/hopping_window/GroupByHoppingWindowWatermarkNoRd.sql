@@ -19,7 +19,7 @@ $input =
             k String,
             v Uint64
         )
-        , WATERMARK AS (SystemMetadata("write_time") - Interval("PT8S"))
+        , WATERMARK = SystemMetadata("write_time") - Interval("PT8S")
         , WATERMARK_GRANULARITY = "PT11S"
     );
 

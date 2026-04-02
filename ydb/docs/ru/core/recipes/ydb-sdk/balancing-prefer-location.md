@@ -113,4 +113,31 @@
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  В **Java SDK** предпочтение зоны доступности задаётся в настройках gRPC-транспорта.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.fromLocation("a")) // предпочитаемая зона доступности
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    Уточните поддерживаемые параметры зоны доступности в [свойствах JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md) или задайте балансировку через нативный API при встраивании драйвера.
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры зоны доступности, что и при прямом подключении (например, в `spring.datasource.url` или свойствах пула).
+
+  {% endlist %}
+
 {% endlist %}

@@ -73,39 +73,44 @@
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = CloudAuthHelper.getMetadataAuthProvider();
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      Properties props = new Properties();
-      props.setProperty("useMetadata", "true");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("useMetadata", "true");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Опцию useMetadata также можно указать прямо в JDBC URL
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Опцию useMetadata также можно указать прямо в JDBC URL
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?useMetadata=true")) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры (`useMetadata` в URL или в свойствах источника данных), что и в примере выше.
+
+  {% endlist %}
 
 - JavaScript
 

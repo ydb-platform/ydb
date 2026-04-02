@@ -394,6 +394,12 @@ PEERDIR(
     yt/yt/library/numeric
 )
 
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    PEERDIR(
+        yt/yt/core/yt_custom_internal_specific
+    )
+ENDIF()
+
 IF (OS_WINDOWS)
     PEERDIR(
         library/cpp/yt/backtrace/cursors/dummy

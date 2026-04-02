@@ -124,6 +124,10 @@ void TCommandTPCCImport::Config(TConfig& config) {
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
             .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
+    config.Opts->AddLongOption(
+        "compact", "Compact tables after importing data"
+    ).NoArgument().StoreTrue(&RunConfig->Compact);
+
     // TODO: detect automatically
     config.Opts->AddLongOption(
         "threads", TStringBuilder() << "Number of threads loading the data (default: auto)")

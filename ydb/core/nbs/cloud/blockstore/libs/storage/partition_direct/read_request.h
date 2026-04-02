@@ -25,7 +25,7 @@ public:
         NActors::TActorSystem* actorSystem,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TVector<TReadHint> hints,
+        TReadHint readHint,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
@@ -43,7 +43,7 @@ private:
     NActors::TActorSystem const* ActorSystem;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TVector<TReadHint> Hints;
+    const TReadHint ReadHint;
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;

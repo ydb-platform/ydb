@@ -35,6 +35,7 @@ THashSet<TStringBuf> FuzzUntypedExcludes = {
 // IO funcs will be skipped during partial typecheck
 THashSet<TStringBuf> FuzzUniversalExcludes = {
     "ConfRead!",
+    "PgReadTable!",
 };
 
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
@@ -660,14 +661,9 @@ private:
             }
         }
 
-        if (mode == EFuzzMode::UntypedLambda) {
-            ctx.IssueManager.Mute();
-        }
-
+        ctx.IssueManager.Mute(mode == EFuzzMode::Universal);
         Y_DEFER {
-            if (mode == EFuzzMode::UntypedLambda) {
-                ctx.IssueManager.Unmute();
-            }
+            ctx.IssueManager.Unmute();
         };
 
         for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {

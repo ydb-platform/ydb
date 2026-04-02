@@ -9,14 +9,15 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TMaybeNode<TDqCnUnionAll> MakeConditionalInsertRows(const TExprBase& input, const TKikimrTableDescription& table,
-    const TMaybe<THashSet<TStringBuf>>& inputColumns, bool abortOnError, TPositionHandle pos, TExprContext& ctx)
+    const TMaybe<THashSet<TStringBuf>>& inputColumns, bool abortOnError, TPositionHandle pos, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx)
 {
     auto condenseResult = CondenseInput(input, ctx);
     if (!condenseResult) {
         return {};
     }
 
-    auto helper = CreateInsertUniqBuildHelper(table, inputColumns, pos, ctx);
+    auto helper = CreateInsertUniqBuildHelper(table, inputColumns, pos, ctx, kqpCtx);
     auto computeKeysStage = helper->CreateComputeKeysStage(condenseResult.GetRef(), pos, ctx);
 
     auto inputPrecompute = helper->CreateInputPrecompute(computeKeysStage, pos, ctx);
@@ -132,7 +133,7 @@ TExprBase KqpBuildInsertStages(TExprBase node, TExprContext& ctx, const TKqpOpti
 
     if (needPrecompute) {
         const static TMaybe<THashSet<TStringBuf>> empty;
-        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, empty, abortOnError, insert.Pos(), ctx);
+        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, empty, abortOnError, insert.Pos(), ctx, kqpCtx);
         if (!insertRows) {
             return node;
         }

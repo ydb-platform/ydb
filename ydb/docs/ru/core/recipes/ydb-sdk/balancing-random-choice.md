@@ -162,4 +162,31 @@
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Алгоритм «равномерный случайный выбор» в Java SDK задаётся политикой `USE_ALL_NODES` в `BalancingSettings` (это поведение по умолчанию, если настройки не переопределять).
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.fromPolicy(BalancingSettings.Policy.USE_ALL_NODES))
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    Балансировка при выборе новой сессии задаётся на стороне нативного транспорта внутри драйвера; при необходимости используйте те же параметры, что и в нативном SDK, через [настройки подключения JDBC](../../reference/languages-and-apis/jdbc-driver/properties.md).
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` с нужными query-параметрами или свойства `DataSource`).
+
+  {% endlist %}
+
 {% endlist %}

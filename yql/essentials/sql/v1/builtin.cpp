@@ -146,9 +146,13 @@ public:
         return TAstListNode::DoInit(ctx, src);
     }
 
-    void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
+    bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override {
         if (Args_.empty() || (Aggr_->GetAggregationMode() != EAggregateMode::Distinct && Aggr_->GetAggregationMode() != EAggregateMode::OverWindowDistinct)) {
-            return;
+            return true;
+        }
+
+        if (PreaggregateExpr_) {
+            return true; // Already collected
         }
 
         auto& expr = Args_.front();
@@ -156,12 +160,12 @@ public:
         // need to initialize expr before checking whether it is a column
         auto clone = expr->Clone();
         if (!clone->Init(ctx, &src)) {
-            return;
+            return !ctx.StrictWarningAsError;
         }
 
         const auto column = clone->GetColumnName();
         if (column) {
-            return;
+            return true;
         }
 
         auto tmpColumn = src.MakeLocalName("_yql_preagg_" + Name_);
@@ -173,6 +177,7 @@ public:
         expr = BuildColumn(expr->GetPos(), tmpColumn);
 
         Aggr_->MarkKeyColumnAsGenerated();
+        return true;
     }
 
     TNodePtr DoClone() const final {
@@ -2892,6 +2897,7 @@ struct TBuiltinFuncInfo {
     std::string_view CanonicalSqlName;
     std::string_view Kind;
     TBuiltinFactoryCallback Callback;
+    NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
 };
 
 struct TSimplePgFuncInfo {
@@ -3226,6 +3232,7 @@ struct TBuiltinFuncData {
             {"instanceof", {"InstanceOf", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1)}},
             {"datatype", {"DataType", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlDataType>()}},
             {"optionaltype", {"OptionalType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalType", 1, 1)}},
+            {"asoptionaltype", {"AsOptionalType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsOptionalType", 1, 1), NYql::MakeLangVersion(2026, 1)}},
             {"listtype", {"ListType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListType", 1, 1)}},
             {"streamtype", {"StreamType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamType", 1, 1)}},
             {"dicttype", {"DictType", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictType", 2, 2)}},
@@ -4152,7 +4159,11 @@ TNodeResult BuildBuiltinFunc(
 
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
-            return Wrap((*builtinCallback).second.Callback(pos, args));
+            const auto& funcInfo = builtinCallback->second;
+            if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, funcInfo.CanonicalSqlName, funcInfo.MinLangVer)) {
+                return std::unexpected(ESQLError::Basic);
+            }
+            return Wrap(funcInfo.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
@@ -4410,36 +4421,41 @@ TNodeResult BuildBuiltinFunc(
                              TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {}));
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback) {
+void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer)>& callback) {
+    struct TFuncInfo {
+        TString Kind;
+        NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
+    };
+
     const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>();
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
     const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
 
-    std::map<TString, TString> map;
-    for (const auto& x : builtinFuncs) {
-        if (!x.second.CanonicalSqlName.empty()) {
-            map.emplace(x.second.CanonicalSqlName, x.second.Kind);
+    std::map<TString, TFuncInfo> map;
+    for (const auto& [key, info] : builtinFuncs) {
+        if (!info.CanonicalSqlName.empty()) {
+            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer});
         }
     }
 
-    for (const auto& x : aggrFuncs) {
-        if (!x.second.CanonicalSqlName.empty()) {
-            map.emplace(x.second.CanonicalSqlName, x.second.Kind);
+    for (const auto& [key, info] : aggrFuncs) {
+        if (!info.CanonicalSqlName.empty()) {
+            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind)});
         }
     }
 
-    for (const auto& x : coreFuncs) {
-        map.emplace(x.second.Name, "Normal");
+    for (const auto& [key, info] : coreFuncs) {
+        map.emplace(info.Name, TFuncInfo{"Normal"});
     }
 
-    for (const auto& x : simplePgFuncs) {
-        map.emplace(TString("SimplePg::") + x.first, "Normal");
+    for (const auto& [key, name] : simplePgFuncs) {
+        map.emplace(TString("SimplePg::") + key, TFuncInfo{"Normal"});
     }
 
-    for (const auto& x : map) {
-        callback(x.first, x.second);
+    for (const auto& [name, info] : map) {
+        callback(name, info.Kind, info.MinLangVer);
     }
 }
 

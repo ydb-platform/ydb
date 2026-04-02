@@ -29,6 +29,7 @@
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
+/ydb/core/kqp/ut/tli/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs

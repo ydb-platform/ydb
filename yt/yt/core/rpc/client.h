@@ -88,6 +88,8 @@ struct IClientRequest
 
     virtual size_t GetHash() const = 0;
 
+    virtual IClientRequestPtr Clone() const = 0;
+
     // Extension methods.
     template <class E>
     void DeclareClientFeature(E featureId);
@@ -234,6 +236,8 @@ protected:
 
     IClientRequestControlPtr Send(IClientResponseHandlerPtr responseHandler);
 
+    void InitializeFrom(const TClientRequest& other) const;
+
 private:
     std::atomic<bool> Serialized_ = false;
 
@@ -295,7 +299,11 @@ public:
         const TServiceDescriptor& serviceDescriptor,
         const TMethodDescriptor& methodDescriptor);
 
+    TTypedClientRequest(const TTypedClientRequest& other);
+
     TFuture<typename TResponse::TResult> Invoke();
+
+    IClientRequestPtr Clone() const override;
 
 private:
     TSharedRefArray SerializeHeaderless() const override;

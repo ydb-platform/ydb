@@ -1652,6 +1652,14 @@ public:
 
                 columnDesc = L(columnDesc, Q(Y(Q("columnConstrains"), Q(columnConstraints))));
 
+                if (col.Compression) {
+                    auto columnCompression = Y();
+                    for (const auto& [key, value] : col.Compression->Entries) {
+                        columnCompression = L(columnCompression, Q(Y(Q(key), value)));
+                    }
+                    columnDesc = L(columnDesc, Q(Y(Q("columnCompression"), Q(columnCompression))));
+                }
+
                 auto familiesDesc = Y();
                 for (const auto& family : col.Families) {
                     familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
@@ -4469,12 +4477,20 @@ private:
         auto options = Y();
         options = L(options, Q(Y(Q("mode"), Q(GetMode()))));
         if (Params_.Value) {
-            if (Params_.Value->HasNode()) {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), Params_.Value->Build())));
-            } else {
-                options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
-            }
+            std::visit([&](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, TDeferredAtom>) {
+                    if (value.HasNode()) {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"), value.Build())));
+                    } else {
+                        options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value"))));
+                    }
+                } else if constexpr (std::is_same_v<T, TNodePtr>) {
+                    options = L(options, Q(Y(BuildQuotedAtom(Pos_, "value_expr"), Y("EvaluateExpr", value))));
+                }
+            }, *Params_.Value);
         }
+
         if (Params_.InheritPermissions) {
             if (Params_.InheritPermissions->HasNode()) {
                 options = L(options, Q(Y(BuildQuotedAtom(Pos_, "inherit_permissions"), Params_.InheritPermissions->Build())));

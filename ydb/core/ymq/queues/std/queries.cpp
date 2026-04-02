@@ -1455,6 +1455,7 @@ const char* const GetQueuesListQuery = R"__(
             'QueueName
             'QueueState
             'FifoQueue
+            'TopicCreated
             'CreatedTimestamp
             'CustomQueueName
             'DlqName

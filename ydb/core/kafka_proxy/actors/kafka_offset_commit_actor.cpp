@@ -196,6 +196,10 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                                                                                        .TopicPath = topicIt->second.TopicNameConverter->GetPrimaryPath()};
                 PendingResponses++;
                 commits.push_back(commitReq);
+                KAFKA_LOG_D("Add commit request in txn for group# " << Message->GroupId.value() <<
+                    ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
+                    ", partition# " << partitionRequest.PartitionIndex <<
+                    ", offset# " << partitionRequest.CommittedOffset);
             }
         }
     }
@@ -218,6 +222,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
     }
     return;
 }
+
 void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
@@ -229,7 +234,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
         KAFKA_LOG_ERROR(kqpQueryError);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::PRECONDITION_FAILED && issues.Size() == 1 && (issues.begin())->IssueCode == Ydb::PersQueue::ErrorCode::ErrorCode::GENERATION_MISMATCH) {
-            Error = EKafkaErrors::FENCED_INSTANCE_ID;
+            Error = EKafkaErrors::ILLEGAL_GENERATION;
             for (auto topicReq: Message->Topics) {
                 for (auto partitionRequest: topicReq.Partitions) {
                     AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
@@ -251,6 +256,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
     }
     return;
 }
+
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());

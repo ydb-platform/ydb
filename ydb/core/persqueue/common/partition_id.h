@@ -9,6 +9,7 @@
 
 #include <compare>
 #include <functional>
+#include <tuple>
 
 namespace NKikimr::NPQ {
 
@@ -31,7 +32,13 @@ public:
 
     size_t GetHash() const;
 
-    friend auto operator<=>(const TPartitionId& lhs, const TPartitionId& rhs) = default;
+    friend auto operator<=>(const TPartitionId& lhs, const TPartitionId& rhs) {
+        auto makeTuple = [](const TPartitionId& v) {
+            return std::tie(v.OriginalPartitionId, v.WriteId, v.InternalPartitionId);
+        };
+        return makeTuple(lhs) <=> makeTuple(rhs);
+    }
+
     friend bool operator==(const TPartitionId& lhs, const TPartitionId& rhs) = default;
 
     void ToStream(IOutputStream& s) const;

@@ -108,7 +108,7 @@ public:
             const auto pos = read->Pos();
 
             // DqPqTopicSource.Columns = final output row (may shrink after e.g. ExtractMembers).
-            // columns_list / UserSchemaColumns = fixed topic/userschema order for csv parsing; unchanged by projection.
+            // UserSchemaColumns setting / UserSchemaColumns arg = fixed topic/userschema order for csv parsing; unchanged by projection.
             // Non-empty csv UserSchemaColumns is validated in HandleReadTopic (yql_pq_datasource_type_ann.cpp), same as S3.
 
             // Same member order/names as PqReadTopic row type (RowSpec + metadata, PqReadTopic.Columns projection).
@@ -314,12 +314,12 @@ public:
                         streamingTopicRead = FromString<bool>(Value(setting));
                     } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
                         *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
-                    } else if (name == "columns_list"sv) {
+                    } else if (name == UserSchemaColumnsSetting) {
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             const TExprNode& list = maybeList.Cast().Ref();
-                            YQL_ENSURE(list.IsList(), "columns_list must be a list of atoms");
+                            YQL_ENSURE(list.IsList(), "UserSchemaColumns must be a list of atoms");
                             for (ui32 j = 0; j < list.ChildrenSize(); ++j) {
-                                YQL_ENSURE(list.Child(j)->IsAtom(), "columns_list must be a list of atoms");
+                                YQL_ENSURE(list.Child(j)->IsAtom(), "UserSchemaColumns must be a list of atoms");
                                 srcDesc.AddColumnNames(TString(list.Child(j)->Content()));
                             }
                         }
@@ -368,7 +368,7 @@ public:
                 }
 
                 // Proto Columns / ColumnTypes: same order as annotated row struct (fullRowType), not DqPqTopicSource.Columns expr.
-                // ColumnNames from columns_list: userschema order for headerless csv (same role as S3 TSource.ColumnNames).
+                // ColumnNames from UserSchemaColumns: userschema order for headerless csv (same role as S3 TSource.ColumnNames).
                 for (const auto* item : fullRowType->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
@@ -765,7 +765,7 @@ public:
                 YQL_ENSURE(child->IsAtom(), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
             }
             props.push_back(Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build("columns_list")
+                .Name().Build(UserSchemaColumnsSetting)
                 .Value(std::move(usc))
                 .Done());
         }
@@ -792,7 +792,7 @@ public:
             .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
             .Done());
 
-        // Like S3: columns_list in formatSettings тАФ immutable userschema/file column order for csv CH parser (not projection Columns).
+        // Like S3: UserSchemaColumns in formatSettings тАФ immutable userschema/file column order for csv CH parser (not projection Columns).
         TExprNode::TPtr formatSettingsNode = pqReadTopic.Settings().Ptr();
         if (pqReadTopic.Format().Ref().Content() == TStringBuf("csv")) {
             const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
@@ -805,7 +805,7 @@ public:
             }
             TExprNode::TListType merged = formatSettingsNode->ChildrenList();
             merged.push_back(ctx.NewList(pos, {
-                ctx.NewAtom(pos, "columns_list"),
+                ctx.NewAtom(pos, UserSchemaColumnsSetting),
                 ctx.NewList(pos, usc->ChildrenList()),
             }));
             formatSettingsNode = ctx.NewList(pos, std::move(merged));

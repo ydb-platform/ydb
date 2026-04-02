@@ -131,7 +131,7 @@ public:
         }
 
         // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
-        if (format == TStringBuf("csv")) {
+        if (format == "csv"sv) {
             if (!columns || !columns->IsList() || columns->ChildrenSize() == 0) {
                 ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
                     "csv format requires SCHEMA with explicitly listed column names to determine column order"));
@@ -231,7 +231,7 @@ public:
         }
 
         TExprNode::TPtr userSchemaColumnsList;
-        if (format == TStringBuf("csv")) {
+        if (format == "csv"sv) {
             YQL_ENSURE(columns && columns->IsList());
             // Own copy: Columns may later be rewritten to projection order; UserSchemaColumns must keep file order.
             userSchemaColumnsList = ctx.NewList(read.Pos(), columns->ChildrenList());

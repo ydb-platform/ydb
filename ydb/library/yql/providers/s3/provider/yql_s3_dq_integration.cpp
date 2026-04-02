@@ -29,6 +29,8 @@ using namespace NNodes;
 
 namespace {
 
+constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+
 TString GetLastName(const TString& fullName) {
     auto n = fullName.find_last_of('/');
     return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
@@ -315,7 +317,7 @@ public:
                         settingsList.push_back(
                             ctx.Builder(s3ReadObject.Object().Pos())
                                 .List()
-                                    .Atom(0, "columns_list")
+                                    .Atom(0, UserSchemaColumnsSetting)
                                     .Add(1, ctx.NewList(s3ReadObject.Object().Pos(), std::move(columnAtoms)))
                                 .Seal()
                                 .Build()
@@ -449,7 +451,7 @@ public:
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
                         const TStringBuf key = settings.Ref().Child(i)->Head().Content();
                         const auto& valueNode = settings.Ref().Child(i)->Tail();
-                        if (key == "columns_list"sv) {
+                        if (key == UserSchemaColumnsSetting) {
                             // Value is a list of column name atoms тАФ iterate without string parsing.
                             const auto columnCount = valueNode.ChildrenSize();
                             srcDesc.MutableColumnNames()->Reserve(columnCount);

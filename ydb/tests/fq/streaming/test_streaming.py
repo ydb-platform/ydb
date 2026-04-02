@@ -112,13 +112,13 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["time"] == b"lunch time"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_column_order(self, kikimr, entity_name, local_topics):
         """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_projection_column_order`.
         """
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_projection_column_order", local_topics, entity_name
+            kikimr, "test_csv_projection_column_order", local_topics, entity_name
         )
 
         sql = f"""SELECT b, a FROM {input_name}
@@ -140,13 +140,13 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
         """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output.
 
         S3 analog: `test_formats.TestS3Formats.test_csv_with_names_projection_column_order`.
         """
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_with_names_projection_column_order", local_topics, entity_name
+            kikimr, "test_csv_with_names_projection_column_order", local_topics, entity_name
         )
 
         sql = f"""SELECT b, a FROM {input_name}
@@ -168,10 +168,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
+    def test_custom_csv_delimiter_csv_with_names(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv_with_names` (semicolon + header per message)."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_custom_csv_delimiter_csv_with_names", local_topics, entity_name
+            kikimr, "test_custom_csv_delimiter_csv_with_names", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -203,10 +203,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
+    def test_custom_csv_delimiter_csv(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_custom_csv_delimiter_csv` / `test_csv_format_custom_delimiter`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_custom_csv_delimiter_csv", local_topics, entity_name
+            kikimr, "test_custom_csv_delimiter_csv", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -234,10 +234,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
+    def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_empty_schema_rejected", local_topics, entity_name
+            kikimr, "test_csv_empty_schema_rejected", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -256,10 +256,10 @@ class TestStreamingInYdb(StreamingTestBase):
         )
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_projection_single_column(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_single_column(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_projection_single_column`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_projection_single_column", local_topics, entity_name
+            kikimr, "test_csv_projection_single_column", local_topics, entity_name
         )
 
         sql = f"""SELECT b FROM {input_name}
@@ -278,10 +278,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert result_sets[0].rows[0]["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
+    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_projection_column_order_non_alphabetical_schema`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_projection_nonalpha_schema", local_topics, entity_name
+            kikimr, "test_csv_projection_nonalpha_schema", local_topics, entity_name
         )
 
         sql = f"""SELECT a, b FROM {input_name}
@@ -301,10 +301,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert row["b"] == b"bb"
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
+    def test_csv_no_header_three_rows(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_format_no_header` (same data as test_format_data/test_no_header.csv)."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_no_header_three_rows", local_topics, entity_name
+            kikimr, "test_csv_no_header_three_rows", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}
@@ -331,10 +331,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
+    def test_csv_no_header_select_price(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_format_no_header_project_non_first_alphabetic_column`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_no_header_select_price", local_topics, entity_name
+            kikimr, "test_csv_no_header_select_price", local_topics, entity_name
         )
 
         sql = f"""SELECT Price FROM {input_name}
@@ -361,10 +361,10 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Price"] == 15
 
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_read_topic_csv_physical_column_order(self, kikimr, entity_name, local_topics):
+    def test_csv_physical_column_order(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_format_schema_order_differs_from_alphabet`."""
         input_name, endpoint = self.get_input_name(
-            kikimr, "test_read_topic_csv_physical_column_order", local_topics, entity_name
+            kikimr, "test_csv_physical_column_order", local_topics, entity_name
         )
 
         sql = f"""SELECT * FROM {input_name}

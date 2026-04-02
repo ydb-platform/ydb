@@ -15,6 +15,8 @@ using namespace NNodes;
 
 namespace {
 
+constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+
 const TExprNode& GetFormat(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
         const auto& child = *settings.Child(i);
@@ -326,6 +328,7 @@ TRuntimeNode BuildParseCall(
         if (csvVirtualHeader) {
             writer.Write("with_names_use_header", false);
             writer.Write("empty_as_default", true);
+            // ClickHouse parser option name.
             writer.WriteKey("columns_list");
             writer.OpenArray();
             for (const auto& col : *csvHeaderlessColumnOrder) {
@@ -431,10 +434,10 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         settings->Tail().ForEachChild([&](const TExprNode& v) {
             const TStringBuf key = v.Child(0)->Content();
             const auto& valNode = *v.Child(1);
-            if (key == "columns_list"sv && valNode.IsList()) {
+            if (key == UserSchemaColumnsSetting && valNode.IsList()) {
                 csvHeaderlessColumns.reserve(valNode.ChildrenSize());
                 for (ui32 i = 0; i < valNode.ChildrenSize(); ++i) {
-                    MKQL_ENSURE(valNode.Child(i)->IsAtom(), "columns_list must be a list of atoms");
+                    MKQL_ENSURE(valNode.Child(i)->IsAtom(), "UserSchemaColumns must be a list of atoms");
                     csvHeaderlessColumns.push_back(TString(valNode.Child(i)->Content()));
                 }
             } else {

@@ -226,66 +226,70 @@
 
 - Java
 
-  ```java
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
     private static final String TABLE_NAME = "bulk_upsert";
     private static final int BATCH_SIZE = 1000;
-
+    
     public static void main(String[] args) {
-        String connectionString = args[0];
-
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
-                .build()) {
-
-            // Для bulk upsert необходимо использовать полный путь к таблице
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
+      String connectionString = args[0];
+    
+      try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+              .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация
+              .build()) {
+    
+          // Для bulk upsert необходимо использовать полный путь к таблице
+          String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
+          try (TableClient tableClient = TableClient.newClient(transport).build()) {
+              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+              execute(retryCtx, tablePath);
+          }
+      }
     }
-
+    
     public static void execute(SessionRetryContext retryCtx, String tablePath) {
-        // описание таблицы
-        StructType structType = StructType.of(
-            "app", PrimitiveType.Text,
-            "timestamp", PrimitiveType.Timestamp,
-            "host", PrimitiveType.Text,
-            "http_code", PrimitiveType.Uint32,
-            "message", PrimitiveType.Text
-        );
-
-        // генерация пакета записей
-        List<Value<?>> list = new ArrayList<>(50);
-        for (int i = 0; i < BATCH_SIZE; i += 1) {
-            // добавление новой строки в виде значения-структуры
-            list.add(structType.newValue(
-                "app", PrimitiveValue.newText("App_" + String.valueOf(i / 256)),
-                "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
-                "host", PrimitiveValue.newText("192.168.0." + i % 256),
-                "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
-                "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
-            ));
-        }
-
-        // Create list of structs
-        ListValue rows = ListType.of(structType).newValue(list);
-        // Do retry operation on errors with best effort
-        retryCtx.supplyStatus(
-            session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
-        ).join().expectSuccess("bulk upsert problem");
+      // описание таблицы
+      StructType structType = StructType.of(
+          "app", PrimitiveType.Text,
+          "timestamp", PrimitiveType.Timestamp,
+          "host", PrimitiveType.Text,
+          "http_code", PrimitiveType.Uint32,
+          "message", PrimitiveType.Text
+      );
+    
+      // генерация пакета записей
+      List<Value<?>> list = new ArrayList<>(50);
+      for (int i = 0; i < BATCH_SIZE; i += 1) {
+          // добавление новой строки в виде значения-структуры
+          list.add(structType.newValue(
+              "app", PrimitiveValue.newText("App_" + i / 256),
+              "timestamp", PrimitiveValue.newTimestamp(Instant.now().plusSeconds(i)),
+              "host", PrimitiveValue.newText("192.168.0." + i % 256),
+              "http_code", PrimitiveValue.newUint32(i % 113 == 0 ? 404 : 200),
+              "message", PrimitiveValue.newText(i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1")
+          ));
+      }
+    
+      // Create list of structs
+      ListValue rows = ListType.of(structType).newValue(list);
+      // Do retry operation on errors with best effort
+      retryCtx.supplyStatus(
+          session -> session.executeBulkUpsert(tablePath, rows, new BulkUpsertSettings())
+      ).join().expectSuccess("bulk upsert problem");
     }
-  ```
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
+    ```java
     private static final int BATCH_SIZE = 1000;
-
+    
     public static void main(String[] args) {
         String connectionUrl = args[0];
-
+    
         try (Connection conn = DriverManager.getConnection(connectionUrl)) {
             try (PreparedStatement ps = conn.prepareStatement(
                     "BULK UPSERT INTO bulk_upsert (app, timestamp, host, http_code, message) VALUES (?, ?, ?, ?, ?);"
@@ -298,14 +302,18 @@
                     ps.setString(5, i % 3 == 0 ? "GET / HTTP/1.1" : "GET /images/logo.png HTTP/1.1");
                     ps.addBatch();
                 }
-
+    
                 ps.executeBatch();
             }
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
-  ```
+    ```
+
+    В Spring Boot, Hibernate, JOOQ и других фреймворках вокруг ORM поверх JDBC можно выполнять нативный YQL (в том числе из репозиториев и `@Query`). Драйвер стремится оптимизировать крупные вставки; операции `UPDATE`, `INSERT`, `DELETE`, `UPSERT`, идущие через JDBC, при необходимости автоматически группируются в пакеты на стороне драйвера.
+
+  {% endlist %}
 
 - Python
 

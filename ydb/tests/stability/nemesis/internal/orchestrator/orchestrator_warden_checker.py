@@ -14,7 +14,7 @@ from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
-from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_runs import (
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import (
     run_orchestrator_aggregated_safety,
     run_orchestrator_liveness_subprocess_sync,
 )

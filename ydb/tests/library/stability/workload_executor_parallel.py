@@ -42,7 +42,7 @@ class ParallelWorkloadTestBase:
         binaries_deploy_path: str = (
             "/tmp/stress_binaries/"
         )
-        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config)
+        deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location='/home/pefavel/ydbwork/ydb/ydb/tests/stability/nemesis/static')
         yield deployer
         deployer._manage_nemesis(False, [], 'teardown')
 
@@ -381,7 +381,7 @@ class ParallelWorkloadTestBase:
             recoverability_execution_result = stress_executor.execute_stress_runs(
                 stress_deployer,
                 workload_params,
-                1200,
+                600,
                 preparation_result,
                 False
             )

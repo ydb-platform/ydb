@@ -287,7 +287,7 @@ class ErrorsCollector:
         tz = timezone('Europe/Moscow')
         start = datetime.fromtimestamp(start_time, tz).strftime("%Y-%m-%d %H:%M:%S")
         end = datetime.fromtimestamp(datetime.now().timestamp(), tz).strftime("%Y-%m-%d %H:%M:%S")
-        cmd = f"sudo journalctl -u nemesis -S '{start}' -U '{end}'"
+        cmd = f"sudo journalctl -u nemesis-agent -S '{start}' -U '{end}'"
         nemesis_logs = {}
         for host in self.hosts:
             try:

@@ -134,7 +134,7 @@
 
 | Категория | Где исполняется | Как попадает в отчёт |
 |-----------|-----------------|----------------------|
-| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (набор из `ORCHESTRATOR_LIVENESS_CHECKS`, исполнение `run_orchestrator_liveness_cli_batch` в `orchestrator_warden_runs.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
+| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (набор из `ORCHESTRATOR_LIVENESS_CHECKS`, исполнение `run_orchestrator_liveness_cli_batch` в `orchestrator_warden_execution.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
 | **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно) | По каждому хосту в том же JSON |
 | **Safety (orchestrator)** | **Оркестратор** (`OrchestratorWardenChecker`): кортежи **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** и **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** (агрегация — `unified_agent_verify_failed_aggregated.py`) | В `_orchestrator.safety_checks` |
 

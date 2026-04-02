@@ -7,7 +7,7 @@ from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 from ydb.tests.tools.nemesis.library import monitor
-from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_runs import run_orchestrator_liveness_cli_batch
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch
 
 
 def parse_args():

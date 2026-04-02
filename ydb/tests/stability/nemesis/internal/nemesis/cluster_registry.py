@@ -11,15 +11,15 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_planner import (
     SerialStaggeredInjectPlanner,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.disk_chaos import (
+from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_disk import (
     ClusterSafelyBreakDiskNemesis,
     ClusterSafelyCleanupDisksNemesis,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.hive_ops import (
+from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_hive import (
     ClusterKickTabletsFromNodeNemesis,
     ClusterReBalanceTabletsNemesis,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.node_chaos import (
+from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_node import (
     ClusterKillNodeDaemonNemesis,
     ClusterKillSlotDaemonNemesis,
     ClusterRollingUpdateNemesis,
@@ -28,7 +28,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.node_chaos impor
     ClusterStopStartNodeNemesis,
     ClusterSuspendNodeNemesis,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.tablet_kill import (
+from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_tablets import (
     ClusterBulkChangeTabletGroupNemesis,
     ClusterChangeTabletGroupNemesis,
     ClusterKillBlockstorePartitionNemesis,
@@ -163,7 +163,7 @@ def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
 
 def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     """Datacenter / bridge pile actors only if ``cluster.yaml`` advertises the layout."""
-    from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.yaml_nemesis_gates import (
+    from ydb.tests.stability.nemesis.internal.nemesis.runners.yaml_gates import (
         yaml_has_bridge_piles_section,
         yaml_has_multi_datacenter,
     )
@@ -173,7 +173,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     extra: dict[str, dict[str, Any]] = {}
 
     if yaml_has_multi_datacenter(path):
-        from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.datacenter_chaos import (
+        from ydb.tests.stability.nemesis.internal.nemesis.runners.datacenter import (
             ClusterDataCenterIptablesBlockPortsNemesis,
             ClusterDataCenterRouteUnreachableNemesis,
             ClusterDataCenterStopNodesNemesis,
@@ -192,7 +192,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
             }
 
     if yaml_has_bridge_piles_section(path):
-        from ydb.tests.stability.nemesis.internal.nemesis.cluster_chaos.bridge_pile_chaos import (
+        from ydb.tests.stability.nemesis.internal.nemesis.runners.bridge_pile import (
             ClusterBridgePileIptablesBlockPortsNemesis,
             ClusterBridgePileRouteUnreachableNemesis,
             ClusterBridgePileStopNodesNemesis,

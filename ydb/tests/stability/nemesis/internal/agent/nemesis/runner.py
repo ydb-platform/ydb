@@ -5,7 +5,7 @@ import threading
 import time
 import traceback
 
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import NEMESIS_EXECUTION_LOGGER
+from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import NEMESIS_EXECUTION_LOGGER
 
 
 def _invoke_fault(method, payload):

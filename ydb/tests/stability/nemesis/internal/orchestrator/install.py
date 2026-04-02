@@ -9,6 +9,19 @@ import yaml
 from ydb.tests.stability.nemesis.internal.config import Settings, AgentSettings
 
 
+def _get_app_dir() -> str:
+    """Return the directory containing the nemesis binary.
+
+    When the program is executed as ``./nemesis install ...`` the binary
+    (or the ``__main__.py`` entry-point) lives next to the ``static/``
+    directory that must be uploaded to the orchestrator host.  All local
+    paths (binary, static assets, temporary service-unit files) are
+    resolved relative to this directory so that the install command works
+    regardless of the caller's working directory.
+    """
+    return os.path.dirname(os.path.abspath(sys.argv[0]))
+
+
 def _ssh_base():
     return [
         "ssh",
@@ -71,8 +84,12 @@ def _require_local_path(path: str, *, kind: str) -> None:
             raise FileNotFoundError(f"Local file missing: {path}")
 
 
-def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None):
-    _require_local_path("./nemesis", kind="file")
+def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None, app_dir=None):
+    if app_dir is None:
+        app_dir = _get_app_dir()
+
+    nemesis_binary = os.path.join(app_dir, "nemesis")
+    _require_local_path(nemesis_binary, kind="file")
 
     ssh_base = _ssh_base()
     ssh_rsh = " ".join(ssh_base)
@@ -89,7 +106,7 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
             "--no-g",
             "--rsh={}".format(ssh_rsh),
             "--rsync-path=sudo rsync",
-            "./nemesis",
+            nemesis_binary,
             f"{host}:{root}/bin/agent",
         ],
         log_line="upload nemesis binary",
@@ -97,7 +114,13 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
     )
 
     if is_orchestrator:
-        _require_local_path("./static", kind="dir")
+        # Use settings.static_location if it's an absolute path;
+        # otherwise resolve relative to app_dir (default: "static").
+        if os.path.isabs(settings.static_location):
+            static_dir = settings.static_location
+        else:
+            static_dir = os.path.join(app_dir, settings.static_location)
+        _require_local_path(static_dir, kind="dir")
         _run_external(
             [
                 "rsync",
@@ -107,7 +130,7 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
                 "--no-g",
                 "--rsh={}".format(ssh_rsh),
                 "--rsync-path=sudo rsync",
-                "./static/",
+                static_dir + "/",
                 f"{host}:{root}/static/",
             ],
             log_line="upload static/",
@@ -147,7 +170,7 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
             host=host,
         )
 
-    unit_file = f"./nemesis-agent.service.{host}"
+    unit_file = os.path.join(app_dir, f"nemesis-agent.service.{host}")
     _require_local_path(unit_file, kind="file")
     _run_external(
         [
@@ -214,13 +237,14 @@ def install_on_hosts(hosts, settings: Settings):
     if not hosts:
         return None
 
+    app_dir = _get_app_dir()
     orchestrator_host = hosts[0]
     agent_hosts = hosts[1:] if len(hosts) > 1 else []
 
     root = settings.install_root.rstrip("/")
 
     # Create service file for orchestrator (first host)
-    with open(f"nemesis-agent.service.{orchestrator_host}", "w") as f:
+    with open(os.path.join(app_dir, f"nemesis-agent.service.{orchestrator_host}"), "w") as f:
         # Use the copied config location on the orchestrator host
         config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
         yaml_config_env = f"Environment=YAML_CONFIG_LOCATION={config_location}\n" if config_location else ""
@@ -270,7 +294,7 @@ WantedBy=multi-user.target
             f"Environment=YAML_CONFIG_LOCATION={agent_config_location}\n" if agent_config_location else ""
         )
 
-        with open(f"nemesis-agent.service.{host}", "w") as f:
+        with open(os.path.join(app_dir, f"nemesis-agent.service.{host}"), "w") as f:
             f.write(
                 f"""[Unit]
 Description=Nemesis Agent Service
@@ -309,18 +333,18 @@ WantedBy=multi-user.target
     futures = []
     with ThreadPoolExecutor(max_workers=max(len(hosts), 1)) as executor:
         futures.append(
-            executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location)
+            executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location, app_dir)
         )
         for host in agent_hosts:
             futures.append(
-                executor.submit(upload_binary, host, settings, False, settings.yaml_config_location or None)
+                executor.submit(upload_binary, host, settings, False, settings.yaml_config_location or None, app_dir)
             )
 
         for fut in as_completed(futures):
             fut.result()
 
     for host in agent_hosts + [orchestrator_host]:
-        os.remove(f"nemesis-agent.service.{host}")
+        os.remove(os.path.join(app_dir, f"nemesis-agent.service.{host}"))
 
     return orchestrator_host
 

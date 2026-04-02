@@ -12,20 +12,23 @@ PY_SRCS(
     internal/nemesis/local_network.py
     internal/nemesis/monitored_actor.py
     internal/nemesis/cluster_context.py
-    internal/nemesis/cluster_chaos/registry.py
-    internal/nemesis/cluster_chaos/tablet_kill.py
-    internal/nemesis/cluster_chaos/hive_ops.py
-    internal/nemesis/cluster_chaos/disk_chaos.py
-    internal/nemesis/cluster_chaos/node_chaos.py
-    internal/nemesis/cluster_chaos/yaml_nemesis_gates.py
-    internal/nemesis/cluster_chaos/datacenter_chaos.py
-    internal/nemesis/cluster_chaos/bridge_pile_chaos.py
+    internal/nemesis/cluster_registry.py
+    internal/nemesis/runners/__init__.py
+    internal/nemesis/runners/network.py
+    internal/nemesis/runners/node_local.py
+    internal/nemesis/runners/cluster_disk.py
+    internal/nemesis/runners/cluster_hive.py
+    internal/nemesis/runners/cluster_node.py
+    internal/nemesis/runners/cluster_tablets.py
+    internal/nemesis/runners/datacenter.py
+    internal/nemesis/runners/bridge_pile.py
+    internal/nemesis/runners/yaml_gates.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
     internal/agent/agent_safety_runs.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py
-    internal/orchestrator/orchestrator_warden_runs.py
+    internal/orchestrator/orchestrator_warden_execution.py
     internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py
     internal/orchestrator/nemesis/schedule_loop.py

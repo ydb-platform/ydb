@@ -137,7 +137,8 @@ class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubj
     using TBase::PassAway;
     using TBase::Become;
     using TBase::Register;
-    using IRetryPolicy = IRetryPolicy<NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr&>;
+    using IRetryPolicyV1 = IRetryPolicy<NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr&>;
+    using IRetryPolicyV2 = IRetryPolicy<NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr&>;
 
     const ::NFq::TControlPlaneProxyConfig Config;
     const TActorId Sender;
@@ -147,7 +148,8 @@ class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubj
     TEventRequest Event;
     const ui32 Cookie;
     const TInstant StartTime;
-    const IRetryPolicy::IRetryState::TPtr RetryState;
+    const IRetryPolicyV1::IRetryState::TPtr RetryStateV1;
+    const IRetryPolicyV2::IRetryState::TPtr RetryStateV2;
     const TActorId AccessService;
 
 public:
@@ -165,7 +167,8 @@ public:
         , Event(event)
         , Cookie(cookie)
         , StartTime(TInstant::Now())
-        , RetryState(GetRetryPolicy()->CreateRetryState())
+        , RetryStateV1(GetRetryPolicyV1()->CreateRetryState())
+        , RetryStateV2(GetRetryPolicyV2()->CreateRetryState())
         , AccessService(accessService)
     {
     }
@@ -176,18 +179,29 @@ public:
         CPP_LOG_T("Resolve subject type bootstrap. Token: " << MaskTicket(Token) << " Actor id: " << SelfId());
         Become(&TResolveSubjectTypeActor::StateFunc, Config.RequestTimeout, new NActors::TEvents::TEvWakeup());
         Counters->InFly->Inc();
-        Send(AccessService, CreateRequest().release(), 0, 0);
+        if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            Send(AccessService, CreateRequestV2().release(), 0, 0);
+        } else {
+            Send(AccessService, CreateRequestV1().release(), 0, 0);
+        }
     }
 
-    std::unique_ptr<NCloud::TEvAccessService::TEvAuthenticateRequest> CreateRequest() {
-        auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+    std::unique_ptr<NCloud::TEvAccessService::TEvAuthenticateRequestV1> CreateRequestV1() {
+        auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
+        request->Request.set_iam_token(Token);
+        return request;
+    }
+
+    std::unique_ptr<NCloud::TEvAccessService::TEvAuthenticateRequestV2> CreateRequestV2() {
+        auto request = std::make_unique<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
         request->Request.set_iam_token(Token);
         return request;
     }
 
     STRICT_STFUNC(StateFunc,
         cFunc(NActors::TEvents::TSystem::Wakeup, HandleTimeout);
-        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV1, Handle);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, Handle);
     )
 
     void HandleTimeout() {
@@ -203,16 +217,53 @@ public:
         PassAway();
     }
 
-    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
         const auto& response = ev->Get()->Response;
         const auto& status = ev->Get()->Status;
         if (!status.Ok() || !response.has_subject()) {
             TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
-            auto delay = RetryState->GetNextRetryDelay(ev);
+            auto delay = RetryStateV1->GetNextRetryDelay(ev);
             if (delay) {
                 Counters->Retry->Inc();
                 CPP_LOG_E("Resolve subject type error. Retry with delay " << *delay << ", " << errorMessage);
-                TActivationContext::Schedule(*delay, new IEventHandle(AccessService, static_cast<const TActorId&>(SelfId()), CreateRequest().release()));
+                TActivationContext::Schedule(*delay, new IEventHandle(AccessService, static_cast<const TActorId&>(SelfId()), CreateRequestV1().release()));
+                return;
+            }
+            const TDuration delta = TInstant::Now() - StartTime;
+            Counters->InFly->Dec();
+            Counters->LatencyMs->Collect((delta).MilliSeconds());
+            Counters->Error->Inc();
+            CPP_LOG_E(errorMessage);
+            NYql::TIssues issues;
+            NYql::TIssue issue = MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Resolve subject type error");
+            issues.AddIssue(issue);
+            Probe(delta, false, false);
+            Send(Sender, new TResponseProxy(issues, {}), 0, Cookie);
+            PassAway();
+            return;
+        }
+
+        Counters->InFly->Dec();
+        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+        Counters->Ok->Inc();
+        TString subjectType = GetSubjectType(response.subject());
+        Event->Get()->SubjectType = subjectType;
+        CPP_LOG_T("Subject Type: " << subjectType << " Token: " << MaskTicket(Token));
+
+        TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
+        PassAway();
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+        const auto& response = ev->Get()->Response;
+        const auto& status = ev->Get()->Status;
+        if (!status.Ok() || !response.has_subject()) {
+            TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
+            auto delay = RetryStateV2->GetNextRetryDelay(ev);
+            if (delay) {
+                Counters->Retry->Inc();
+                CPP_LOG_E("Resolve subject type error. Retry with delay " << *delay << ", " << errorMessage);
+                TActivationContext::Schedule(*delay, new IEventHandle(AccessService, static_cast<const TActorId&>(SelfId()), CreateRequestV2().release()));
                 return;
             }
             const TDuration delta = TInstant::Now() - StartTime;
@@ -253,8 +304,29 @@ private:
         }
     }
 
-    static const IRetryPolicy::TPtr& GetRetryPolicy() {
-        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+    static TString GetSubjectType(const yandex::cloud::priv::accessservice::v2::Subject& subject) {
+        switch (subject.type_case()) {
+            case yandex::cloud::priv::accessservice::v2::Subject::TYPE_NOT_SET:
+            case yandex::cloud::priv::accessservice::v2::Subject::kAnonymousAccount:
+                return "unknown";
+            case yandex::cloud::priv::accessservice::v2::Subject::kUserAccount:
+                return subject.user_account().federation_id() ? "federated_account" : "user_account";
+            case yandex::cloud::priv::accessservice::v2::Subject::kServiceAccount:
+                return "service_account";
+        }
+    }
+
+    static const IRetryPolicyV1::TPtr& GetRetryPolicyV1() {
+        static IRetryPolicyV1::TPtr policy = IRetryPolicyV1::GetExponentialBackoffPolicy([](NCloud::TEvAccessService::TEvAuthenticateResponseV1::TPtr& ev) {
+            const auto& response = ev->Get()->Response;
+            const auto& status = ev->Get()->Status;
+            return !status.Ok() || !response.has_subject() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
+        }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
+        return policy;
+    }
+
+    static const IRetryPolicyV2::TPtr& GetRetryPolicyV2() {
+        static IRetryPolicyV2::TPtr policy = IRetryPolicyV2::GetExponentialBackoffPolicy([](NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
             const auto& response = ev->Get()->Response;
             const auto& status = ev->Get()->Status;
             return !status.Ok() || !response.has_subject() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
@@ -547,7 +619,13 @@ public:
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();
             }
-            AccessService = Register(NCloud::CreateAccessServiceWithCache(asSettings));
+            // TODO(vlad-serikov): Test
+            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+                AccessService = Register(NCloud::CreateAccessServiceV2WithCache(asSettings));
+
+            } else {
+                AccessService = Register(NCloud::CreateAccessServiceV1WithCache(asSettings));
+            }
         } else {
             AccessService = Register(NCloud::CreateMockAccessServiceWithCache());
         }

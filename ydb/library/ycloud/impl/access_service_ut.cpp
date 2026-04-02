@@ -54,7 +54,8 @@ struct TTestSetup {
         //AccessServiceActor = NCloud::CreateAccessService("localhost:" + ToString(ServicePort));
         NCloud::TAccessServiceSettings sets;
         sets.Endpoint = "localhost:" + ToString(ServicePort);
-        AccessServiceActor = NCloud::CreateAccessServiceWithCache(sets);
+        // TODO(vlad-serikov): Test
+        AccessServiceActor = NCloud::CreateAccessServiceV1WithCache(sets);
         GetRuntime()->Register(AccessServiceActor);
     }
 
@@ -65,6 +66,7 @@ struct TTestSetup {
     }
 };
 
+// TODO(vlad-serikov): Test
 Y_UNIT_TEST_SUITE(TAccessServiceTest) {
     Y_UNIT_TEST(Authenticate) {
         TTestSetup setup;
@@ -73,18 +75,18 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         setup.AccessServiceMock.AuthenticateData["good1"].Response.mutable_subject()->mutable_user_account()->set_id("1234");
 
         // check for not found
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
         request->Request.set_iam_token("bad1");
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
-        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
+        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV1>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Status.Msg, "Permission Denied");
 
         // check for found
-        request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
         request->Request.set_iam_token("good1");
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
-        result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
+        result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV1>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
@@ -99,11 +101,11 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         req.RequireRequestId = true;
 
         // check for not found
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV1>();
         request->Request.set_iam_token("token");
         request->RequestId = "trololo";
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
-        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponse>(handle);
+        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV1>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
     }

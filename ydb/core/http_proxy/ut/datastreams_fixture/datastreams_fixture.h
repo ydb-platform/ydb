@@ -80,6 +80,7 @@ public:
         bool EnableMetering : 1 = false;
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
+        bool UseV2as : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);
@@ -237,7 +238,7 @@ private:
 
     void InitAccessServiceService();
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool useV2as);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -290,3 +291,13 @@ class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
         });
     }
 };
+
+class THttpProxyTestMockWithV2AccessService : public THttpProxyTestMock {
+    public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .UseV2as = true,
+        });
+    }
+};
+

@@ -146,9 +146,10 @@ public:
                     return nullptr;
                 }
 
-                columnOrder.AddColumn(TString(columnName));
+                TString columnNameStr(columnName);
+                columnOrder.AddColumn(columnNameStr);
                 items.push_back(itemSchema->GetItems()[*index]);
-                addedFields.emplace(TString(columnName));
+                addedFields.emplace(std::move(columnNameStr));
             }
 
             for (auto c : itemSchema->GetItems()) {
@@ -161,7 +162,6 @@ public:
                 items.push_back(c);
             }
         } else {
-            items.reserve(itemSchema->GetSize() + metadata->ChildrenSize());
             items = itemSchema->GetItems();
         }
 
@@ -181,7 +181,6 @@ public:
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
         const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
-        // PqReadTopic: optional Watermark (8), optional UserSchemaColumns (9) тАФ yql_pq_expr_nodes.json.
         const TExprNode* userSchemaColumnsArg = nullptr;
         TExprNode::TPtr watermarkNode;
         if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
@@ -221,22 +220,6 @@ public:
 
         if (!EnsureAtom(*compression, ctx)) {
             return TStatus::Error;
-        }
-
-        // Same requirement and wording as S3 read (yql_s3_datasource_type_ann.cpp): csv needs explicit column order.
-        static constexpr TStringBuf CsvRequiresExplicitSchemaColumnNames =
-            "csv format requires SCHEMA with explicitly listed column names to determine column order"sv;
-        if (format->Content() == "csv"sv) {
-            if (input->ChildrenSize() <= TPqReadTopic::idx_UserSchemaColumns) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
-                return TStatus::Error;
-            }
-            const auto* userSchemaColumns = input->Child(TPqReadTopic::idx_UserSchemaColumns);
-            if (TCoVoid::Match(userSchemaColumns) || !userSchemaColumns->IsList() ||
-                userSchemaColumns->ChildrenSize() == 0) {
-                ctx.AddError(TIssue(ctx.GetPosition(userSchemaColumns->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
-                return TStatus::Error;
-            }
         }
 
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).

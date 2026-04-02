@@ -208,7 +208,7 @@ protected:
 
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel());
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->GetDefaultEnableShuffleElimination());
-        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
+        auto providerCtx = TKqpProviderContext(KqpCtx, optLevel, KqpCtx.Config);
         auto stats = TypesCtx.GetStats(node.Raw());
         TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, settings, ctx, enableShuffleElimination, TypesCtx.OrderingsFSM, tableAliases));

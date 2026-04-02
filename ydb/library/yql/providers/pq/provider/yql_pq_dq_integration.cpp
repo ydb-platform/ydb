@@ -371,9 +371,8 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
-                // Proto Columns / ColumnTypes: same order as annotated row struct (fullRowType), not DqPqTopicSource.Columns expr.
-                // UserSchemaColumns from UserSchemaColumns setting: userschema order for headerless csv.
-                for (const auto* item : fullRowType->GetItems()) {
+                const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (const auto& item : rowSchema->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }

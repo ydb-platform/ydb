@@ -441,6 +441,51 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, s3, client, unique_prefix):
+        """Same as test_csv_projection_column_order but SCHEMA lists b, a (not alphabetical a, b).
+
+        First CSV field binds to b, second to a; SELECT a, b only reorders output columns.
+        """
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL="public-read")
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        s3_client.put_object(Body="bb,aa", Bucket="fbucket", Key="headerless_b_a.csv", ContentType="text/plain")
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "headerless_ba_bucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f"""
+            PRAGMA s3.UseBlocksSource="true";
+            SELECT a, b
+            FROM `{storage_connection_name}`.`headerless_b_a.csv`
+            WITH (
+                format = csv,
+                SCHEMA = (
+                    b String NOT NULL,
+                    a String NOT NULL
+                )
+            );
+            """
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        assert len(result_set.columns) == 2
+        assert result_set.columns[0].name == "a"
+        assert result_set.columns[1].name == "b"
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].bytes_value == b"aa"
+        assert result_set.rows[0].items[1].bytes_value == b"bb"
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_no_not_nullable_column(self, kikimr, s3, client, unique_prefix):
         filename = "test_wrong_type.csv"
         self.create_bucket_and_upload_file(filename, s3, kikimr)

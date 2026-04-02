@@ -330,7 +330,7 @@ private:
 
 // Supposed to be used from actor system, so all blocking methods are not supported.
 // Write session is not thread safe and MUST be used from single actor.
-// Supports RAW, GZIP and ZSTD codecs; compression is performed on the client side inside Write().
+// Supports RAW, GZIP, LZOP and ZSTD codecs; compression is performed on the client side inside Write().
 class TLocalTopicWriteSession final : public TLocalTopicSessionBase<TWriteSessionEvent::TEvent>, public IWriteSession {
     using TBase = TLocalTopicSessionBase<TWriteSessionEvent::TEvent>;
     using TWriteEvents = TLocalTopicWriteSessionActor::TSessionEvents;
@@ -495,8 +495,9 @@ private:
     static void ValidateSettings(const TWriteSessionSettings& settings) {
         TBase::ValidateSettings(settings);
 
-        Y_VALIDATE(settings.Codec_ == ECodec::RAW || settings.Codec_ == ECodec::GZIP || settings.Codec_ == ECodec::ZSTD,
-                   "Only RAW, GZIP and ZSTD codecs are supported for local topic write session");
+        Y_VALIDATE(settings.Codec_ == ECodec::RAW || settings.Codec_ == ECodec::GZIP
+                       || settings.Codec_ == ECodec::LZOP || settings.Codec_ == ECodec::ZSTD,
+                   "Only RAW, GZIP, LZOP and ZSTD codecs are supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushInterval_, "BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 

@@ -300,7 +300,12 @@ public:
         }
 
         if (!Buffer.empty() && ContinuationToken) {
-            WriteNextMessage(std::move(*ContinuationToken));
+            try {
+                WriteNextMessage(std::move(*ContinuationToken));
+            } catch (const std::exception& e) {
+                Fail(TStringBuilder() << "Topic write error: " << e.what());
+                return;
+            }
             ContinuationToken = std::nullopt;
         }
 
@@ -348,6 +353,16 @@ private:
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
     )
+
+    // Override base HandleTopicEvent to catch exceptions thrown inside the SDK
+    // compression executor lambda (e.g. unknown codec in TCodecMap::GetOrThrow).
+    void HandleTopicEvent(TEvPrivate::TEvExecuteTopicEvent::TPtr& event) {
+        try {
+            event->Get()->Execute();
+        } catch (const std::exception& e) {
+            Fail(TStringBuilder() << "Topic write session error: " << e.what());
+        }
+    }
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
         if (!Inited) {
@@ -566,7 +581,13 @@ private:
             }
 
             if (!Self.Buffer.empty()) {
-                Self.WriteNextMessage(std::move(ev.ContinuationToken));
+                try {
+                    Self.WriteNextMessage(std::move(ev.ContinuationToken));
+                } catch (const std::exception& e) {
+                    TIssues issues;
+                    issues.AddIssue(TStringBuilder() << "Topic write error: " << e.what());
+                    return issues;
+                }
                 return std::nullopt;
             }
 

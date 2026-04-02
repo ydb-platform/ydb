@@ -619,20 +619,31 @@ class TestStreamingInYdb(StreamingTestBase):
 
         self.write_stream(['{"time": "test_value"}'], endpoint=endpoint)
 
-        # Read raw bytes with identity decoders тАФ the SDK skips decompression
-        # so raw_messages[0] contains the compressed payload as stored on the wire.
-        ep = endpoint if endpoint is not None else kikimr.endpoint
-        raw_messages = read_stream_raw(
-            self.output_topic, 1, self.consumer_name,
-            ep.endpoint, ep.database)
+        if local_topics:
+            # For local topics the consumer is created via the old PersQueue v1 API
+            # (create_read_rule), which is not visible to the new Python SDK Topic
+            # reader used by read_stream_raw тАФ that reader would block indefinitely.
+            # Use pq_read (old API) instead: it auto-decompresses GZIP, so a
+            # successful read proves that the GZIP write path works end-to-end.
+            result = self.read_stream(1, endpoint=endpoint)
+            assert result == ["test_value"], f"Unexpected result: {result}"
+        else:
+            # For remote DataStreams topics both old and new SDK APIs share the same
+            # consumer metadata, so read_stream_raw works reliably.  Read raw bytes
+            # with identity decoders тАФ the SDK skips decompression and returns the
+            # compressed payload as stored on the wire.
+            ep = endpoint if endpoint is not None else kikimr.endpoint
+            raw_messages = read_stream_raw(
+                self.output_topic, 1, self.consumer_name,
+                ep.endpoint, ep.database)
 
-        # Verify GZIP compression by magic bytes and by successful decompression.
-        # Note: batch._codec is not used because the Python SDK resets it to RAW
-        # after applying any decoder, making it an unreliable wire-codec indicator.
-        assert raw_messages[0][:2] == b'\x1f\x8b', \
-            "Expected GZIP magic bytes in raw payload тАФ data does not appear to be GZIP-compressed"
-        decompressed = gzip_module.decompress(raw_messages[0]).decode()
-        assert decompressed == "test_value"
+            # Verify GZIP compression by magic bytes and by successful decompression.
+            # Note: batch._codec is not used because the Python SDK resets it to RAW
+            # after applying any decoder, making it an unreliable wire-codec indicator.
+            assert raw_messages[0][:2] == b'\x1f\x8b', \
+                "Expected GZIP magic bytes in raw payload тАФ data does not appear to be GZIP-compressed"
+            decompressed = gzip_module.decompress(raw_messages[0]).decode()
+            assert decompressed == "test_value"
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 

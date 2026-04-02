@@ -23,7 +23,6 @@ SRCS(
     kqp_opt_predicate_selectivity.cpp
     kqp_opt_stat.cpp
     kqp_opt_stat_kqp.cpp
-    kqp_opt_stat_transformer_base.cpp
 )
 
 YQL_LAST_ABI_VERSION()

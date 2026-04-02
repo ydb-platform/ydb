@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/string/builder.h>
+#include <util/system/compiler.h>
 #include <util/system/sanitizers.h>
 #include <util/system/thread.h>
 #include <util/system/yassert.h>

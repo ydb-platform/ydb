@@ -1627,6 +1627,8 @@ void TTupleLayout::TupleDeepCopy(
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
             std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
+            MKQL_ENSURE(outOverflowSize <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
             WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
             outOverflowSize += overflowSize;
         }
@@ -1638,19 +1640,22 @@ void TTupleLayout::TupleDeepCopy(
     TTupleData& outTuple, TTupleData& outOverflow) const
 {
     auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
-        int offset = std::ssize(to);
-        int writeSize = std::ssize(range);    
-        to.resize( offset + writeSize);
+        MKQL_ENSURE(to.size() <= std::numeric_limits<ui32>::max(), "tuple buffer exceeds ui32 range");
+        ui32 offset = to.size();
+        ui32 writeSize = range.size();
+        to.resize(offset + writeSize);
         std::memcpy(to.data() + offset, range.data(), writeSize);
     };
-    int initSize = std::ssize(outTuple);
+    ui32 initSize = outTuple.size();
     appendRange(outTuple, {inTuple, TotalRowSize});
     for (const auto& col: VariableColumns) {
         ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
         if (size == 255) { // overflow buffer used
             auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
             auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
-            int outOverflowOffset = std::ssize(outOverflow);
+            MKQL_ENSURE(outOverflow.size() <= std::numeric_limits<ui32>::max(),
+                        "overflow offset exceeds ui32 range");
+            ui32 outOverflowOffset = outOverflow.size();
             appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
             WriteUnaligned<ui32>(outTuple.data() + initSize + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
         }
@@ -1667,6 +1672,10 @@ void TTupleLayout::Concat(
     if (srcCount == 0) {
         return;
     }
+    MKQL_ENSURE(dstOverflow.size() <= std::numeric_limits<ui32>::max(),
+                "overflow buffer exceeds ui32 offset range");
+    MKQL_ENSURE(dstOverflow.size() + srcOverflowSize <= std::numeric_limits<ui32>::max(),
+                "combined overflow would exceed ui32 offset range");
     ui32 dstOverflowOffset = dstOverflow.size();
     if (srcOverflowSize > 0) {
         dstOverflow.resize(dstOverflow.size() + srcOverflowSize);
@@ -1674,8 +1683,8 @@ void TTupleLayout::Concat(
     }
 
     constexpr ui32 blockRows = 128;
-    dst.resize((dstCount + srcCount) * TotalRowSize);
-    ui8 *dstRow = dst.data() + dstCount * TotalRowSize;
+    dst.resize(static_cast<size_t>(dstCount + srcCount) * TotalRowSize);
+    ui8 *dstRow = dst.data() + static_cast<size_t>(dstCount) * TotalRowSize;
     ui32 blockSize;
     
     for (ui32 rowInd = 0; rowInd < srcCount; rowInd += blockRows, 
@@ -1716,12 +1725,21 @@ TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
     flattened.Overflow.reserve(totalOverflowSize);
 
 
-    int tupleSize = TotalRowSize;
+    ui32 tupleSize = TotalRowSize;
     for (const TPackResult& tupleBatch : tuples) {
+        MKQL_ENSURE(flattened.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "dstCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.PackedTuples.size() / tupleSize <= std::numeric_limits<ui32>::max(),
+                    "srcCount exceeds ui32 range");
+        MKQL_ENSURE(tupleBatch.Overflow.size() <= std::numeric_limits<ui32>::max(),
+                    "srcOverflowSize exceeds ui32 range");
+        ui32 dstCount = flattened.PackedTuples.size() / tupleSize;
+        ui32 srcCount = tupleBatch.PackedTuples.size() / tupleSize;
+        ui32 srcOverflowSize = tupleBatch.Overflow.size();
         Concat(flattened.PackedTuples, flattened.Overflow,
-                                std::ssize(flattened.PackedTuples) / tupleSize, tupleBatch.PackedTuples.data(),
-                                tupleBatch.Overflow.data(), tupleBatch.PackedTuples.size() / tupleSize,
-                                tupleBatch.Overflow.size());
+                                dstCount, tupleBatch.PackedTuples.data(),
+                                tupleBatch.Overflow.data(), srcCount,
+                                srcOverflowSize);
     }
     return flattened;
 

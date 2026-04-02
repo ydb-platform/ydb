@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/testlib/test_pq_client.h>
 #include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
@@ -4997,6 +4998,73 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto result = results[i].ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryRestartAfterShutdown, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "streamingQueryRestartAfterShutdownInputTopic";
+        constexpr char outputTopicName[] = "streamingQueryRestartAfterShutdownOutputTopic";
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "key1value1");
+        ReadTopicMessage(outputTopicName, "key1value1");
+
+        // Finish query like shutdown
+        {
+            const auto& edgeActor = GetRuntime().AllocateEdgeActor();
+            const auto& proxyId = MakeKqpProxyID(GetRuntime().GetFirstNodeId());
+
+            auto listRequest = std::make_unique<TEvKqp::TEvListSessionsRequest>();
+            auto& listRequestProto = listRequest->Record;
+            listRequestProto.AddColumns(NSysView::Schema::QuerySessions::SessionId::ColumnId);
+            listRequestProto.SetFreeSpace(std::numeric_limits<i64>::max());
+            listRequestProto.SetTenantName(GetRuntime().GetAppData().TenantName);
+            GetRuntime().Send(proxyId, edgeActor, listRequest.release());
+            auto sessionsEv = GetRuntime().GrabEdgeEvent<TEvKqp::TEvListSessionsResponse>(edgeActor, TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT(sessionsEv);
+
+            const auto& sessionsProto = sessionsEv->Get()->Record.GetSessions();
+            UNIT_ASSERT_GE(sessionsProto.size(), 1);
+
+            for (const auto& session : sessionsProto) {
+                auto closeRequest = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+                closeRequest->Record.MutableRequest()->SetSessionId(session.GetSessionId());
+                GetRuntime().Send(proxyId, edgeActor, closeRequest.release());
+            }
+
+            Sleep(TDuration::Seconds(2));
+        }
+
+        const auto& result = ExecQuery("SELECT RetryCount FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 1);
+        });
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopicName, "key2value2");
+        ReadTopicMessage(outputTopicName, "key2value2", disposition);
     }
 }
 

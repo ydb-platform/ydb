@@ -100,21 +100,41 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
         switch (Stage) {
             case EParseStage::Method:
                 if (ProcessData(Method, data, ' ', MaxMethodSize)) {
+                    if (!IsValidMethod(Method)) {
+                        Method = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::URL;
                 }
                 break;
             case EParseStage::URL:
                 if (ProcessData(URL, data, ' ', MaxURLSize)) {
+                    if (!IsValidURL(URL)) {
+                        URL = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Protocol;
                 }
                 break;
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
             case EParseStage::Version:
                 if (ProcessData(Version, data, "\r\n", MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = data;
                 }
@@ -188,21 +208,41 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
         switch (Stage) {
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
             case EParseStage::Version:
                 if (ProcessData(Version, data, ' ', MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Status;
                 }
                 break;
             case EParseStage::Status:
                 if (ProcessData(Status, data, ' ', MaxStatusSize)) {
+                    if (!IsValidStatus(Status)) {
+                        Status = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Message;
                 }
                 break;
             case EParseStage::Message:
                 if (ProcessData(Message, data, "\r\n", MaxMessageSize)) {
+                    if (!IsValidMessage(Message)) {
+                        Message = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = TStringBuf(data.data(), size_t(0));
                 }

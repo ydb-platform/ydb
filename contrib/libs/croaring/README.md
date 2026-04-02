@@ -139,6 +139,7 @@ Linux or macOS users might follow the following instructions if they have a rece
         return EXIT_SUCCESS;
     }
     ```
+    [You can try it out on Godbolt](https://godbolt.org/z/Y6oMGEo97).
  2. Create a new file named `demo.cpp` with this content:
     ```C++
     #include <iostream>

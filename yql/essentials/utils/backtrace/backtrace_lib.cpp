@@ -27,7 +27,7 @@ size_t DLLCount = 0;
 int DlIterCallback(struct dl_phdr_info* info, size_t, void* data) {
     if (*info->dlpi_name) {
         if (DLLCount + 1 < MaxDLLCnt) {
-            reinterpret_cast<std::remove_reference_t<decltype(DLLs[0])>*>(data)[DLLCount++] = {info->dlpi_name, (ui64)info->dlpi_addr};
+            reinterpret_cast<std::remove_reference_t<decltype(DLLs[0])>*>(data)[DLLCount++] = {.Path = info->dlpi_name, .BaseAddress = (ui64)info->dlpi_addr};
         }
     }
     return 0;

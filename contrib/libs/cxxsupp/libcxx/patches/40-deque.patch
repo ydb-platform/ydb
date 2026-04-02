@@ -1,5 +1,5 @@
 diff --git a/include/deque b/include/deque
-index d8645d0..caaecd2 100644
+index e33e7d3..6d709af 100644
 --- a/include/deque
 +++ b/include/deque
 @@ -267,7 +267,9 @@ _LIBCPP_BEGIN_NAMESPACE_STD

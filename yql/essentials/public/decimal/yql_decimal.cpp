@@ -7,39 +7,7 @@
 
 namespace NYql::NDecimal {
 
-static const TUint128 Ten(10U);
-
-TUint128 GetDivider(ui8 scale) {
-    if (scale > MaxPrecision) {
-        return Inf();
-    }
-
-    TUint128 d(1U);
-    while (scale--) {
-        d *= Ten;
-    }
-    return d;
-}
-
-bool IsError(TInt128 v) {
-    return v > Nan() || v < -Inf();
-}
-
-bool IsNan(TInt128 v) {
-    return v == Nan();
-}
-
-bool IsInf(TInt128 v) {
-    return v == Inf() || v == -Inf();
-}
-
-bool IsNormal(TInt128 v) {
-    return v < Inf() && v > -Inf();
-}
-
-bool IsComparable(TInt128 v) {
-    return v <= Inf() && v >= -Inf();
-}
+static constexpr TUint128 Ten(10U);
 
 const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     if (!precision || precision > MaxPrecision || scale > precision) {

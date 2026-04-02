@@ -266,6 +266,9 @@ struct IServiceContext
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
 
+    //! The same as ReplyFrom() but sets response info.
+    void ReplyAndLogFrom(bool incremental, TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages);
+
     //! Replies with a given error when the latter is set.
     void ReplyFrom(TFuture<void> asyncError);
 

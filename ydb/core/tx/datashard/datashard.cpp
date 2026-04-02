@@ -39,6 +39,9 @@ ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
 
+// Avoid caching too many txIds when operations are cancelled en-masse
+size_t MaxCachedGlobalTxIds = 16;
+
 // The first byte is 0x01 so it would fail to parse as an internal tablet protobuf
 TStringBuf SnapshotTransferReadSetMagic("\x01SRS", 4);
 
@@ -133,6 +136,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , SchemaSnapshotManager(this)
     , VolatileTxManager(this)
     , ConflictsCache(this)
+    , MultiTxIdManager(*this)
     , DisableByKeyFilter(0, 0, 1)
     , MaxTxInFly(15000, 0, 100000)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
@@ -434,6 +438,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
 
     if (State != TShardState::Offline) {
         VolatileTxManager.Start(ctx);
+        MultiTxIdManager.Start();
     }
 
     SignalTabletActive(ctx);
@@ -4778,6 +4783,8 @@ void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volati
         if (info->State != EVolatileTxState::Aborting) {
             volatileDependencies.insert(txId);
         }
+    } else if (auto* entry = GetMultiTxIdManager().FindMultiTxId(txId)) {
+        GetMultiTxIdManager().BreakMultiTxId(entry);
     } else {
         SysLocksTable().BreakLock(txId);
     }
@@ -4820,6 +4827,51 @@ void TDataShard::Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev, const T
         Pipeline.ProvideGlobalTxId(op, ev->Get()->TxId);
         Pipeline.AddCandidateOp(op);
         PlanQueue.Progress(ctx);
+    } else {
+        // Try to recycle txId when operation no longer exists, e.g. it was
+        // cancelled while waiting for the txId. This code path is also called
+        // when AllocateGlobalTxId() sends the request with Cookie == 0.
+        RecycleGlobalTxId(ev->Get()->TxId);
+    }
+}
+
+async<ui64> TDataShard::AllocateGlobalTxId() {
+    // Fast path when some txId is already in the cache
+    if (!GlobalTxIdCache.empty()) {
+        ui64 txId = GlobalTxIdCache.back();
+        GlobalTxIdCache.pop_back();
+        co_return txId;
+    }
+
+    // Note: this request is not tied to any operation, ev->Cookie == 0
+    Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId());
+
+    // Add ourselves to the queue, we will wake up as soon as some txId is
+    // available, and there will be at least one we requested above.
+    TGlobalTxIdAwaiter awaiter;
+    ui64 txId = co_await WithAsyncContinuation<ui64>([&](auto continuation) {
+        awaiter.Continuation = std::move(continuation);
+        GlobalTxIdAwaiters.PushBack(&awaiter);
+    });
+    co_return txId;
+}
+
+void TDataShard::RecycleGlobalTxId(ui64 txId) {
+    // Find the first non-detached awaiter
+    while (!GlobalTxIdAwaiters.Empty()) {
+        auto* awaiter = GlobalTxIdAwaiters.PopFront();
+        if (awaiter->Continuation) {
+            awaiter->Continuation.Resume(txId);
+            return;
+        }
+        // Note: an awaiting coroutine may have been cancelled and detached, but
+        // it may still be in the list temporarily, because it didn't have a
+        // chance to run its destructors yet.
+    }
+
+    // Add this txId to the cache, but avoid keeping too many
+    if (GlobalTxIdCache.size() < MaxCachedGlobalTxIds) {
+        GlobalTxIdCache.push_back(txId);
     }
 }
 

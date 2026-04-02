@@ -89,6 +89,9 @@ public:
         if (settings.SetRetentionPeriod_) {
             request.mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
         }
+        if (settings.SetContentBasedDeduplication_) {
+            request.set_set_content_based_deduplication(*settings.SetContentBasedDeduplication_);
+        }
         if (settings.SetSupportedCodecs_) {
             for (const auto& codec : *settings.SetSupportedCodecs_) {
                 request.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));

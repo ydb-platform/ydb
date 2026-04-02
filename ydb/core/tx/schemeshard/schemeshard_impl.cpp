@@ -213,6 +213,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         InitializeTabletMigrations();
     }
 
+    if (!IsOldArgonHashFormatMigrationCompleted) {
+        Execute(CreateTxUserHashesMigration(), ctx);
+    }
+
     ResumeExports(opts.ExportIds, ctx);
     ResumeImports(opts.ImportsIds, ctx);
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
@@ -426,6 +430,10 @@ TTxId TSchemeShard::GetCachedTxId(const TActorContext &ctx) {
     }
 
     return txId;
+}
+
+void TSchemeShard::ReturnTxIdToCache(const TTxId txId) {
+    CachedTxIds.push_back(txId);
 }
 
 EAttachChildResult TSchemeShard::AttachChild(TPathElement::TPtr child) {
@@ -1766,6 +1774,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterExtSubDomainCreateHive:
     case TTxState::TxAlterUserAttributes:
     case TTxState::TxInitializeBuildIndex:
+    case TTxState::TxPrepareIndexValidation:
     case TTxState::TxFinalizeBuildIndex:
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
@@ -5175,6 +5184,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableInitialUniqueIndex = appData->FeatureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
+    EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
@@ -8458,7 +8468,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const T
     if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShred in tenant schemeshard: " << TabletID());
         return;
-    } 
+    }
     RootShredManager->WakeupToRunShred(ev, ctx);
 }
 

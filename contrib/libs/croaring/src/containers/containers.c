@@ -50,6 +50,10 @@ extern bool container_iterator_next(const container_t *c, uint8_t typecode,
 extern bool container_iterator_prev(const container_t *c, uint8_t typecode,
                                     roaring_container_iterator_t *it,
                                     uint16_t *value);
+extern bool container_contains(
+    const container_t *c, uint16_t val,
+    uint8_t typecode  // !!! should be second argument?
+);
 
 void container_free(container_t *c, uint8_t type) {
     switch (type) {

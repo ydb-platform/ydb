@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/url/url.h>
 #include <util/digest/murmur.h>
 #include <util/string/hex.h>
+#include <util/generic/guid.h>
 
 #include <format>
 
@@ -1059,8 +1060,8 @@ void TProducer::TMessagesWorker::DoWork() {
 
     iterateMessagesIndex(
         MessagesToResendIndex,
-        [](MessageIter) {
-            return false;
+        [this](MessageIter head) {
+            return Producer->Partitions[head->Partition].Locked_;
         }
     );
 
@@ -1259,17 +1260,20 @@ void TProducer::TMessagesWorker::ScheduleResendMessages(std::uint32_t partition,
     }
     
     list.erase(resendIt, list.end());
-    for (const auto& [newPartition, msgIt] : messagesFromOldPartition) {
+    for (auto it = messagesFromOldPartition.rbegin(); it != messagesFromOldPartition.rend(); ++it) {
+        auto [newPartition, msgIt] = *it;
         auto [inFlightMessagesIndexChainIt, _] = InFlightMessagesIndex.try_emplace(newPartition);
-        inFlightMessagesIndexChainIt->second.push_back(msgIt);
+        inFlightMessagesIndexChainIt->second.push_front(msgIt);
 
         if (msgIt->Sent) {
             auto [messagesToResendChainIt, __] = MessagesToResendIndex.try_emplace(newPartition);
-            messagesToResendChainIt->second.push_back(msgIt);
+            messagesToResendChainIt->second.push_front(msgIt);
         }
     }
 
     InFlightMessagesIndex.erase(partition);
+    PendingMessagesIndex.erase(partition);
+    MessagesToResendIndex.erase(partition);
     Producer->SessionsWorker->AddIdleSession(partition);
 }
 
@@ -1428,7 +1432,8 @@ TProducer::TProducer(
     std::shared_ptr<TTopicClient::TImpl> client,
     std::shared_ptr<TGRpcConnectionsImpl> connections,
     TDbDriverStatePtr dbDriverState)
-    : Connections(connections),
+    : Id(CreateGuidAsString()),
+    Connections(connections),
     Client(client),
     DbDriverState(dbDriverState),
     Metrics(this),
@@ -1457,7 +1462,7 @@ TProducer::TProducer(
         return a.GetPartitionId() < b.GetPartitionId();
     });
 
-    PartitionChooserStrategy = settings.PartitionChooserStrategy_;
+    auto partitionChooserStrategy = settings.PartitionChooserStrategy_;
     auto strategy = topicConfig.GetTopicDescription().GetPartitioningSettings().GetAutoPartitioningSettings().GetStrategy();
     auto autoPartitioningEnabled = (strategy != EAutoPartitioningStrategy::Disabled &&
                                 strategy != EAutoPartitioningStrategy::Unspecified);
@@ -1496,7 +1501,7 @@ TProducer::TProducer(
         }
     }
 
-    switch (PartitionChooserStrategy) {
+    switch (partitionChooserStrategy) {
         case TProducerSettings::EPartitionChooserStrategy::Bound:
             PartitioningKeyHasher = settings.PartitioningKeyHasher_;
             PartitionChooser = std::make_unique<TBoundPartitionChooser>(this);
@@ -1513,9 +1518,9 @@ TProducer::TProducer(
                 PartitionsIndex[partition.GetFromBound().value_or("")] = partition.GetPartitionId();
             }
             break;
-        case TProducerSettings::EPartitionChooserStrategy::Hash:
+        case TProducerSettings::EPartitionChooserStrategy::KafkaHash:
             if (autoPartitioningEnabled) {
-                throw TContractViolation("Hash partition chooser strategy is not supported with auto partitioning enabled");
+                throw TContractViolation("KafkaHash partition chooser strategy is not supported with auto partitioning enabled");
             }
 
             std::vector<std::uint32_t> partitionsIds;
@@ -1628,6 +1633,11 @@ void TProducer::SetCloseDeadline(const TDuration& closeTimeout) {
 TProducer::~TProducer() {
     auto _ = Close(TDuration::Zero()); // Ignore the result, because we are destroying the producer
     Settings.EventHandlers_.HandlersExecutor_->Stop();
+
+    if (MainWorkerState.load() == 0) {
+        ShutdownPromise.TrySetValue();
+    }
+
     ShutdownFuture.Wait();
 }
 
@@ -1791,7 +1801,7 @@ void TProducer::GetSessionClosedEventAndDie(WrappedWriteSessionPtr wrappedSessio
 }
 
 TStringBuilder TProducer::LogPrefix() {
-    return TStringBuilder() << " SessionId: " << Settings.SessionId_ << " Epoch: " << Epoch.load() << " ";
+    return TStringBuilder() << " Id: " << Id << " Epoch: " << Epoch.load() << " ";
 }
 
 void TProducer::NextEpoch() {
@@ -1932,29 +1942,25 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         }
 
         std::uint32_t chosenPartition;
-        if (message.Partition_.has_value()) {
-            if (!Partitions[message.Partition_.value()].Children_.empty()) {
+        std::string key;
+        if (message.GetPartition().has_value()) {
+            if (!Partitions[message.GetPartition().value()].Children_.empty()) {
                 return TWriteResult{
                     .Status = EWriteStatus::Error,
                     .ErrorMessage = "Partition was split",
                 };
             }
 
-            chosenPartition = message.Partition_.value();
-        } else if (!message.Key_.has_value()) {
-            std::string key;
-            if (Settings.KeyProducer_) {
-                key = (*Settings.KeyProducer_)(message);
-            } else {
-                key = Settings.ProducerIdPrefix_;
-            }
-            message.Key(key);
-            chosenPartition = PartitionChooser->ChoosePartition(key);
+            chosenPartition = message.GetPartition().value();
+        } else if (!message.GetKey().has_value()) {
+            key = Settings.ProducerIdPrefix_;
+            chosenPartition = PartitionChooser->ChoosePartition(Settings.ProducerIdPrefix_);
         } else {
-            chosenPartition = PartitionChooser->ChoosePartition(*message.Key_);
+            chosenPartition = PartitionChooser->ChoosePartition(*message.GetKey());
+            key = *message.GetKey();
         }
 
-        MessagesWorker->AddMessage(message.Key_.value_or(""), std::move(message), chosenPartition);
+        MessagesWorker->AddMessage(key, std::move(message), chosenPartition);
         eventsPromise = EventsWorker->HandleNewMessage();
         RunUserEventLoop();
     }
@@ -1970,7 +1976,7 @@ TWriteResult TProducer::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
-    auto remainingTimeout = Settings.MaxBlock_;
+    auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
         if (Closed.load()) {

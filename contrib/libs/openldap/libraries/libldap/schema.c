@@ -1018,7 +1018,6 @@ get_token( const char ** sp, char ** token_val )
 	switch (**sp) {
 	case '\0':
 		kind = TK_EOS;
-		(*sp)++;
 		break;
 	case '(':
 		kind = TK_LEFTPAREN;

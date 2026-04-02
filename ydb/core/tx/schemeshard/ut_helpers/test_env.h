@@ -55,6 +55,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableNotNullDataColumns, std::nullopt);
         OPTION(std::optional<bool>, EnableAlterDatabaseCreateHiveFirst, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicDiskSubDomainQuota, std::nullopt);
+        OPTION(std::optional<bool>, EnableTopicMessageLevelParallelism, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDynamoDBStreamsFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableChangefeedDebeziumJsonFormat, std::nullopt);
         OPTION(std::optional<bool>, EnableTablePgTypes, std::nullopt);
@@ -85,6 +86,9 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnableConditionalEraseResponseBatching, false);
         OPTION(std::optional<ui32>, CondEraseResponseBatchSize, std::nullopt);
         OPTION(std::optional<ui32>, CondEraseResponseBatchMaxTimeMs, std::nullopt);
+        OPTION(bool, EnableDataShardSplitHistogramSorting, false);
+        OPTION(bool, EnableDataShardSplitKeySelection, false);
+        OPTION(bool, EnableDataShardSplitHistogramOmission, false);
 
         #undef OPTION
     };

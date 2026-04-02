@@ -69,6 +69,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
         path = self.user_cache_dir
         if self.opinion:
             path = os.path.join(path, "log")  # noqa: PTH118
+            self._optionally_create_directory(path)
         return path
 
     @property
@@ -132,6 +133,7 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
         path = self.user_cache_dir
         if self.opinion:
             path = os.path.join(path, "tmp")  # noqa: PTH118
+            self._optionally_create_directory(path)
         return path
 
     @property

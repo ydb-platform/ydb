@@ -90,16 +90,32 @@ namespace NTest {
                 }
             }
 
+            auto partScheme = TPartScheme::Parse(*eggs.Scheme, eggs.Rooted);
+
+            TVector<std::pair<ui32, TIntrusiveConstPtr<NPage::TBloom>>> byKeyPrefixes;
+            if (root.HasLayout()) {
+                for (const auto& meta : root.GetLayout().GetByKeyPrefixes()) {
+                    if (auto *page = Store->GetPage(0, meta.GetPageId())) {
+                        byKeyPrefixes.emplace_back(meta.GetPrefixColumns(), new TBloom(*page));
+                    }
+                }
+            }
+            // Fall back to legacy ByKey if no ByKeyPrefixes are present (old SST format)
+            if (byKeyPrefixes.empty() && eggs.ByKey) {
+                ui32 keyCount = partScheme->Groups[0].KeyTypes.size();
+                byKeyPrefixes.emplace_back(keyCount, new TBloom(*eggs.ByKey));
+            }
+
             return
                 new TPartStore(
                     std::move(Store),
                     token,
                     {
                         epoch,
-                        TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
+                        std::move(partScheme),
                         { eggs.FlatGroupIndexes, eggs.FlatHistoricIndexes, eggs.BTreeGroupIndexes, eggs.BTreeHistoricIndexes },
                         eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
-                        eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
+                        std::move(byKeyPrefixes),
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
                         eggs.Small ? new TFrames(*eggs.Small) : nullptr,
                         indexesRawSize,

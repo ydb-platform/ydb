@@ -159,13 +159,25 @@ protected:
         auto baseRecord = TestProto.GetDDiskTestList(CurrentTest);
 
         switch (baseRecord.Command_case()) {
-        case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad:
-            CurrentTestType = "DDiskWriteLoad";
+        case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
+            CurrentTestType = "DDiskLoad";
+            const auto& cmd = baseRecord.GetDDiskLoad();
+            if (cmd.GetIsReadLoad()) {
+                for (const auto& area : cmd.GetAreas()) {
+                    if (area.GetInitType() == TEvLoadTestRequest::TDDiskLoad::TArea::INIT_NONE) {
+                        Cerr << "Error: read load requires area initialization"
+                             << " (InitType != INIT_NONE) to allocate chunks before reading" << Endl;
+                        ASSERT_YTHROW(false,
+                            "Invalid configuration: read load requires area initialization (InitType != INIT_NONE)");
+                    }
+                }
+            }
             break;
+        }
         default:
             CurrentTestType = "Unknown";
             Cerr << "Unknown load type" << Endl;
-            return;
+            ASSERT_YTHROW(false, "Invalid configuration: unknown load type in TDDiskPerfTestActor");
         }
 
         PendingResults.clear();
@@ -175,13 +187,13 @@ protected:
         for (ui32 d = 0; d < Devices.size(); ++d) {
             auto record = baseRecord;
             switch (record.Command_case()) {
-            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskWriteLoad: {
-                auto* cfg = record.MutableDDiskWriteLoad();
+            case NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad: {
+                auto* cfg = record.MutableDDiskLoad();
                 auto* ddiskId = cfg->MutableDDiskId();
                 ddiskId->SetNodeId(1);
                 ddiskId->SetPDiskId(Devices[d].PDiskIdNum);
                 ddiskId->SetDDiskSlotId(Devices[d].DDiskSlotId);
-                ctx.Register(CreateDDiskWriterLoadTest(record.GetDDiskWriteLoad(), ctx.SelfID, Counters, d, d));
+                ctx.Register(CreateDDiskLoadTest(record.GetDDiskLoad(), ctx.SelfID, Counters, d, d));
                 break;
             }
             default:
@@ -280,11 +292,42 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
         return proto;
     }
 
+    NDDisk::TDDiskConfig ExtractDDiskConfig() const {
+        NDDisk::TDDiskConfig config;
+        bool initialized = false;
+
+        for (ui32 i = 0; i < TestProto.DDiskTestListSize(); ++i) {
+            const auto& record = TestProto.GetDDiskTestList(i);
+            if (record.Command_case() != NKikimr::TEvLoadTestRequest::CommandCase::kDDiskLoad) {
+                continue;
+            }
+
+            const auto& load = record.GetDDiskLoad();
+            const bool useSQPoll = load.GetSQPoll();
+            const bool useIOPoll = load.GetIOPoll();
+
+            if (!initialized) {
+                config.UseSQPoll = useSQPoll;
+                config.UseIOPoll = useIOPoll;
+                initialized = true;
+                continue;
+            }
+
+            if (config.UseSQPoll != useSQPoll || config.UseIOPoll != useIOPoll) {
+                ythrow TWithBackTrace<yexception>()
+                    << "Invalid configuration: all DDiskLoad entries must use identical SQPoll/IOPoll values";
+            }
+        }
+
+        return config;
+    }
+
     void Init() override {
         try {
             TBase::DoBasicSetup();
 
             auto groupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
+            const NDDisk::TDDiskConfig ddiskConfig = ExtractDDiskConfig();
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {
                 const TActorId ddiskId = MakeBlobStorageDDiskId(1, i + 1, DDiskSlotId);
@@ -299,7 +342,8 @@ struct TDDiskTest : public TPDiskTest<ChunkSize> {
                     NKikimrBlobStorage::TVDiskKind::Default,
                     1000,
                     "ddisk_pool");
-                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {}, TBase::Counters),
+                TActorSetupCmd ddiskSetup(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
+                    NDDisk::TDDiskConfig(ddiskConfig), TBase::Counters),
                     TMailboxType::Revolving, 1);
                 TBase::Setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(ddiskId, std::move(ddiskSetup)));
             }

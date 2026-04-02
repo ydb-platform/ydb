@@ -34,6 +34,7 @@ class KMeansTreeSettings;
 class FulltextIndexSettings;
 class PartitioningSettings;
 class ReadReplicasSettings;
+class MetricsSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
 class TtlTier;
@@ -41,6 +42,7 @@ class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
+class CompactItem;
 
 } // namespace Table
 } // namespace Ydb
@@ -229,6 +231,70 @@ private:
     uint64_t ReadReplicasCount_;
 };
 
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+class TMetricsSettings {
+public:
+    /**
+     * The level at which metrics are aggregated and reported.
+     */
+    enum class EMetricsLevel {
+        /**
+         * The metrics level is not specified.
+         */
+        Unspecified = 0,
+
+        /**
+         * All metrics are disabled.
+         */
+        Disabled = 1,
+
+        /**
+         * Metrics are aggregated and reported for the entire database.
+         */
+        Database = 2,
+
+        /**
+         * Metrics are aggregated and reported for individual tables.
+         */
+        Table = 3,
+
+        /**
+         * Metrics are aggregated and reported for individual partitions.
+         */
+        Partition = 4,
+    };
+
+    explicit TMetricsSettings(EMetricsLevel metricsLevel);
+
+    /**
+     * Return the configured metrics level.
+     *
+     * @return The metrics level
+     */
+    EMetricsLevel GetMetricsLevel() const;
+
+    /**
+     * Read the metrics configuration from the corresponding protobuf message.
+     *
+     * @param[in] proto The message to read from
+     *
+     * @return The corresponding metrics configuration
+     */
+    static std::optional<TMetricsSettings> FromProto(const Ydb::Table::MetricsSettings& proto);
+
+    /**
+     * Read the metrics configuration to the corresponding protobuf message.
+     *
+     * @param[in,out] proto The message to write to
+     */
+    void SerializeTo(Ydb::Table::MetricsSettings& proto) const;
+
+private:
+    EMetricsLevel MetricsLevel_;
+};
+
 struct TGlobalIndexSettings {
     static constexpr const int VectorKMeansTreeLevelTablePosition = 0;
     static constexpr const int VectorKMeansTreePostingTablePosition = 1;
@@ -243,6 +309,7 @@ struct TGlobalIndexSettings {
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
     std::optional<TReadReplicasSettings> ReadReplicasSettings;
+    std::optional<TMetricsSettings> MetricsSettings;
 
     static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
 
@@ -376,6 +443,65 @@ public:
     const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& GetIndexSettings() const;
     uint64_t GetSizeBytes() const;
 
+    static TIndexDescription CreateGlobalIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateGlobalAsyncIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateGlobalUniqueIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateVectorIndex(
+        const std::string& name,
+        const std::string& vectorColumn,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {}
+    );
+
+    static TIndexDescription CreatePrefixedVectorIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TKMeansTreeSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& levelTableSettings = {},
+        const TGlobalIndexSettings& postingTableSettings = {},
+        const TGlobalIndexSettings& prefixTableSettings = {}
+    );
+
+    static TIndexDescription CreateFulltextPlainIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TFulltextIndexSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& indexTableSettings = {}
+    );
+
+    static TIndexDescription CreateFulltextRelevanceIndex(
+        const std::string& name,
+        const std::vector<std::string>& indexColumns,
+        const TFulltextIndexSettings& specializedIndexSettings,
+        const std::vector<std::string>& dataColumns = {},
+        const TGlobalIndexSettings& postingTableSettings = {},
+        const TGlobalIndexSettings& dictTableSettings = {},
+        const TGlobalIndexSettings& docsTableSettings = {},
+        const TGlobalIndexSettings& statsTableSettings = {}
+    );
+
     void SerializeTo(Ydb::Table::TableIndex& proto) const;
     std::string ToString() const;
     void Out(IOutputStream& o) const;
@@ -416,6 +542,37 @@ public:
         float Progress;
         std::string Path;
         std::optional<TIndexDescription> Desctiption;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TCompact {
+public:
+    TCompact(bool cascade, uint32_t maxShardsInFlight);
+    TCompact();
+
+    void SerializeTo(Ydb::Table::CompactItem& proto) const;
+private:
+    bool Cascade_;
+    uint32_t MaxShardsInFlight_;
+};
+
+class TCompactionOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ECompactState State;
+        float Progress;
+        std::string Path;
+        bool Cascade;
+        uint32_t MaxInFlight;
+        uint32_t Total;
+        uint32_t Done;
     };
 
     const TMetadata& Metadata() const;
@@ -646,9 +803,7 @@ private:
 class TAlterTtlSettings {
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
-    TAlterTtlSettings()
-        : Action_(true)
-    {}
+    TAlterTtlSettings() = default;
 
     template <typename... Args>
     explicit TAlterTtlSettings(Args&&... args)
@@ -675,9 +830,101 @@ public:
 
 private:
     std::variant<
-        bool, // EAction::Drop
+        std::monostate, // EAction::Drop
         TTtlSettings // EAction::Set
     > Action_;
+};
+
+/**
+ * The holder for the detailed metrics configuration for the ALTER TABLE request.
+ */
+class TAlterMetricsSettings {
+private:
+    /**
+     * The constructor, which configures the ALTER TABLE request to remove
+     * the current metrics configuration.
+     */
+    TAlterMetricsSettings() = default;
+
+    /**
+     * The constructor, which configures the ALTER TABLE request to use
+     * the given metrics configuration.
+     *
+     * @tparam Args The types of arguments for the TMetricsSettings constructor
+     *
+     * @param[in] args The arguments for the TMetricsSettings constructor
+     */
+    template <typename... Args>
+    explicit TAlterMetricsSettings(Args&&... args)
+        : Action_(TMetricsSettings(std::forward<Args>(args)...))
+    {}
+
+public:
+    /**
+     * The type of the action for the metrics configuration in the ALTER TABLE request.
+     */
+    enum class EAction {
+        /**
+         * Remove the current metrics configuration.
+         */
+        Drop = 0,
+
+        /**
+         * Set the metrics configuration to the given values.
+         */
+        Set = 1,
+    };
+
+    /**
+     * Configure the ALTER TABLE request to remove the current metrics configuration.
+     *
+     * @return The metrics configuration holder for the EAction::Drop action
+     */
+    static TAlterMetricsSettings Drop() {
+        return TAlterMetricsSettings();
+    }
+
+    /**
+     * Configure the ALTER TABLE request to update the current metrics configuration.
+     *
+     * @tparam Args The types of arguments for the TMetricsSettings constructor
+     *
+     * @param[in] args The arguments for the TMetricsSettings constructor
+     *
+     * @return The metrics configuration holder for the EAction::Set action
+     */
+    template <typename... Args>
+    static TAlterMetricsSettings Set(Args&&... args) {
+        return TAlterMetricsSettings(std::forward<Args>(args)...);
+    }
+
+    /**
+     * Return the action for the metrics configuration (drop or set).
+     *
+     * @return The action for the metrics configuration
+     */
+    EAction GetAction() const {
+        return static_cast<EAction>(Action_.index());
+    }
+
+    /**
+     * Return the current metrics configuration.
+     *
+     * @return The current metrics configuration
+     */
+    const TMetricsSettings& GetMetricsSettings() const {
+        return std::get<TMetricsSettings>(Action_);
+    }
+
+private:
+    /**
+     * The holder for the current metrics configuration.
+     *
+     * @note If the first variant is set, the metrics configuration will be removed.
+     *       If the second variant is set, the metrics configuration will be set
+     *       to the given values.
+     */
+    std::variant<std::monostate, TMetricsSettings> Action_;
 };
 
 //! Represents table storage settings
@@ -786,6 +1033,13 @@ public:
     // Returns read replicas settings of the table
     std::optional<TReadReplicasSettings> GetReadReplicasSettings() const;
 
+    /**
+     * Return the metrics configuration for the given table.
+     *
+     * @return The metrics configuration
+     */
+    std::optional<TMetricsSettings> GetMetricsSettings() const;
+
     // Fills CreateTableRequest proto from this description
     void SerializeTo(Ydb::Table::CreateTableRequest& request) const;
 
@@ -837,6 +1091,14 @@ private:
     void SetPartitioningSettings(const TPartitioningSettings& settings);
     void SetKeyBloomFilter(bool enabled);
     void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount);
+
+    /**
+     * Set the metrics configuration for the given table.
+     *
+     * @param[in] metricsLevel The metrics level
+     */
+    void SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel);
+
     void SetStoreType(EStoreType type);
     const Ydb::Table::DescribeTableResult& GetProto() const;
 
@@ -1094,6 +1356,15 @@ public:
     TTableBuilder& SetKeyBloomFilter(bool enabled);
 
     TTableBuilder& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount);
+
+    /**
+     * Set the metrics configuration for the given table.
+     *
+     * @param[in] metricsLevel The metrics level
+     *
+     * @return The instance of the builder itself
+     */
+    TTableBuilder& SetMetricsSettings(TMetricsSettings::EMetricsLevel metricsLevel);
 
     TTableStorageSettingsBuilder BeginStorageSettings() {
         return TTableStorageSettingsBuilder(*this);
@@ -1634,6 +1905,66 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
+/**
+ * The builder for the metrics configuration for the ALTER TABLE request.
+ */
+class TAlterMetricsSettingsBuilder {
+public:
+    /**
+     * Start the process of building the metrics configuration for the ALTER TABLE request.
+     *
+     * @param[in] parent The instance of the ALTER TABLE request builder
+     */
+    TAlterMetricsSettingsBuilder(TAlterTableSettings& parent);
+
+    /**
+     * Configure the ALTER TABLE request to remove the metrics configuration.
+     *
+     * @return The instance of this builder
+     */
+    TAlterMetricsSettingsBuilder& Drop();
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     *
+     * @return The instance of this builder
+     */
+    TAlterMetricsSettingsBuilder& Set(TMetricsSettings&& settings);
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics configuration.
+     *
+     * @param[in] settings The metrics configuration to use
+     *
+     * @return The instance of this builder
+     */
+    TAlterMetricsSettingsBuilder& Set(const TMetricsSettings& settings);
+
+    /**
+     * Configure the ALTER TABLE request to use the given metrics level.
+     *
+     * @param[in] metricsLevel The metrics level
+     *
+     * @return The instance of this builder
+     */
+    TAlterMetricsSettingsBuilder& Set(TMetricsSettings::EMetricsLevel metricsLevel);
+
+    /**
+     * Complete the building process and finalize the metrics configuration.
+     *
+     * @return The instance of the ALTER TABLE request builder
+     */
+    TAlterTableSettings& EndAlterMetricsSettings();
+
+private:
+    TAlterTableSettings& Parent_;
+
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
 class TAlterAttributesBuilder {
 public:
     TAlterAttributesBuilder(TAlterTableSettings& parent)
@@ -1739,6 +2070,8 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter);
 
+    FLUENT_SETTING_OPTIONAL(TCompact, Compact);
+
     FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings);
     TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {
         SetReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
@@ -1760,6 +2093,31 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     TAlterTtlSettingsBuilder BeginAlterTtlSettings() {
         return TAlterTtlSettingsBuilder(*this);
     }
+
+    /**
+     * Start the process of updating the metrics configuration for the ALTER TABLE request.
+     *
+     * @return The instance of the metrics configuration builder
+     */
+    TAlterMetricsSettingsBuilder BeginAlterMetricsSettings() {
+        return TAlterMetricsSettingsBuilder(*this);
+    }
+
+    /**
+     * Return the current metrics configuration for the ALTER TABLE request.
+     *
+     * @return The current metrics configuration
+     */
+    const std::optional<TAlterMetricsSettings>& GetAlterMetricsSettings() const;
+
+    /**
+     * Update the metrics configuration for the ALTER TABLE request.
+     *
+     * @param[in] settings The metrics configuration to use
+     *
+     * @return The instance of this builder
+     */
+    TSelf& SetAlterMetricsSettings(const std::optional<TAlterMetricsSettings>& settings);
 
     TAlterAttributesBuilder BeginAlterAttributes() {
         return TAlterAttributesBuilder(*this);

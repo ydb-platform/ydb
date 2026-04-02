@@ -53,6 +53,15 @@ public:
     virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) = 0;
 };
 
+class TPhysicalBinaryOpBuilderWithOpProps: public TPhysicalOpBuilder {
+public:
+    TPhysicalBinaryOpBuilderWithOpProps(TExprContext& ctx, TPositionHandle pos)
+        : TPhysicalOpBuilder(ctx, pos) {
+    }
+
+    virtual TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, const TPhysicalOpProps& props) = 0;
+};
+
 template <typename TPhysicalBuilder, typename TOperator, typename... Args>
 TExprNode::TPtr Build(TIntrusivePtr<TOperator> op, TExprContext& ctx, TPositionHandle pos, Args... args) {
     return TPhysicalBuilder(op, ctx, pos).BuildPhysicalOp(args...);

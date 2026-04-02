@@ -83,15 +83,15 @@ struct TProtoInfo {
 };
 
 void ProtoTypeBuild(const NProtoBuf::Descriptor* descriptor,
-                    const EEnumFormat enumFormat,
-                    const ERecursionTraits recursion,
-                    const bool optionalLists,
+                    EEnumFormat enumFormat,
+                    ERecursionTraits recursion,
+                    bool optionalLists,
                     IFunctionTypeInfoBuilder& builder,
                     TProtoInfo* info,
                     EProtoStringYqlType stringType = EProtoStringYqlType::Bytes,
-                    const bool syntaxAware = false,
-                    const bool useJsonName = false,
-                    const bool ytMode = false);
+                    bool syntaxAware = false,
+                    bool useJsonName = false,
+                    bool ytMode = false);
 
 template <class T>
 void ProtoTypeBuild(IFunctionTypeInfoBuilder& builder, TProtoInfo* info) {

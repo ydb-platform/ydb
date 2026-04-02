@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/keyvalue
     ydb/core/persqueue/pqtablet/blob
+    ydb/core/persqueue/events
 )
 
 END()

@@ -10,7 +10,6 @@ TEST_SRCS(
     test_rename.py
 )
 
-
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
@@ -20,9 +19,9 @@ IF (SANITIZER_TYPE)
 ELSE()
     REQUIREMENTS(cpu:2)
 ENDIF()
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

@@ -465,6 +465,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -503,6 +506,8 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {

@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(150)
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -19,6 +19,7 @@ SRCS(
     dictionary_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
+    peephole_ut.cpp
     sys_view_ut.cpp
     tiering_ut.cpp
 )

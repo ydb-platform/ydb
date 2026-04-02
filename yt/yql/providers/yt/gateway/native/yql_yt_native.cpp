@@ -303,7 +303,7 @@ public:
                 session->OperationSemaphore.Drop();
             }
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, logCtx] {
+            return session->Async([session, logCtx] {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
                     session->TxCache_.AbortAll();
@@ -324,7 +324,7 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([
+            return session->Async([
                 session, logCtx,
                 abort=options.Abort(),
                 detachSnapshotTxs=options.DetachSnapshotTxs(),
@@ -384,7 +384,7 @@ public:
             }
 
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, paths = std::move(paths), reqPerServer = std::move(reqPerServer), logCtx] () {
+            return session->Async([session, paths = std::move(paths), reqPerServer = std::move(reqPerServer), logCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 return ExecCanonizePaths(paths, reqPerServer);
             });
@@ -450,7 +450,7 @@ public:
             auto logCtx = NYql::NLog::CurrentLogContextPath();
             bool readOnly = options.ReadOnly();
             ui32 epoch = options.Epoch();
-            return session->Queue_->Async([session, tables = std::move(tables), reqPerServer = std::move(reqPerServer), readOnly, epoch, logCtx] () {
+            return session->Async([session, tables = std::move(tables), reqPerServer = std::move(reqPerServer), readOnly, epoch, logCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 return ExecGetTableInfo(tables, reqPerServer, readOnly, epoch);
             });
@@ -505,14 +505,14 @@ public:
 
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, filter, exprCtx);
             if (lambda) {
-                return session->Queue_->Async([execCtx, tmpTablePath, lambda, extraUsage] () {
+                return session->Async([execCtx, tmpTablePath, lambda, extraUsage] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                     execCtx->MakeUserFiles();
                     return ExecGetTableRange(execCtx, tmpTablePath, lambda, extraUsage);
                 });
             }
 
-            return session->Queue_->Async([execCtx] () {
+            return session->Async([execCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 return ExecGetTableRange(execCtx);
             });
@@ -543,7 +543,7 @@ public:
                 return MakeFuture(res);
             }
 
-            auto getFolderFuture = session->Queue_->Async([execCtx] () {
+            auto getFolderFuture = session->Async([execCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 return ExecGetFolder(execCtx);
             });
@@ -635,7 +635,7 @@ public:
             auto cluster = options.Cluster();
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
-            return session->Queue_->Async([execCtx] () {
+            return session->Async([execCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 return ExecGetFolder(execCtx);
             });
@@ -657,7 +657,7 @@ public:
             auto cluster = options.Cluster();
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
-            return session->Queue_->Async([execCtx] () {
+            return session->Async([execCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 return ExecResolveLinks(execCtx);
             });
@@ -814,7 +814,7 @@ public:
 
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
-            return session->Queue_->Async([execCtx, lambda, extraUsage, tmpTablePath] () {
+            return session->Async([execCtx, lambda, extraUsage, tmpTablePath] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->MakeUserFiles();
                 return ExecCalc(lambda, extraUsage, tmpTablePath, execCtx, {}, TNodeResultFactory());
@@ -975,7 +975,7 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
+            return session->Async([execCtx, src = std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 return ExecPublish(execCtx, std::move(src), dst, dstIsDynamic, srcAreSortedByDstKeys, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
             })
@@ -1002,7 +1002,7 @@ public:
             auto cluster = options.Cluster();
 
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
-            return session->Queue_->Async([execCtx] () {
+            return session->Async([execCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 try {
                     execCtx->Session_->TxCache_.Commit(execCtx->YtServer_);
@@ -1048,7 +1048,7 @@ public:
 
                 auto execCtx = MakeExecCtx(TDropTrackablesOptions(options), session, cluster, nullptr, nullptr);
 
-                futures.push_back(session->Queue_->Async([execCtx, paths] () {
+                futures.push_back(session->Async([execCtx, paths] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                     return ExecDropTrackables(paths, execCtx);
                 }));
@@ -1088,7 +1088,7 @@ public:
 
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
-            return session->Queue_->Async([execCtx, logCtx] () {
+            return session->Async([execCtx, logCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 bool onlyCached = false;
                 return ExecPathStat(execCtx, onlyCached);
@@ -1200,7 +1200,7 @@ public:
                 YQL_ENSURE(p, "Table " << table << " has no snapshot");
                 richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
 
-                waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx, supportRLSTables] () {
+                waits.push_back(session->Async([entry, richYPath, targetPath, logCtx, supportRLSTables] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
 
                     NYT::TTableReaderOptions readerOptions = NYT::TTableReaderOptions()
@@ -1274,7 +1274,7 @@ public:
 
             NYT::MergeNodes(attrs, YqlOpOptionsToAttrs(session->OperationOptions_));
 
-            return session->Queue_->Async([entry, table, path, attrs, writerOptions, logCtx] () {
+            return session->Async([entry, table, path, attrs, writerOptions, logCtx] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
                     entry->Tx->Create(table, NT_TABLE, NYT::TCreateOptions().Force(true).Attributes(attrs));
@@ -1491,7 +1491,7 @@ public:
             TVector<TFuture<void>> futures;
             for (auto& [cluster, entries] : options.Entries()) {
                 auto execCtx = MakeExecCtx(std::move(entries), session, cluster, nullptr, nullptr);
-                futures.push_back(execCtx->Session_->Queue_->Async([execCtx, config = options.Config()]() {
+                futures.push_back(execCtx->Session_->Async([execCtx, config = options.Config()]() {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                     return ExecDump(execCtx, config);
                 }));
@@ -3127,7 +3127,7 @@ private:
             size_t i = 0;
             for (auto& idx : idxs) {
                 YQL_ENSURE(tables[idx.first].InferSchemaRows() > 0);
-                futures.push_back(execCtx->Session_->Queue_->Async([i, idx, &result, &tables, &tx](){
+                futures.push_back(execCtx->Session_->Async([i, idx, &result, &tables, &tx](){
                         YQL_CLOG(INFO, ProviderYt) << "Infering schema for table '" << tables[idx.first].Table() << "'";
                         result[i] = InferSchemaFromTableContents(tx, idx.second, tables[idx.first].Table(), tables[idx.first].InferSchemaRows());
                     }));
@@ -3270,7 +3270,7 @@ private:
 
         auto pos = ctx.GetPosition(pull.Pos());
 
-        return session->Queue_->Async([rowSpec, type, ref, range, autoRef, execCtx, columns, pos] () {
+        return session->Async([rowSpec, type, ref, range, autoRef, execCtx, columns, pos] () {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             try {
@@ -3528,7 +3528,7 @@ private:
             type = typeYson.Str();
         }
 
-        return session->Queue_->Async([lambda, hasListResult, extraUsage, tmpTablePath, execCtx, columns, rowSpec] () {
+        return session->Async([lambda, hasListResult, extraUsage, tmpTablePath, execCtx, columns, rowSpec] () {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
 
@@ -3621,7 +3621,7 @@ private:
     TFuture<void> DoSort(TYtSort /*sort*/, const TExecContext<TRunOptions>::TPtr& execCtx) {
         YQL_ENSURE(execCtx->OutTables_.size() == 1);
 
-        return execCtx->Session_->Queue_->Async([execCtx]() {
+        return execCtx->Session_->Async([execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
@@ -3667,7 +3667,7 @@ private:
         YQL_ENSURE(execCtx->InputTables_.front().Temp);
         YQL_ENSURE(execCtx->OutTables_.size() == 1);
 
-        return execCtx->Session_->Queue_->Async([execCtx]() {
+        return execCtx->Session_->Async([execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             execCtx->QueryCacheItem.Destroy(); // Don't use cache for YtCopy
@@ -3731,7 +3731,7 @@ private:
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
+        return execCtx->Session_->Async([forceTransform, combineChunks, limit, execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 execCtx->SetNodeExecProgress("Preparing");
@@ -3952,7 +3952,7 @@ private:
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
 
-        return execCtx->Session_->Queue_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx]() {
+        return execCtx->Session_->Async([mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             return ExecMap(mapJob, ordered, jobCount, limit, sortLimitBy, mapLambda, extraUsage, execCtx);
@@ -4164,7 +4164,7 @@ private:
             : GetSequenceItemType(reduce.Reducer().Args().Arg(0), true)
         );
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Async([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             return ExecReduce(reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
@@ -4695,7 +4695,7 @@ private:
             limit.Clear();
         }
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
+        return execCtx->Session_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
             reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4955,7 +4955,7 @@ private:
         TString tmpTablePath = NYql::TransformPath(tmpFolder,
             TStringBuilder() << "tmp/" << GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid()), true, execCtx->Session_->UserName_);
 
-        return execCtx->Session_->Queue_->Async([lambda, tmpTablePath, extraUsage, execCtx]() {
+        return execCtx->Session_->Async([lambda, tmpTablePath, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             return ExecFill(lambda, extraUsage, tmpTablePath, execCtx);
@@ -4964,7 +4964,7 @@ private:
 
     TFuture<void> DoTouch(TYtOutputOpBase touch, const TExecContext<TRunOptions>::TPtr& execCtx) {
         Y_UNUSED(touch);
-        return execCtx->Session_->Queue_->Async([execCtx]() {
+        return execCtx->Session_->Async([execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             PrepareDestinations(execCtx->OutTables_, execCtx, entry, true);
@@ -4973,7 +4973,7 @@ private:
 
     TFuture<bool> DoPrepare(TYtOutputOpBase write, const TExecContext<TPrepareOptions>::TPtr& execCtx) const {
         Y_UNUSED(write);
-        return execCtx->Session_->Queue_->Async([execCtx]() {
+        return execCtx->Session_->Async([execCtx]() {
             return execCtx->LookupQueryCacheAsync().Apply([execCtx](const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 auto entry = execCtx->GetEntry();
@@ -4992,7 +4992,7 @@ private:
         TString path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
         YQL_CLOG(INFO, ProviderYt) << "Dropping: " << execCtx->Cluster_ << '.' << path;
 
-        return execCtx->Session_->Queue_->Async([path, execCtx]() {
+        return execCtx->Session_->Async([path, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             auto entry = execCtx->GetEntry();
             entry->Tx->Remove(path, TRemoveOptions().Force(true));
@@ -5010,7 +5010,7 @@ private:
         attrs[YqlTypeAttribute] = "view";
         attrs["value"] = create.Original().Value();
 
-        return execCtx->Session_->Queue_->Async([path, attrs, execCtx]() {
+        return execCtx->Session_->Async([path, attrs, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->GetEntry()->Tx->Create(path, NT_DOCUMENT, TCreateOptions().Force(true).Attributes(attrs));
         });
@@ -6006,7 +6006,7 @@ private:
             TSession::TPtr session = GetSession(options.SessionId());
             auto execCtx = MakeExecCtx(TSnapshotLayersOptions(options), session, options.Cluster(), nullptr, nullptr);
             auto logCtx = NYql::NLog::CurrentLogContextPath();
-            return session->Queue_->Async([session, execCtx, logCtx, paths = options.Layers(), cluster = options.Cluster()] () {
+            return session->Async([session, execCtx, logCtx, paths = options.Layers(), cluster = options.Cluster()] () {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
                 try {
                     TLayersSnapshotResult result;
@@ -6027,7 +6027,7 @@ private:
         auto execCtx = MakeExecCtx(TDownloadTableOptions(options), session, options.Cluster(), nullptr, nullptr);
         auto logCtx = NYql::NLog::CurrentLogContextPath();
 
-        return session->Queue_->Async([session, execCtx, logCtx, options = std::move(options)] {
+        return session->Async([session, execCtx, logCtx, options = std::move(options)] {
             bool forceLocalTableContent = options.ForceLocalTableContent();
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             try {

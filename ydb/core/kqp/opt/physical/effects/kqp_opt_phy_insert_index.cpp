@@ -136,7 +136,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     std::optional<TExprBase> insertRows;
     if (needPrecompute) {
         // TODO: don't use precompute here!
-        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
+        auto conditionalInsertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx, kqpCtx);
         if (!conditionalInsertRows) {
             return node;
         }

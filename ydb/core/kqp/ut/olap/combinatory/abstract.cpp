@@ -15,11 +15,15 @@ TConclusionStatus ICommand::DeserializeFromString(const TString& description) {
             if (!l) {
                 continue;
             }
+            TString matchedProp;
             for (auto&& c : props) {
-                if (l.StartsWith(c)) {
-                    currentProperty = c;
-                    l = Strip(l.substr(c.size()));
+                if (l.StartsWith(c) && c.size() > matchedProp.size()) {
+                    matchedProp = c;
                 }
+            }
+            if (matchedProp) {
+                currentProperty = matchedProp;
+                l = Strip(l.substr(matchedProp.size()));
                 if (l.StartsWith(":") || l.StartsWith("=")) {
                     l = Strip(l.substr(1));
                 }

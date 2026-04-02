@@ -247,9 +247,15 @@ void Splice(
     const TFile& destination,
     i64 chunkSize);
 
+struct TSpliceResult
+{
+    i64 BytesSpliced;
+    TError Error;
+};
+
 //! Asynchronously copies data via splice syscall,
 //! releasing invoker thread when pipe is blocked.
-TFuture<void> SpliceAsync(
+TFuture<TSpliceResult> SpliceAsync(
     const TFile& src,
     const TFile& dst,
     bool pipeIsSrc,

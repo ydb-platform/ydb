@@ -35,10 +35,6 @@ struct TResolveOutput {
     // Source id from config ("source" field), used in result/error reporting.
     TString Name;
 
-    // false: source is still resolving.
-    // true: source resolving is finished for this entry.
-    bool Ready = false;
-
     // Links produced by this source.
     TVector<NSupportLinks::TResolvedLink> Links;
 

@@ -78,8 +78,8 @@ TVector<TInfoUnit> TOpRead::GetOutputIUs() {
     return OutputIUs;
 }
 
-bool TOpRead::NeedsMap() {
-    for (size_t i=0; i<Columns.size(); i++) {
+bool TOpRead::NeedsMap() const {
+    for (size_t i = 0; i < Columns.size(); i++) {
         if (TInfoUnit("", Columns[i]) != OutputIUs[i]) {
             return true;
         }
@@ -118,8 +118,9 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << "])";
     const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
     res << " (StorageType: " << storageType << ")";
-    if (OlapFilterLambda)
+    if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
+    }
     return res;
 }
 
@@ -345,6 +346,31 @@ TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPosition
     , Types(types) {
 }
 
+TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs)
+    : IUnaryOperator(EOperator::AddDependencies, pos, input) {
+        for (const auto & [iu, type] : pairs) {
+            Dependencies.push_back(iu);
+            Types.push_back(type);
+        }
+}
+
+TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> TOpAddDependencies::GetDependencyPairs() {
+    TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> result;
+    for (size_t i=0; i<Dependencies.size(); i++) {
+        result.push_back(std::make_pair(Dependencies[i], Types[i]));
+    }
+    return result;
+}
+
+void TOpAddDependencies::SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs) {
+    Dependencies.clear();
+    Types.clear();
+    for (const auto & [iu, type] : pairs) {
+        Dependencies.push_back(iu);
+        Types.push_back(type);
+    }
+}
+
 TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
     auto ius = GetInput()->GetOutputIUs();
     ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
@@ -512,11 +538,15 @@ void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     }
 }
 
-const THashMap<EJoinAlgoType,TString> AlgoNames = {
-    {EJoinAlgoType::LookupJoin, "Lookup"},
-    {EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
-    {EJoinAlgoType::MapJoin, "Map"},
-    {EJoinAlgoType::GraceJoin, "Shuffle"}};
+const THashMap<NKqp::EJoinAlgoType, TString> AlgoNames = {
+    {NKqp::EJoinAlgoType::Undefined, "Undefined"},
+    {NKqp::EJoinAlgoType::LookupJoin, "Lookup"},
+    {NKqp::EJoinAlgoType::LookupJoinReverse, "ReverseLookup"},
+    {NKqp::EJoinAlgoType::MapJoin, "Map"},
+    {NKqp::EJoinAlgoType::GraceJoin, "Shuffle"},
+    {NKqp::EJoinAlgoType::StreamLookupJoin, "StreamLookup"},
+    {NKqp::EJoinAlgoType::MergeJoin, "Merge"},
+};
 
 TString TOpJoin::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
@@ -844,6 +874,75 @@ void TOpRoot::PlanToStringRec(TIntrusivePtr<IOperator> op, TExprContext& ctx, TS
     for (auto c : op->Children) {
         PlanToStringRec(c, ctx, builder, tabs + 1, printOptions);
     }
+}
+
+TOpIterator::TOpIterator(TOpRoot* ptr) {
+    if (!ptr) {
+        CurrElement = -1;
+        return;
+    }
+
+    std::unordered_set<IOperator*> visited;
+    for (const auto& subplan : ptr->PlanProps.Subplans.Get()) {
+        BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
+    }
+    auto child = ptr->GetInput();
+    BuildDfsList(child, {}, size_t(0), visited, nullptr);
+    CurrElement = 0;
+}
+
+TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent) {
+    std::unordered_set<IOperator*> visited;
+    BuildDfsList(op, parent, size_t(0), visited, nullptr);
+    CurrElement = 0;
+}
+
+TOpIterator::TOpIterator(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, TPlanProps* props) {
+    PlanProps = props;
+    std::unordered_set<IOperator*> visited;
+    BuildDfsList(op, parent, size_t(0), visited, nullptr, true);
+    CurrElement = 0;
+}
+
+TOpIterator::TIteratorItem TOpIterator::operator*() const {
+    return DfsList[CurrElement];
+}
+
+TOpIterator& TOpIterator::operator++() {
+    if (CurrElement >= 0) {
+        CurrElement++;
+    }
+    if (CurrElement == DfsList.size()) {
+        CurrElement = -1;
+    }
+    return *this;
+}
+
+TOpIterator TOpIterator::operator++(int) {
+    TOpIterator tmp = *this;
+    ++(*this);
+    return tmp;
+}
+
+void TOpIterator::BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<IOperator> parent, size_t childIdx, std::unordered_set<IOperator*>& visited,
+                          std::shared_ptr<TInfoUnit> subplanIU, bool recurseIntoSubplans) {
+
+    if(recurseIntoSubplans) {
+        auto subplanIUs = current->GetSubplanIUs(*PlanProps);
+        for (const auto & iu : subplanIUs) {
+            const auto & subplan = PlanProps->Subplans.PlanMap.at(iu);
+            BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, 0, visited, std::make_shared<TInfoUnit>(iu), true);
+        }
+    }
+
+    const auto& children = current->GetChildren();
+    for (size_t idx = 0, e = children.size(); idx < e; ++idx) {
+        BuildDfsList(children[idx], current, idx, visited, subplanIU, recurseIntoSubplans);
+    }
+    if (!visited.contains(current.get())) {
+        DfsList.push_back(TOpIterator::TIteratorItem(current, parent, childIdx, subplanIU));
+    }
+    visited.insert(current.get());
 }
 
 } // namespace NKqp

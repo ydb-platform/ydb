@@ -392,7 +392,7 @@ message TTableServiceConfig {
 
     optional bool EnableFoldUdfs = 82 [ default = true , (InvalidateCompileCache) = true];
 
-    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true, (InvalidateCompileCache) = true];
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = false, (InvalidateCompileCache) = true];
 
     optional bool EnableNewRBO = 84 [default = false, (InvalidateCompileCache) = true];
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = true, (InvalidateCompileCache) = true];
@@ -428,8 +428,8 @@ message TTableServiceConfig {
 
     optional bool EnableOrderOptimizaionFSM = 99 [ default = false , (InvalidateCompileCache) = true];
 
-    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
-    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
+    reserved 100; //    optional bool EnableTopSortSelectIndex = 100 [ default = true, (InvalidateCompileCache) = true ];
+    reserved 101; //    optional bool EnablePointPredicateSortAutoSelectIndex = 101 [ default = true , (InvalidateCompileCache) = true];
 
     optional bool EnableDataShardCreateTableAs = 102 [default = true, (InvalidateCompileCache) = true];
 
@@ -492,4 +492,8 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+
+    optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 };

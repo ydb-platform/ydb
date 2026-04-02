@@ -398,6 +398,7 @@ message TKqpPhyConnection {
 enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
+    EKqpFullTextJson = 2;
 }
 
 message TKqpFullTextSource {

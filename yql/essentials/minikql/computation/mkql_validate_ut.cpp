@@ -528,13 +528,13 @@ SIMPLE_UDF(TDictDigDigHoleAsOpt, NUdfDictDigDig(ui32, ui32)) {
     return NUdf::TUnboxedValuePod(std::move(boxed));
 }
 
-static const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {"Johnnie Walker", "Blue Label", 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {"Alfred", "Hithcock", 81};
-static const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {"Howard", "Lovecraft", 25};
-static const NUdf::TPersonStruct STRUCT_PERSON_KING = {"Stephen", "King", 25};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {"Alfred", "Hithcock", 81, {}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {"Howard", "Lovecraft", 25, {3, 2, 99}};
-static const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {"Stephen", "King", 25, {}};
+static const NUdf::TPersonStruct STRUCT_PERSON_JONNIE = {.FirstName = "Johnnie Walker", .LastName = "Blue Label", .Age = 25};
+static const NUdf::TPersonStruct STRUCT_PERSON_HITHCOCK = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81};
+static const NUdf::TPersonStruct STRUCT_PERSON_LOVECRAFT = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25};
+static const NUdf::TPersonStruct STRUCT_PERSON_KING = {.FirstName = "Stephen", .LastName = "King", .Age = 25};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_HITHCOCK_LIST = {.FirstName = "Alfred", .LastName = "Hithcock", .Age = 81, .Tags = {}};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_LOVECRAFT_LIST = {.FirstName = "Howard", .LastName = "Lovecraft", .Age = 25, .Tags = {3, 2, 99}};
+static const NUdf::TPersonStructWithOptList STRUCT_PERSON_KING_LIST = {.FirstName = "Stephen", .LastName = "King", .Age = 25, .Tags = {}};
 
 SIMPLE_UDF_RUN(TPersonStruct, NUdf::TPersonStruct(ui32), NUdf::TOptional<void>) {
     Y_UNUSED(valueBuilder);

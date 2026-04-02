@@ -1,11 +1,11 @@
 diff --git a/include/__configuration/abi.h b/include/__configuration/abi.h
-index 01a4a4c..f4df5fe 100644
+index a75cd0a..aaeac79 100644
 --- a/include/__configuration/abi.h
 +++ b/include/__configuration/abi.h
-@@ -58,7 +58,12 @@
- // Previously libc++ used "unsigned int" exclusively.
- #  define _LIBCPP_ABI_VARIANT_INDEX_TYPE_OPTIMIZATION
- // Unstable attempt to provide a more optimized std::function
+@@ -72,7 +72,12 @@
+ #  define _LIBCPP_ABI_NO_FILESYSTEM_INLINE_NAMESPACE
+ #  define _LIBCPP_ABI_NO_ITERATOR_BASES
+ #  define _LIBCPP_ABI_NO_RANDOM_DEVICE_COMPATIBILITY_LAYOUT
 -#  define _LIBCPP_ABI_OPTIMIZED_FUNCTION
 +#  ifdef __EMSCRIPTEN__
 +// XXX EMSCRIPTEN https://github.com/emscripten-core/emscripten/issues/11022
@@ -13,9 +13,9 @@ index 01a4a4c..f4df5fe 100644
 +#  else
 +#    define _LIBCPP_ABI_OPTIMIZED_FUNCTION
 +#  endif
- // All the regex constants must be distinct and nonzero.
  #  define _LIBCPP_ABI_REGEX_CONSTANTS_NONZERO
- // Re-worked external template instantiations for std::string with a focus on
+ #  define _LIBCPP_ABI_STRING_OPTIMIZED_EXTERNAL_INSTANTIATION
+ #  define _LIBCPP_ABI_USE_WRAP_ITER_IN_STD_ARRAY
 diff --git a/include/typeinfo b/include/typeinfo
 index 24aaabf..c952487 100644
 --- a/include/typeinfo

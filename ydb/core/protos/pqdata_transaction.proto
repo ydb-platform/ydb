@@ -1,0 +1,150 @@
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/library/actors/protos/actors.proto";
+
+package NKikimrPQ;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TKafkaProducerInstanceId {
+    optional int64 Id = 1;
+    optional int32 Epoch = 2;
+};
+
+message TPartitionOperation {
+    optional uint32 PartitionId = 1;
+    optional uint64 CommitOffsetsBegin = 2;
+    optional uint64 CommitOffsetsEnd = 3;
+    optional string Consumer = 4;
+    optional string Path = 5; // topic path
+    optional uint32 SupportivePartition = 6;
+    optional bool ForceCommit = 7;
+    optional bool KillReadSession = 8;
+    optional bool OnlyCheckCommitedToFinish = 9;
+    optional string ReadSessionId = 10;
+    optional bool KafkaTransaction = 11 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 12;
+    optional bool SkipConflictCheck = 13;
+};
+
+message TWriteId {
+    optional uint64 NodeId = 1;
+    optional fixed64 KeyId = 2;
+    optional bool KafkaTransaction = 3 [default = false];
+    optional TKafkaProducerInstanceId KafkaProducerInstanceId = 4;
+};
+
+message TDataTransaction {
+    enum ELocksOp {
+        Unspecified = 0;
+        Validate = 1;
+        Commit = 2;
+        Rollback = 3;
+    }
+
+    repeated TPartitionOperation Operations = 1;
+    optional ELocksOp Op = 2;
+    repeated uint64 SendingShards = 3;
+    repeated uint64 ReceivingShards = 4;
+    optional bool Immediate = 5;
+    optional TWriteId WriteId = 6;
+}
+
+message TConfigTransaction {
+    optional TPQTabletConfig TabletConfig = 2;
+    optional TBootstrapConfig BootstrapConfig = 3;
+}
+
+message TPartitions {
+    message TPartitionInfo {
+        required uint32 PartitionId = 1;
+
+        message TMessageGroup {
+            required string Id = 1;
+            optional uint64 SeqNo = 2;
+        };
+        repeated TMessageGroup MessageGroup = 2;
+    };
+
+    repeated TPartitionInfo Partition = 1;
+}
+
+message TTransaction {
+    enum EKind {
+        KIND_UNKNOWN = 0;
+        KIND_DATA = 1;
+        KIND_CONFIG = 2;
+    };
+
+    enum EState {
+        UNKNOWN = 0;
+        PREPARING = 1;
+        PREPARED = 2;     // persist
+        PLANNING = 3;
+        PLANNED = 4;      // persist
+        CALCULATING = 5;
+        CALCULATED = 6;
+        WAIT_RS = 7;      // persist
+        EXECUTING = 8;
+        EXECUTED = 9;     // persist
+        WAIT_RS_ACKS = 11;
+        DELETING = 10;
+
+        EXPIRED = 12;
+        CANCELED = 13;
+    };
+
+    message TPredicateReceived {
+        optional uint64 TabletId = 1;
+        optional bool Predicate = 2;
+    }
+
+    optional EKind Kind = 11;
+    optional uint64 Step = 8;
+    optional uint64 TxId = 1;
+    optional EState State = 2;
+    optional uint64 MinStep = 3;
+    optional uint64 MaxStep = 4;
+
+    repeated TPredicateReceived PredicatesReceived = 5;
+    repeated uint64 PredicateRecipients = 6;
+    optional bool Predicate = 9;
+
+    //
+    // TDataTransaction
+    //
+    repeated TPartitionOperation Operations = 7;
+
+    //
+    // TConfigTransaction
+    //
+    optional TPQTabletConfig TabletConfig = 12;
+    optional TBootstrapConfig BootstrapConfig = 13;
+    optional TPartitions Partitions = 16;
+
+    //
+    // получатель результата
+    //
+    optional NActorsProto.TActorId SourceActor = 14;
+
+    optional TWriteId WriteId = 15;
+
+    optional NActorsProto.TTraceId ExecuteTraceId = 17;
+    optional NActorsProto.TTraceId WaitRSTraceId = 18;
+    optional NActorsProto.TTraceId WaitRSAcksTraceId = 19;
+};
+
+message TTabletTxInfo {
+    message TTxWriteInfo {
+        optional TWriteId WriteId = 1;
+        optional uint32 OriginalPartitionId = 2;
+        optional uint32 InternalPartitionId = 3;
+        optional bool KafkaTransaction = 4 [default = false];
+        optional uint64 CreatedAt = 5;
+    };
+
+    optional uint64 PlanStep = 2;
+    optional uint64 PlanTxId = 3;
+    repeated TTxWriteInfo TxWrites = 4;
+    optional uint64 NextSupportivePartitionId = 5;
+    optional uint64 ExecStep = 6;
+    optional uint64 ExecTxId = 7;
+}

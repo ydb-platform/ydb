@@ -22,7 +22,7 @@
 #define STREAMING_REQUEST_CLASS(inputType, outputType) ::NKikimr::NGRpcServer::TGRpcStreamingRequest<inputType, outputType, std::remove_reference_t<decltype(*this)>, ::NKikimrServices::GRPC_SERVER>
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, emptyDatabaseMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
     MakeIntrusive<::NKikimr::NGRpcService::TGRpcRequest<                                                  \
         inputType,                                                                                        \
         outputType,                                                                                       \
@@ -45,6 +45,7 @@
                         .CustomAttributeProcessor = customAttributeProcessorCallback,                     \
                         .AuditMode = auditMode,                                                           \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,              \
+                        .EmptyDatabaseMode = emptyDatabaseMode,                                           \
                     }));                                                                                  \
         },                                                                                                \
         &TGrpcAsyncService::Y_CAT(Request, methodName),                                                   \
@@ -55,7 +56,7 @@
     )->Run()
 
 // Setup for bidirectional streaming
-#define SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName, inputType, outputType, rlMode, requestType, counterBlock, auditMode, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
+#define SETUP_RUNTIME_EVENT_STREAM_METHOD(methodName, inputType, outputType, rlMode, requestType, counterBlock, auditMode, emptyDatabaseMode, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback)  \
     STREAMING_REQUEST_CLASS(inputType, outputType)::Start(this,                                                         \
         &Service_,                                                                                                      \
         cq,                                                                                                             \
@@ -71,6 +72,7 @@
                         .CustomAttributeProcessor = customAttributeProcessorCallback,                                   \
                         .AuditMode = auditMode,                                                                         \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,                            \
+                        .EmptyDatabaseMode = emptyDatabaseMode,                                                         \
                     }                                                                                                   \
                 )                                                                                                       \
             );                                                                                                          \
@@ -83,21 +85,22 @@
 
 // Common macro for gRPC methods setup
 // Use RLSWITCH or RLMODE macro for rlMode
-#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)             \
-    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
-        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
-        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                        \
-        methodCallback,                                                                                   \
-        rlMode,                                                                                           \
-        requestType,                                                                                      \
-        YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName),                                           \
-        auditMode,                                                                                        \
-        COMMON,                                                                                           \
-        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
-        GRpcRequestProxyId_,                                                                              \
-        CQ_,                                                                                              \
-        nullptr,                                                                                          \
-        nullptr                                                                                           \
+#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode, emptyDatabaseMode)    \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                          \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                                   \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                                  \
+        methodCallback,                                                                                             \
+        rlMode,                                                                                                     \
+        requestType,                                                                                                \
+        YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName),                                                     \
+        auditMode,                                                                                                  \
+        emptyDatabaseMode,                                                                                          \
+        COMMON,                                                                                                     \
+        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                                         \
+        GRpcRequestProxyId_,                                                                                        \
+        CQ_,                                                                                                        \
+        nullptr,                                                                                                    \
+        nullptr                                                                                                     \
     )
 
 #endif // GRPC_METHOD_SETUP_H

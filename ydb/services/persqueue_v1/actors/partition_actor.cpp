@@ -179,13 +179,29 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
+        auto topicPath = Topic->GetPrimaryPath();
         for (auto& parent: parents) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            TDistributedCommitHelper::TCommitInfo commit {
+                .PartitionId = parent->Id,
+                .Offset = Max<i64>(),
+                .KillReadSession = false,
+                .OnlyCheckCommitedToFinish = true,
+                .ReadSessionId = Session,
+                .TopicPath = topicPath
+            };
             commits.push_back(commit);
         }
-        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
+
+        TDistributedCommitHelper::TCommitInfo commit {
+            .PartitionId = Partition.Partition,
+            .Offset = (i64)offset,
+            .KillReadSession = false,
+            .OnlyCheckCommitedToFinish = false,
+            .ReadSessionId = Session,
+            .TopicPath = topicPath
+        };
         commits.push_back(commit);
-        auto kqp = std::make_shared<TDistributedCommitHelper>(Database, ClientId, Topic->GetPrimaryPath(), commits, readId);
+        auto kqp = std::make_shared<TDistributedCommitHelper>(Database, ClientId, commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);
@@ -981,7 +997,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     CommittedOffset = CommitsInfly.front().second.Offset;
-    
+
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
     if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
@@ -1044,17 +1060,13 @@ void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TAct
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " update read metrics " << Partition
                         << " inFlightLimitReachedDuration " << inFlightLimitReachedDuration.MilliSeconds());
 
-    NKikimrClient::TPersQueueRequest request;
-    auto req = request.MutablePartitionRequest();
-    req->SetPartition(Partition.Partition);
-    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetInFlightLimitReachedDurationMs(inFlightLimitReachedDuration.MilliSeconds());
-    request.MutablePartitionRequest()->MutableCmdUpdateReadMetrics()->SetClientId(ClientId);
-
-    TAutoPtr<TEvPersQueue::TEvRequest> persqueueRequest(new TEvPersQueue::TEvRequest);
-    persqueueRequest->Record.Swap(&request);
+    TAutoPtr<TEvPersQueue::TEvPartitionUpdateReadMetrics> persqueueRequest(new TEvPersQueue::TEvPartitionUpdateReadMetrics);
+    persqueueRequest->Record.SetPartition(Partition.Partition);
+    persqueueRequest->Record.MutableUpdateReadMetrics()->SetInFlightLimitReachedDurationMs(inFlightLimitReachedDuration.MilliSeconds());
+    persqueueRequest->Record.MutableUpdateReadMetrics()->SetClientId(ClientId);
 
     ctx.Schedule(READ_METRICS_UPDATE_INTERVAL, new TEvPQProxy::TEvUpdateReadMetrics());
-    if (!PipeClient) 
+    if (!PipeClient)
         return;
 
     NTabletPipe::SendData(ctx, PipeClient, persqueueRequest.Release());

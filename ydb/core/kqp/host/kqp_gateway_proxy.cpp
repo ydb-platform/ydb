@@ -1,5 +1,6 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -362,6 +364,11 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             error = "Column Compression is not supported in row tables";
             return false;
         }
+
+        if (columnIt->second.Encoding) {
+            error = "Column Encoding is not supported in row tables";
+            return false;
+        }
     }
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
@@ -453,6 +460,39 @@ bool FillSerializer(
     return true;
 }
 
+bool FillAccessor(
+    const TMaybe<TColumnEncodingsList>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from) {
+        return true;
+    }
+
+    if (from->size() != 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = TStringBuilder() << "Column `" << name << "`: several encodings are not yet supported";
+        return false;
+    }
+
+    const auto& encodingType = (*from)[0].Type;
+    switch (encodingType) {
+        case TColumnEncoding::EEncodingType::UNDEFINED:
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::DICTIONARY:
+            to.MutableDataAccessorConstructor()->MutableDictionary();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::PLAIN:
+            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+            break;
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
@@ -492,6 +532,10 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
+        }
+
+        if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
             return false;
         }
     }
@@ -783,36 +827,10 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
-        try {
-            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
-
-            if (tableName.empty()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
-            }
-
-            if (!IsStartWithSlash(tablePath)) {
-                dirname = JoinPath({GetDatabase(), dirname});
-            }
-
-            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
-            for (auto& setting : settings) {
-                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
-                add->Swap(&setting);
-            }
-
-            setColumnConstraintsInitiate.SetTableName(tableName);
-
-            NKikimrSchemeOp::TModifyScheme modifyScheme;
-            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
-            modifyScheme.SetWorkingDir(std::move(dirname));
-            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
-
-            return Gateway->ModifyScheme(std::move(modifyScheme));
-        }
-        catch (yexception& e) {
-            return MakeFuture(ResultFromException<TGenericResult>(e));
-        }
+    // TODO: flown4qqqq. Need to remove.
+    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
+        TString error = "NotImplemented";
+        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -976,16 +994,24 @@ public:
                 if (!metadata->Indexes.empty() || !sequences.empty()) {
                     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
+                    TSet<ui32> bloomPrefixes;
                     for (auto&& index : metadata->Indexes) {
                         const bool isLocalBloom = (index.Type == TIndexDescription::EType::LocalBloomFilter ||
                                     index.Type == TIndexDescription::EType::LocalBloomNgramFilter);
 
                         if (isLocalBloom) {
-                            if (metadata->StoreType != EStoreType::Column) {
-                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom indexes are supported only for column tables"));
+                            if (index.Type == TIndexDescription::EType::LocalBloomNgramFilter &&
+                                metadata->StoreType != EStoreType::Column) {
+                                tablePromise.SetValue(ResultFromError<TGenericResult>("Local bloom ngram indexes are supported only for column tables"));
                                 return;
                             }
 
+                            if (metadata->StoreType == EStoreType::Column) {
+                                continue; // handled by OLAP path below
+                            }
+
+                            // Row-store LocalBloomFilter: collect prefix lengths for de-duplication
+                            bloomPrefixes.insert(static_cast<ui32>(index.KeyColumns.size()));
                             continue;
                         }
 
@@ -1018,6 +1044,9 @@ public:
                             default:
                                 break;
                         }
+                    }
+                    for (ui32 prefix : bloomPrefixes) {
+                        tableDesc->MutablePartitionConfig()->AddByKeyFilterPrefixes(prefix);
                     }
                     if (!FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata, columnError)) {
                         tablePromise.SetValue(ResultFromError<TGenericResult>(columnError));

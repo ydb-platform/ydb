@@ -53,7 +53,9 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
 
     if (CurrentStateFunc() == &TThis::StateWork) {
         if (Context->SaslMechanism == "PLAIN") {
-            StartPlainAuth(ctx);
+            if (!StartPlainAuth(ctx)) {
+                return;
+            }
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             StartScramAuth();
         } else {
@@ -75,13 +77,25 @@ void TKafkaSaslAuthActor::HandleAuthRequest(TEvKafka::TEvAuthRequest::TPtr& ev, 
     }
 }
 
-void TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
-    if (!TryParseAuthDataTo(ClientAuthData, ctx)) {
-        return;
+ void TKafkaSaslAuthActor::HandleMtlsAuthRequest(TEvKafka::TEvMtlsAuthRequest::TPtr& ev, const NActors::TActorContext&) {
+    auto& mtlsRequest = *ev->Get();
+    ClientCert = mtlsRequest.ClientCertificate;
+    if (CurrentStateFunc() == &TThis::StateWork) {
+        StartMtlsAuth();
+        SendDescribeRequest();
+        Become(&TKafkaSaslAuthActor::StateResolveDatabase);
     }
+ }
+
+bool TKafkaSaslAuthActor::StartPlainAuth(const NActors::TActorContext& ctx) {
+    return TryParseAuthDataTo(ClientAuthData, ctx);
 }
 
 void TKafkaSaslAuthActor::StartScramAuth() {
+    DatabasePath = AppData()->TenantName;
+}
+
+void TKafkaSaslAuthActor::StartMtlsAuth() {
     DatabasePath = AppData()->TenantName;
 }
 
@@ -275,7 +289,7 @@ bool TKafkaSaslAuthActor::TryParseAuthDataTo(TKafkaSaslAuthActor::TAuthData& aut
 
     TVector<TString> tokens = StringSplitter(AuthRequest).Split('\0');
     if (tokens.size() != 3) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN response: expected 3 tokens, got " << tokens.size(), "", ctx);
+        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, TStringBuilder() << "Invalid SASL/PLAIN request: expected 3 tokens, got " << tokens.size(), "", ctx);
         return false;
     }
 
@@ -321,6 +335,13 @@ void TKafkaSaslAuthActor::SendScramLoginRequest(const NActors::TActorContext& ct
         event->Msg = std::move(authMsg);
         Send(ScramAuthActor, event.release());
     }
+}
+
+void TKafkaSaslAuthActor::SendMtlsAuthRequest(const NActors::TActorContext&) {
+    Send(NKikimr::MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({.Ticket = ClientCert,
+                                                                                                     .Database = DatabasePath,
+                                                                                                     .PeerName = TStringBuilder() << Address}));
+    Become(&TKafkaSaslAuthActor::StateTicketResolve);
 }
 
 void TKafkaSaslAuthActor::SendDescribeRequest() {
@@ -416,6 +437,9 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
         } else if (Context->SaslMechanism == "SCRAM-SHA-256") {
             // Scram Login/Password authentication
             SendScramLoginRequest(ctx);
+        } else if (Context->SaslMechanism == "MTLS") {
+            // Mtls authentication
+            SendMtlsAuthRequest(ctx);
         }
     }
 }

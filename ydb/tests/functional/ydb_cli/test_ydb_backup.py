@@ -1892,7 +1892,7 @@ class TestRestoreReplaceOption(BaseTestBackupInFiles):
 class TestReplaceSysACLOption(BaseTestBackupInFiles):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_real_system_view_paths"]))
+        cls.cluster = KiKiMR(KikimrConfigGenerator())
         cls.cluster.start()
         cls.root_dir = '/Root'
         driver_config = ydb.DriverConfig(
@@ -2034,7 +2034,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         self.driver.scheme_client.modify_permissions('/Root/.sys/partition_stats', new_permissions_settings)
 
         # Restore the domain
-        self.ydb_cli(['tools', 'restore', '--path', '/Root', '--input', backup_files_dir])
+        self.ydb_cli(['tools', 'restore', '--path', '/Root', '--input', backup_files_dir, '--replace-sys-acl', 'true'])
 
         # Check the restored directory
         assert_that(
@@ -2079,7 +2079,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         # Restore the domain in ordinary directory
         assert_that(
             self.try_ydb_cli(
-                ['tools', 'restore', '--path', '/Root/restored', '--input', backup_files_dir]
+                ['tools', 'restore', '--path', '/Root/restored', '--input', backup_files_dir, '--replace-sys-acl', 'true']
             )[0],
             is_(True),
         )

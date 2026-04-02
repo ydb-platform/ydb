@@ -819,11 +819,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_no_header(self, kikimr, s3, client, unique_prefix):
-        # csv format: file has no header row; column names and order come from SCHEMA
-        s3_helpers.create_bucket_and_upload_file(
-            "test_no_header.csv", s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
-        )
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file("test_no_header.csv", s3.s3_url, "fbucket")
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")

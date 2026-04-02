@@ -26,7 +26,7 @@ CREATE GROUP group2 WITH USER root;
 ```
 
 ```yql
-CREATE GROUP group3 WITH USER root, root1,;
+CREATE GROUP group3 WITH USER root, root1;
 ```
 
 ```yql

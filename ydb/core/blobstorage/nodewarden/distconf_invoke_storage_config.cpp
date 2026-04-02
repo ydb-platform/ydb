@@ -1,14 +1,52 @@
 #include "distconf_invoke.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
+
+    namespace {
+        static std::optional<TString> LocalYamlValidate(const TString& yaml, bool allowUnknown = true) {
+            try {
+                auto doc = NFyaml::TDocument::Parse(yaml);
+                auto resolved = NYamlConfig::ResolveAll(doc);
+
+                TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownCollector =
+                    new NYamlConfig::TBasicUnknownFieldsCollector;
+
+                std::vector<TString> errors;
+                for (auto& [_, config] : resolved.Configs) {
+                    auto appCfg = NYamlConfig::YamlToProto(
+                        config.second,
+                        true,   // strict
+                        true,   // merge database config (if any)
+                        unknownCollector);
+                    if (NKikimr::NConfig::ValidateConfig(appCfg, errors) == NKikimr::NConfig::EValidationResult::Error) {
+                        if (!errors.empty()) {
+                            return errors.front();
+                        } else {
+                            return TString("unknown validation error");
+                        }
+                    }
+                }
+
+                if (!allowUnknown && !unknownCollector->GetUnknownKeys().empty()) {
+                    return TString("has forbidden unknown fields");
+                }
+
+                return std::nullopt;
+            } catch (const std::exception& ex) {
+                return TString(ex.what());
+            }
+        }
+    }
 
     void TInvokeRequestHandlerActor::FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage) {
         if (!Self->StorageConfig) {
@@ -484,7 +522,15 @@ namespace NKikimr::NStorage {
                     Y_ABORT_UNLESS(prevState == ERootState::IN_PROGRESS);
                     return error;
                 },
-                [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) {
+                [&](NKikimrBlobStorage::TStorageConfig& proposedConfig) -> std::optional<TString> {
+                    // config validation, which is basically done in Console
+                    TString mainYaml;
+                    if (auto err = DecomposeConfig(proposedConfig.GetConfigComposite(), &mainYaml, /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {
+                        return TString(TStringBuilder() << "Failed to decompose composite config: " << *err);
+                    }
+                    if (auto err = LocalYamlValidate(mainYaml, /*allowUnknown=*/ true)) {
+                        return TString(TStringBuilder() << "YAML validation failed: " << *err);
+                    }
                     StartProposition(&proposedConfig, false);
                     return std::nullopt;
                 }

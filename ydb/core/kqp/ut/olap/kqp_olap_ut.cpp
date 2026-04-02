@@ -1719,8 +1719,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CREATE TABLE `/Root/t1` (
                 a Int64	NOT NULL,
                 b Int32,
-<<<<<<< HEAD
-=======
+                c Timestamp NOT NULL,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1728,25 +1727,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
-        res = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t2` (
-                c Int64	NOT NULL,
-                d Int32,
-                primary key(c)
-            )
-            PARTITION BY HASH(c)
-        )").GetValueSync();
-        UNIT_ASSERT(res.IsSuccess());
-
         std::vector<TString> queries = {
             R"(
-                SELECT result
-                FROM (
-                    SELECT coalesce(t1.b,0) as result from `/Root/t1` as t1
-                    LEFT JOIN `/Root/t2` as t2 on t1.a = t2.c
-                )
-                WHERE result > 0;
-            )"
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (cast(c as Timestamp?) > $some_time)
+            )",
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (just(c) > $some_time)
+            )",
+            R"(
+                $sub = (select distinct (b) from `/Root/t1` where b > 10);
+
+                select count(*) from `/Root/t1` as t1
+                where t1.b = $sub;
+            )",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1765,7 +1770,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-     Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
+    Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         // Columns limit 2 for tests.
         settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
@@ -1861,75 +1866,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             TString output = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(output, results[i]);
-        }
-    }
-
-    Y_UNIT_TEST(PushdownFilterKnownIssuies) {
-        auto settings = TKikimrSettings()
-            .SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
-
-        auto tableClient = kikimr.GetTableClient();
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        auto queryClient = kikimr.GetQueryClient();
-        auto result = queryClient.GetSession().GetValueSync();
-        NStatusHelpers::ThrowOnError(result);
-        auto session2 = result.GetSession();
-
-        auto res = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Uint64 NOT NULL,
-                b Uint32 NOT NULL,
->>>>>>> 3af2cec0720 ([Optimizers] Disable blocks on column limit. (#36835))
-                c Timestamp NOT NULL,
-                primary key(a)
-            )
-            PARTITION BY HASH(a)
-            WITH (STORE = COLUMN);
-        )").GetValueSync();
-        UNIT_ASSERT(res.IsSuccess());
-
-        std::vector<TString> queries = {
-            R"(
-                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
-                SELECT
-                    *
-                FROM
-                    `/Root/t1`
-                WHERE
-                    (cast(c as Timestamp?) > $some_time)
-            )",
-            R"(
-                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
-                SELECT
-                    *
-                FROM
-                    `/Root/t1`
-                WHERE
-                    (just(c) > $some_time)
-            )",
-            R"(
-                $sub = (select distinct (b) from `/Root/t1` where b > 10);
-
-                select count(*) from `/Root/t1` as t1
-                where t1.b = $sub;
-            )",
-        };
-
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto query = queries[i];
-            auto result =
-                session2
-                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
-                    .ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-            auto ast = *result.GetStats()->GetAst();
-            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
-
-            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
     }
 

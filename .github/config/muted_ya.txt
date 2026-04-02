@@ -94,3 +94,4 @@ ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite
+ydb/core/blobstorage/ddisk/ut TDDiskActorTest.SyncWithPBViaFakeSource

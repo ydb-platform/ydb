@@ -42,7 +42,7 @@ public:
 
     size_t GetHash() const;
 
-    friend auto operator<=>(const TPartitionId& lhs, const TPartitionId& rhs) {
+    friend std::strong_ordering operator<=>(const TPartitionId& lhs, const TPartitionId& rhs) {
         auto makeTuple = [](const TPartitionId& v) {
             return std::tie(v.OriginalPartitionId, v.WriteId, v.InternalPartitionId);
         };

@@ -250,6 +250,16 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
 
 
+def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
+    node = cluster.nodes[node_index]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    node_id = node.node_id
+    full_path = f'/node/{node_id}{path_suffix}'
+    endpoint_url = f'{base_url}{full_path}'
+    for token, expected_status in expected_statuses_by_token.items():
+        _test_endpoint(endpoint_url, full_path, token, expected_status)
+
+
 def _test_endpoints(cluster, expected_results):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
@@ -259,6 +269,24 @@ def _test_endpoints(cluster, expected_results):
         endpoint_url = f'{base_url}{endpoint_path}'
         for token, expected_status in expected_statuses.items():
             _test_endpoint(endpoint_url, endpoint_path, token, expected_status)
+
+
+def _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body=None):
+    headers = {'Content-Type': 'application/json'}
+    if token is not None:
+        headers['Authorization'] = token
+    body = {} if json_body is None else json_body
+    response = requests.post(
+        f'{base_url}{endpoint_path}',
+        headers=headers,
+        json=body,
+        verify=False,
+    )
+    token_desc = token if token is not None else 'null'
+    assert response.status_code == expected_status, (
+        f'POST {endpoint_path!r} token={token_desc!r}: expected {expected_status}, '
+        f'got {response.status_code}: {response.text[:500]}'
+    )
 
 
 def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -400,205 +428,26 @@ def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_e
     )
 
 
-def test_public_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
+# Built-in authorization page, so it returns 200
+@pytest.mark.parametrize('node_index', [1])
+def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
     ydb_cluster_with_enforce_user_token,
+    node_index,
 ):
-    _test_endpoints(
+    all_ok = {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    _test_endpoints_via_node_proxy(
         ydb_cluster_with_enforce_user_token,
-        {
-            # Forwarding entrypoint to node-specific surface.
-            '/node': {
-                None: 400,
-                'user@builtin': 400,
-                'database@builtin': 400,
-                'viewer@builtin': 400,
-                'monitoring@builtin': 400,
-                'root@builtin': 400,
-            },
-        },
+        node_index,
+        '/monitoring',
+        all_ok,
     )
-
-
-DATABASE_ENDPOINTS_LIST = [
-    '/viewer/plan2svg',
-    # Endpoints below expose excessive information.
-    '/viewer/bscontrollerinfo',
-    '/viewer/cluster',
-    '/viewer/compute',
-    '/viewer/config',
-    '/viewer/counters',
-    '/viewer/hiveinfo',
-    '/viewer/hivestats',
-    '/viewer/labeledcounters',
-    '/viewer/netinfo',
-    '/viewer/pqconsumerinfo',
-    '/viewer/storage',
-    '/viewer/storage_usage',
-    '/viewer/tenants',
-    '/viewer/topicinfo',
-]
-
-
-def test_database_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    expected_results = {
-        endpoint_path: {
-            None: 401,
-            'user@builtin': 403,
-            'database@builtin': 200,
-            'viewer@builtin': 200,
-            'monitoring@builtin': 200,
-            'root@builtin': 200,
-        }
-        for endpoint_path in DATABASE_ENDPOINTS_LIST
-    }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
-
-
-DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
-    '/operation/get',
-    '/operation/list',
-    '/query/script/fetch',
-    '/viewer/browse',
-    '/viewer/describe_consumer',
-    '/viewer/describe_replication',
-    '/viewer/describe_topic',
-    '/viewer/describe_transfer',
-    '/viewer/graph',
-    '/viewer/metainfo',
-    '/viewer/topic_data',
-    '/operation/list?database=%2FRoot',
-    # Endpoints below expose excessive information or grant excessive rights.
-    '/operation/forget',
-    '/viewer/commit_offset',
-    '/operation/cancel',
-    '/query/script/execute',
-    '/scheme/directory',
-    '/viewer/put_record',
-]
-
-
-def test_database_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    expected_results = {
-        endpoint_path: {
-            None: 401,
-            'user@builtin': 403,
-            'database@builtin': 400,
-            'viewer@builtin': 400,
-            'monitoring@builtin': 400,
-            'root@builtin': 400,
-        }
-        for endpoint_path in DATABASE_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
-    }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
-
-
-@pytest.mark.xfail(reason='Empty request handling is unstable for this endpoint in the current environment')
-def test_database_endpoints_with_unstable_empty_request_handling_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    _test_endpoints(
-        ydb_cluster_with_enforce_user_token,
-        {
-            '/viewer/content': {
-                None: 401,
-                'user@builtin': 403,
-                'database@builtin': 504,
-                'viewer@builtin': 504,
-                'monitoring@builtin': 504,
-                'root@builtin': 504,
-            },
-            '/viewer/tabletcounters': {
-                None: 401,
-                'user@builtin': 403,
-                'database@builtin': None,
-                'viewer@builtin': None,
-                'monitoring@builtin': None,
-                'root@builtin': None,
-            },
-        },
-    )
-
-
-VIEWER_ENDPOINTS_LIST = [
-    '/storage/groups',
-    '/viewer/bsgroupinfo',
-    '/viewer/groups',
-    '/viewer/multipart_counter',
-    '/viewer/nodeinfo',
-    '/viewer/nodes',
-    '/viewer/pdiskinfo',
-    '/viewer/peers',
-    '/viewer/simple_counter',
-    '/viewer/sse_counter',
-    '/viewer/sysinfo',
-    '/viewer/tabletinfo',
-    '/viewer/v2/json/nodeinfo',
-    '/viewer/v2/json/pdiskinfo',
-    '/viewer/v2/json/sysinfo',
-    '/viewer/v2/json/tabletinfo',
-    '/viewer/v2/json/vdiskinfo',
-    '/viewer/vdiskinfo',
-    # Endpoints below expose excessive information or grant excessive rights.
-    '/viewer/autocomplete',
-    '/viewer/feature_flags',
-    '/viewer/nodelist',
-    '/viewer/tenantinfo',
-    '/viewer/whoami',
-]
-
-
-def test_viewer_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
-    expected_results = {
-        endpoint_path: {
-            None: 401,
-            'user@builtin': 403,
-            'database@builtin': 403,
-            'viewer@builtin': 200,
-            'monitoring@builtin': 200,
-            'root@builtin': 200,
-        }
-        for endpoint_path in VIEWER_ENDPOINTS_LIST
-    }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
-
-
-VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST = [
-    '/viewer/render',
-    # Endpoints below expose excessive information or grant excessive rights.
-    '/pdisk/info',
-    '/pdisk/restart',
-    '/pdisk/status',
-    '/vdisk/blobindexstat',
-    '/vdisk/evict',
-    '/vdisk/getblob',
-    '/vdisk/vdiskstat',
-    '/viewer/acl',
-    '/viewer/check_access',
-    '/viewer/database_stats',
-    '/viewer/describe',
-    '/viewer/hotkeys',
-    '/viewer/query',
-    '/viewer/storage_stats',
-]
-
-
-def test_viewer_endpoints_requiring_parameters_or_request_context_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    expected_results = {
-        endpoint_path: {
-            None: 401,
-            'user@builtin': 403,
-            'database@builtin': 403,
-            'viewer@builtin': 400,
-            'monitoring@builtin': 400,
-            'root@builtin': 400,
-        }
-        for endpoint_path in VIEWER_ENDPOINTS_REQUIRING_PARAMETERS_OR_REQUEST_CONTEXT_LIST
-    }
-    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
 
 
 OPERATOR_ENDPOINTS_LIST = [
@@ -637,7 +486,6 @@ OPERATOR_ENDPOINTS_LIST = [
     '/viewer/healthcheck',
     '/viewer/v2/json/nodelist',
     '/viewer/v2/json/storage',
-    # Endpoints below expose excessive information or grant excessive rights.
     '/actors/configs_dispatcher',
     '/actors/console_configs_provider',
     '/actors/dnameserver',
@@ -663,6 +511,33 @@ OPERATOR_UNRESOLVED_ENDPOINTS_LIST = [
     '/fq_diag/local_worker_manager',
     '/fq_diag/quotas',
 ]
+
+# pdisk_id=0: nonempty split before parts[0].
+# FIX https://nda.ya.ru/t/JmqU0jon7YLVMx
+OPERATOR_POST_BS_CONTROLLER_POST_PATHS = [
+    '/pdisk/restart?pdisk_id=0',
+    '/pdisk/status?pdisk_id=0',
+    '/vdisk/evict',
+]
+
+
+def test_operator_post_bs_controller_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 400,
+        'root@builtin': 400,
+    }
+    for endpoint_path in OPERATOR_POST_BS_CONTROLLER_POST_PATHS:
+        for token, expected_status in expected_by_token.items():
+            _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})
 
 
 def test_operator_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
@@ -693,3 +568,30 @@ def test_operator_unresolved_endpoints_list_with_enforce_user_token(ydb_cluster_
         for endpoint_path in OPERATOR_UNRESOLVED_ENDPOINTS_LIST
     }
     _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+# FIX https://nda.ya.ru/t/9iAsmOAG7YLakE
+ADMIN_POST_BS_CONTROLLER_POST_PATHS = [
+    '/pdisk/restart?pdisk_id=0&force=true',
+    '/pdisk/status?pdisk_id=0&force=true',
+    '/vdisk/evict?force=true',
+]
+
+
+def test_admin_post_bs_controller_endpoints_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    host = ydb_cluster_with_enforce_user_token.nodes[1].host
+    mon_port = ydb_cluster_with_enforce_user_token.nodes[1].mon_port
+    base_url = f'https://{host}:{mon_port}'
+    expected_by_token = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 400,
+    }
+    for endpoint_path in ADMIN_POST_BS_CONTROLLER_POST_PATHS:
+        for token, expected_status in expected_by_token.items():
+            _test_post_json_endpoint(base_url, endpoint_path, token, expected_status, json_body={})

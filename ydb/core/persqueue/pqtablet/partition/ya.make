@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     autopartitioning_manager.cpp
+    partitioning_keys_manager.cpp
     consumer_offset_tracker.cpp
     message_id_deduplicator.cpp
     offload_actor.cpp
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/backup/impl
     ydb/core/persqueue/events
     ydb/core/persqueue/common
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/write_meta
     ydb/core/persqueue/pqtablet/blob
@@ -36,6 +38,7 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition/mirrorer
     ydb/core/persqueue/pqtablet/partition/mlp
     ydb/core/persqueue/pqtablet/quota
+    ydb/library/kll_median
 )
 
 END()

@@ -40,6 +40,12 @@ enum class EBindingsMode {
     DROP
 };
 
+enum class EYqlSelect {
+    Disable,
+    Auto,
+    Force,
+};
+
 inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
     return mode == NSQLTranslation::ESqlMode::QUERY || mode == NSQLTranslation::ESqlMode::DISCOVERY;
 }
@@ -85,6 +91,7 @@ struct TTranslationSettings {
     THashMap<TString, TString> ModuleMapping;
     THashSet<TString> Libraries;
     THashSet<TString> Flags;
+    EYqlSelect YqlSelect = EYqlSelect::Disable;
 
     EBindingsMode BindingsMode;
     THashMap<TString, TTableBindingSettings> Bindings;

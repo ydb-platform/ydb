@@ -6365,7 +6365,7 @@ bool TSqlTranslation::ParseAlterStreamingQueryAction(const TRule_alter_streaming
     return true;
 }
 
-std::expected<EYqlSelectMode, TString>
+std::expected<EYqlSelect, TString>
 ParseYqlSelectHint(const NSQLTranslation::TSQLHint& hint) {
     if (auto size = hint.Values.size(); size != 1) {
         return std::unexpected(TStringBuilder() << "expected 1 value, got " << size);
@@ -6373,13 +6373,13 @@ ParseYqlSelectHint(const NSQLTranslation::TSQLHint& hint) {
 
     const TString value = to_lower(hint.Values.front());
     if (value == "disable") {
-        return EYqlSelectMode::Disable;
+        return EYqlSelect::Disable;
     }
     if (value == "auto") {
-        return EYqlSelectMode::Auto;
+        return EYqlSelect::Auto;
     }
     if (value == "force") {
-        return EYqlSelectMode::Force;
+        return EYqlSelect::Force;
     }
 
     return std::unexpected(
@@ -6393,9 +6393,9 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
     std::function<TNodePtr()> legacy,
     TMaybe<TPosition> position)
 {
-    const EYqlSelectMode prevMode = Ctx_.GetYqlSelectMode();
+    const EYqlSelect prevMode = Ctx_.GetYqlSelectMode();
 
-    EYqlSelectMode mode = prevMode;
+    EYqlSelect mode = prevMode;
 
     if (position && Ctx_.IsBackwardCompatibleFeatureAvailable(YqlSelectLangVersion())) {
         if (const auto hint = Ctx_.PullHintForToken(*position, "yqlselect")) {
@@ -6413,7 +6413,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         }
     }
 
-    if (mode == EYqlSelectMode::Disable) {
+    if (mode == EYqlSelect::Disable) {
         return legacy();
     }
 
@@ -6442,7 +6442,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             return nullptr;
         }
         case ESQLError::UnsupportedYqlSelect: {
-            if (mode == EYqlSelectMode::Force) {
+            if (mode == EYqlSelect::Force) {
                 TStringBuf message =
                     "Translation of the statement "
                     "to YqlSelect was forced, but unsupported";
@@ -6456,7 +6456,7 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
                 return nullptr;
             }
 
-            YQL_ENSURE(mode == EYqlSelectMode::Auto);
+            YQL_ENSURE(mode == EYqlSelect::Auto);
             return legacy();
         }
     }

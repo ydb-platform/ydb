@@ -3828,11 +3828,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         if (*literal == "disable") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Disable);
+            ctx.SetYqlSelectMode(EYqlSelect::Disable);
         } else if (*literal == "auto") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Auto);
+            ctx.SetYqlSelectMode(EYqlSelect::Auto);
         } else if (*literal == "force") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Force);
+            ctx.SetYqlSelectMode(EYqlSelect::Force);
         } else {
             query.Error() << "Unexpected literal '" << *literal << "' for: " << pragma
                           << ", expected 'disable', 'auto' or 'force'";

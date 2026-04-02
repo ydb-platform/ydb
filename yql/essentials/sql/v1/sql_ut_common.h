@@ -13801,6 +13801,53 @@ Y_UNIT_TEST(QuotedAtoms) {
     UNIT_ASSERT_STRING_CONTAINS(program, R"('"e f")");
 }
 
+Y_UNIT_TEST(PriorityFieldOverNothing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT x FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(PriorityFlagOverField) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    settings.Flags.insert("AutoYqlSelect");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT x FROM plato.x;
+        )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(PriorityPragmaOverField) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'disable';
+        SELECT x FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
 } // Y_UNIT_TEST_SUITE(YqlSelect)
 
 Y_UNIT_TEST_SUITE(ColumnDefault) {

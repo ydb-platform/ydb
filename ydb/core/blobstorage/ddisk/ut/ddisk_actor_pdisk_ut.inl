@@ -514,6 +514,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     constexpr ui32 blocksPerVChunk = ChunkSize / MinBlockSize;
     constexpr ui32 totalWrites = numTablets * numVChunks * blocksPerVChunk;
     constexpr ui32 baseTabletId = 301;
+    constexpr ui32 MaxWritesInFlight = 1000;
 
     TTestContext ctx(std::move(ddiskConfig), ddiskLogPriority);
 
@@ -567,16 +568,22 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         }
     };
 
+    ui32 inFlight = 0;
+
     if (withRestarts) {
-        ui32 batchStart = 0;
         ui32 nextRestart = std::min(10u, totalWrites);
 
         for (ui32 i = 0; i < totalWrites; ++i) {
+            if (inFlight >= MaxWritesInFlight) {
+                collectWriteResults(1);
+                --inFlight;
+            }
             sendWrite(writeOps[i]);
+            ++inFlight;
 
             if (i + 1 == nextRestart || i + 1 == totalWrites) {
-                collectWriteResults(i + 1 - batchStart);
-                batchStart = i + 1;
+                collectWriteResults(inFlight);
+                inFlight = 0;
 
                 if (i + 1 < totalWrites) {
                     reconnect();
@@ -591,9 +598,14 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         }
     } else {
         for (const auto& op : writeOps) {
+            if (inFlight >= MaxWritesInFlight) {
+                collectWriteResults(1);
+                --inFlight;
+            }
             sendWrite(op);
+            ++inFlight;
         }
-        collectWriteResults(totalWrites);
+        collectWriteResults(inFlight);
     }
 
     auto verifyAllReads = [&]() {
@@ -609,8 +621,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                     AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
                     const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
-                    const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
-                    UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+                    ui32 readTabletId = 0;
+                    std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
+                    UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
                         "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
                     UNIT_ASSERT_VALUES_EQUAL(actual, expected);
                 }
@@ -652,8 +665,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
         const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
-        const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
-        UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+        ui32 readTabletId = 0;
+        std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
+        UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
@@ -724,8 +738,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
         const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
-        const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
-        UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+        ui32 readTabletId = 0;
+        std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
+        UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
@@ -855,8 +870,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
         const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
-        const ui32* readPtr = reinterpret_cast<const ui32*>(actual.data());
-        UNIT_ASSERT_VALUES_EQUAL_C(readPtr[0], tabletId,
+        ui32 readTabletId = 0;
+        std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
+        UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };

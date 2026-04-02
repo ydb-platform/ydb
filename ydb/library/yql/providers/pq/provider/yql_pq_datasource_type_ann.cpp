@@ -182,14 +182,6 @@ public:
         const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
         const TExprNode* userSchemaColumnsArg = nullptr;
-        TExprNode::TPtr watermarkNode;
-        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
-            const auto w = input->ChildPtr(TPqReadTopic::idx_Watermark);
-            if (!TCoVoid::Match(w.Get())) {
-                YQL_ENSURE(TCoLambda::Match(w.Get()));
-                watermarkNode = w;
-            }
-        }
         if (input->ChildrenSize() > TPqReadTopic::idx_UserSchemaColumns) {
             userSchemaColumnsArg = input->Child(TPqReadTopic::idx_UserSchemaColumns);
         }
@@ -288,28 +280,31 @@ public:
             }
         }
 
-        if (watermarkNode) {
-            const auto status = ConvertToLambda(watermarkNode, ctx, 1, 1);
-            if (status != TStatus::Ok) {
-                return status;
-            }
-            if (!UpdateLambdaAllArgumentsTypes(watermarkNode, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
-                return TStatus::Error;
-            }
-            if (!watermarkNode->GetTypeAnn()) {
-                return TStatus::Repeat;
-            }
-            if (!EnsureSpecificDataType(*watermarkNode, EDataSlot::Timestamp, ctx, true)) {
-                return TStatus::Error;
-            }
+        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
+            auto& watermarkNode = input->ChildRef(TPqReadTopic::idx_Watermark);
+            if (!TCoVoid::Match(watermarkNode.Get())) {
+                const auto status = ConvertToLambda(watermarkNode, ctx, 1, 1);
+                if (status != TStatus::Ok) {
+                    return status;
+                }
+                if (!UpdateLambdaAllArgumentsTypes(watermarkNode, {schema->Cast<TListExprType>()->GetItemType()}, ctx)) {
+                    return TStatus::Error;
+                }
+                if (!watermarkNode->GetTypeAnn()) {
+                    return TStatus::Repeat;
+                }
+                if (!EnsureSpecificDataType(*watermarkNode, EDataSlot::Timestamp, ctx, true)) {
+                    return TStatus::Error;
+                }
 
-            const TCoLambda lambda(watermarkNode.Get());
-            const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
-            const auto lambdaBody = lambda.Body();
-            if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
-                return TStatus::Error;
+                const TCoLambda lambda(watermarkNode.Get());
+                const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
+                const auto lambdaBody = lambda.Body();
+                if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
+                    ctx.AddError(TIssue(ctx.GetPosition(watermarkNode->Pos()), TStringBuilder()
+                        << "Bad watermark expression"));
+                    return TStatus::Error;
+                }
             }
         }
 

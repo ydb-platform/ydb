@@ -2,7 +2,6 @@
 
 import argparse
 import datetime
-import os
 import time
 import ydb
 import numpy as np
@@ -196,7 +195,6 @@ def main():
     parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
 
     args, unknown = parser.parse_known_args()
-    history_for_n_day = 1
     build_type = args.build_type
     branch = args.branch
     start_date_override = datetime.date.fromisoformat(args.start_date) if args.start_date else None
@@ -298,7 +296,6 @@ def main():
             last_exist_day = None
 
         last_exist_df = None
-        last_day_data = None
 
         if start_date_override:
             process_start_date = max(start_date_override, default_start_date)
@@ -388,7 +385,7 @@ def main():
             'is_muted': [],
         }
 
-        print(f'Getting aggregated history in window {history_for_n_day} days')
+        print(f'Getting aggregated history for {len(date_list)} day(s): {date_list[0]} .. {date_list[-1]}')
         for date in sorted(date_list):
             query_get_history = f"""
                 SELECT 

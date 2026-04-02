@@ -242,6 +242,7 @@ public:
         TExprNode::TPtr watermarkArg;
         if (auto watermark = topicKeyParser.GetWatermark()) {
             watermarkArg = std::move(watermark);
+            YQL_ENSURE(TCoLambda::Match(watermarkArg));
         } else {
             watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
         }

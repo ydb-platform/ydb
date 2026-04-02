@@ -261,4 +261,9 @@ message TFeatureFlags {
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
+<<<<<<< HEAD
+=======
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
+>>>>>>> 02a3b601aad (LOGBROKER-10309 New partition split strategy (#36567))
 }

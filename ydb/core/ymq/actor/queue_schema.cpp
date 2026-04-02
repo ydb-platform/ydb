@@ -33,7 +33,8 @@ static bool IsGoodStatusCode(ui32 code) {
     }
 }
 
-TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
+TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
+                                                     const TQueuePath& path,
                                                      const TCreateQueueRequest& req,
                                                      const TActorId& sender,
                                                      const TString& requestId,
@@ -48,7 +49,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& maskedToken,
                                                      const TString& authType,
                                                      const TString& sourceAddress)
-    : QueuePath_(path)
+    : AccountName_(accountName)
+    , QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
     , CustomQueueName_(customQueueName)
@@ -500,6 +502,14 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
         config->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
     }
 
+    auto* partitionStrategy = pqgroup->MutablePQTabletConfig()->MutablePartitionStrategy();
+    partitionStrategy->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig::CAN_SPLIT_AND_MERGE);
+    partitionStrategy->SetMinPartitionCount(1);
+    partitionStrategy->SetMaxPartitionCount(100);
+    partitionStrategy->SetScaleUpPartitionWriteSpeedThresholdPercent(80);
+    partitionStrategy->SetScaleDownPartitionWriteSpeedThresholdPercent(20);
+    partitionStrategy->SetScaleThresholdSeconds(30);
+
     auto* consumer = config->AddConsumers();
     consumer->SetName(ConsumerName);
     consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
@@ -515,6 +525,17 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
     if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
         consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+    }
+
+    if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
+        consumer->SetDeadLetterPolicyEnabled(true);
+        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+        consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+    }
+    if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
+        consumer->SetDeadLetterPolicyEnabled(true);
+        consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+        consumer->SetDeadLetterQueue(TString::Join("sqs://", AccountName_, '/', *ValidatedAttributes_.RedrivePolicy.TargetQueueName));
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));

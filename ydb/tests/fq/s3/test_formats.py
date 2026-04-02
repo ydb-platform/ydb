@@ -223,9 +223,16 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
-        describe_string = "{}".format(describe_result)
+        # Do not str() the whole describe result: v2 meta may embed large unrelated payloads (e.g. SVG).
+        stack = list(describe_result.query.issue[0].issues)
+        issue_messages = []
+        while stack:
+            iss = stack.pop()
+            issue_messages.append(iss.message)
+            stack.extend(iss.issues)
+        describe_string = " ".join(issue_messages)
         assert (
-            "Unknown format: invalid_type_format. Use one of: csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
+            "Unknown format: invalid_type_format. Use one of: csv_with_names, csv, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
             in describe_string
         )
 

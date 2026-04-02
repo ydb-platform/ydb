@@ -35,6 +35,18 @@ using namespace std::literals::string_view_literals;
 
 namespace {
 
+/// PqReadTopic may use Void as a placeholder when WATERMARK is omitted (see yql_pq_datasource.cpp).
+TMaybe<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
+    if (topic.Ref().ChildrenSize() <= TPqReadTopic::idx_Watermark) {
+        return Nothing();
+    }
+    const TExprNode* w = topic.Ref().Child(TPqReadTopic::idx_Watermark);
+    if (TCoVoid::Match(w)) {
+        return Nothing();
+    }
+    return TCoLambda(w);
+}
+
 class TPqDqIntegration : public TDqIntegrationBase {
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
@@ -125,9 +137,9 @@ public:
                 return {};
             }
 
-            TMaybeNode<TCoAtom> watermarkSerialized;
-            if (const auto maybeWatermark = pqReadTopic.Watermark()) {
-                const auto watermark = maybeWatermark.Cast();
+            TString serializedWatermarkExpr;
+            if (const auto maybeWatermarkLambda = TryPqReadTopicWatermarkLambda(pqReadTopic)) {
+                const auto& watermark = maybeWatermarkLambda.GetRef();
 
                 TStringBuilder err;
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
@@ -135,14 +147,10 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
                     return {};
                 }
-
-                TString serializedWatermarkExpr;
                 if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
                     return {};
                 }
-
-                watermarkSerialized = Build<TCoAtom>(ctx, watermark.Pos()).Value(serializedWatermarkExpr).Done();
             }
 
             return Build<TDqSourceWrap>(ctx, pos)
@@ -156,8 +164,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .WatermarkExpr(pqReadTopic.Watermark())
-                    .WatermarkSerialized(watermarkSerialized)
+                    .Watermark().Value(serializedWatermarkExpr).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -401,16 +408,14 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
+                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
                 TString watermarkExprSql;
-                if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
-                    const auto watermarkSerialized = maybeWatermarkSerialized.Cast();
-                    const auto serializedWatermarkExpr = watermarkSerialized.Ref().Content();
-
+                if (!serializedWatermarkExpr.empty()) {
                     NYql::NConnector::NApi::TExpression watermarkExprProto;
                     YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
                     watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                    srcDesc.SetWatermarkExpr(watermarkExprSql);
                 }
-                srcDesc.SetWatermarkExpr(watermarkExprSql);
 
                 if (commonSettings) {
                     commonSettings->MutableSettings()->PackFrom(srcDesc);
@@ -497,9 +502,9 @@ public:
 private:
     // Extract watermark delay from fixed-format expression:
     // WITH ( ...
-    //   WATERMARK = SystemMetadata('write_time') - Interval('PT5S')
+    //   WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))
     // Only used (and useful) for non-shared-reading pq source
-    // (in this case, flexible watermark expression is not implemented)
+    // (in this case, flexible watermark expression is not implented)
     static TMaybe<ui64> ExtractWatermarkDelay(const TCoLambda& watermark) {
         if (watermark.Args().Size() != 1) {
             return Nothing();
@@ -550,7 +555,7 @@ public:
         const auto& cluster = pqReadTopic.DataSource().Cluster().StringValue();
         const auto format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
-        const auto maybeWatermark = pqReadTopic.Watermark();
+        const auto maybeWatermarkLambda = TryPqReadTopicWatermarkLambda(pqReadTopic);
 
         TVector<TCoNameValueTuple> props;
 
@@ -588,10 +593,10 @@ public:
         TMaybe<ui64> watermarksGranularityUs;
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
-        if (!useSharedReading && maybeWatermark) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermark.Cast());
+        if (!useSharedReading && maybeWatermarkLambda) {
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermarkLambda.GetRef());
             if (!watermarksLateArrivalDelayUs) {
-                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
+                ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = (SystemMetadata('write_time') - Interval('PT5S'))"));
                 return {};
             }
         }
@@ -725,7 +730,7 @@ public:
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
 
-        if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermark) {
+        if (wrSettings.WatermarksMode.GetOrElse("") == "default" && maybeWatermarkLambda) {
             Add(props, WatermarksEnableSetting, ToString(true), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
@@ -750,7 +755,7 @@ public:
                 }
             }
         } else {
-            if (maybeWatermark) {
+            if (maybeWatermarkLambda) {
                 ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "WATERMARK expression specified, but watermarks are disabled"));
                 return {};
             }

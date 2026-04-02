@@ -756,7 +756,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-IBusServerPtr CreatePublicTcpBusServer(
+IBusServerPtr CreateRemoteTcpBusServer(
     TBusServerConfigPtr config,
     IPacketTranscoderFactory* packetTranscoderFactory,
     IMemoryUsageTrackerPtr memoryUsageTracker,
@@ -798,7 +798,7 @@ IBusServerPtr CreateBusServer(
     std::vector<IBusServerPtr> servers;
 
     if (config->Port) {
-        servers.push_back(CreatePublicTcpBusServer(
+        servers.push_back(CreateRemoteTcpBusServer(
             config,
             packetTranscoderFactory,
             memoryUsageTracker,

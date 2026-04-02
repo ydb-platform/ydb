@@ -12,9 +12,38 @@ The YDB SDK provides a built-in mechanism for handling temporary failures. For m
 
 - **Shorten transaction duration.** The longer a transaction holds locks, the higher the likelihood of a conflict. Where possible, avoid [interactive transactions](../../../concepts/glossary.md#interactive-transaction): the best approach is a single YQL query with `BEGIN;` and `COMMIT;` to read, modify, and commit data. If interactive transactions are necessary, execute `COMMIT` in the last query.
 
-- **Reduce data overlap between transactions.** The fewer rows a transaction reads, the fewer locks it holds and the lower the chance of a conflict. Avoid reading unnecessary data. If multiple transactions compete for the same rows, reconsider your data model: for example, instead of a single row with a total balance, use a hundred rows and compute the balance as a sum.
+- **Reduce data overlap between transactions.** The fewer rows a transaction reads, the fewer locks it holds and the lower the chance of a conflict. Avoid reading unnecessary data. If multiple transactions compete for the same rows, reconsider your data model.
 
 - **Use read-only transaction modes.** Transactions in [`Snapshot Read-Only`](../../../concepts/transactions.md#modes) mode read data from a consistent snapshot and do not acquire optimistic locks — such a transaction can never become a TLI victim. If a transaction does not modify data, explicitly set this mode in the SDK.
+
+### Example: transaction conflict during product reservation
+
+In an online store during a flash sale, hundreds of buyers may try to purchase the same product at the same time. A purchase transaction reads the current stock, then the application calculates discounts, waits for payment confirmation, and only after that decrements the stock:
+
+```sql
+SELECT available FROM stock WHERE sku = $sku AND warehouse_id = $warehouse_id;
+-- application checks: available > 0
+-- application calculates discounts, waits for payment ...
+UPDATE stock SET available = available - 1 WHERE sku = $sku AND warehouse_id = $warehouse_id;
+COMMIT;
+```
+
+The `SELECT` acquires an [optimistic lock](../../../concepts/glossary.md#optimistic-locking) on the row. While the transaction is waiting for payment, another transaction may update the same row and commit. This invalidates the lock, and the first transaction fails at commit time with a TLI error.
+
+The solution is to reserve the product immediately in a short transaction, and perform all slower operations afterwards (discount calculation, payment, external service calls):
+
+```sql
+BEGIN;
+UPDATE stock SET available = available - 1, reserved = reserved + 1
+WHERE sku = $sku AND warehouse_id = $warehouse_id AND available > 0;
+
+UPSERT INTO orders (order_id, sku, qty, status)
+VALUES ($order_id, $sku, 1, "RESERVED");
+COMMIT;
+-- afterwards: calculate discounts, process payment, arrange delivery
+```
+
+If the payment succeeds, a separate transaction sets `status = "PAID"`. If it fails, another short transaction moves the item from `reserved` back to `available` and sets the status to `"CANCELLED"`. Because the reservation transaction completes quickly, it minimizes the time locks are held and reduces the probability of conflicts.
 
 
 ## Diagnostics

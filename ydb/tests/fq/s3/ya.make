@@ -1,6 +1,7 @@
 PY3TEST()
 
 FORK_TEST_FILES()
+FORK_SUBTESTS()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
@@ -55,13 +56,16 @@ DATA(
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR SANITIZER_TYPE == "address")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(cpu:2)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

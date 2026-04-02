@@ -47,6 +47,7 @@ public:
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    TString CompletionDescription;
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
@@ -445,6 +446,10 @@ public:
     void Hide();
     void MarkDangerous();
     void UseOnlyExplicitProfile();
+
+    const TString& GetCompletionDescription() const {
+        return CompletionDescription ? CompletionDescription : Description;
+    }
 
 protected:
     virtual void Config(TConfig& config);

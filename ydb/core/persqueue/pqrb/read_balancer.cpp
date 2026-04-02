@@ -491,7 +491,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, c
 
         CheckStat(ctx);
         Balancer->ProcessPendingStats(ctx);
-        ProcessPendingMLPGetPartitionRequests(ctx);
+        ProcessPendingMLPRequests(ctx);
     }
 }
 
@@ -922,23 +922,37 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
+    PQ_LOG_D("Handle TEvPQ::TEvMLPGetPartitionRequest: " << ev->Get()->Record.ShortDebugString());
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }
 
-    PendingMLPGetPartitionRequests.push_back(std::move(ev));
+    PendingMLPRequests.push_back(std::move(ev));
 }
 
-void TPersQueueReadBalancer::ProcessPendingMLPGetPartitionRequests(const TActorContext&) {
-    while (!PendingMLPGetPartitionRequests.empty()) {
-        auto ev = std::move(PendingMLPGetPartitionRequests.front());
-        PendingMLPGetPartitionRequests.pop_front();
-        MLPBalancer->Handle(ev);
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
+    PQ_LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesRequest: " << ev->Get()->Record.ShortDebugString());
+    if (StatsRequestTracker.StatsReceived) {
+        return MLPBalancer->Handle(ev);
     }
 
-    if (!PendingMLPGetPartitionRequests.empty()) {
-        std::exchange(PendingMLPGetPartitionRequests, {});
+    PendingMLPRequests.push_back(std::move(ev));
+}
+
+void TPersQueueReadBalancer::ProcessPendingMLPRequests(const TActorContext&) {
+    if (!StatsRequestTracker.StatsReceived) {
+        return;
     }
+
+    while (!PendingMLPRequests.empty()) {
+        auto ev = std::move(PendingMLPRequests.front());
+        std::visit([&](auto& ev) {
+            return MLPBalancer->Handle(ev);
+        }, ev);
+        PendingMLPRequests.pop_front();
+    }
+
+    std::exchange(PendingMLPRequests, {});
 }
 
 STFUNC(TPersQueueReadBalancer::StateInit) {
@@ -956,7 +970,9 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
         // MLP
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
+        hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
         // From kafka
         HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
         HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
@@ -1003,6 +1019,7 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        hFunc(TEvPQ::TEvMLPGetRuntimeAttributesRequest, Handle);
         hFunc(TEvPQ::TEvMLPConsumerStatus, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());

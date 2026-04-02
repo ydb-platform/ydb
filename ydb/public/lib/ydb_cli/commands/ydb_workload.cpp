@@ -77,7 +77,12 @@ TCommandWorkload::TCommandWorkload()
     AddHiddenCommand(std::make_unique<TCommandFulltext>());
     AddHiddenCommand(std::make_unique<TCommandTestShard>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
-        AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
+        auto command = std::make_unique<TWorkloadCommandRoot>(key.c_str());
+        if (key == "mixed") {
+            AddHiddenCommand(std::move(command));
+        } else {
+            AddCommand(std::move(command));
+        }
     }
 }
 
@@ -131,7 +136,8 @@ void TWorkloadCommand::Config(TConfig& config) {
     config.Opts->AddLongOption("window", "Window duration in seconds.")
         .DefaultValue(1).StoreResult(&WindowSec);
     config.Opts->AddLongOption("executer", "Query executer type (data or generic).")
-        .DefaultValue("generic").StoreResult(&QueryExecuterType);
+        .DefaultValue("generic").StoreResult(&QueryExecuterType)
+        .ChoicesWithCompletion({{"data", "Data queries"}, {"generic", "Generic queries"}});
 }
 
 void TWorkloadCommand::PrepareForRun(TConfig& config) {
@@ -400,6 +406,7 @@ TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TW
     , Type(type)
 {
     if (const auto desc = Params.GetDescription(CommandType, Type)) {
+        CompletionDescription = Description;
         Description = desc;
     }
 }
@@ -485,6 +492,7 @@ TWorkloadCommandRoot::TWorkloadCommandRoot(const TString& key)
       )
     , Params(NYdbWorkload::TWorkloadFactory::MakeHolder(key))
 {
+    CompletionDescription = Description;
     if (const auto desc = Params->GetDescription(NYdbWorkload::TWorkloadParams::ECommandType::Root, 0)) {
         Description = desc;
     }

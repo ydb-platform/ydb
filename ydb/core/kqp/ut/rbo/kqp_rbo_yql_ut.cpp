@@ -1819,9 +1819,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 where b > 10
                 order by a;
             )",
-            /*
             R"(
                 PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
+                PRAGMA YqlSelect = 'force';
 
                 SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result
                 FROM `/Root/foo`
@@ -1833,19 +1833,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
                 PRAGMA YqlSelect = 'force';
 
+                SELECT a, (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2
+                FROM `/Root/foo`
+                ORDER BY a;
+            )",
+            /* Multiple projection for same column is not supported in new RBO.
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA YqlSelect = 'force';
+
                 SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result, JSON_VALUE(jsonDoc, "$.\"c.d.e\"") as result1 FROM `/Root/foo`
                 where b > 10
                 order by a;
             )",
             R"(
                 PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
-
-                SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2
-                FROM `/Root/foo`
-                ORDER BY col2;
-            )",
-            R"(
-                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+                PRAGMA YqlSelect = 'force';
 
                 SELECT (JSON_VALUE(jsonDoc, "$.\"a.b.c\"") in ["a1", "a3", "a4"]) as col1,
                        CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) as col2,
@@ -1859,6 +1862,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const std::vector<TString> results = {
              R"([[2;["a2"]];[3;#]])",
              R"([[2;["a2"];#];[3;#;["3.1"]]])",
+             R"([[1;["a1"]]])",
+             R"([[1;[%true];[1.1]];[2;[%false];[2.1]];[3;#;#]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1877,13 +1882,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 auto result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
                 TString output = FormatResultSetYson(result.GetResultSet(0));
+                //Cout << output << Endl;
                 CompareYson(output, results[i]);
             }
         }
     }
 
     Y_UNIT_TEST_TWIN(OlapProjection, Explain) {
-        TestOlapProjectionPushdown(true);
+        TestOlapProjectionPushdown(Explain);
     }
 
     void TestLimit(bool columnTables) {

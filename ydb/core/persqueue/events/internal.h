@@ -234,6 +234,8 @@ struct TEvPQ {
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
         EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
         EvEnd,
     };
 
@@ -1745,10 +1747,9 @@ struct TEvPQ {
     struct TEvMLPConsumerStatus : TEventPB<TEvMLPConsumerStatus, NKikimrPQ::TEvMLPConsumerStatus, EvMLPConsumerStatus> {
         TEvMLPConsumerStatus() = default;
 
-        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, ui64 messages, bool useForReading) {
+        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, bool useForReading) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
         }
     };
@@ -1762,6 +1763,45 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesRequest : TEventPB<TEvMLPGetRuntimeAttributesRequest, NKikimrPQ::TEvMLPGetRuntimeAttributesRequest, EvMLPGetRuntimeAttributesRequest> {
+        TEvMLPGetRuntimeAttributesRequest() = default;
+
+        TEvMLPGetRuntimeAttributesRequest(const TString& topic, const TString& consumer) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+    };
+    
+    struct TEvMLPGetRuntimeAttributesResponse : TEventPB<TEvMLPGetRuntimeAttributesResponse, NKikimrPQ::TEvMLPGetRuntimeAttributesResponse, EvMLPGetRuntimeAttributesResponse> {
+        TEvMLPGetRuntimeAttributesResponse() = default;
+
+        TEvMLPGetRuntimeAttributesResponse(ui64 messageCount, ui64 delayedMessageCount, ui64 lockedMessageCount) {
+            Record.SetApproximateMessageCount(messageCount);
+            Record.SetApproximateDelayedMessageCount(delayedMessageCount);
+            Record.SetApproximateLockedMessageCount(lockedMessageCount);
+        }
+
+        ui64 GetApproximateMessageCount() const {
+            return Record.GetApproximateMessageCount();
+        }
+
+        ui64 GetApproximateDelayedMessageCount() const {
+            return Record.GetApproximateDelayedMessageCount();
+        }
+
+        ui64 GetApproximateLockedMessageCount() const {
+            return Record.GetApproximateLockedMessageCount();
         }
     };
 };

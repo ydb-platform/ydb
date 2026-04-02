@@ -1005,10 +1005,10 @@ public:
         TMaybe<ui64> skip, TMaybe<ui64> take,
         TMaybe<ui64> knownLength) const;
 
-    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
-    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
 
     template <bool IsStream>
     NUdf::TUnboxedValuePod Collect(NUdf::TUnboxedValuePod list) const;
@@ -1023,7 +1023,7 @@ public:
     NUdf::TUnboxedValuePod CreateIteratorOverList(NUdf::TUnboxedValuePod list) const;
     NUdf::TUnboxedValuePod CreateForwardList(NUdf::TUnboxedValuePod stream) const;
 
-    NUdf::TUnboxedValuePod CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
+    NUdf::TUnboxedValuePod CloneArray(NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
 
     TMemoryUsageInfo& GetMemInfo() const {
         return MemInfo_;

@@ -4536,6 +4536,18 @@
             "Status": "StatusSuccess"
         }
     },
+    "test.TestViewer.test_viewer_domain_peers": {
+        "FieldsAvailable": "0000011110111010000000000110101000011",
+        "FieldsRequired": "0000000000010000000000000000001000001",
+        "FoundNodes": "1",
+        "Nodes": [
+            {
+                "ConnectStatus": "Grey",
+                "NodeId": 1
+            }
+        ],
+        "TotalNodes": "1"
+    },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
             "FieldsAvailable": "111110111111011111011110001",

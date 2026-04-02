@@ -1030,7 +1030,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto checkDlq = [&params](const NJson::TJsonValue& json, bool expectRedrivePolicyIfHasDlq = true, std::source_location loc = std::source_location::current()) {
             const TString subcase = std::format("line={}", loc.line());
             if (expectRedrivePolicyIfHasDlq && params.Dlq) {
-                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), subcase);
+                UNIT_ASSERT_C(json["Attributes"].Has("RedrivePolicy"), TStringBuilder() << subcase << " " << json.GetStringRobust());
                 TString redrivePolicyJson = json["Attributes"]["RedrivePolicy"].GetString();
                 NJson::TJsonValue redrivePolicy;
                 UNIT_ASSERT_C(ReadJsonTree(redrivePolicyJson, &redrivePolicy), subcase);

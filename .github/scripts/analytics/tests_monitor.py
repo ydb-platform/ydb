@@ -581,7 +581,6 @@ def main():
 
             # State transitions
             state_changed = df['state'] != df['prev_state']
-            df['previous_state'] = state_changed.map({True: None})
             df['previous_state'] = df['prev_state'].where(state_changed, df['prev_previous_state'])
             df['state_change_date'] = df['date_window'].where(state_changed, df['prev_state_change_date'])
             df['days_in_state'] = np.where(state_changed, 1, df['prev_days_in_state'] + 1)

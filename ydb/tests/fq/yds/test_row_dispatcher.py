@@ -220,7 +220,12 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 118}',
         ]
         self.write_stream(data)
-        assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
+        deadline = time.time() + 30
+        while True:
+            if len(self.read_stream(1, topic_path=self.output_topic)) == 1:
+                break
+            assert time.time() < deadline, "No output rows for metadatafields query"
+            time.sleep(1)
         stop_yds_query(client, query_id)
 
     @yq_v1

@@ -133,8 +133,8 @@ public:
         // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
         if (format == TStringBuf("csv")) {
             if (!columns || !columns->IsList()) {
-                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
-                    << "Pq read: csv format requires userschema column order as a list of column name atoms (third argument of userschema)"));
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()),
+                    "csv format requires SCHEMA with explicitly listed column names to determine column order"));
                 return nullptr;
             }
         }

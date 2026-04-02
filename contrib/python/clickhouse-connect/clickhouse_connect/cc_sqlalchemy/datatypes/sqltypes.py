@@ -445,17 +445,6 @@ class Nested(ChSqlaType, UserDefinedType):
     python_type = None
 
 
-class Object(ChSqlaType, UserDefinedType):
-    """
-    Note this isn't currently supported for insert/select, only table definitions
-    """
-    python_type = None
-
-    def __init__(self, fmt: str = None, type_def: TypeDef = None):
-        if not type_def:
-            type_def = TypeDef(values=(fmt,))
-        super().__init__(type_def)
-
 
 class SimpleAggregateFunction(ChSqlaType, UserDefinedType):
     python_type = None

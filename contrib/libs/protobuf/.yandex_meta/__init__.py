@@ -217,7 +217,9 @@ def post_install(self):
             ymake.write(str(libprotoc))
 
         with open(os.path.join(self.ctx.arc, self.arcdir, "src/google/protobuf/util/json_util.h"), "w") as f:
-            f.write('#define USE_DEPRECATED_NAMESPACE 1\n#include "google/protobuf/json/json.h"')
+            f.write(
+                '#define USE_DEPRECATED_NAMESPACE 1\n#include "google/protobuf/json/json.h"\n#undef USE_DEPRECATED_NAMESPACE\n'
+            )
 
 
 protobuf = CMakeNinjaNixProject(

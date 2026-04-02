@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NPQ::NMLP {
@@ -25,13 +26,19 @@ struct TResult {
     ui64 Cookie;
 };
 
+struct TReadMessage {
+    ui64 Offset;
+    ui32 ApproximateReceiveCount;
+    TInstant ApproximateFirstReceiveTimestamp;
+};
+
 struct TReadResult : public TResult {
-    TReadResult(const NActors::TActorId& sender, ui64 cookie, std::deque<ui64>&& offsets)
+    TReadResult(const NActors::TActorId& sender, ui64 cookie, std::deque<TReadMessage>&& messages)
         : TResult(sender, cookie)
-        , Offsets(std::move(offsets))
+        , Messages(std::move(messages))
     {}
 
-    std::deque<ui64> Offsets;
+    std::deque<TReadMessage> Messages;
 };
 
 std::unique_ptr<TEvPersQueue::TEvRequest> MakeEvPQRead(

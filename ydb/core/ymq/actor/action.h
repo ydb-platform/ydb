@@ -33,6 +33,31 @@
 
 namespace NKikimr::NSQS {
 
+constexpr char const ConsumerName[] = "sqs_consumer";
+
+class TMigrationFeatureFlags
+{
+public:
+    TMigrationFeatureFlags()
+        : EnableSQSMigrationTopicCreation_(GetFeatureFlags().GetEnableSQSMigrationTopicCreation())
+        , EnableSQSMigrationCompatibility_(GetFeatureFlags().GetEnableSQSMigrationCompatibility())
+        , EnableSQSMigrationFinished_(GetFeatureFlags().GetEnableSQSMigrationFinished())
+    {
+    }
+
+    static const TFeatureFlags& GetFeatureFlags() {
+        static TFeatureFlags DefaultFeatureFlags;
+        return TlsActivationContext ?
+               AppData()->FeatureFlags
+             : DefaultFeatureFlags;
+    }
+
+public:
+    const bool EnableSQSMigrationTopicCreation_;
+    const bool EnableSQSMigrationCompatibility_;
+    const bool EnableSQSMigrationFinished_;
+};
+
 template <typename TDerived>
 class TActionActor
     : public TActorBootstrapped<TDerived>
@@ -186,6 +211,11 @@ protected:
         return *TablesFormat_;
     }
 
+    virtual bool IsTopicCreated() const {
+        Y_ABORT_UNLESS(TopicCreated_);
+        return *TopicCreated_;
+    }
+
     virtual void DoStart() { }
 
     virtual void DoFinish() { }
@@ -256,6 +286,15 @@ protected:
 
     TString MakeQueueUrl(const TString& name) const {
         return Join("/", RootUrl_, UserName_, name);
+    }
+
+    TString GetDatabaseName() const {
+        return Cfg().GetRoot();
+    }
+
+    TString GetTopicName() const {
+        const auto& root = Cfg().GetRoot();
+        return Join("/", root, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
     }
 
     void SendReplyAndDie() {
@@ -639,6 +678,7 @@ private:
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
+        TopicCreated_ = ev->Get()->TopicCreated;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -893,6 +933,7 @@ protected:
     TMaybe<bool> IsFifo_;
     TMaybe<ui64> QueueVersion_;
     TMaybe<ui32> TablesFormat_;
+    TMaybe<bool> TopicCreated_;
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
@@ -912,6 +953,8 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 } // namespace NKikimr::NSQS

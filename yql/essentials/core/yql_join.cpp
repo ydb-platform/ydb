@@ -375,7 +375,8 @@ namespace {
                 }
                 leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
             }
-            if (strictKeys && leftKeyType != rightKeyType) {
+            if (strictKeys && !IsSameAnnotation(*leftKeyType, *rightKeyType) &&
+                !leftKeyType->HasUniversal() && !rightKeyType->HasUniversal()) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
                     << leftKeys[i].first << "." << leftKeys[i].second

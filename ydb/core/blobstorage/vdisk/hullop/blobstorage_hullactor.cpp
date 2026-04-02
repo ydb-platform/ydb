@@ -651,7 +651,7 @@ namespace NKikimr {
                     HullDs->HullCtx->VCtx->VDiskLogPrefix);
 
                 // assign VolatileOrderId for any new SSTables at level 0 to allow merging them to level 0 below
-                if (const auto& cs = CompactionTask->CompactSsts; cs.TargetLevel == 0) {
+                if (const auto& cs = CompactionTask->CompactSsts; cs.TargetLevel == 0 && msg->SegVec.Get()) {
                     for (auto& seg : msg->SegVec->Segments) {
                         const ui64 prev = std::exchange(seg->VolatileOrderId,
                             ++RTCtx->LevelIndex->CurSlice->Ctx->VolatileOrderId);

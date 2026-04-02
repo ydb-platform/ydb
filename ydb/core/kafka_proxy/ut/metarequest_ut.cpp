@@ -50,39 +50,48 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
     Y_UNIT_TEST(TopicMetadataGoodAndBad) {
         auto serverSettings = NKikimr::NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
         serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+        const TString DbRoot = "/Root/LbAccount";
+        const TString Account = "account";
+        const TString DbPath = DbRoot + "/" + Account;
+        TString topicName1 = "topic";
+        TString topicName2 = "topic2";
+        const TString fullTopicName1 = DbPath + "/" + topicName1;
+        const TString shorttopicName1 = Account + "/" + topicName1;
+        const TString fullTopicName2 = DbPath + "/" + topicName2;
+        const TString shorttopicName2 = Account + "/" + topicName2;
+        serverSettings.PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(DbRoot);
+        serverSettings.PQConfig.SetTestDatabaseRoot(DbRoot);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(false);
         NPersQueue::TTestServer server{serverSettings};
-        TString topicName = "rt3.dc1--topic";
-        TString topicName2 = "rt3.dc1--topic2";
-        TString topicPath = TString("/Root/PQ/") + topicName;
-        TString topicPath2 = TString("/Root/PQ/") + topicName2;
         ui32 totalPartitions = 5;
-        server.AnnoyingClient->CreateTopic(topicName, totalPartitions);
-        server.AnnoyingClient->CreateTopic(topicName2, totalPartitions * 2);
-        server.WaitInit("topic");
-
+        server.AnnoyingClient->MkDir("/Root", "LbAccount");
+        server.AnnoyingClient->MkDir("/Root/LbAccount", "account");
+        server.AnnoyingClient->CreateTopicNoLegacy(fullTopicName1, totalPartitions, true, true, "dc1", {"user", "test-consumer"}, "account");
+        server.AnnoyingClient->CreateTopicNoLegacy(fullTopicName2, totalPartitions * 2, true, true, "dc1", {"user", "test-consumer"}, "account");
+        server.WaitInit(shorttopicName1);
 
         auto edgeId = server.CleverServer->GetRuntime()->AllocateEdgeActor();
-        auto event = GetEvent(server, edgeId, {topicPath});
+        auto event = GetEvent(server, edgeId, {fullTopicName1});
         auto response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions.size(), 5);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[0].Partitions[0].ReplicaNodes.size(), 1);
 
-        event = GetEvent(server, edgeId, {topicPath, topicPath2});
+        event = GetEvent(server, edgeId, {fullTopicName1, fullTopicName2});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[1].Partitions.size(), totalPartitions * 2);
         UNIT_ASSERT_VALUES_EQUAL(response->Topics[1].Partitions[5].ReplicaNodes.size(), 1);
 
-        event = GetEvent(server, edgeId, {topicPath, ""});
+        event = GetEvent(server, edgeId, {fullTopicName1, ""});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT(response->Topics[1].ErrorCode == EKafkaErrors::INVALID_TOPIC_EXCEPTION);
 
-        event = GetEvent(server, edgeId, {"/Root/bad-topic", topicPath});
+        event = GetEvent(server, edgeId, {"/Root/bad-topic", fullTopicName1});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
         UNIT_ASSERT(response->Topics[0].ErrorCode == EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
@@ -97,7 +106,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
 
-        event = GetEvent(server, edgeId, {topicPath}, "proxy-host");
+        event = GetEvent(server, edgeId, {fullTopicName1}, "proxy-host");
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
         UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Brokers.size(), 1);

@@ -80,6 +80,11 @@
     "kind": "Normal"
   },
   {
+    "name": "AsOptionalType",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "AsSet",
     "kind": "Normal"
   },

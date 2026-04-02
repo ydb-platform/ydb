@@ -31,8 +31,11 @@ TEvChunkKeeperDiscover::TEvChunkKeeperDiscover(TSubsystem subsystem)
 {}
 
 
-TEvChunkKeeperDiscoverResult::TEvChunkKeeperDiscoverResult(std::vector<ui32> chunks)
-    : Chunks(chunks)
+TEvChunkKeeperDiscoverResult::TEvChunkKeeperDiscoverResult(std::vector<TChunkInfo>&& chunks,
+        NKikimrProto::EReplyStatus status, TString errorReason)
+    : Chunks(std::move(chunks))
+    , Status(status)
+    , ErrorReason(errorReason)
 {}
 
 } // namespace NKikimr

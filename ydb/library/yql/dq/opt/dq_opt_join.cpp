@@ -185,7 +185,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
 
     if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
         mode = EHashJoinMode::Map;
-    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin || linkSettings.JoinAlgo == EJoinAlgoType::ReverseBlockJoin) {
         mode = EHashJoinMode::GraceAndSelf;
     }
 
@@ -1329,7 +1329,11 @@ TExprBase DqBuildHashJoin(
     bool useBlockHashJoin,
     bool blockHashJoinBuildSideLeft
 ) {
+
+    Y_UNUSED(blockHashJoinBuildSideLeft);
+
     const auto joinType = join.JoinType().Value();
+    const auto joinAlgo = FromString<EJoinAlgoType>(join.JoinAlgo().StringValue());
     YQL_ENSURE(joinType != "Cross"sv);
 
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
@@ -1694,7 +1698,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
                 TVector<TCoNameValueTuple> joinSettings;
-                if (blockHashJoinBuildSideLeft && joinType == "Left"sv) {
+                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
                     joinSettings.push_back(
                         Build<TCoNameValueTuple>(ctx, join.Pos())
                             .Name().Build("BuildSide")

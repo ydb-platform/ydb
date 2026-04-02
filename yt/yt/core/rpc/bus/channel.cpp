@@ -700,7 +700,7 @@ private:
 
         TFuture<void> GetBusReadyFuture()
         {
-            if (Y_LIKELY(BusReady_.load(std::memory_order::relaxed))) {
+            if (BusReady_.load(std::memory_order::relaxed)) [[likely]] {
                 return {};
             }
 

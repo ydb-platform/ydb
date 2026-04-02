@@ -59,60 +59,35 @@ private:
     TExprNode::TPtr BuildNarrowMapForPhysicalAggregationOutput(TExprNode::TPtr input, const TVector<TString>& keyFields,
                                                                const TVector<TPhysicalAggregationTraits>& aggTraitsList,
                                                                const THashMap<TString, TString>& projectionMap, bool distinctAll);
-    // Physical aggregation lambdas - packed.
-    TExprNode::TPtr BuildKeyExtractorLambdaPacked(const TVector<TString>& keyFields, const TVector<TString>& inputFields);
-    TExprNode::TPtr BuildInitHandlerLambdaPacked(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                                 const TVector<TPhysicalAggregationTraits>& aggTraitsList);
-    TExprNode::TPtr BuildUpdateHandlerLambdaPacked(const TVector<TString>& keyFields, const TVector<TString>& inputFields,
-                                                   const TVector<TPhysicalAggregationTraits>& aggTraitsList);
-    TExprNode::TPtr BuildFinishHandlerLambdaPacked(const TVector<TString>& keyFields, const TVector<TPhysicalAggregationTraits>& aggTraitsList,
-                                                   bool distinctAll);
-
     // Init state.
     TExprNode::TPtr BuildCountAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg);
-    TExprNode::TPtr BuildCountAggregationInitialStateForOptionalTypePacked(TExprNode::TPtr asStruct, const TString& colName);
     TExprNode::TPtr BuildCountAggregationInitialState();
     TExprNode::TPtr BuildAvgAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationInitialStatePacked(TExprNode::TPtr asStruct, const TString& colName);
     TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalType(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationInitialStateForOptionalTypePacked(TExprNode::TPtr asStruct, const TString& colName);
     TExprNode::TPtr BuildSumAggregationInitialState(TExprNode::TPtr lambdaArg, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildSumAggregationInitialStatePacked(TExprNode::TPtr asStruct, const TString& colName, const TTypeAnnotationNode* itemType);
-
 
     // Update state.
     TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
-    TExprNode::TPtr BuildSumAggregationUpdateStatePacked(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStrcutInputColumns, const TString& stateColumn,
-                                                         const TString& columnName, const TTypeAnnotationNode* itemType);
     TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField);
-    TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalTypePacked(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStructInputColumns,
-                                                                          const TString& stateColumn, const TString& columnName);
     TExprNode::TPtr BuildCountAggregationUpdateState(TExprNode::TPtr lambdaArgState);
-    TExprNode::TPtr BuildCountAggregationUpdateStatePacked(TExprNode::TPtr asStructStateColumns, const TString& stateColumn);
     TExprNode::TPtr BuildAvgAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationUpdateStateForOptionalTypePacked(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStructInputColumns,
-                                                                        const TString& stateColumn, const TString& columnName);
     TExprNode::TPtr BuildAvgAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaFieldState, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationUpdateStatePacked(TExprNode::TPtr asStructStateColumns, TExprNode::TPtr asStrcutInputColumns, const TString& stateColumn,
-                                                         const TString& columnName);
 
     // Finish state.
     TExprNode::TPtr BuildAvgAggregationFinishStateForOptionalType(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationFinishStateForOptionalTypePacked(TExprNode::TPtr asStructStateColumns, const TString& stateName);
     TExprNode::TPtr BuildAvgAggregationFinishState(TExprNode::TPtr lambdaArgState, const TTypeAnnotationNode* typeNode);
-    TExprNode::TPtr BuildAvgAggregationFinishStatePacked(TExprNode::TPtr asStructStateColumns, const TString& stateName);
 
     // Scalar aggregation wrapper.
     TExprNode::TPtr BuildCondenseForAggregationOutputWithEmptyKeys(TExprNode::TPtr input, const TVector<TPhysicalAggregationTraits>& traits,
                                                                    const THashMap<TString, TString>& projectionMap, const TTypeAnnotationNode* type);
     // Helpers.
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
-    TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns);
+    TVector<TString> GetInputColumns(const TVector<TOpAggregationTraits>& aggregationTraitsList, const TVector<TInfoUnit>& keyColumns) const;
     void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyColumns,
                                         const TVector<TOpAggregationTraits>& aggregationTraitsList, TVector<TString>& inputFields,
                                         TVector<TPhysicalAggregationTraits>& aggTraits, THashMap<TString, TString>& projectionMap,
                                         const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
-    TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns);
+    TVector<TString> GetKeyFields(const TVector<TInfoUnit>& keyColumns) const;
 
     // Helpers for scalar aggregation.
     TExprNode::TPtr CreateNothingForEmptyInput(const TTypeAnnotationNode* aggType);
@@ -124,10 +99,8 @@ private:
     TDecimalType GetDecimalType(const TTypeAnnotationNode* typeNode) const;
     TExprNode::TPtr GetDecimalDataType(const TTypeAnnotationNode* typeNode, bool keepOriginalPrecision = false) const;
 
-
+    // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;
-    static constexpr bool DebugPackWideLambdasToStruct{false};
-
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.

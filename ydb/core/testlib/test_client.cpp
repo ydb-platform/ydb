@@ -63,7 +63,6 @@
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/ticket_parser_settings.h>
-#include <ydb/core/security/sasl/static_credentials_provider.h>
 #include <ydb/core/base/user_registry.h>
 #include <ydb/core/health_check/health_check.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
@@ -1860,7 +1859,6 @@ namespace Tests {
 
     TServer::~TServer() {
         ShutdownGRpc();
-        NSasl::TStaticCredentialsProvider::GetInstance().Clear();
 
         if (YqSharedResources) {
             YqSharedResources->Stop();

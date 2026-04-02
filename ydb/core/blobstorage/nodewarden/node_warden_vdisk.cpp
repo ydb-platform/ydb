@@ -187,9 +187,11 @@ namespace NKikimr::NStorage {
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         std::unique_ptr<IActor> actor;
+        auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
-            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {}, AppData()->Counters));
+            actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
+                NDDisk::TDDiskConfig{}, AppData()->Counters));
         } else {
             baseInfo.ReplPDiskReadQuoter = pdiskIt->second.ReplPDiskReadQuoter;
             baseInfo.ReplPDiskWriteQuoter = pdiskIt->second.ReplPDiskWriteQuoter;
@@ -294,7 +296,6 @@ namespace NKikimr::NStorage {
             actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        auto *as = TActivationContext::ActorSystem();
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
@@ -383,6 +384,16 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
+
+        // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
+        // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
+        // so this flag is purely local.
+        if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                Groups[groupId].MustSubscribe = true;
+            }
+        }
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed) {

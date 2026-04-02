@@ -52,6 +52,7 @@ TExecContextBaseSimple::TExecContextBaseSimple(
     , Cluster_(cluster)
     , BaseSession_(session)
     , NeedToTransformTmpTablePaths_(services->NeedToTransformTmpTablePaths)
+    , CheckSpecDoesntUseNativeYtTypes_(services->CheckSpecDoesntUseNativeYtTypes)
 {
     if (Clusters_) {
         YtServer_ = Clusters_->GetServer(Cluster_);
@@ -152,7 +153,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
             }
 
             bool useQLFilter = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
-            TNodeMap<TString> inputQueries;
+            TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
                 TYtPathInfo pathInfo(path);
@@ -183,11 +184,13 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 }
 
                 if (useQLFilter && pathInfo.QLFilter) {
-                    auto& inputQuery = inputQueries[pathInfo.QLFilter.Get()];
-                    if (!inputQuery) {
-                        inputQuery = GenerateInputQuery(pathInfo.QLFilter);
+                    auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
+                    if (queryIter == inputQueries.end()) {
+                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
                     }
-                    richYPath.InputQuery(inputQuery);
+                    if (queryIter->second) {
+                        richYPath.InputQuery(*queryIter->second);
+                    }
                 }
 
                 InputTables_.emplace_back(
@@ -294,15 +297,15 @@ void TExecContextBaseSimple::SetSingleOutput(const TYtOutTableInfo& outTable, co
 }
 
 TString TExecContextBaseSimple::GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const {
-    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly, nativeTypeCompatibilityFlags, intermediateInput);
+    return GetSpecImpl(InputTables_, 0, InputTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, intermediateInput);
 }
 
 TString TExecContextBaseSimple::GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly, nativeTypeCompatibilityFlags, false);
+    return GetSpecImpl(OutTables_, 0, OutTables_.size(), {}, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
 }
 
 TString TExecContextBaseSimple::GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const {
-    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly, nativeTypeCompatibilityFlags, false);
+    return GetSpecImpl(OutTables_, beginIdx, endIdx, initialOutSpec, ensureOldTypesOnly && CheckSpecDoesntUseNativeYtTypes_, nativeTypeCompatibilityFlags, false);
 }
 
 template <class TTableType>

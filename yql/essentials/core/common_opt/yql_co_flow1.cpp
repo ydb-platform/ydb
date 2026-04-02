@@ -1408,6 +1408,11 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     return node;
 }
 
+bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverIteratorWithDepends";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
 }
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
@@ -2073,6 +2078,23 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             }
         }
 
+        return node;
+    };
+
+    map["ToFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsOptimizerToFlowOverIteratorWithDependsAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Iterator") && optCtx.IsSingleUsage(*head)) {
+                YQL_CLOG(DEBUG, Core) << "ToFlow over Iterator with depends";
+                auto newChildren = node->ChildrenList();
+                const auto headChildren = head->ChildrenList();
+                newChildren.front() = headChildren.front();
+                for (size_t i = 1; i < headChildren.size(); i++) {
+                    newChildren.push_back(headChildren[i]);
+                }
+                return ctx.ChangeChildren(*node, std::move(newChildren));
+            }
+        }
         return node;
     };
 

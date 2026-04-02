@@ -888,9 +888,8 @@ TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
     std::string data = "message";
     for (size_t i = 0; i < 100; ++i) {
         auto key = CreateGuidAsString();
-        TWriteMessage msg(data);
+        TWriteMessage msg(key, data);
         msg.SeqNo(i + 1);
-        msg.Key(key);
         ASSERT_TRUE(producer->Write(std::move(msg)).IsQueued());
     }
 

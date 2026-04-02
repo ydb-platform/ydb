@@ -50,48 +50,48 @@ public:
     void TestPrimary() {
         const TVector<TMultiOutputTestCase> testCases = {
             // Context object $ must return whole JSON when used alone
-            {R"({"key": 123})", "$", {R"({"key":123})"}},
-            {R"([1, 2, 3])", "$", {R"([1,2,3])"}},
-            {"1.234", "$", {"1.234"}},
-            {R"("some string")", "$", {R"("some string")"}},
+            {.Json = R"({"key": 123})", .JsonPath = "$", .Result = {R"({"key":123})"}},
+            {.Json = R"([1, 2, 3])", .JsonPath = "$", .Result = {R"([1,2,3])"}},
+            {.Json = "1.234", .JsonPath = "$", .Result = {"1.234"}},
+            {.Json = R"("some string")", .JsonPath = "$", .Result = {R"("some string")"}},
 
             // Literal must not depend on input
-            {R"({"key": 123})", "123", {"123"}},
-            {R"([1, 2, 3])", "123", {"123"}},
-            {"1.234", "123", {"123"}},
-            {R"("some string")", "123", {"123"}},
+            {.Json = R"({"key": 123})", .JsonPath = "123", .Result = {"123"}},
+            {.Json = R"([1, 2, 3])", .JsonPath = "123", .Result = {"123"}},
+            {.Json = "1.234", .JsonPath = "123", .Result = {"123"}},
+            {.Json = R"("some string")", .JsonPath = "123", .Result = {"123"}},
 
             // Check various ways to define number literal
-            {"1", "123.4", {"123.4"}},
-            {"1", "0.567", {"0.567"}},
+            {.Json = "1", .JsonPath = "123.4", .Result = {"123.4"}},
+            {.Json = "1", .JsonPath = "0.567", .Result = {"0.567"}},
 
-            {"1", "1234e-1", {"123.4"}},
-            {"1", "567e-3", {"0.567"}},
-            {"1", "123.4e-1", {"12.34"}},
+            {.Json = "1", .JsonPath = "1234e-1", .Result = {"123.4"}},
+            {.Json = "1", .JsonPath = "567e-3", .Result = {"0.567"}},
+            {.Json = "1", .JsonPath = "123.4e-1", .Result = {"12.34"}},
 
-            {"1", "123e3", {"123000"}},
-            {"1", "123e+3", {"123000"}},
-            {"1", "1.23e+1", {"12.3"}},
-            {"1", "1.23e1", {"12.3"}},
+            {.Json = "1", .JsonPath = "123e3", .Result = {"123000"}},
+            {.Json = "1", .JsonPath = "123e+3", .Result = {"123000"}},
+            {.Json = "1", .JsonPath = "1.23e+1", .Result = {"12.3"}},
+            {.Json = "1", .JsonPath = "1.23e1", .Result = {"12.3"}},
 
-            {"1", "12e0", {"12"}},
-            {"1", "12.3e0", {"12.3"}},
+            {.Json = "1", .JsonPath = "12e0", .Result = {"12"}},
+            {.Json = "1", .JsonPath = "12.3e0", .Result = {"12.3"}},
 
-            {"1", "0", {"0"}},
-            {"1", "0.0", {"0"}},
-            {"1", "0.0e0", {"0"}},
+            {.Json = "1", .JsonPath = "0", .Result = {"0"}},
+            {.Json = "1", .JsonPath = "0.0", .Result = {"0"}},
+            {.Json = "1", .JsonPath = "0.0e0", .Result = {"0"}},
 
             // Check boolean and null literals
-            {"1", "null", {"null"}},
-            {"1", "false", {"false"}},
-            {"1", "true", {"true"}},
+            {.Json = "1", .JsonPath = "null", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "false", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "true", .Result = {"true"}},
 
             // Check string literals
-            {"1", "\"string\"", {"\"string\""}},
-            {"1", "\"  space  another space  \"", {"\"  space  another space  \""}},
-            {"1", "\"привет\"", {"\"привет\""}},
+            {.Json = "1", .JsonPath = "\"string\"", .Result = {"\"string\""}},
+            {.Json = "1", .JsonPath = "\"  space  another space  \"", .Result = {"\"  space  another space  \""}},
+            {.Json = "1", .JsonPath = "\"привет\"", .Result = {"\"привет\""}},
             // NOTE: escaping is added by library/cpp/json
-            {"1", "\"\r\n\t\"", {R"("\r\n\t")"}},
+            {.Json = "1", .JsonPath = "\"\r\n\t\"", .Result = {R"("\r\n\t")"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -103,30 +103,30 @@ public:
 
     void TestMemberAccess() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"({"key": 123, "another_key": 456})", "$.key", {"123"}},
-            {R"({"key": 123, "_another_28_key_$_": 456})", "$._another_28_key_$_", {"456"}},
-            {R"({"key": 123, "another_key": 456})", "           $.another_key    ", {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "$.key", .Result = {"123"}},
+            {.Json = R"({"key": 123, "_another_28_key_$_": 456})", .JsonPath = "$._another_28_key_$_", .Result = {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "           $.another_key    ", .Result = {"456"}},
 
-            {R"({"key": 123, "another_key": 456})", "$.key", {"123"}},
-            {R"({"k\"ey": 123, "another_key": 456})", R"($."k\"ey")", {"123"}},
-            {R"({"k\"ey": 123, "another_key": 456})", "$.'k\\\"ey'", {"123"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "$.key", .Result = {"123"}},
+            {.Json = R"({"k\"ey": 123, "another_key": 456})", .JsonPath = R"($."k\"ey")", .Result = {"123"}},
+            {.Json = R"({"k\"ey": 123, "another_key": 456})", .JsonPath = "$.'k\\\"ey'", .Result = {"123"}},
 
-            {R"({"key": 123, "another_key": 456})", "$.'key'", {"123"}},
-            {R"({"key": 123, "_another_28_key_$_": 456})", "$.'_another_28_key_$_'", {"456"}},
-            {R"({"key": 123, "another_key": 456})", "           $.'another_key'    ", {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "$.'key'", .Result = {"123"}},
+            {.Json = R"({"key": 123, "_another_28_key_$_": 456})", .JsonPath = "$.'_another_28_key_$_'", .Result = {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "           $.'another_key'    ", .Result = {"456"}},
 
-            {R"({"key": 123, "another_key": 456})", "$.\"key\"", {"123"}},
-            {R"({"key": 123, "_another_28_key_$_": 456})", "$.\"_another_28_key_$_\"", {"456"}},
-            {R"({"key": 123, "another_key": 456})", "           $.\"another_key\"    ", {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "$.\"key\"", .Result = {"123"}},
+            {.Json = R"({"key": 123, "_another_28_key_$_": 456})", .JsonPath = "$.\"_another_28_key_$_\"", .Result = {"456"}},
+            {.Json = R"({"key": 123, "another_key": 456})", .JsonPath = "           $.\"another_key\"    ", .Result = {"456"}},
 
-            {R"({"key": 123, "another key": 456})", "$.'another key'", {"456"}},
-            {R"({"key": 123, "another key": 456})", "$.\"another key\"", {"456"}},
+            {.Json = R"({"key": 123, "another key": 456})", .JsonPath = "$.'another key'", .Result = {"456"}},
+            {.Json = R"({"key": 123, "another key": 456})", .JsonPath = "$.\"another key\"", .Result = {"456"}},
 
-            {R"({"key": 123, "прием отбой": 456})", "$.'прием отбой'", {"456"}},
-            {R"({"key": 123, "прием отбой": 456})", "$.\"прием отбой\"", {"456"}},
+            {.Json = R"({"key": 123, "прием отбой": 456})", .JsonPath = "$.'прием отбой'", .Result = {"456"}},
+            {.Json = R"({"key": 123, "прием отбой": 456})", .JsonPath = "$.\"прием отбой\"", .Result = {"456"}},
 
-            {R"({"key": {"another": 456}})", "$.key.another", {"456"}},
-            {R"({"key": {"another key": 456}})", "$.'key'.\"another key\"", {"456"}},
+            {.Json = R"({"key": {"another": 456}})", .JsonPath = "$.key.another", .Result = {"456"}},
+            {.Json = R"({"key": {"another key": 456}})", .JsonPath = "$.'key'.\"another key\"", .Result = {"456"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -138,29 +138,29 @@ public:
 
     void TestWildcardMemberAccess() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"({
+            {.Json = R"({
                 "first": 12,
                 "second": 72
             })",
-             "$.*",
-             {"12", "72"}},
-            {R"({
+             .JsonPath = "$.*",
+             .Result = {"12", "72"}},
+            {.Json = R"({
                 "friends": {
                     "Nik": {"age": 18},
                     "Kate": {"age": 72}
                 }
             })",
-             "$.friends.*.age",
-             {"72", "18"}},
-            {R"({
+             .JsonPath = "$.friends.*.age",
+             .Result = {"72", "18"}},
+            {.Json = R"({
                 "friends": {
                     "Nik": {"age": 18},
                     "Kate": {"age": 72}
                 }
             })",
-             "$.*.*.*",
-             {"72", "18"}},
-            {R"({})", "$.*.key", {}},
+             .JsonPath = "$.*.*.*",
+             .Result = {"72", "18"}},
+            {.Json = R"({})", .JsonPath = "$.*.key", .Result = {}},
         };
 
         for (const auto& testCase : testCases) {
@@ -172,10 +172,10 @@ public:
 
     void TestArrayAccess() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"([1, 2, 3])", "$[0]", {"1"}},
-            {R"([1, 2, 3, 4, 5, 6])", "$[0 to 2]", {"1", "2", "3"}},
-            {R"([1, 2, 3, 4, 5, 6])", "$[5, 0 to 2, 0, 0, 3 to 5, 2]", {"6", "1", "2", "3", "1", "1", "4", "5", "6", "3"}},
-            {R"({
+            {.Json = R"([1, 2, 3])", .JsonPath = "$[0]", .Result = {"1"}},
+            {.Json = R"([1, 2, 3, 4, 5, 6])", .JsonPath = "$[0 to 2]", .Result = {"1", "2", "3"}},
+            {.Json = R"([1, 2, 3, 4, 5, 6])", .JsonPath = "$[5, 0 to 2, 0, 0, 3 to 5, 2]", .Result = {"6", "1", "2", "3", "1", "1", "4", "5", "6", "3"}},
+            {.Json = R"({
                 "friends": [
                     {"name": "Nik", "age": 18},
                     {"name": "Kate", "age": 72},
@@ -183,9 +183,9 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[1 to 3, 0].age",
-             {"72", "50", "60", "18"}},
-            {R"({
+             .JsonPath = "$.friends[1 to 3, 0].age",
+             .Result = {"72", "50", "60", "18"}},
+            {.Json = R"({
                 "range": {
                     "from": 1,
                     "to": 2
@@ -197,9 +197,9 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[$.range.from to $.range.to].age",
-             {"72", "50"}},
-            {R"({
+             .JsonPath = "$.friends[$.range.from to $.range.to].age",
+             .Result = {"72", "50"}},
+            {.Json = R"({
                 "range": {
                     "from": [1, 3, 4],
                     "to": {"key1": 1, "key2": 2, "key3": 3}
@@ -211,8 +211,8 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[$.range.from[1] to $.range.to.key3].age",
-             {"60"}},
+             .JsonPath = "$.friends[$.range.from[1] to $.range.to.key3].age",
+             .Result = {"60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -224,17 +224,17 @@ public:
 
     void TestLastArrayIndex() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"([1, 2, 3])", "$[last]", {"3"}},
-            {R"([1, 2, 3])", "$[1 to last]", {"2", "3"}},
-            {R"([1, 2, 3])", "$[last to last]", {"3"}},
-            {R"([1, 2, 3, 5, 6])", "$[1, last, last, 0, 2 to last, 3]", {"2", "6", "6", "1", "3", "5", "6", "5"}},
-            {R"([
+            {.Json = R"([1, 2, 3])", .JsonPath = "$[last]", .Result = {"3"}},
+            {.Json = R"([1, 2, 3])", .JsonPath = "$[1 to last]", .Result = {"2", "3"}},
+            {.Json = R"([1, 2, 3])", .JsonPath = "$[last to last]", .Result = {"3"}},
+            {.Json = R"([1, 2, 3, 5, 6])", .JsonPath = "$[1, last, last, 0, 2 to last, 3]", .Result = {"2", "6", "6", "1", "3", "5", "6", "5"}},
+            {.Json = R"([
                 [1, 2, 3, 4],
                 [5, 6, 7, 8]
             ])",
-             "$[*][last]",
-             {"4", "8"}},
-            {R"({
+             .JsonPath = "$[*][last]",
+             .Result = {"4", "8"}},
+            {.Json = R"({
                 "ranges": [
                     {"from": 1, "to": 3},
                     {"from": 0, "to": 1}
@@ -246,9 +246,9 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
-             {"60", "18", "72", "50", "60"}},
-            {R"({
+             .JsonPath = "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
+             .Result = {"60", "18", "72", "50", "60"}},
+            {.Json = R"({
                 "ranges": [
                     {"from": 1.23, "to": 3.75},
                     {"from": 0.58, "to": 1.00001}
@@ -260,8 +260,8 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
-             {"60", "18", "72", "50", "60"}},
+             .JsonPath = "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
+             .Result = {"60", "18", "72", "50", "60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -273,7 +273,7 @@ public:
 
     void TestLastArrayIndexInvalid() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"({})", "last", C(TIssuesIds::JSONPATH_LAST_OUTSIDE_OF_ARRAY_SUBSCRIPT)},
+            {.Json = R"({})", .JsonPath = "last", .Error = C(TIssuesIds::JSONPATH_LAST_OUTSIDE_OF_ARRAY_SUBSCRIPT)},
         };
 
         for (const auto& testCase : testCases) {
@@ -285,14 +285,15 @@ public:
 
     void TestNonIntegerArrayIndex() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"({
+            {.Json = R"({
                 "range": {
                     "from": [1, 3, 4],
                     "to": {"key1": 1, "key2": 2, "key3": 3}
                 },
                 "friends": [1, 2, 3]
             })",
-             "$.friends[$.range.from[*] to $.range.to.*]", C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX)},
+             .JsonPath = "$.friends[$.range.from[*] to $.range.to.*]",
+             .Error = C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX)},
         };
 
         for (const auto& testCase : testCases) {
@@ -304,9 +305,9 @@ public:
 
     void TestWildcardArrayAccess() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"([1, 2, 3])", "$[*]", {"1", "2", "3"}},
-            {R"([[1], [2], [3, 4, 5]])", "$[*][*]", {"1", "2", "3", "4", "5"}},
-            {R"({
+            {.Json = R"([1, 2, 3])", .JsonPath = "$[*]", .Result = {"1", "2", "3"}},
+            {.Json = R"([[1], [2], [3, 4, 5]])", .JsonPath = "$[*][*]", .Result = {"1", "2", "3", "4", "5"}},
+            {.Json = R"({
                 "friends": [
                     {"name": "Nik", "age": 18},
                     {"name": "Kate", "age": 72},
@@ -314,8 +315,8 @@ public:
                     {"name": "Jora", "age": 60}
                 ]
             })",
-             "$.friends[*].age",
-             {"18", "72", "50", "60"}},
+             .JsonPath = "$.friends[*].age",
+             .Result = {"18", "72", "50", "60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -327,48 +328,48 @@ public:
 
     void TestUnaryOperations() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"([])", "-3", {"-3"}},
-            {R"([])", "+3", {"3"}},
-            {R"(-1)", "-$", {"1"}},
-            {R"(-1)", "+$", {"-1"}},
-            {R"({
+            {.Json = R"([])", .JsonPath = "-3", .Result = {"-3"}},
+            {.Json = R"([])", .JsonPath = "+3", .Result = {"3"}},
+            {.Json = R"(-1)", .JsonPath = "-$", .Result = {"1"}},
+            {.Json = R"(-1)", .JsonPath = "+$", .Result = {"-1"}},
+            {.Json = R"({
                 "range": {
                     "from": -1,
                     "to": -2
                 },
                 "array": [1, 2, 3, 4]
             })",
-             "$.array[-$.range.from to -$.range.to]",
-             {"2", "3"}},
-            {R"({
+             .JsonPath = "$.array[-$.range.from to -$.range.to]",
+             .Result = {"2", "3"}},
+            {.Json = R"({
                 "range": {
                     "from": 1,
                     "to": -2
                 },
                 "array": [1, 2, 3, 4]
             })",
-             "$.array[+$.range.from to -$.range.to]",
-             {"2", "3"}},
-            {R"({
+             .JsonPath = "$.array[+$.range.from to -$.range.to]",
+             .Result = {"2", "3"}},
+            {.Json = R"({
                 "range": {
                     "from": -1,
                     "to": 2
                 },
                 "array": [1, 2, 3, 4]
             })",
-             "$.array[-$.range.from to +$.range.to]",
-             {"2", "3"}},
-            {R"({
+             .JsonPath = "$.array[-$.range.from to +$.range.to]",
+             .Result = {"2", "3"}},
+            {.Json = R"({
                 "range": {
                     "from": 1,
                     "to": 2
                 },
                 "array": [1, 2, 3, 4]
             })",
-             "$.array[+$.range.from to +$.range.to]",
-             {"2", "3"}},
-            {R"([1, 2, 3])", "-$[*]", {"-1", "-2", "-3"}},
-            {"30000000000000000000000000", "-$", {"-3e+25"}},
+             .JsonPath = "$.array[+$.range.from to +$.range.to]",
+             .Result = {"2", "3"}},
+            {.Json = R"([1, 2, 3])", .JsonPath = "-$[*]", .Result = {"-1", "-2", "-3"}},
+            {.Json = "30000000000000000000000000", .JsonPath = "-$", .Result = {"-3e+25"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -380,9 +381,9 @@ public:
 
     void TestUnaryOperationsErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"({})", "-$", C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
-            {R"([1, 2, [], 4])", "-$[*]", C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
-            {R"([1, 2, {}, 4])", "-$[*]", C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = R"({})", .JsonPath = "-$", .Error = C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = R"([1, 2, [], 4])", .JsonPath = "-$[*]", .Error = C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = R"([1, 2, {}, 4])", .JsonPath = "-$[*]", .Error = C(TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE)},
         };
 
         for (const auto& testCase : testCases) {
@@ -394,29 +395,29 @@ public:
 
     void TestBinaryArithmeticOperations() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"[]", "1 + 2", {"3"}},
-            {"[]", "1 - 2", {"-1"}},
-            {"[]", "10 * 5", {"50"}},
-            {"[]", "10 / 5", {"2"}},
-            {"[]", "13 % 5", {"3"}},
+            {.Json = "[]", .JsonPath = "1 + 2", .Result = {"3"}},
+            {.Json = "[]", .JsonPath = "1 - 2", .Result = {"-1"}},
+            {.Json = "[]", .JsonPath = "10 * 5", .Result = {"50"}},
+            {.Json = "[]", .JsonPath = "10 / 5", .Result = {"2"}},
+            {.Json = "[]", .JsonPath = "13 % 5", .Result = {"3"}},
 
-            {"[]", "20 * 2 + 5", {"45"}},
-            {"[]", "20 / 2 + 5", {"15"}},
-            {"[]", "20 % 2 + 5", {"5"}},
+            {.Json = "[]", .JsonPath = "20 * 2 + 5", .Result = {"45"}},
+            {.Json = "[]", .JsonPath = "20 / 2 + 5", .Result = {"15"}},
+            {.Json = "[]", .JsonPath = "20 % 2 + 5", .Result = {"5"}},
 
-            {"[]", "20 * (2 + 5)", {"140"}},
-            {"[]", "20 / (2 + 3)", {"4"}},
-            {"[]", "20 % (2 + 5)", {"6"}},
+            {.Json = "[]", .JsonPath = "20 * (2 + 5)", .Result = {"140"}},
+            {.Json = "[]", .JsonPath = "20 / (2 + 3)", .Result = {"4"}},
+            {.Json = "[]", .JsonPath = "20 % (2 + 5)", .Result = {"6"}},
 
-            {"[]", "5 / 2", {"2.5"}},
-            {"[5.24 , 2.62]", "$[0] / $[1]", {"2"}},
-            {"[5.24, 2.62]", "$[0] % $[1]", {"0"}},
-            {"[3.753, 2.35]", "$[0] % $[1]", {"1.403"}},
+            {.Json = "[]", .JsonPath = "5 / 2", .Result = {"2.5"}},
+            {.Json = "[5.24 , 2.62]", .JsonPath = "$[0] / $[1]", .Result = {"2"}},
+            {.Json = "[5.24, 2.62]", .JsonPath = "$[0] % $[1]", .Result = {"0"}},
+            {.Json = "[3.753, 2.35]", .JsonPath = "$[0] % $[1]", .Result = {"1.403"}},
 
-            {"[]", "- 1 + 1", {"0"}},
-            {"[]", "+ 1 + 1", {"2"}},
+            {.Json = "[]", .JsonPath = "- 1 + 1", .Result = {"0"}},
+            {.Json = "[]", .JsonPath = "+ 1 + 1", .Result = {"2"}},
 
-            {"[1, 2, 3, 4]", "$[last, last-1, last-2, last-3]", {"4", "3", "2", "1"}},
+            {.Json = "[1, 2, 3, 4]", .JsonPath = "$[last, last-1, last-2, last-3]", .Result = {"4", "3", "2", "1"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -428,13 +429,13 @@ public:
 
     void TestBinaryArithmeticOperationsErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {"[1, 2, 3]", "$[*] + 1", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
-            {"[1, 2, 3]", "1 + $[*]", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
-            {"[1, 2, 3]", "$[*] + $[*]", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
+            {.Json = "[1, 2, 3]", .JsonPath = "$[*] + 1", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
+            {.Json = "[1, 2, 3]", .JsonPath = "1 + $[*]", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
+            {.Json = "[1, 2, 3]", .JsonPath = "$[*] + $[*]", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT)},
 
-            {"[1, 2, 3]", "$ + 1", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
-            {"[1, 2, 3]", "1 + $", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
-            {"[1, 2, 3]", "$ + $", C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = "[1, 2, 3]", .JsonPath = "$ + 1", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = "[1, 2, 3]", .JsonPath = "1 + $", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
+            {.Json = "[1, 2, 3]", .JsonPath = "$ + $", .Error = C(TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE)},
         };
 
         for (const auto& testCase : testCases) {
@@ -489,10 +490,10 @@ public:
 
     void TestVariables() {
         TVector<TVariablesTestCase> testCases = {
-            {"123", {{"var", "456"}}, "$ + $var", {"579"}},
-            {"123", {{"var", "456"}}, "$var", {"456"}},
-            {"123", {{"var", R"({"key": [1, 2, 3, 4, 5]})"}}, "$var.key[2 to last]", {"3", "4", "5"}},
-            {"123", {{"to", "1"}, {"strict", "2"}}, "$to + $strict", {"3"}},
+            {.Json = "123", .Variables = {{"var", "456"}}, .JsonPath = "$ + $var", .Result = {"579"}},
+            {.Json = "123", .Variables = {{"var", "456"}}, .JsonPath = "$var", .Result = {"456"}},
+            {.Json = "123", .Variables = {{"var", R"({"key": [1, 2, 3, 4, 5]})"}}, .JsonPath = "$var.key[2 to last]", .Result = {"3", "4", "5"}},
+            {.Json = "123", .Variables = {{"to", "1"}, {"strict", "2"}}, .JsonPath = "$to + $strict", .Result = {"3"}},
         };
         for (const auto& testCase : testCases) {
             for (const auto mode : AllModes_) {
@@ -503,8 +504,8 @@ public:
 
     void TestDivisionByZero() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {"0", "1 / $", C(TIssuesIds::JSONPATH_DIVISION_BY_ZERO)},
-            {"0.00000000000000000001", "1 / $", C(TIssuesIds::JSONPATH_DIVISION_BY_ZERO)},
+            {.Json = "0", .JsonPath = "1 / $", .Error = C(TIssuesIds::JSONPATH_DIVISION_BY_ZERO)},
+            {.Json = "0.00000000000000000001", .JsonPath = "1 / $", .Error = C(TIssuesIds::JSONPATH_DIVISION_BY_ZERO)},
         };
 
         for (const auto& testCase : testCases) {
@@ -529,8 +530,8 @@ public:
         literal << '"';
 
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {"0", TString(query), C(TIssuesIds::JSONPATH_BINARY_OPERATION_RESULT_INFINITY)},
-            {TString(literal), "$.double()", C(TIssuesIds::JSONPATH_INFINITE_NUMBER_STRING)},
+            {.Json = "0", .JsonPath = TString(query), .Error = C(TIssuesIds::JSONPATH_BINARY_OPERATION_RESULT_INFINITY)},
+            {.Json = TString(literal), .JsonPath = "$.double()", .Error = C(TIssuesIds::JSONPATH_INFINITE_NUMBER_STRING)},
         };
 
         for (const auto& testCase : testCases) {
@@ -547,34 +548,34 @@ public:
             // 1. "(1 < true)" for "null"
             // 2. "(true == true)" for "true"
             // 3. "(true != true)" for "false"
-            {"1", "(1 < true) || (1 < true)", {"null"}},
-            {"1", "(1 < true) || (true != true)", {"null"}},
-            {"1", "(1 < true) || (true == true)", {"true"}},
-            {"1", "(true != true) || (1 < true)", {"null"}},
-            {"1", "(true != true) || (true != true)", {"false"}},
-            {"1", "(true != true) || (true == true)", {"true"}},
-            {"1", "(true == true) || (1 < true)", {"true"}},
-            {"1", "(true == true) || (true != true)", {"true"}},
-            {"1", "(true == true) || (true == true)", {"true"}},
+            {.Json = "1", .JsonPath = "(1 < true) || (1 < true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(1 < true) || (true != true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(1 < true) || (true == true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true != true) || (1 < true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(true != true) || (true != true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true != true) || (true == true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true == true) || (1 < true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true == true) || (true != true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true == true) || (true == true)", .Result = {"true"}},
 
-            {"1", "(1 < true) && (1 < true)", {"null"}},
-            {"1", "(1 < true) && (true != true)", {"false"}},
-            {"1", "(1 < true) && (true == true)", {"null"}},
-            {"1", "(true != true) && (1 < true)", {"false"}},
-            {"1", "(true != true) && (true != true)", {"false"}},
-            {"1", "(true != true) && (true == true)", {"false"}},
-            {"1", "(true == true) && (1 < true)", {"null"}},
-            {"1", "(true == true) && (true != true)", {"false"}},
-            {"1", "(true == true) && (true == true)", {"true"}},
+            {.Json = "1", .JsonPath = "(1 < true) && (1 < true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(1 < true) && (true != true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(1 < true) && (true == true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(true != true) && (1 < true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true != true) && (true != true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true != true) && (true == true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true == true) && (1 < true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "(true == true) && (true != true)", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true == true) && (true == true)", .Result = {"true"}},
 
-            {"1", "(true != true) && (true != true) || (true == true)", {"true"}},
-            {"1", "(true != true) && ((true != true) || (true == true))", {"false"}},
-            {"1", "(true != true) || (true != true) || (true == true)", {"true"}},
-            {"1", "(true == true) && (true == true) && (true == true) && (true != true)", {"false"}},
+            {.Json = "1", .JsonPath = "(true != true) && (true != true) || (true == true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true != true) && ((true != true) || (true == true))", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true != true) || (true != true) || (true == true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true == true) && (true == true) && (true == true) && (true != true)", .Result = {"false"}},
 
-            {"1", "!(1 < true)", {"null"}},
-            {"1", "!(true != true)", {"true"}},
-            {"1", "!(true == true)", {"false"}},
+            {.Json = "1", .JsonPath = "!(1 < true)", .Result = {"null"}},
+            {.Json = "1", .JsonPath = "!(true != true)", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "!(true == true)", .Result = {"false"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -611,93 +612,93 @@ public:
 
         const TVector<TMultiOutputTestCase> testCases = {
             // Check comparison of numbers
-            {"1", "1.23 < 4.56", {"true"}},
-            {"1", "1.23 > 4.56", {"false"}},
-            {"1", "1.23 <= 4.56", {"true"}},
-            {"1", "1.23 >= 4.56", {"false"}},
-            {"1", "1.23 == 1.23", {"true"}},
-            {"1", "1.23 != 1.23", {"false"}},
-            {"1", "1.23 <> 4.56", {"true"}},
-            {"1", "1.00000000000000000001 == 1.00000000000000000002", {"true"}},
+            {.Json = "1", .JsonPath = "1.23 < 4.56", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1.23 > 4.56", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1.23 <= 4.56", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1.23 >= 4.56", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1.23 == 1.23", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1.23 != 1.23", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1.23 <> 4.56", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1.00000000000000000001 == 1.00000000000000000002", .Result = {"true"}},
 
             // Check numbers of different kinds (int64 vs double)
-            {"1", "1 < 2.33", {"true"}},
-            {"1", "1 > 4.56", {"false"}},
-            {"1", "1 <= 4.56", {"true"}},
-            {"1", "1 >= 4.56", {"false"}},
-            {"1", "1 == 1.23", {"false"}},
-            {"1", "1 != 1.23", {"true"}},
-            {"1", "1 <> 4.56", {"true"}},
+            {.Json = "1", .JsonPath = "1 < 2.33", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1 > 4.56", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1 <= 4.56", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1 >= 4.56", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1 == 1.23", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "1 != 1.23", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "1 <> 4.56", .Result = {"true"}},
 
             // Check comparison of strings
-            {"1", R"("abc" < "def")", {"true"}},
-            {"1", R"("abc" > "def")", {"false"}},
-            {"1", R"("abc" <= "def")", {"true"}},
-            {"1", R"("abc" >= "def")", {"false"}},
-            {"1", R"("abc" == "abc")", {"true"}},
-            {"1", R"("abc" != "abc")", {"false"}},
-            {"1", R"("abc" <> "def")", {"true"}},
+            {.Json = "1", .JsonPath = R"("abc" < "def")", .Result = {"true"}},
+            {.Json = "1", .JsonPath = R"("abc" > "def")", .Result = {"false"}},
+            {.Json = "1", .JsonPath = R"("abc" <= "def")", .Result = {"true"}},
+            {.Json = "1", .JsonPath = R"("abc" >= "def")", .Result = {"false"}},
+            {.Json = "1", .JsonPath = R"("abc" == "abc")", .Result = {"true"}},
+            {.Json = "1", .JsonPath = R"("abc" != "abc")", .Result = {"false"}},
+            {.Json = "1", .JsonPath = R"("abc" <> "def")", .Result = {"true"}},
 
             // Check comparison of UTF8 strings
             // First string is U+00e9 (LATIN SMALL LETTER E WITH ACUTE), "é"
             // Second string is U+0065 (LATIN SMALL LETTER E) U+0301 (COMBINING ACUTE ACCENT), "é"
-            {"1", R"("é" < "é")", {"false"}},
-            {"1", R"("é" > "é")", {"true"}},
-            {"1", R"("привет" == "привет")", {"true"}},
+            {.Json = "1", .JsonPath = R"("é" < "é")", .Result = {"false"}},
+            {.Json = "1", .JsonPath = R"("é" > "é")", .Result = {"true"}},
+            {.Json = "1", .JsonPath = R"("привет" == "привет")", .Result = {"true"}},
 
             // Check cross-product comparison
-            {R"({
+            {.Json = R"({
                 "left": [1],
                 "right": [4, 5, 6]
             })",
-             "$.left[*] < $.right[*]",
-             {"true"}},
-            {R"({
+             .JsonPath = "$.left[*] < $.right[*]",
+             .Result = {"true"}},
+            {.Json = R"({
                 "left": [4, 5, 6],
                 "right": [1]
             })",
-             "$.left[*] < $.right[*]",
-             {"false"}},
-            {R"({
+             .JsonPath = "$.left[*] < $.right[*]",
+             .Result = {"false"}},
+            {.Json = R"({
                 "left": [1, 2, 3],
                 "right": [4, 5, 6]
             })",
-             "$.left[*] < $.right[*]",
-             {"true"}},
-            {R"({
+             .JsonPath = "$.left[*] < $.right[*]",
+             .Result = {"true"}},
+            {.Json = R"({
                 "left": [10, 30, 40],
                 "right": [1, 2, 15]
             })",
-             "$.left[*] < $.right[*]",
-             {"true"}},
-            {R"({
+             .JsonPath = "$.left[*] < $.right[*]",
+             .Result = {"true"}},
+            {.Json = R"({
                 "left": [10, 30, 40],
                 "right": [1, 2, 3]
             })",
-             "$.left[*] < $.right[*]",
-             {"false"}},
+             .JsonPath = "$.left[*] < $.right[*]",
+             .Result = {"false"}},
 
             // Check incomparable types
-            {"1", "1 < true", {"null"}},
-            {"1", R"(true <> "def")", {"null"}},
+            {.Json = "1", .JsonPath = "1 < true", .Result = {"null"}},
+            {.Json = "1", .JsonPath = R"(true <> "def")", .Result = {"null"}},
 
             // Check error in arguments
-            {R"({
+            {.Json = R"({
                 "array": [1, 2, 3, 4, 5],
                 "invalid_index": {
                     "key": 1
                 }
             })",
-             "$.array[$.invalid_index] < 3",
-             {"null"}},
-            {R"({
+             .JsonPath = "$.array[$.invalid_index] < 3",
+             .Result = {"null"}},
+            {.Json = R"({
                 "array": [1, 2, 3, 4, 5],
                 "invalid_index": {
                     "key": 1
                 }
             })",
-             "5 >= $.array[$.invalid_index]",
-             {"null"}},
+             .JsonPath = "5 >= $.array[$.invalid_index]",
+             .Result = {"null"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -709,48 +710,48 @@ public:
 
     void TestFilter() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"[1, 2, 3]", "$[*] ? (@ > 2)", {"3"}},
-            {R"([
+            {.Json = "[1, 2, 3]", .JsonPath = "$[*] ? (@ > 2)", .Result = {"3"}},
+            {.Json = R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
             ])",
-             "$[*] ? (@.age >= 18)",
-             {R"({"age":18})", R"({"age":25})", R"({"age":50})"}},
-            {R"([
+             .JsonPath = "$[*] ? (@.age >= 18)",
+             .Result = {R"({"age":18})", R"({"age":25})", R"({"age":50})"}},
+            {.Json = R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
             ])",
-             "$[*] ? (@.age >= 18) ? (@.age <= 30)",
-             {R"({"age":18})", R"({"age":25})"}},
-            {R"([
+             .JsonPath = "$[*] ? (@.age >= 18) ? (@.age <= 30)",
+             .Result = {R"({"age":18})", R"({"age":25})"}},
+            {.Json = R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
             ])",
-             "$[*] ? (@.age >= 18) ? (@.age <= 30) . age",
-             {"18", "25"}},
-            {R"([
+             .JsonPath = "$[*] ? (@.age >= 18) ? (@.age <= 30) . age",
+             .Result = {"18", "25"}},
+            {.Json = R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
             ])",
-             "$[*] ? (@.age >= 18 && @.age <= 30) . age",
-             {"18", "25"}},
-            {R"([
+             .JsonPath = "$[*] ? (@.age >= 18 && @.age <= 30) . age",
+             .Result = {"18", "25"}},
+            {.Json = R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
             ])",
-             "$[*] ? (@.age >= 18 || @.age <= 30) . age",
-             {"18", "25", "50", "5"}},
-            {R"([
+             .JsonPath = "$[*] ? (@.age >= 18 || @.age <= 30) . age",
+             .Result = {"18", "25", "50", "5"}},
+            {.Json = R"([
                 {
                     "id": 1,
                     "is_valid": false,
@@ -776,8 +777,8 @@ public:
                     "age_estimation": 2
                 }
             ])",
-             "$[*] ? (@.is_valid == true && @.days_till_doom > 10 && 2 * @.age_estimation <= 12).id",
-             {"4"}},
+             .JsonPath = "$[*] ? (@.is_valid == true && @.days_till_doom > 10 && 2 * @.age_estimation <= 12).id",
+             .Result = {"4"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -789,7 +790,7 @@ public:
 
     void TestFilterInvalid() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"({})", "@", C(TIssuesIds::JSONPATH_FILTER_OBJECT_OUTSIDE_OF_FILTER)},
+            {.Json = R"({})", .JsonPath = "@", .Error = C(TIssuesIds::JSONPATH_FILTER_OBJECT_OUTSIDE_OF_FILTER)},
         };
 
         for (const auto& testCase : testCases) {
@@ -801,10 +802,10 @@ public:
 
     void TestNumericMethods() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"[-1.23, 4.56, 3, 0]", "$[*].abs()", {"1.23", "4.56", "3", "0"}},
-            {"[-1.23, 4.56, 3, 0]", "$[*].floor()", {"-2", "4", "3", "0"}},
-            {"[-1.23, 4.56, 3, 0]", "$[*].ceiling()", {"-1", "5", "3", "0"}},
-            {"-123.45", "$.ceiling().abs().floor()", {"123"}},
+            {.Json = "[-1.23, 4.56, 3, 0]", .JsonPath = "$[*].abs()", .Result = {"1.23", "4.56", "3", "0"}},
+            {.Json = "[-1.23, 4.56, 3, 0]", .JsonPath = "$[*].floor()", .Result = {"-2", "4", "3", "0"}},
+            {.Json = "[-1.23, 4.56, 3, 0]", .JsonPath = "$[*].ceiling()", .Result = {"-1", "5", "3", "0"}},
+            {.Json = "-123.45", .JsonPath = "$.ceiling().abs().floor()", .Result = {"123"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -816,9 +817,9 @@ public:
 
     void TestNumericMethodsErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"(["1", true, null])", "$[*].abs()", C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
-            {R"(["1", true, null])", "$[*].floor()", C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
-            {R"(["1", true, null])", "$[*].ceiling()", C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
+            {.Json = R"(["1", true, null])", .JsonPath = "$[*].abs()", .Error = C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
+            {.Json = R"(["1", true, null])", .JsonPath = "$[*].floor()", .Error = C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
+            {.Json = R"(["1", true, null])", .JsonPath = "$[*].ceiling()", .Error = C(TIssuesIds::JSONPATH_INVALID_NUMERIC_METHOD_ARGUMENT)},
         };
 
         for (const auto& testCase : testCases) {
@@ -830,13 +831,13 @@ public:
 
     void TestDoubleMethod() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"([
+            {.Json = R"([
                 "123", "123.4", "0.567", "1234e-1", "567e-3", "123.4e-1",
                 "123e3", "123e+3", "1.23e+1", "1.23e1",
                 "12e0", "12.3e0", "0", "0.0", "0.0e0"
             ])",
-             "$[*].double()",
-             {
+             .JsonPath = "$[*].double()",
+             .Result = {
                  "123",
                  "123.4",
                  "0.567",
@@ -853,7 +854,7 @@ public:
                  "0",
                  "0",
              }},
-            {R"("-123.45e1")", "$.double().abs().floor()", {"1234"}},
+            {.Json = R"("-123.45e1")", .JsonPath = "$.double().abs().floor()", .Result = {"1234"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -865,8 +866,8 @@ public:
 
     void TestDoubleMethodErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"(["1", true, null])", "$[*].double()", C(TIssuesIds::JSONPATH_INVALID_DOUBLE_METHOD_ARGUMENT)},
-            {R"("hi stranger")", "$.double()", C(TIssuesIds::JSONPATH_INVALID_NUMBER_STRING)},
+            {.Json = R"(["1", true, null])", .JsonPath = "$[*].double()", .Error = C(TIssuesIds::JSONPATH_INVALID_DOUBLE_METHOD_ARGUMENT)},
+            {.Json = R"("hi stranger")", .JsonPath = "$.double()", .Error = C(TIssuesIds::JSONPATH_INVALID_NUMBER_STRING)},
         };
 
         for (const auto& testCase : testCases) {
@@ -878,18 +879,18 @@ public:
 
     void TestTypeMethod() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"null", "$.type()", {"\"null\""}},
-            {"true", "$.type()", {"\"boolean\""}},
-            {"false", "$.type()", {"\"boolean\""}},
-            {"1", "$.type()", {"\"number\""}},
-            {"-1", "$.type()", {"\"number\""}},
-            {"4.56", "$.type()", {"\"number\""}},
-            {"-4.56", "$.type()", {"\"number\""}},
-            {"\"some string\"", "$.type()", {"\"string\""}},
-            {"[]", "$.type()", {"\"array\""}},
-            {"[1, 2, 3, 4]", "$.type()", {"\"array\""}},
-            {"{}", "$.type()", {"\"object\""}},
-            {"{\"key\": 123}", "$.type()", {"\"object\""}},
+            {.Json = "null", .JsonPath = "$.type()", .Result = {"\"null\""}},
+            {.Json = "true", .JsonPath = "$.type()", .Result = {"\"boolean\""}},
+            {.Json = "false", .JsonPath = "$.type()", .Result = {"\"boolean\""}},
+            {.Json = "1", .JsonPath = "$.type()", .Result = {"\"number\""}},
+            {.Json = "-1", .JsonPath = "$.type()", .Result = {"\"number\""}},
+            {.Json = "4.56", .JsonPath = "$.type()", .Result = {"\"number\""}},
+            {.Json = "-4.56", .JsonPath = "$.type()", .Result = {"\"number\""}},
+            {.Json = "\"some string\"", .JsonPath = "$.type()", .Result = {"\"string\""}},
+            {.Json = "[]", .JsonPath = "$.type()", .Result = {"\"array\""}},
+            {.Json = "[1, 2, 3, 4]", .JsonPath = "$.type()", .Result = {"\"array\""}},
+            {.Json = "{}", .JsonPath = "$.type()", .Result = {"\"object\""}},
+            {.Json = "{\"key\": 123}", .JsonPath = "$.type()", .Result = {"\"object\""}},
         };
 
         for (const auto& testCase : testCases) {
@@ -901,18 +902,18 @@ public:
 
     void TestSizeMethod() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"null", "$.size()", {"1"}},
-            {"true", "$.size()", {"1"}},
-            {"false", "$.size()", {"1"}},
-            {"1", "$.size()", {"1"}},
-            {"-1", "$.size()", {"1"}},
-            {"4.56", "$.size()", {"1"}},
-            {"-4.56", "$.size()", {"1"}},
-            {"\"some string\"", "$.size()", {"1"}},
-            {"[]", "$.size()", {"0"}},
-            {"[1, 2, 3, 4]", "$.size()", {"4"}},
-            {"{}", "$.size()", {"1"}},
-            {"{\"key\": 123}", "$.size()", {"1"}},
+            {.Json = "null", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "true", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "false", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "1", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "-1", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "4.56", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "-4.56", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "\"some string\"", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "[]", .JsonPath = "$.size()", .Result = {"0"}},
+            {.Json = "[1, 2, 3, 4]", .JsonPath = "$.size()", .Result = {"4"}},
+            {.Json = "{}", .JsonPath = "$.size()", .Result = {"1"}},
+            {.Json = "{\"key\": 123}", .JsonPath = "$.size()", .Result = {"1"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -924,24 +925,24 @@ public:
 
     void TestKeyValueMethod() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"({
+            {.Json = R"({
                 "one": 1,
                 "two": 2,
                 "three": 3
             })",
-             "$.keyvalue()",
-             {
+             .JsonPath = "$.keyvalue()",
+             .Result = {
                  R"({"name":"one","value":1})",
                  R"({"name":"three","value":3})",
                  R"({"name":"two","value":2})",
              }},
-            {R"({
+            {.Json = R"({
                 "one": "string",
                 "two": [1, 2, 3, 4],
                 "three": [4, 5]
             })",
-             R"($.keyvalue() ? (@.value.type() == "array" && @.value.size() > 2).name)",
-             {"\"two\""}},
+             .JsonPath = R"($.keyvalue() ? (@.value.type() == "array" && @.value.size() > 2).name)",
+             .Result = {"\"two\""}},
         };
 
         for (const auto& testCase : testCases) {
@@ -953,8 +954,8 @@ public:
 
     void TestKeyValueMethodErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {"\"string\"", "$.keyvalue()", C(TIssuesIds::JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT)},
-            {"[1, 2, 3, 4]", "$.keyvalue()", C(TIssuesIds::JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT)},
+            {.Json = "\"string\"", .JsonPath = "$.keyvalue()", .Error = C(TIssuesIds::JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT)},
+            {.Json = "[1, 2, 3, 4]", .JsonPath = "$.keyvalue()", .Error = C(TIssuesIds::JSONPATH_INVALID_KEYVALUE_METHOD_ARGUMENT)},
         };
 
         for (const auto& testCase : testCases) {
@@ -966,9 +967,9 @@ public:
 
     void TestStartsWithPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"1", R"("some string" starts with "some")", {"true"}},
-            {"1", R"("some string" starts with "string")", {"false"}},
-            {R"(["some string", "string"])", R"($[*] ? (@ starts with "string"))", {"\"string\""}},
+            {.Json = "1", .JsonPath = R"("some string" starts with "some")", .Result = {"true"}},
+            {.Json = "1", .JsonPath = R"("some string" starts with "string")", .Result = {"false"}},
+            {.Json = R"(["some string", "string"])", .JsonPath = R"($[*] ? (@ starts with "string"))", .Result = {"\"string\""}},
         };
 
         for (const auto& testCase : testCases) {
@@ -980,8 +981,8 @@ public:
 
     void TestStartsWithPredicateErrors() {
         const TVector<TRuntimeErrorTestCase> testCases = {
-            {R"(["first", "second"])", R"($[*] starts with "first")", C(TIssuesIds::JSONPATH_INVALID_STARTS_WITH_ARGUMENT)},
-            {"1", R"(1 starts with "string")", C(TIssuesIds::JSONPATH_INVALID_STARTS_WITH_ARGUMENT)},
+            {.Json = R"(["first", "second"])", .JsonPath = R"($[*] starts with "first")", .Error = C(TIssuesIds::JSONPATH_INVALID_STARTS_WITH_ARGUMENT)},
+            {.Json = "1", .JsonPath = R"(1 starts with "string")", .Error = C(TIssuesIds::JSONPATH_INVALID_STARTS_WITH_ARGUMENT)},
         };
 
         for (const auto& testCase : testCases) {
@@ -993,13 +994,13 @@ public:
 
     void TestExistsPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"({
+            {.Json = R"({
                 "key": 123
             })",
-             "exists ($.key)",
-             {"true"}},
-            {"\"string\"", "exists ($ * 2)", {"null"}},
-            {R"(["some string", 2])", "$[*] ? (exists (@ * 2))", {"2"}},
+             .JsonPath = "exists ($.key)",
+             .Result = {"true"}},
+            {.Json = "\"string\"", .JsonPath = "exists ($ * 2)", .Result = {"null"}},
+            {.Json = R"(["some string", 2])", .JsonPath = "$[*] ? (exists (@ * 2))", .Result = {"2"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -1011,10 +1012,10 @@ public:
 
     void TestIsUnknownPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {"1", "(1 < true) is unknown", {"true"}},
-            {"1", "(true == true) is unknown", {"false"}},
-            {"1", "(true == false) is unknown", {"false"}},
-            {R"(["some string", -20])", "$[*] ? ((1 < @) is unknown)", {"\"some string\""}},
+            {.Json = "1", .JsonPath = "(1 < true) is unknown", .Result = {"true"}},
+            {.Json = "1", .JsonPath = "(true == true) is unknown", .Result = {"false"}},
+            {.Json = "1", .JsonPath = "(true == false) is unknown", .Result = {"false"}},
+            {.Json = R"(["some string", -20])", .JsonPath = "$[*] ? ((1 < @) is unknown)", .Result = {"\"some string\""}},
         };
 
         for (const auto& testCase : testCases) {
@@ -1026,14 +1027,14 @@ public:
 
     void TestLikeRegexPredicate() {
         const TVector<TMultiOutputTestCase> testCases = {
-            {R"(["string", "123", "456"])", R"($[*] like_regex "[0-9]+")", {"true"}},
-            {R"(["string", "another string"])", R"($[*] like_regex "[0-9]+")", {"false"}},
+            {.Json = R"(["string", "123", "456"])", .JsonPath = R"($[*] like_regex "[0-9]+")", .Result = {"true"}},
+            {.Json = R"(["string", "another string"])", .JsonPath = R"($[*] like_regex "[0-9]+")", .Result = {"false"}},
 
             // Case insensitive flag
-            {R"("AbCd")", R"($ like_regex "abcd")", {"false"}},
-            {R"("AbCd")", R"($ like_regex "abcd" flag "i")", {"true"}},
+            {.Json = R"("AbCd")", .JsonPath = R"($ like_regex "abcd")", .Result = {"false"}},
+            {.Json = R"("AbCd")", .JsonPath = R"($ like_regex "abcd" flag "i")", .Result = {"true"}},
 
-            {R"(["string", "123", "456"])", R"($[*] ? (@ like_regex "[0-9]+"))", {"\"123\"", "\"456\""}},
+            {.Json = R"(["string", "123", "456"])", .JsonPath = R"($[*] ? (@ like_regex "[0-9]+"))", .Result = {"\"123\"", "\"456\""}},
         };
 
         for (const auto& testCase : testCases) {

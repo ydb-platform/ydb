@@ -448,8 +448,11 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int):
+    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int, compact: bool):
         cmd = cls.get_cli_command(remote_cli_path) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
+        if compact:
+            cmd.append('--compact')
+
         with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
             while exec.is_running():
                 sleep(10)

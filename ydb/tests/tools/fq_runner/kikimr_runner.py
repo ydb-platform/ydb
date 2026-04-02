@@ -181,7 +181,9 @@ class BaseTenant(abc.ABC):
             deadline = time.time() + max_waiting_time_sec
             bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
             while time.time() < deadline:
-                meterings_loaded = sum(1 for _ in open(bill_fname))
+                with open(bill_fname) as bill_file:
+                    meterings_loaded = sum(1 for _ in bill_file)
+
                 if meterings_loaded >= meterings_expected:
                     break
 

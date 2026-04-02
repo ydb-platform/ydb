@@ -5,12 +5,12 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(60)
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     REQUIREMENTS(
         ram:32
     )
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

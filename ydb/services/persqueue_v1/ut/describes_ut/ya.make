@@ -7,9 +7,9 @@ ADDINCL(
 FORK_SUBTESTS()
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)

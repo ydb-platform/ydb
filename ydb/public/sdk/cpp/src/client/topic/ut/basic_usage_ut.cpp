@@ -53,9 +53,8 @@ TString SerializeDataChunk(ui64 seqNo, const TString& payload) {
 }
 
 TWriteMessage CreateMessage(std::string_view payload, const std::string& key, ui64 seqNo) {
-    TWriteMessage msg(payload);
+    TWriteMessage msg(key, payload);
     msg.SeqNo(seqNo);
-    msg.Key(key);
     return msg;
 }
 
@@ -247,7 +246,7 @@ void CreateTopicWithAutoPartitioning(TTopicClient& client) {
 }
 
 void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count,
-    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10)
+    TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor, ui32 restartPeriod = 7, ui32 maxRestartsCount = 10, ui64 shuffleRatio = 1, TDuration shuffleDelay = TDuration::MilliSeconds(10))
 {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
@@ -263,9 +262,21 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 
     TTopicClient topicClient = setup.MakeClient();
 
-    auto WaitTasks = [&, timeout = TInstant::Now() + TDuration::Seconds(60)](auto f, size_t c) {
-        while (f() < c) {
-            UNIT_ASSERT(timeout > TInstant::Now());
+    auto WaitTasks = [&](auto f, size_t c) {
+        const auto hardTimeout = TInstant::Now() + TDuration::Seconds(60);
+        const auto shuffleTimeout = TInstant::Now() + shuffleDelay;
+        while (true) {
+            const auto fVal = f();
+            if (fVal >= c * shuffleRatio) {
+                return;
+            }
+
+            const auto now = TInstant::Now();
+            if (fVal >= c && now > shuffleTimeout) {
+                return;
+            }
+
+            UNIT_ASSERT_GE(hardTimeout, now);
             ReadSession->WaitEvent();
             std::this_thread::sleep_for(100ms);
         };
@@ -277,28 +288,23 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
         WaitTasks([&]() { return e->GetExecutedCount(); }, count);
     };
 
-    auto RunTasks = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto RunTask = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(RunTasks);
 
-    auto PlanTasksAndRestart = [&](auto e, const std::vector<size_t>& tasks) {
-        size_t n = tasks.size();
-        WaitPlannedTasks(e, n);
+    auto PlanTaskAndRestart = [&](auto e) {
+        WaitPlannedTasks(e, 1);
         size_t completed = e->GetExecutedCount();
 
         setup.GetServer().KillTopicPqrbTablet(JoinPath({TString(setup.MakeDriverConfig().GetDatabase()), TString(setup.GetTopicPath())}));
         std::this_thread::sleep_for(100ms);
 
-        e->StartFuncs(tasks);
-        WaitExecutedTasks(e, completed + n);
+        e->StartRandomFunc();
+        WaitExecutedTasks(e, completed + 1);
     };
-    Y_UNUSED(PlanTasksAndRestart);
-
 
     NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
     TAtomic lastOffset = 0u;
@@ -319,11 +325,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ui32 restartCount = 0;
     while (AtomicGet(lastOffset) + 1 < count) {
         if (restartCount < maxRestartsCount && i % restartPeriod == 1) {
-            PlanTasksAndRestart(decompressor, {i++});
+            PlanTaskAndRestart(decompressor);
             restartCount++;
         } else {
-            RunTasks(decompressor, {i++});
+            RunTask(decompressor);
         }
+        i++;
     }
 
     ReadSession->Close(TDuration::MilliSeconds(10));
@@ -1014,6 +1021,32 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor);
     }
 
+    Y_UNIT_TEST(ReadWithRestartsAndLargeDataAndShuffle) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto compressor = std::make_shared<TSyncExecutor>();
+        auto decompressor = CreateThreadPoolManagedExecutor(1);
+
+        TReadSessionSettings readSettings;
+        readSettings
+            .ConsumerName(setup.GetConsumerName())
+            .MaxMemoryUsageBytes(10_MB)
+            .DecompressionExecutor(decompressor)
+            .AppendTopics(setup.GetTopicPath())
+            // .DirectRead(EnableDirectRead)
+            ;
+
+        TWriteSessionSettings writeSettings;
+        writeSettings
+            .Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID)
+            .Codec(ECodec::RAW)
+            .CompressionExecutor(compressor);
+
+        std::uint32_t count = 3000;
+        std::string message(8'000, 'x');
+
+        WriteAndReadToEndWithRestarts(readSettings, writeSettings, message, count, setup, decompressor, 7, 10, 10);
+    }
+
     Y_UNIT_TEST(ConflictingWrites) {
 
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
@@ -1090,9 +1123,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 messages = 5;
         for (ui64 i = 0; i < messages; ++i) {
             std::string payload = "payload";
-            TWriteMessage msg(payload);
+            TWriteMessage msg("key-" + ToString(i), payload);
             msg.SeqNo(i + 1);
-            msg.Key("key-" + ToString(i));
             UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1153,9 +1185,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto session = publicClient.CreateProducer(writeSettings);
 
         std::string payload = "msg0";
-        TWriteMessage msg(payload);
+        TWriteMessage msg("key", payload);
         msg.SeqNo(0);
-        msg.Key("key");
         UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         auto flushResult = session->Flush().GetValueSync();
         UNIT_ASSERT_C(flushResult.IsClosed(), "Failed to flush producer");
@@ -1198,16 +1229,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto seqNo = 1;
         for (ui64 i = 0; i < count0; ++i) {
             std::string payload = "msg0";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key0, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key0);
             UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
         for (ui64 i = 0; i < count1; ++i) {
             std::string payload = "msg1";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key1, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key1);
             UNIT_ASSERT_C(session->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1287,9 +1316,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }
 
             std::string payload = "msg";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i + 1);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1333,9 +1361,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         const ui64 count = 3000;
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1366,9 +1393,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1379,8 +1405,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         std::string payload = "data";
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
-            TWriteMessage msg(payload);
-            msg.Key(key);
+            TWriteMessage msg(key, payload);
             UNIT_ASSERT_C(producer2->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
         UNIT_ASSERT_C(producer2->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
@@ -1410,9 +1435,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 1; i <= count; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(i);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1420,9 +1444,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_C(producer->Close(TDuration::Seconds(10)).IsSuccess(), "Failed to close producer");
 
         std::string payload = "data";
-        TWriteMessage msg(payload);
+        TWriteMessage msg(CreateGuidAsString(), payload);
         msg.SeqNo(count + 1);
-        msg.Key(CreateGuidAsString());
         auto writeResult = producer->Write(std::move(msg));
         UNIT_ASSERT_C(writeResult.IsError(), "Failed to write message");
         UNIT_ASSERT_C(writeResult.ErrorMessage == "producer is closed", "Error message is not correct");
@@ -1459,9 +1482,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 for (ui64 i = 0; i < perThread; ++i) {
                     const ui64 seqNo = nextSeqNo.fetch_add(1);
                     std::string payload = "data";
-                    TWriteMessage msg(payload);
+                    TWriteMessage msg(key, payload);
                     msg.SeqNo(seqNo);
-                    msg.Key(key);
                     auto writeResult = producer->Write(std::move(msg));
                     UNIT_ASSERT_C(
                         writeResult.IsQueued(),
@@ -1502,9 +1524,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messages; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1514,9 +1535,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         for (ui64 i = 0; i < messages; ++i) {
             auto key = CreateGuidAsString();
             std::string payload = "data";
-            TWriteMessage msg(payload);
+            TWriteMessage msg(key, payload);
             msg.SeqNo(seqNo++);
-            msg.Key(key);
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1550,9 +1570,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             for (ui64 i = 1; i <= messages; ++i) {
                 auto key = CreateGuidAsString();
                 std::string payload = "data";   
-                TWriteMessage msg(payload);
+                TWriteMessage msg(key, payload);
                 msg.SeqNo(i);
-                msg.Key(key);
                 UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
             }
         });
@@ -1589,9 +1608,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         for (int i = 0; i < 1000; ++i) {
             std::string payload = "message-" + ToString(i);
-            TWriteMessage msg(payload);
+            TWriteMessage msg("key1", payload);
             msg.SeqNo(i + 1);
-            msg.Key("key1");
             UNIT_ASSERT_C(producer->Write(std::move(msg)).IsQueued(), "Failed to write message");
         }
 
@@ -1927,8 +1945,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto msgData = TString(10_KB, 'a');
         for (const auto& partition : partitions) {
             for (ui64 i = 0; i < 10; ++i) {
-                TWriteMessage msg(msgData);
-                msg.Partition(partition.GetPartitionId());
+                TWriteMessage msg(partition.GetPartitionId(), msgData);
                 UNIT_ASSERT(producer->Write(std::move(msg)).IsQueued());
             }
         }

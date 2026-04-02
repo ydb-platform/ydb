@@ -36,6 +36,8 @@ public:
     void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) override;
     void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event) override;
 
+    void WaitForContinuationToken(const TDuration&) override;
+
 private:
     std::string GetKey() const;
 

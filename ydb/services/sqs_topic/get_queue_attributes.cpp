@@ -113,7 +113,24 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
+            if (auto attrReq = MakeAttributesList(); attrReq.has_value()) {
+                AttributesRequest = std::move(attrReq).value();
+            } else {
+                return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, attrReq.error()));
+            }
+
+            ++RequestInflight;
             SendDescribeProposeRequest(ctx);
+
+            if (AttributesRequest.NeedRuntimeAttributes) {
+                ++RequestInflight;
+                Register(NPQ::NMLP::CreateDescriber(SelfId(), {
+                    .DatabasePath = Database,
+                    .TopicName = FullTopicPath_,
+                    .Consumer = QueueUrl_->Consumer,
+                }));
+            }
+
             Become(&TGetQueueAttributesActor::StateWork);
         }
 
@@ -154,8 +171,22 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
+                hFunc(NPQ::NMLP::TEvDescribeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
+            }
+        }
+
+        void Handle(NPQ::NMLP::TEvDescribeResponse::TPtr& ev) {
+            auto* result = ev->Get();
+
+            if (result->Status == Ydb::StatusIds::SUCCESS) {
+                DescribeResponse = std::move(ev);
+            }
+
+            --RequestInflight;
+            if (RequestInflight == 0) {
+                ReplyAndDie(ActorContext());
             }
         }
 
@@ -194,7 +225,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, attrReq.error()));
             }
 
-            ReplyAndDie(ActorContext());
+            --RequestInflight;
+            if (RequestInflight == 0) {
+                ReplyAndDie(ActorContext());
+            }
         }
 
         bool HasDlq() const {
@@ -224,13 +258,13 @@ namespace NKikimr::NSqsTopic::V1 {
             Ydb::Ymq::V1::GetQueueAttributesResult result;
 
             if (const auto attrName = "ApproximateNumberOfMessages"sv; HasAttribute(attrName)) {
-                AddAttribute(result, attrName, 0);
+                AddAttribute(result, attrName, DescribeResponse ? DescribeResponse->Get()->ApproximateMessageCount : 0);
             }
             if (const auto attrName = "ApproximateNumberOfMessagesDelayed"sv; HasAttribute(attrName)) {
-                AddAttribute(result, attrName, 0);
+                AddAttribute(result, attrName, DescribeResponse ? DescribeResponse->Get()->ApproximateDelayedMessageCount : 0);
             }
             if (const auto attrName = "ApproximateNumberOfMessagesNotVisible"sv; HasAttribute(attrName)) {
-                AddAttribute(result, attrName, 0);
+                AddAttribute(result, attrName, DescribeResponse ? DescribeResponse->Get()->ApproximateLockedMessageCount : 0);
             }
             if (const auto attrName = "CreatedTimestamp"sv; HasAttribute(attrName)) {
                 TInstant ts = TInstant::MilliSeconds(SelfInfo.GetCreateStep());
@@ -274,7 +308,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 AddAttribute(result, attrName, fifo);
             }
             if (const auto attrName = "ContentBasedDeduplication"sv; HasAttribute(attrName)) {
-                bool value = fifo && ConsumerConfig && ConsumerConfig->GetContentBasedDeduplication();
+                bool value = fifo && pqTabletConfig.GetContentBasedDeduplication();
                 AddAttribute(result, attrName, value);
             }
             if (const auto attrName = "RedrivePolicy"sv; HasAttribute(attrName)) {
@@ -310,10 +344,12 @@ namespace NKikimr::NSqsTopic::V1 {
             return GetRequest<TProtoRequest>(this->Request_.get());
         }
     private:
+        size_t RequestInflight = 0;
         TAttributesRequest AttributesRequest;
         NKikimrSchemeOp::TDirEntry SelfInfo;
         NKikimrSchemeOp::TPersQueueGroupDescription PQGroup;
         TMaybe<NKikimrPQ::TPQTabletConfig::TConsumer> ConsumerConfig;
+        NPQ::NMLP::TEvDescribeResponse::TPtr DescribeResponse;
     };
 
     std::unique_ptr<NActors::IActor> CreateGetQueueAttributesActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

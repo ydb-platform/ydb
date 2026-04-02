@@ -133,7 +133,7 @@ private:
                         AppDataVerified().TenantName,
                         ActorContext().ActorSystem());
 
-                        const auto selfId = SelfId();
+                    const auto selfId = SelfId();
                     const auto tierIdCopy = tierId;
 
                     future.Subscribe([actorSystem = ActorContext().ActorSystem(),

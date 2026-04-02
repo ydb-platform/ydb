@@ -182,30 +182,33 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
 
-        Iterate(json, POOL_CONFIG_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
-            Y_ENSURE_BT(ids.size() == 2);
-
-            TPoolConfigKey key{
-                .Domain = ids[0],
-                .StoragePoolType = ids[1],
-            };
-
-            bool currentHasErasureSpecies = false;
-            bool currentHasPoolConfigKind = false;
-            bool currentHasVDiskKind = false;
+        auto collectPoolConfigInfo = [&ctx](TPoolConfigKey key, const NJson::TJsonValue& node) {
+            bool hasErasureSpecies = false;
+            bool hasPoolConfigKind = false;
+            bool hasVDiskKind = false;
 
             const NJson::TJsonValue* poolConfigObject = nullptr;
             if (node.IsMap() && node.GetValuePointer("pool_config", &poolConfigObject) && poolConfigObject->IsMap()) {
-                currentHasErasureSpecies = poolConfigObject->Has("erasure_species");
-                currentHasPoolConfigKind = poolConfigObject->Has("kind");
-                currentHasVDiskKind = poolConfigObject->Has("vdisk_kind");
+                hasErasureSpecies = poolConfigObject->Has("erasure_species");
+                hasPoolConfigKind = poolConfigObject->Has("kind");
+                hasVDiskKind = poolConfigObject->Has("vdisk_kind");
             }
 
             ctx.PoolConfigInfo[key] = TPoolConfigInfo{
-                .HasErasureSpecies = currentHasErasureSpecies,
-                .HasKind = currentHasPoolConfigKind,
-                .HasVDiskKind = currentHasVDiskKind,
+                .HasErasureSpecies = hasErasureSpecies,
+                .HasKind = hasPoolConfigKind,
+                .HasVDiskKind = hasVDiskKind,
             };
+        };
+
+        Iterate(json, POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 2);
+            collectPoolConfigInfo({ids[0], ids[1]}, node);
+        });
+
+        Iterate(json, EPHEMERAL_POOL_CONFIG_PATH, [&collectPoolConfigInfo](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Y_ENSURE_BT(ids.size() == 1);
+            collectPoolConfigInfo({0, ids[0]}, node);
         });
 
         Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {

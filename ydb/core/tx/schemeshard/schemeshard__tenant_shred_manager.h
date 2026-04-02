@@ -49,7 +49,7 @@ private:
     THashMap<TShardIdx, TActorId> ActivePipes;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr WaitingShardsCounter;
-    ::NMonitoring::TDynamicCounters::TCounterPtr RunnigShardsCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RunningShardsCounter;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletedShardsCounter;
 
 public:

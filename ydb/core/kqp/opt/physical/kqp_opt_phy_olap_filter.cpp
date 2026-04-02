@@ -351,8 +351,9 @@ TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprConte
 }
 
 TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
-    if (!stripAliasPrefix)
+    if (!stripAliasPrefix) {
         return colName;
+    }
 
     auto it = colName.find(".");
     if (it != TString::npos) {
@@ -361,6 +362,17 @@ TString GetColName(const TString& colName, bool stripAliasPrefix = false) {
     return colName;
 }
 
+bool HasAlias(const TString& colName) {
+    return colName.find(".") != TString::npos;
+}
+
+TString GetAlias(const TString& colName) {
+    auto it = colName.find(".");
+    if (it != TString::npos) {
+        return colName.substr(0, it);
+    }
+    return "";
+}
 } //namespace
 
 std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExprNode& argument, TExprContext& ctx, TPositionHandle pos,
@@ -401,9 +413,12 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
 
             YQL_ENSURE(maybeColMember, "Expected TCoMember in column field of JSON_VALUE function for pushdown");
             YQL_ENSURE(maybePathUtf8, "Expected TCoUtf8 in path of JSON_VALUE function for pushdown");
+            const TString colName = GetColName(maybeColMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
 
             auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
-                .Column(maybeColMember.Cast().Name())
+                .Column<TCoAtom>()
+                    .Value(colName)
+                .Build()
                 .Path(maybePathUtf8.Cast());
             if (maybeReturningType) {
                 builder.ReturningType(maybeReturningType.Cast());
@@ -824,6 +839,57 @@ TExprNode::TPtr IsSuitableToCollectProjection(TExprNode::TPtr node) {
     return nullptr;
 }
 
+
+void CollectPredicateMembers(TExprNode::TPtr predicate, THashSet<TString>& predicateMembers) {
+    auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
+    auto members = FindNodes(predicate, memberPred);
+    for (const auto& member : members) {
+        predicateMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
+    }
+}
+
+}  // anonymous namespace end
+
+bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& arg, const THashSet<TString>& predicateMembers, THashSet<TString>& projectionMembers,
+                                       TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,
+                                       ui32& nextMemberId, TExprContext& ctx, const TPushdownOptions& pushdownOptions) {
+    if (auto projection = IsSuitableToCollectProjection(input)) {
+        if (auto olapOperations = ConvertComparisonNode(TExprBase(projection), arg, ctx, input->Pos(), pushdownOptions); olapOperations.size() == 1) {
+            Y_ENSURE(TMaybeNode<TCoMember>(projection->ChildPtr(0)));
+            auto originalMember = TExprBase(projection->ChildPtr(0)).Cast<TCoMember>();
+            auto originalMemberName = TString(originalMember.Name());
+
+            if (!predicateMembers.contains(originalMemberName)) {
+                if (projectionMembers.contains(originalMemberName)) {
+                    if (pushdownOptions.StripAliasPrefixFromColName && HasAlias(originalMemberName)) {
+                        originalMemberName = GetAlias(originalMemberName) + "." + "__kqp_olap_projection_" + GetColName(originalMemberName, /*stripAlias=*/true) +
+                                             ToString(nextMemberId++);
+                    } else {
+                        originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
+                    }
+                } else {
+                    projectionMembers.insert(originalMemberName);
+                }
+
+                // clang-format off
+                auto replace = Build<TCoMember>(ctx, input->Pos())
+                    .Struct(originalMember.Struct())
+                    .Name<TCoAtom>()
+                        .Value(originalMemberName)
+                        .Build()
+                .Done().Ptr();
+                // clang-format on
+
+                auto olapOperation = olapOperations.front();
+                projectionCandidates.push_back({originalMemberName, projection, replace, olapOperation.Ptr()});
+                YQL_CLOG(TRACE, ProviderKqp) << "[OLAP PROJECTION] Operation in olap dialect: " << KqpExprToPrettyString(olapOperation, ctx);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 // Collects all operations for projections and returns a vector of pair - [columName, olap operation].
 TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections(const TExprNode::TPtr& node, const TExprNode& arg,
                                                                                  TNodeOnNodeOwnedMap& replaces,
@@ -838,48 +904,20 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
 
     TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>> projectionCandidates;
     // Expressions for projections are placed in `AsStruct` callable.
-    if (auto asStruct = FindNode(node, asStructPred)) {
-        // Process each child for `AsStruct` callable.
-        for (auto child : TExprBase(asStruct).Cast<TCoAsStruct>()) {
-            bool memberCollected = false;
-            TExprNode::TPtr nodeToProcess = child.Item(1).Ptr();
-            if (auto projection = IsSuitableToCollectProjection(nodeToProcess)) {
-                if (auto olapOperations = ConvertComparisonNode(TExprBase(projection), arg, ctx, node->Pos(), pushdownOptions);
-                    olapOperations.size() == 1) {
+    auto asStruct = FindNode(node, asStructPred);
+    if (!asStruct) {
+        return olapOperationsForProjections;
+    }
 
-                    Y_ENSURE(TMaybeNode<TCoMember>(projection->ChildPtr(0)));
-                    auto originalMember = TExprBase(projection->ChildPtr(0)).Cast<TCoMember>();
-                    auto originalMemberName = TString(originalMember.Name());
+    // Process each child for `AsStruct` callable.
+    for (auto child : TExprBase(asStruct).Cast<TCoAsStruct>()) {
+        TExprNode::TPtr nodeToProcess = child.Item(1).Ptr();
 
-                    if (!predicateMembers.contains(originalMemberName)) {
-                        if (projectionMembers.contains(originalMemberName)) {
-                            originalMemberName = "__kqp_olap_projection_" + originalMemberName + ToString(nextMemberId++);
-                        } else {
-                            projectionMembers.insert(originalMemberName);
-                        }
-
-                        // clang-format off
-                        auto replace = Build<TCoMember>(ctx, node->Pos())
-                            .Struct(originalMember.Struct())
-                            .Name<TCoAtom>()
-                                .Value(originalMemberName)
-                                .Build()
-                        .Done().Ptr();
-                        // clang-format on
-
-                        auto olapOperation = olapOperations.front();
-                        projectionCandidates.push_back({TString(originalMemberName), projection, replace, olapOperation.Ptr()});
-                        memberCollected = true;
-                        YQL_CLOG(TRACE, ProviderKqp)
-                            << "[OLAP PROJECTION] Operation in olap dialect: " << KqpExprToPrettyString(olapOperation, ctx);
-                    }
-                }
-            }
-            if (!memberCollected) {
-                auto members = FindNodes(child.Item(1).Ptr(), memberPred);
-                for (const auto& member : members) {
-                    notSuitableToPushMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
-                }
+        if (!CollectOlapOperationForProjection(nodeToProcess, arg, predicateMembers, projectionMembers, projectionCandidates, nextMemberId, ctx,
+                                               pushdownOptions)) {
+            auto members = FindNodes(child.Item(1).Ptr(), memberPred);
+            for (const auto& member : members) {
+                notSuitableToPushMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
             }
         }
     }
@@ -893,16 +931,6 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
 
     return olapOperationsForProjections;
 }
-
-void CollectPredicateMembers(TExprNode::TPtr predicate, THashSet<TString>& predicateMembers) {
-    auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
-    auto members = FindNodes(predicate, memberPred);
-    for (const auto& member : members) {
-        predicateMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
-    }
-}
-
-}  // anonymous namespace end
 
 TExprBase KqpPushOlapProjections(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TTypeAnnotationContext& typesCtx)

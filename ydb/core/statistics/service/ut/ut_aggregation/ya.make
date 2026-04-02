@@ -2,12 +2,7 @@ UNITTEST_FOR(ydb/core/statistics/service)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 YQL_LAST_ABI_VERSION()
 
@@ -23,4 +18,3 @@ SRCS(
 )
 
 END()
-

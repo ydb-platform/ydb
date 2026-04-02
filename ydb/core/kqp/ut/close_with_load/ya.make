@@ -3,11 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(cpu:2)
-ELSEIF(SANITIZER_TYPE)
+IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:2)
 ELSE()
@@ -15,8 +11,8 @@ ELSE()
 ENDIF()
 
 SRCS(
-	kqp_cwl.cpp
-	kqp_cwl_qs.cpp
+    kqp_cwl.cpp
+    kqp_cwl_qs.cpp
 )
 
 PEERDIR(

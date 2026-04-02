@@ -115,8 +115,7 @@ int main() {
     auto messageData = std::string(1_KB, 'a');
 
     for (int i = 0; i < 10; i++) {
-        NYdb::NTopic::TWriteMessage writeMessage(messageData);
-        writeMessage.Key("key" + ToString(i));
+        NYdb::NTopic::TWriteMessage writeMessage("key" + ToString(i), messageData);
         WriteWithHandlingResult(producer, std::move(writeMessage));
     }
     return 0;

@@ -6,12 +6,12 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(40)
+SPLIT_FACTOR(400)
 
 REQUIREMENTS(cpu:2)
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -48,6 +48,7 @@ SRCS(
     pqrb_describes_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
+    events_ut.cpp
 )
 
 RESOURCE(

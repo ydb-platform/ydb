@@ -1,82 +1,40 @@
 #include "source.h"
+#include "grafana_dashboard_source.h"
 
 #include <util/generic/yexception.h>
-#include <mutex>
 
 namespace NMVP {
 
-namespace {
-
-THashMap<TString, TLinkSourceFactory>& LinkSourceFactories() {
-    static THashMap<TString, TLinkSourceFactory> factories;
-    return factories;
+void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const TMetaSettings& metaSettings) {
+    for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetCluster(i), metaSettings);
+    }
+    for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetDatabase(i), metaSettings);
+    }
 }
 
-std::mutex& LinkSourceFactoriesMutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
-} // namespace
-
-class TUnsupportedLinkSource final : public ILinkSource {
-public:
-    explicit TUnsupportedLinkSource(TSupportLinkEntryConfig config)
-        : SourceConfig(std::move(config))
-    {}
-
-    const TSupportLinkEntryConfig& Config() const override {
-        return SourceConfig;
-    }
-
-    TResolveOutput Resolve(const TResolveInput&) const override {
-        TResolveOutput output;
-        output.Name = SourceConfig.GetSource();
-        output.Ready = true;
-        output.Errors.emplace_back(NSupportLinks::TSupportError{
-            .Source = SourceConfig.GetSource(),
-            .Message = TStringBuilder() << "unsupported support_links source: " << SourceConfig.GetSource(),
-        });
-        return output;
-    }
-
-private:
-    TSupportLinkEntryConfig SourceConfig;
-};
-
-void RegisterLinkSource(TString source, TLinkSourceFactory factory) {
-    if (source.empty()) {
-        ythrow yexception() << "support_links source name is required";
-    }
-    if (!factory) {
-        ythrow yexception() << "support_links source factory is required for " << source;
-    }
-
-    std::lock_guard guard(LinkSourceFactoriesMutex());
-    auto& factories = LinkSourceFactories();
-    if (factories.contains(source)) {
-        ythrow yexception() << "support_links source factory is already registered for " << source;
-    }
-    factories.emplace(std::move(source), factory);
-}
-
-std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config) {
+void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
     if (config.GetSource().empty()) {
         ythrow yexception() << "source is required";
     }
 
-    TLinkSourceFactory factory = nullptr;
-    {
-        std::lock_guard guard(LinkSourceFactoriesMutex());
-        if (const auto it = LinkSourceFactories().find(config.GetSource()); it != LinkSourceFactories().end()) {
-            factory = it->second;
-        }
-    }
-    if (factory) {
-        return factory(std::move(config));
+    if (config.GetSource() == "grafana/dashboard") {
+        ValidateGrafanaDashboardSourceConfig(config, metaSettings);
+        return;
     }
 
-    return std::make_shared<TUnsupportedLinkSource>(std::move(config));
+    ythrow yexception() << "unsupported support_links source: " << config.GetSource();
+}
+
+std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {
+    ValidateLinkSourceConfig(config, metaSettings);
+
+    if (config.GetSource() == "grafana/dashboard") {
+        return MakeGrafanaDashboardSource(std::move(config), metaSettings);
+    }
+
+    ythrow yexception() << "unsupported support_links source: " << config.GetSource();
 }
 
 } // namespace NMVP

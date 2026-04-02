@@ -18,7 +18,7 @@
 
 #define FASTFLOAT_VERSION_MAJOR 8
 #define FASTFLOAT_VERSION_MINOR 2
-#define FASTFLOAT_VERSION_PATCH 3
+#define FASTFLOAT_VERSION_PATCH 4
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -313,8 +313,6 @@ fastfloat_strncasecmp3(UC const *actual_mixedcase,
       return false;
     }
   }
-
-  return true;
 }
 
 template <typename UC>
@@ -369,8 +367,6 @@ fastfloat_strncasecmp5(UC const *actual_mixedcase,
       return false;
     }
   }
-
-  return true;
 }
 
 // Compares two ASCII strings in a case insensitive manner.

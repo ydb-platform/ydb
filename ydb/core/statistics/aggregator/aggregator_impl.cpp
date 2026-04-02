@@ -44,12 +44,7 @@ void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
 
     auto appData = AppData(ctx);
     Y_ABORT_UNLESS(appData);
-    PropagateIntervalDedicated = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
-    PropagateIntervalServerless = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
-    // Start with the dedicated interval, switch to the serverless one if needed.
-    PropagateInterval = PropagateIntervalDedicated;
+    StatisticsConfig = appData->StatisticsConfig;
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -60,9 +55,11 @@ void TStatisticsAggregator::DefaultSignalTabletActive(const TActorContext& ctx) 
 }
 
 void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) {
-    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+            (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
+        }));
 }
 
 void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -81,11 +78,10 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
         }
-
-        const auto& statsConfig = config.GetStatisticsConfig();
-        EnableBackgroundColumnStatsCollection =
-            statsConfig.GetEnableBackgroundColumnStatsCollection();
     }
+
+    StatisticsConfig = config.GetStatisticsConfig();
+
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
@@ -242,16 +238,11 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
-    if (BaseStatistics.size() > 1) {
-        // We are in a shared database, switch to a bigger propagation interval.
-        PropagateInterval = PropagateIntervalServerless;
-    }
-
     if (EnableStatistics) {
         PropagateStatistics();
     }
 
-    Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
+    Schedule(GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
@@ -366,7 +357,7 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    auto timeout = PropagateInterval * 3 / 5;
+    auto timeout = GetPropagateInterval() * 3 / 5;
     Schedule(timeout, new TEvPrivate::TEvPropagateTimeout);
 
     ++CurPropagationSeq;
@@ -433,6 +424,18 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
     Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release(), 0, cookie);
 
     return index;
+}
+
+TDuration TStatisticsAggregator::GetPropagateInterval() {
+    if (BaseStatistics.size() > 1) {
+        // We are in a shared database, switch to a bigger propagation interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    } else {
+        // Otherwise use the dedicated interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
+    }
 }
 
 void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -772,9 +775,13 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
 
                 // operation.Types field is not used, TAnalyzeActor will determine suitable
                 // statistic types itself.
+                auto analyzeActorConfig = TAnalyzeActor::TConfig{
+                    .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+                    .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+                };
                 AnalyzeActorId = ctx.Register(new TAnalyzeActor(
                     SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
-                    operationTable.ColumnTags));
+                    operationTable.ColumnTags, analyzeActorConfig));
                 SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
                     << "operationId: " << operation.OperationId.Quote()
                     << ", started analyzing table: " << operationTable.PathId

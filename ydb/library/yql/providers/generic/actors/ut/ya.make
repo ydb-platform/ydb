@@ -4,7 +4,6 @@ PEERDIR(
     yql/essentials/sql/pg_dummy
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
     ydb/library/actors/testlib
-    ydb/core/kqp/ut/common
     library/cpp/testing/unittest
 )
 

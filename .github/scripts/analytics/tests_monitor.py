@@ -193,6 +193,8 @@ def main():
     parser.add_argument('--branch', default='main', type=str, help='branch')
     parser.add_argument('--start-date', dest='start_date', type=str, help='Start date (YYYY-MM-DD), inclusive')
     parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
+    parser.add_argument('--table-suffix', dest='table_suffix', type=str, default=None,
+                        help='Append suffix to target table name (e.g. "_temp" → tests_monitor_temp)')
 
     args, unknown = parser.parse_known_args()
     build_type = args.build_type
@@ -221,7 +223,8 @@ def main():
         default_start_date = datetime.date(2025, 2, 1)
         actual_today = datetime.date.today()
         today = min(end_date_override, actual_today) if end_date_override else actual_today
-        table_path = tests_monitor_table
+        read_table_path = tests_monitor_table
+        write_table_path = tests_monitor_table + (args.table_suffix or '')
 
         def load_monitor_data_for_date(target_date):
             if target_date is None:
@@ -229,7 +232,7 @@ def main():
             date_str = target_date.strftime('%Y-%m-%d')
             query = f"""
                 SELECT *
-                FROM `{table_path}`
+                FROM `{read_table_path}`
                 WHERE build_type = '{build_type}'
                 AND branch = '{branch}'
                 AND date_window = Date('{date_str}')
@@ -283,7 +286,7 @@ def main():
         print("Getting date of last collected monitor data")
         query_last_exist_day = f"""
             SELECT MAX(date_window) AS last_exist_day
-            FROM `{table_path}`
+            FROM `{read_table_path}`
             WHERE build_type = '{build_type}'
             AND branch = '{branch}'
         """
@@ -357,10 +360,15 @@ def main():
             last_exist_day_date = (base_date + datetime.timedelta(days=last_exist_day)).date()
             if last_exist_day_date >= today:
                 last_exist_day_date = last_exist_day_date - datetime.timedelta(days=1)
-            print(f"Monitor data exist - getting data for date {last_exist_day_date}")
-            last_exist_df = load_monitor_data_for_date(last_exist_day_date)
 
-            process_start_date = last_exist_day_date + datetime.timedelta(days=1)
+            # Reprocess last existing day to catch late-arriving test runs
+            # (e.g. Nightly jobs that finish after midnight may upload results after tests_monitor already ran)
+            process_start_date = max(last_exist_day_date, default_start_date)
+            prev_day = process_start_date - datetime.timedelta(days=1)
+            if prev_day >= default_start_date:
+                last_exist_df = load_monitor_data_for_date(prev_day)
+            print(f"Monitor data exist - reprocessing from {process_start_date} (last recorded: {last_exist_day_date})")
+
             if process_start_date > today:
                 print("No new dates to process.")
                 return 0
@@ -466,6 +474,10 @@ def main():
         start_time = time.time()
         df = pd.DataFrame(data)
 
+        if df.empty:
+            print(f"No test data found for branch='{branch}', build_type='{build_type}' in the date range. Nothing to process.")
+            return 0
+
         # Build dict lookup from last day (O(1) per test instead of O(N) DataFrame scan)
         last_day_lookup = {}
         if last_exist_df is not None and last_exist_df.shape[0] > 0:
@@ -501,7 +513,7 @@ def main():
         df['owner'] = df['owners'].apply(compute_owner)
 
         df['is_test_chunk'] = df['full_name'].str.contains(
-            ']? chunk|sole chunk|chunk chunk|chunk\\+chunk', regex=True,
+            ']? chunk|sole chunk|chunk chunk|chunk\\+chunk', regex=True, na=False,
         ).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
 
@@ -694,6 +706,8 @@ def main():
         end_time = time.time()
         print(f'Dataframe prepared {end_time - start_time}')
         print(f'Data collected, {len(result)} rows')
+
+
         start_time = time.time()
         prepared_for_update_rows = result.to_dict('records')
         end_time = time.time()
@@ -702,7 +716,7 @@ def main():
         start_upsert_time = time.time()
 
         # Create table and bulk upsert using ydb_wrapper
-        create_tables(ydb_wrapper, table_path)
+        create_tables(ydb_wrapper, write_table_path)
 
         chunk_size = 40000
 
@@ -741,7 +755,7 @@ def main():
         )
         
         ydb_wrapper.bulk_upsert_batches(
-            table_path, prepared_for_update_rows, column_types, chunk_size,
+            write_table_path, prepared_for_update_rows, column_types, chunk_size,
             query_name=f"tests_monitor_{branch}_{build_type}"
         )
 

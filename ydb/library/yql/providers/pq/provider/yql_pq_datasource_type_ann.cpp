@@ -125,11 +125,8 @@ public:
 
         std::unordered_set<TString> addedFields;
         if (columns && !TCoVoid::Match(columns)) {
-            if (!columns->IsList()) {
-                ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()),
-                    "PqReadTopic.Columns: expected list of column name atoms (userschema order)"));
-                return nullptr;
-            }
+            YQL_ENSURE(columns->IsList(),
+                "PqReadTopic.Columns: expected list of column name atoms (userschema order)");
             items.reserve(columns->ChildrenSize() + metadata->ChildrenSize());
             columnOrder.Reserve(items.capacity());
 

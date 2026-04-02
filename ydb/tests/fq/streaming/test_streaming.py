@@ -234,6 +234,44 @@ class TestStreamingInYdb(StreamingTestBase):
         assert rows[2]["Fruit"] == b"Pear" and rows[2]["Price"] == 15 and rows[2]["Weight"] == 33
 
     @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_invalid_format_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_invalid_format_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                csv_delimiter = ";",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter can only be used with csv or csv_with_names format" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, entity_name, local_topics):
+        input_name, _ = self.get_input_name(
+            kikimr, "test_csv_delimiter_must_be_single_character_rejected", local_topics, entity_name
+        )
+
+        sql = f"""SELECT * FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                csv_delimiter = ";;",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            kikimr.ydb_client.query(sql)
+        assert "csv_delimiter must be single character" in str(exc_info.value)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
     def test_csv_empty_schema_rejected(self, kikimr, entity_name, local_topics):
         """Analog of `TestS3Formats.test_csv_empty_schema_rejected`."""
         input_name, endpoint = self.get_input_name(

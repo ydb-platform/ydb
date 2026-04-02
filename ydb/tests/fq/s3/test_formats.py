@@ -345,6 +345,54 @@ Pear;15;33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_delimiter_invalid_format_rejected(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file_body('{"time":"lunch"}\n', "one_row.jsonl", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "delimiterinvalidbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f"""
+            SELECT *
+            FROM `{storage_connection_name}`.`one_row.jsonl`
+            WITH (
+                format = json_each_row,
+                csv_delimiter = ";",
+                SCHEMA = (time String NOT NULL)
+            );
+            """
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        describe_string = "{}".format(describe_result)
+        assert "csv_delimiter can only be used with csv_with_names or csv format" in describe_string
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_delimiter_must_be_single_character_rejected(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file_body("x\n", "one_col.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "delimitersizebucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f"""
+            SELECT *
+            FROM `{storage_connection_name}`.`one_col.csv`
+            WITH (
+                format = csv,
+                csv_delimiter = ";;",
+                SCHEMA = (time String NOT NULL)
+            );
+            """
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        describe_string = "{}".format(describe_result)
+        assert "csv_delimiter must be single character" in describe_string
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_names_projection_column_order(self, kikimr, s3, client, unique_prefix):
         """csv_with_names: header order b,a in file; SCHEMA lists a,b; SELECT a,b checks values by name.
 

@@ -10,6 +10,14 @@ class ExternalDataSourceSecretCompatibilityBase(ExternalDataTableTestBase):
         s3_endpoint, s3_access_key, s3_secret_key, s3_bucket = self.s3_config
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = """
+                DROP OBJECT IF EXISTS s3_access_key (TYPE SECRET);
+                DROP OBJECT IF EXISTS s3_secret_key (TYPE SECRET);
+                DROP SECRET IF EXISTS `s3_access_key`;
+                DROP SECRET IF EXISTS `s3_secret_key`;
+            """
+            session_pool.execute_with_retries(query)
+
             if kind == "object":
                 query = f"""
                     CREATE OBJECT s3_access_key (TYPE SECRET) WITH value="{s3_access_key}";

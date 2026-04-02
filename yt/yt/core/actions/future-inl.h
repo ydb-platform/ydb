@@ -2247,7 +2247,7 @@ public:
             TFutureCallbackCookie cookie;
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(future.BlockingGet());
+                OnFutureSet(future.GetOrCrash());
             } else {
                 cookie = future.Subscribe(BIND_NO_PROPAGATE(&TAnyFutureCombiner::OnFutureSet, MakeStrong(this)));
             }
@@ -2336,7 +2336,7 @@ public:
         for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
-                OnFutureSet(index, future.BlockingGet());
+                OnFutureSet(index, future.GetOrCrash());
             } else {
                 future.Subscribe(BIND_NO_PROPAGATE(&TAllFutureCombiner::OnFutureSet, MakeStrong(this), index));
             }
@@ -2434,7 +2434,7 @@ public:
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(index, future.BlockingGet());
+                OnFutureSet(index, future.GetOrCrash());
             } else {
                 cookie = future.Subscribe(
                     BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
@@ -2751,7 +2751,7 @@ private:
                 break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.BlockingGet()));
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.GetOrCrash()));
             if (!suggestedIndex) {
                 break;
             }
@@ -2868,10 +2868,10 @@ private:
                     BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
                         // NB: Sync invoker protects from unbounded recursion.
                         .Via(GetSyncInvoker()));
-                        break;
+                break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.BlockingGet());
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.GetOrCrash());
             if (!suggestedIndex) {
                 break;
             }

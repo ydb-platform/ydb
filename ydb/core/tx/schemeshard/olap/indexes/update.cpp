@@ -86,7 +86,7 @@ bool TOlapIndexesUpdate::Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& a
             return false;
         }
 
-        MoveIndex.emplace_back(rename.GetSourceName(), rename.GetDestinationName(), rename.GetReplaceDestination());
+        MoveIndexes.emplace_back(rename.GetSourceName(), rename.GetDestinationName(), rename.GetReplaceDestination());
     }
 
     TSet<TString> upsertIndexNames;

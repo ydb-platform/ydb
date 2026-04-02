@@ -330,14 +330,6 @@ public:
                     }
                 }
 
-                if (sharedReading && !IsSupportedFormatInSharedReading(TStringBuf(format))) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                        TStringBuilder() << "Shared reading is enabled but format \"" << format
-                            << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "
-                            "Disable shared reading in cluster configuration or use a supported format."));
-                    return;
-                }
-
                 YQL_ENSURE(streamingTopicRead, "Finite topic reading is not supported");
 
                 for (auto prop : topic.Props()) {
@@ -532,8 +524,8 @@ private:
         }
     }
 
-    static bool IsSupportedFormatInSharedReading(std::string_view format) {
-        return format == "json_each_row"sv || format == "raw"sv;
+    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
+        return clusterConfiguration->SharedReading && (format == "json_each_row"sv || format == "raw"sv);
     }
 
 public:
@@ -556,15 +548,8 @@ public:
 
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
-        if (clusterConfiguration->SharedReading && !IsSupportedFormatInSharedReading(format)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
-                TStringBuilder() << "Cluster has shared reading enabled, but format \"" << format
-                    << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "));
-            return {};
-        }
-
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        const bool useSharedReading = clusterConfiguration->SharedReading;
+        const bool useSharedReading = UseSharedReading(clusterConfiguration, format);
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
@@ -827,7 +812,7 @@ public:
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
-        Add(innerSettings, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)

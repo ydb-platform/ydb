@@ -153,7 +153,7 @@ TRuntimeNode BuildParseCall(
     TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx,
     bool useBlocks,
-    const TVector<TString>* csvHeaderlessColumnOrder)
+    const std::vector<TString>* csvHeaderlessColumnOrder)
 {
     const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
     const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
@@ -429,7 +429,7 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
     }
 
     std::vector<std::pair<std::string_view, std::string_view>> formatSettings;
-    TVector<TString> csvHeaderlessColumns;
+    std::vector<TString> csvHeaderlessColumns;
     if (auto settings = GetSetting(wrapper.Settings().Cast().Ref(), "formatSettings")) {
         settings->Tail().ForEachChild([&](const TExprNode& v) {
             const TStringBuf key = v.Child(0)->Content();

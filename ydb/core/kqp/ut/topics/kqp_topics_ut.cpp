@@ -126,34 +126,6 @@ Y_UNIT_TEST(ReadWriteOperations) {
     AssertWriteOperation(txs, TABLETID_B, 1, 0, false);
 }
 
-Y_UNIT_TEST(OnlyWriteOperations) {
-    const TString TOPIC = "topic";
-    const ui32 PARTITION = 0;
-    const ui64 TABLETID = 1'000'000;
-
-    NTopic::TTopicOperations topicOps;
-
-    topicOps.SetSkipConflictCheck(false);
-
-    AddWriteOperation(topicOps, TOPIC, PARTITION, 100'001);
-
-    topicOps.SetTabletId(TOPIC, PARTITION, TABLETID);
-
-    const auto recvTabletIds = topicOps.GetReceivingTabletIds();
-    UNIT_ASSERT_EQUAL(recvTabletIds.size(), 1);
-    UNIT_ASSERT(recvTabletIds.contains(TABLETID));
-
-    const auto sendTabletIds = topicOps.GetSendingTabletIds();
-    UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
-    UNIT_ASSERT(sendTabletIds.contains(TABLETID));
-
-    NTopic::TTopicOperationTransactions txs;
-    topicOps.BuildTopicTxs(txs);
-    UNIT_ASSERT_EQUAL(txs.size(), 1);
-
-    AssertWriteOperation(txs, TABLETID, 1, 0, false);
-}
-
 Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck) {
     const TString TOPIC_A = "topic_A";
     const TString TOPIC_B = "topic_B";
@@ -223,6 +195,34 @@ Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck_TrackProducerId) {
 
     AssertReadOperation(txs, TABLETID_A, 1, 0);
     AssertWriteOperation(txs, TABLETID_B, 1, 0, false);
+}
+
+Y_UNIT_TEST(OnlyWriteOperations) {
+    const TString TOPIC = "topic";
+    const ui32 PARTITION = 0;
+    const ui64 TABLETID = 1'000'000;
+
+    NTopic::TTopicOperations topicOps;
+
+    topicOps.SetSkipConflictCheck(false);
+
+    AddWriteOperation(topicOps, TOPIC, PARTITION, 100'001);
+
+    topicOps.SetTabletId(TOPIC, PARTITION, TABLETID);
+
+    const auto recvTabletIds = topicOps.GetReceivingTabletIds();
+    UNIT_ASSERT_EQUAL(recvTabletIds.size(), 1);
+    UNIT_ASSERT(recvTabletIds.contains(TABLETID));
+
+    const auto sendTabletIds = topicOps.GetSendingTabletIds();
+    UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
+    UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+
+    AssertWriteOperation(txs, TABLETID, 1, 0, false);
 }
 
 Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck) {

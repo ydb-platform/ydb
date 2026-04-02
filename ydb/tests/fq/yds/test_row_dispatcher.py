@@ -218,6 +218,7 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 100}',
             '{"time": 109}',
             '{"time": 118}',
+            '{"time": 127}',
         ]
         self.write_stream(data)
         deadline = time.time() + 30

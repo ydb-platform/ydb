@@ -424,6 +424,7 @@ public:
 
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
+                const TStringBuf format = parseSettings.Format().Ref().Content();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.GetOrDefault());
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.GetOrDefault());
@@ -452,6 +453,9 @@ public:
                         const TStringBuf key = settings.Ref().Child(i)->Head().Content();
                         const auto& valueNode = settings.Ref().Child(i)->Tail();
                         if (key == UserSchemaColumnsSetting) {
+                            if (format != "csv"sv) {
+                                continue;
+                            }
                             // Value is a list of column name atoms тАФ iterate without string parsing.
                             const auto columnCount = valueNode.ChildrenSize();
                             srcDesc.MutableUserSchemaColumns()->Reserve(columnCount);

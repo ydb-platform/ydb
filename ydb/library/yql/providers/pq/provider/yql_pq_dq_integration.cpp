@@ -278,6 +278,7 @@ public:
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
                 TString format;
+                const TExprNode* userSchemaColumnsSetting = nullptr;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);
@@ -316,13 +317,16 @@ public:
                         *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
                     } else if (name == UserSchemaColumnsSetting) {
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
-                            const TExprNode& list = maybeList.Cast().Ref();
-                            YQL_ENSURE(list.IsList(), "UserSchemaColumns must be a list of atoms");
-                            for (ui32 j = 0; j < list.ChildrenSize(); ++j) {
-                                YQL_ENSURE(list.Child(j)->IsAtom(), "UserSchemaColumns must be a list of atoms");
-                                srcDesc.AddUserSchemaColumns(TString(list.Child(j)->Content()));
-                            }
+                            userSchemaColumnsSetting = maybeList.Cast().Raw();
                         }
+                    }
+                }
+
+                if (format == "csv"sv && userSchemaColumnsSetting) {
+                    YQL_ENSURE(userSchemaColumnsSetting->IsList(), "UserSchemaColumns must be a list of atoms");
+                    for (ui32 j = 0; j < userSchemaColumnsSetting->ChildrenSize(); ++j) {
+                        YQL_ENSURE(userSchemaColumnsSetting->Child(j)->IsAtom(), "UserSchemaColumns must be a list of atoms");
+                        srcDesc.AddUserSchemaColumns(TString(userSchemaColumnsSetting->Child(j)->Content()));
                     }
                 }
 

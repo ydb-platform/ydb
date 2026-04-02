@@ -8,7 +8,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -23,27 +23,27 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <contrib/ydb/core/base/appdata_fwd.h>
-#include <contrib/ydb/core/fq/libs/events/events.h>
-#include <contrib/ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
-#include <contrib/ydb/public/sdk/cpp/adapters/issue/issue.h>
-#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
-#include <contrib/ydb/library/actors/core/actor.h>
-#include <contrib/ydb/library/actors/core/event_local.h>
-#include <contrib/ydb/library/actors/core/events.h>
-#include <contrib/ydb/library/actors/core/hfunc.h>
-#include <contrib/ydb/library/actors/core/log.h>
-#include <contrib/ydb/library/actors/log_backend/actor_log_backend.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/utility.h>
 #include <util/string/join.h>
-#include <contrib/ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/interconnect.h>
 
 #include <queue>
 #include <variant>

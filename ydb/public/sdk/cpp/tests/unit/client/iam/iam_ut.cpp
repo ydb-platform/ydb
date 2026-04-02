@@ -28,7 +28,7 @@ public:
             }
 
             THttpResponse resp(Server->StatusCode);
-            resp.SetContent(Server->Response);
+            resp.SetContent(TString{Server->Response});
             resp.OutTo(params.Output);
             return true;
         }

@@ -576,6 +576,8 @@ public:
     void DoReconciliation();
     void SendDiscovery(NActors::TActorId actorId);
 
+    void Log(const TString& s);
+
     NActors::TActorId NodeActorId;
     mutable std::mutex Mutex;
     mutable std::deque<std::shared_ptr<TOutputItem>> Queue;
@@ -627,6 +629,10 @@ public:
     std::atomic<ui64> FailureLossSend;
     std::atomic<ui64> FailureDoubleSend;
     std::atomic<ui64> FailureReconciliation;
+    mutable std::mutex LogMutex;
+    std::deque<TString> Logs;
+    bool ResendAsked = false;
+    std::atomic<bool> UpdateIgnored = false;
 };
 
 class TDebugNodeState : public TNodeState {

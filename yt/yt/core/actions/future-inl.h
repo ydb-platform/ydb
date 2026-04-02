@@ -1108,12 +1108,6 @@ bool TFutureBase<T>::IsSet() const
 }
 
 template <class T>
-const TErrorOr<T>& TFutureBase<T>::Get() const
-{
-    return BlockingGet();
-}
-
-template <class T>
 const TErrorOr<T>& TFutureBase<T>::BlockingGet() const
 {
     YT_ASSERT(Impl_);
@@ -1140,18 +1134,6 @@ bool TFutureBase<T>::BlockingWait(TInstant deadline) const
 {
     YT_ASSERT(Impl_);
     return Impl_->BlockingWait(deadline);
-}
-
-template <class T>
-bool TFutureBase<T>::Wait(TDuration timeout) const
-{
-    return BlockingWait(timeout);
-}
-
-template <class T>
-bool TFutureBase<T>::Wait(TInstant deadline) const
-{
-    return BlockingWait(deadline);
 }
 
 template <class T>
@@ -1450,12 +1432,6 @@ inline TFuture<void>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<void>> im
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TErrorOr<T> TUniqueFutureBase<T>::Get() const
-{
-    return BlockingGet();
-}
-
-template <class T>
 TErrorOr<T> TUniqueFutureBase<T>::BlockingGet() const
 {
     YT_ASSERT(this->Impl_);
@@ -1641,12 +1617,6 @@ inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
     OnCanceled(BIND_NO_PROPAGATE([anotherCancelable = another.AsCancelable()] (const TError& error) {
         anotherCancelable.Cancel(error);
     }));
-}
-
-template <class T>
-const TErrorOr<T>& TPromiseBase<T>::Get() const
-{
-    return BlockingGet();
 }
 
 template <class T>

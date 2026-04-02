@@ -715,7 +715,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_no_header(self, kikimr, s3, client, unique_prefix):
-        self.create_bucket_and_upload_file("test_no_header.csv", s3.s3_url, "fbucket")
+        self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -745,7 +745,7 @@ Pear,15,33'''
         # Same file as test_csv_format_no_header (3 columns, no header row).
         # Request a single column that is not the first in alphabetical order
         # (Fruit < Price < Weight тЖТ Price is the middle column).
-        self.create_bucket_and_upload_file("test_no_header.csv", s3.s3_url, "fbucket")
+        self.create_bucket_and_upload_file("test_no_header.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")

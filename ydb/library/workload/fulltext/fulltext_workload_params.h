@@ -21,12 +21,12 @@ namespace NYdbWorkload {
         void Init() override;
 
         TString TableName = "fulltext_workload";
-        TString IndexName = "fulltext_index";
-        TString IndexType = "fulltext_plain";
+        TString IndexName = "index";
+        TString IndexType = "fulltext_relevance";
         THashSet<TString> IndexParams;
 
-        ui64 MinPartitions = 4;
-        ui64 PartitionSizeMb = 100;
+        ui64 MinPartitions = 40;
+        ui64 PartitionSizeMb = 2000;
         bool AutoPartitioningByLoad = true;
 
         TString QueryTable;

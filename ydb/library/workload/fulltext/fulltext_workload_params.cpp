@@ -9,7 +9,7 @@ namespace NYdbWorkload {
     void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
         switch (commandType) {
             case TWorkloadParams::ECommandType::Root:
-                opts.AddLongOption("path", "Path to workload table.")
+                opts.AddLongOption("table", "Path to workload table.")
                     .DefaultValue(TableName)
                     .StoreResult(&TableName);
                 break;
@@ -25,7 +25,7 @@ namespace NYdbWorkload {
                     .StoreResult(&AutoPartitioningByLoad);
                 break;
             case TWorkloadParams::ECommandType::Import:
-                opts.AddLongOption("index-name", "Fulltext index name.")
+                opts.AddLongOption("index", "Fulltext index name.")
                     .DefaultValue(IndexName)
                     .StoreResult(&IndexName);
                 opts.AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance).")

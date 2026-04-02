@@ -5,9 +5,8 @@ import datetime
 import os
 import time
 import ydb
+import numpy as np
 import pandas as pd
-from collections import Counter
-from multiprocessing import Pool, cpu_count
 from ydb_wrapper import YDBWrapper
 
 
@@ -54,9 +53,13 @@ def create_tables(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def process_test_group(name, group, last_day_data, default_start_date):
+def process_test_group(name, group, last_day_lookup, default_start_date):
+    """Processes data for a single test group (by full_name).
+
+    Used for multi-day backfill where sequential state tracking is needed.
+    ``last_day_lookup`` is a dict {full_name: {col: val, …}} for O(1) access.
+    """
     state_list_for_filter = ['Muted', 'Muted Flaky', 'Muted Stable', 'Flaky', 'Passed']
-    """Processes data for a single test group (by full_name)."""
 
     previous_state_list = []
     state_change_date_list = []
@@ -71,25 +74,23 @@ def process_test_group(name, group, last_day_data, default_start_date):
     days_in_state_filtered_list = []
     state_filtered_list = []
 
-    # Get 'days_in_state' for the last existing day for the current test
-    if last_day_data is not None and last_day_data[last_day_data['full_name'] == name].shape[0] > 0:
-        prev_state = last_day_data[last_day_data['full_name'] == name]['state'].iloc[0]
-        prev_date = last_day_data[last_day_data['full_name'] == name]['state_change_date'].iloc[0]
-        current_days_in_state = last_day_data[last_day_data['full_name'] == name]['days_in_state'].iloc[0]
-        
-        prev_mute_state = last_day_data[last_day_data['full_name'] == name]['is_muted'].iloc[0]
-        prev_mute_date = last_day_data[last_day_data['full_name'] == name]['mute_state_change_date'].iloc[0]
-        current_days_in_mute_state = last_day_data[last_day_data['full_name'] == name]['days_in_mute_state'].iloc[0]
-        
-        prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['state_filtered'].iloc[0]
-        prev_date_filtered = last_day_data[last_day_data['full_name'] == name]['state_change_date_filtered'].iloc[0]
-        current_days_in_state_filtered = last_day_data[last_day_data['full_name'] == name][
-            'days_in_state_filtered'
-        ].iloc[0]
+    prev = last_day_lookup.get(name)
+    if prev is not None:
+        prev_state = prev['state']
+        prev_date = prev['state_change_date']
+        current_days_in_state = prev['days_in_state']
 
-        saved_prev_state = last_day_data[last_day_data['full_name'] == name]['previous_state'].iloc[0]
-        saved_prev_mute_state= last_day_data[last_day_data['full_name'] == name]['previous_mute_state'].iloc[0]
-        saved_prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
+        prev_mute_state = prev['is_muted']
+        prev_mute_date = prev['mute_state_change_date']
+        current_days_in_mute_state = prev['days_in_mute_state']
+
+        prev_state_filtered = prev['state_filtered']
+        prev_date_filtered = prev['state_change_date_filtered']
+        current_days_in_state_filtered = prev['days_in_state_filtered']
+
+        saved_prev_state = prev['previous_state']
+        saved_prev_mute_state = prev['previous_mute_state']
+        saved_prev_state_filtered = prev['previous_state_filtered']
     else:
         prev_state = 'no_runs'
         prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
@@ -168,53 +169,6 @@ def process_test_group(name, group, last_day_data, default_start_date):
     }
 
 
-def determine_state(row):
-    history_class = row['history_class']
-    is_muted = row['is_muted']
-
-    if is_muted == 1:
-        if 'mute' in history_class or 'failure' in history_class:
-            return 'Muted Flaky'
-        elif 'pass' in history_class and not 'failure' in history_class and not 'mute' in history_class :
-            return 'Muted Stable'
-        elif 'skipped' in history_class:
-            return 'Skipped'
-        else:
-            return 'no_runs'
-    else:
-        if 'failure' in history_class and 'mute' not in history_class:
-            return 'Flaky'
-        elif 'mute' in history_class:
-            return 'Muted'
-        elif 'pass' in history_class:
-            return 'Passed'
-        elif 'skipped' in history_class:
-            return 'Skipped'
-        else:
-            return 'no_runs'
-
-
-def calculate_success_rate(row):
-    total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
-    if total_count == 0:
-        return 0.0
-    else:
-        return (row['pass_count'] / total_count) * 100
-
-
-def calculate_summary(row):
-    return (
-        'Pass:'
-        + str(row['pass_count'])
-        + ' Fail:'
-        + str(row['fail_count'])
-        + ' Mute:'
-        + str(row['mute_count'])
-        + ' Skip:'
-        + str(row['skip_count'])
-    )
-
-
 def compute_owner(owner):
     if not owner or owner == '':
         return 'Unknown'
@@ -241,20 +195,7 @@ def main():
     parser.add_argument('--start-date', dest='start_date', type=str, help='Start date (YYYY-MM-DD), inclusive')
     parser.add_argument('--end-date', dest='end_date', type=str, help='End date (YYYY-MM-DD), inclusive')
 
-    parser.add_argument(
-        '--concurent',
-        dest='concurrent_mode',
-        action='store_true',
-        default=True,
-        help='Set concurrent mode to true (default).',
-    )
-
-    parser.add_argument(
-        '--no-concurrent', dest='concurrent_mode', action='store_false', help='Set concurrent mode to false.'
-    )
-
     args, unknown = parser.parse_known_args()
-    # Always use 1 day window
     history_for_n_day = 1
     build_type = args.build_type
     branch = args.branch
@@ -262,7 +203,6 @@ def main():
     end_date_override = datetime.date.fromisoformat(args.end_date) if args.end_date else None
     if start_date_override and end_date_override and start_date_override > end_date_override:
         raise ValueError("start-date must be earlier or equal to end-date")
-    concurrent_mode = args.concurrent_mode
     
     if start_date_override:
         print(f"➡️  Start date override: {start_date_override}")
@@ -528,25 +468,17 @@ def main():
 
         start_time = time.time()
         df = pd.DataFrame(data)
-        # **Concatenate DataFrames**
+
+        # Build dict lookup from last day (O(1) per test instead of O(N) DataFrame scan)
+        last_day_lookup = {}
         if last_exist_df is not None and last_exist_df.shape[0] > 0:
-            last_day_data = last_exist_df[
-                [
-                    'full_name',
-                    'days_in_state',
-                    'state',
-                    'previous_state',
-                    'state_change_date',
-                    'is_muted',
-                    'days_in_mute_state',
-                    'previous_mute_state',
-                    'mute_state_change_date',
-                    'days_in_state_filtered',
-                    'state_change_date_filtered',
-                    'previous_state_filtered',
-                    'state_filtered',
-                ]
+            prev_cols = [
+                'full_name', 'state', 'previous_state', 'state_change_date', 'days_in_state',
+                'is_muted', 'previous_mute_state', 'mute_state_change_date', 'days_in_mute_state',
+                'state_filtered', 'previous_state_filtered', 'state_change_date_filtered',
+                'days_in_state_filtered',
             ]
+            last_day_lookup = last_exist_df[prev_cols].set_index('full_name').to_dict('index')
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
@@ -558,43 +490,126 @@ def main():
         print(f'Dataframe sorted: {end_time - start_time}')
         start_time = time.time()
 
-        df['success_rate'] = df.apply(calculate_success_rate, axis=1).astype(int)
-        df['summary'] = df.apply(calculate_summary, axis=1)
+        # Vectorized base params (replaces per-row apply)
+        total = df['pass_count'] + df['mute_count'] + df['fail_count']
+        df['success_rate'] = np.where(total > 0, df['pass_count'] / total * 100, 0).astype(int)
+
+        df['summary'] = (
+            'Pass:' + df['pass_count'].astype(str)
+            + ' Fail:' + df['fail_count'].astype(str)
+            + ' Mute:' + df['mute_count'].astype(str)
+            + ' Skip:' + df['skip_count'].astype(str)
+        )
+
         df['owner'] = df['owners'].apply(compute_owner)
-        df['is_test_chunk'] = df['full_name'].str.contains(']? chunk|sole chunk|chunk chunk|chunk\+chunk', regex=True).astype(int)
+
+        df['is_test_chunk'] = df['full_name'].str.contains(
+            ']? chunk|sole chunk|chunk chunk|chunk\\+chunk', regex=True,
+        ).astype(int)
         df['is_muted'] = df['is_muted'].fillna(0).astype(int)
-        df['success_rate'].astype(int)
-        df['state'] = df.apply(determine_state, axis=1)
+
+        # Vectorized state: (is_muted, history_class) -> state
+        hc = df['history_class'].fillna('')
+        im = df['is_muted']
+        has_mute    = hc.str.contains('mute', na=False)
+        has_failure = hc.str.contains('failure', na=False)
+        has_pass    = hc.str.contains('pass', na=False)
+        has_skipped = hc.str.contains('skipped', na=False)
+        muted       = (im == 1)
+        not_muted   = ~muted
+
+        #                    condition                          -> state
+        state_conditions = [
+            (muted     & (has_mute | has_failure),               'Muted Flaky'),
+            (muted     & has_pass & ~has_failure & ~has_mute,    'Muted Stable'),
+            (muted     & has_skipped,                            'Skipped'),
+            (muted,                                              'no_runs'),
+            (not_muted & has_failure & ~has_mute,                'Flaky'),
+            (not_muted & has_mute,                               'Muted'),
+            (not_muted & has_pass,                               'Passed'),
+            (not_muted & has_skipped,                            'Skipped'),
+        ]
+        df['state'] = np.select(
+            [cond for cond, _ in state_conditions],
+            [name for _, name in state_conditions],
+            default='no_runs',
+        )
 
         end_time = time.time()
         print(f'Computed base params: {end_time - start_time}')
         start_time = time.time()
 
-        if concurrent_mode:
-            with Pool(processes=cpu_count()) as pool:
-                results = pool.starmap(
-                    process_test_group,
-                    [(name, group, last_day_data, default_start_date) for name, group in df.groupby('full_name')],
-                )
-                end_time = time.time()
-                print(
-                    f'Computed days_in_state, state_change_date, previous_state and other params: {end_time - start_time}'
-                )
-                start_time = time.time()
-                # Apply results to the DataFrame
-                for i, (name, group) in enumerate(df.groupby('full_name')):
-                    df.loc[group.index, 'previous_state'] = results[i]['previous_state']
-                    df.loc[group.index, 'state_change_date'] = results[i]['state_change_date']
-                    df.loc[group.index, 'days_in_state'] = results[i]['days_in_state']
-                    df.loc[group.index, 'previous_mute_state'] = results[i]['previous_mute_state']
-                    df.loc[group.index, 'mute_state_change_date'] = results[i]['mute_state_change_date']
-                    df.loc[group.index, 'days_in_mute_state'] = results[i]['days_in_mute_state']
-                    df.loc[group.index, 'previous_state_filtered'] = results[i]['previous_state_filtered']
-                    df.loc[group.index, 'state_change_date_filtered'] = results[i]['state_change_date_filtered']
-                    df.loc[group.index, 'days_in_state_filtered'] = results[i]['days_in_state_filtered']
-                    df.loc[group.index, 'state_filtered'] = results[i]['state_filtered']
+        # State tracking (days_in_state, transitions, etc.)
+        default_dt = datetime.datetime(
+            default_start_date.year, default_start_date.month, default_start_date.day,
+        )
+        num_dates = len(date_list)
+
+        if num_dates == 1:
+            # Fast path: single day → one row per test, fully vectorized via merge
+            _STATE_FILTER_SET = {'Muted', 'Muted Flaky', 'Muted Stable', 'Flaky', 'Passed'}
+
+            defaults = {
+                'prev_state': 'no_runs',
+                'prev_previous_state': 'no_runs',
+                'prev_state_change_date': default_dt,
+                'prev_days_in_state': 0,
+                'prev_is_muted': 0,
+                'prev_previous_mute_state': 0,
+                'prev_mute_state_change_date': default_dt,
+                'prev_days_in_mute_state': 0,
+                'prev_state_filtered': 'no_runs',
+                'prev_previous_state_filtered': 'no_runs',
+                'prev_state_change_date_filtered': default_dt,
+                'prev_days_in_state_filtered': 0,
+            }
+
+            if last_day_lookup:
+                prev_df = pd.DataFrame.from_dict(last_day_lookup, orient='index')
+                prev_df.index.name = 'full_name'
+                prev_df = prev_df.add_prefix('prev_').reset_index()
+                df = df.merge(prev_df, on='full_name', how='left')
+                for col, val in defaults.items():
+                    df[col] = df[col].fillna(val)
+            else:
+                for col, val in defaults.items():
+                    df[col] = val
+
+            int_cols = [c for c, v in defaults.items() if isinstance(v, int)]
+            for col in int_cols:
+                df[col] = df[col].astype(int)
+
+            # State transitions
+            state_changed = df['state'] != df['prev_state']
+            df['previous_state'] = state_changed.map({True: None})
+            df['previous_state'] = df['prev_state'].where(state_changed, df['prev_previous_state'])
+            df['state_change_date'] = df['date_window'].where(state_changed, df['prev_state_change_date'])
+            df['days_in_state'] = np.where(state_changed, 1, df['prev_days_in_state'] + 1)
+
+            # Mute state transitions
+            mute_changed = df['is_muted'] != df['prev_is_muted']
+            df['previous_mute_state'] = df['prev_is_muted'].where(mute_changed, df['prev_previous_mute_state'])
+            df['mute_state_change_date'] = df['date_window'].where(mute_changed, df['prev_mute_state_change_date'])
+            df['days_in_mute_state'] = np.where(mute_changed, 1, df['prev_days_in_mute_state'] + 1)
+
+            # Filtered state transitions
+            in_filter = df['state'].isin(_STATE_FILTER_SET)
+            df['state_filtered'] = df['state'].where(in_filter, df['prev_state_filtered'])
+            filtered_changed = df['state_filtered'] != df['prev_state_filtered']
+            df['previous_state_filtered'] = df['prev_state_filtered'].where(
+                filtered_changed, df['prev_previous_state_filtered'],
+            )
+            df['state_change_date_filtered'] = df['date_window'].where(
+                filtered_changed, df['prev_state_change_date_filtered'],
+            )
+            df['days_in_state_filtered'] = np.where(
+                filtered_changed, 1, df['prev_days_in_state_filtered'] + 1,
+            )
+
+            df.drop(columns=[c for c in df.columns if c.startswith('prev_')], inplace=True)
 
         else:
+            # Multi-day backfill: sequential per-group processing with dict lookup
             previous_state_list = []
             state_change_date_list = []
             days_in_state_list = []
@@ -606,24 +621,18 @@ def main():
             days_in_state_filtered_list = []
             state_filtered_list = []
             for name, group in df.groupby('full_name'):
-                result = process_test_group(name, group, last_day_data, default_start_date)
-                previous_state_list = previous_state_list + result['previous_state']
-                state_change_date_list = state_change_date_list + result['state_change_date']
-                days_in_state_list = days_in_state_list + result['days_in_state']
-                previous_mute_state_list = previous_mute_state_list + result['previous_mute_state']
-                mute_state_change_date_list = mute_state_change_date_list + result['mute_state_change_date']
-                days_in_mute_state_list = days_in_mute_state_list + result['days_in_mute_state']
-                previous_state_filtered_list = previous_state_filtered_list + result['previous_state_filtered']
-                state_change_date_filtered_list = state_change_date_filtered_list + result['state_change_date_filtered']
-                days_in_state_filtered_list = days_in_state_filtered_list + result['days_in_state_filtered']
-                state_filtered_list = state_filtered_list + result['state_filtered']
+                result = process_test_group(name, group, last_day_lookup, default_start_date)
+                previous_state_list.extend(result['previous_state'])
+                state_change_date_list.extend(result['state_change_date'])
+                days_in_state_list.extend(result['days_in_state'])
+                previous_mute_state_list.extend(result['previous_mute_state'])
+                mute_state_change_date_list.extend(result['mute_state_change_date'])
+                days_in_mute_state_list.extend(result['days_in_mute_state'])
+                previous_state_filtered_list.extend(result['previous_state_filtered'])
+                state_change_date_filtered_list.extend(result['state_change_date_filtered'])
+                days_in_state_filtered_list.extend(result['days_in_state_filtered'])
+                state_filtered_list.extend(result['state_filtered'])
 
-            end_time = time.time()
-            print(
-                f'Computed days_in_state, state_change_date, previous_state and other params: {end_time - start_time}'
-            )
-            start_time = time.time()
-            # Apply results to the DataFrame
             df['previous_state'] = previous_state_list
             df['state_change_date'] = state_change_date_list
             df['days_in_state'] = days_in_state_list
@@ -636,7 +645,7 @@ def main():
             df['state_filtered'] = state_filtered_list
 
         end_time = time.time()
-        print(f'Saving computed result in dataframe: {end_time - start_time}')
+        print(f'Computed days_in_state, state_change_date, previous_state and other params: {end_time - start_time}')
         start_time = time.time()
 
         df['date_window'] = df['date_window'].dt.date

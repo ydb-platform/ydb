@@ -74,7 +74,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
-ydb/tests/functional/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
@@ -90,7 +89,6 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current_mixed-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current_mixed-column]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-column]

@@ -26,12 +26,15 @@ namespace NYdbWorkload {
     }
 
     void TFulltextWorkloadGenerator::LoadQueries() {
+        const TString limitClause = Params.TopSize != 0 ? std::format("LIMIT {}", Params.TopSize) : "";
         const TString selectQuery = std::format(
             R"sql(
             SELECT `query`
             FROM `{}`
+            {}
         )sql",
-            Params.GetFullTableName(Params.QueryTable.c_str()).c_str());
+            Params.GetFullTableName(Params.QueryTable.c_str()).c_str(),
+            limitClause.c_str());
 
         std::optional<NYdb::TResultSet> resultSet;
         NYdb::NStatusHelpers::ThrowOnError(Params.QueryClient->RetryQuerySync([&selectQuery, &resultSet](NYdb::NQuery::TSession session) {

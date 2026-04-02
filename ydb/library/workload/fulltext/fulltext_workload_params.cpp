@@ -45,6 +45,9 @@ namespace NYdbWorkload {
                         opts.AddLongOption("query-table", "Name of the table with predefined queries. The table must have a 'query' column.")
                             .DefaultValue("")
                             .StoreResult(&QueryTable);
+                        opts.AddLongOption("top-size", "Number of rows to sample from the table to build the query word set")
+                            .DefaultValue(TopSize)
+                            .StoreResult(&TopSize);
                         opts.AddLongOption("limit", "Limit rows in result set")
                             .DefaultValue(Limit)
                             .StoreResult(&Limit);

@@ -31,6 +31,22 @@ static void ExecQuery(TKikimrRunner& kikimr, bool useQueryService, const TString
     }
 }
 
+static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQueryService, const TString& query, TStringBuf needle) {
+    if (useQueryService) {
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains(needle),
+            "Expected error containing '" << needle << "', got: " << result.GetIssues().ToString());
+    } else {
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetIssues().ToString().contains(needle),
+            "Expected error containing '" << needle << "', got: " << result.GetIssues().ToString());
+    }
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateMinMaxIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -118,9 +134,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
-    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxIndexUsedInQueries, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-    Y_UNIT_TEST_DUO(MinMaxIndexUsedInQueries, UseQueryService) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
@@ -236,7 +251,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         
     }
 
-    Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -494,19 +510,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )";
 
         auto assertMixRejected = [&](const TString& alterQuery) {
-            if (UseQueryService) {
-                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
-                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().contains("cannot mix"),
-                    "Expected mix validation error, got: " << result.GetIssues().ToString());
-            } else {
-                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-                auto result = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().contains("cannot mix"),
-                    "Expected mix validation error, got: " << result.GetIssues().ToString());
-            }
+            ExecQueryExpectErrorContains(kikimr, UseQueryService, alterQuery, "cannot mix");
         };
 
         assertMixRejected(alterMixFilterSize);
@@ -855,19 +859,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 PARTITION BY HASH(timestamp, uid)
                 WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
 
-            if (UseQueryService) {
-                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
-                auto result = session.ExecuteQuery(createWithDeprecatedInNewSyntax, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().contains("filter_size_bytes"),
-                    "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
-            } else {
-                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-                auto result = session.ExecuteSchemeQuery(createWithDeprecatedInNewSyntax).GetValueSync();
-                UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-                UNIT_ASSERT_C(result.GetIssues().ToString().contains("filter_size_bytes"),
-                    "Expected deprecated parameter validation error, got: " << result.GetIssues().ToString());
-            }
+            ExecQueryExpectErrorContains(kikimr, UseQueryService, createWithDeprecatedInNewSyntax, "filter_size_bytes");
         }
 
         ExecQuery(kikimr, UseQueryService, R"(

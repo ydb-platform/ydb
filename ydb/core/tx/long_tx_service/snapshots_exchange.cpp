@@ -119,14 +119,14 @@ namespace {
         }
 
         void Handle(TParentEvent::TPtr& ev) {
-            if (!NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId())) {
-                return;
-            }
+            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const auto childActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
             TXLOG_DEBUG("Handling TParentEvent from " << ev->Sender
                 << " (NodeId: " << ev->Sender.NodeId()
                 << ", ChildActorId: " << childActorId << ")");
-            AFL_ENSURE(ChildToSubtree.contains(childActorId));
+            if (!ChildToSubtree.contains(childActorId)) {
+                return;
+            }
 
             ReceiveFromChild(ev->Get());
 
@@ -137,13 +137,13 @@ namespace {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-            if (!NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId)) {
-                return;
-            }
+            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Get()->NodeId));
             const auto failedActorId = NodeIdToTreeNodeActorId.at(ev->Get()->NodeId);
             TXLOG_DEBUG("Handling TEvNodeDisconnected for NodeId: " << ev->Get()->NodeId
                 << ". Failed actor ID: " << failedActorId);
-            AFL_ENSURE(ChildToSubtree.contains(failedActorId));
+            if (!ChildToSubtree.contains(failedActorId)) {
+                return;
+            }
 
             if (!RetrySubtree(failedActorId)) {
                 if (ChildToSubtree.empty()) {
@@ -153,17 +153,15 @@ namespace {
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-            if (!NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId())) {
-                return;
-            }
+            AFL_ENSURE(NodeIdToTreeNodeActorId.contains(ev->Sender.NodeId()));
             const TActorId failedActorId = NodeIdToTreeNodeActorId.at(ev->Sender.NodeId());
             TXLOG_DEBUG("Handling TEvents::TEvUndelivered from " << ev->Sender << ".");
-            AFL_ENSURE(ChildToSubtree.contains(failedActorId));
+            if (!ChildToSubtree.contains(failedActorId)) {
+                return;
+            }
 
             if (!RetrySubtree(failedActorId) && ChildToSubtree.empty()) {
-                if (ChildToSubtree.empty()) {
-                    PassAway();
-                }
+                PassAway();
             }
         }
 
@@ -171,19 +169,17 @@ namespace {
         bool RetrySubtree(TActorId childActorId) {
             THashSet<TActorId> subtree(ChildToSubtree.at(childActorId));
             ChildToSubtree.erase(childActorId);
-            NodeIdToTreeNodeActorId.erase(childActorId.NodeId());
             if (subtree.empty()) {
                 return false;
             }
             const TActorId newRoot = *subtree.begin();
             subtree.erase(newRoot);
-            ChildToSubtree[newRoot] = std::move(subtree);
-            AFL_ENSURE(NodeIdToTreeNodeActorId.emplace(newRoot.NodeId(), newRoot).second);
+            AFL_ENSURE(ChildToSubtree.emplace(newRoot, std::move(subtree)).second);
 
             TXLOG_DEBUG("Retrying subtree for child actor " << childActorId
                 << ". New root for subtree: " << newRoot
                 << ". Subtree size: " << ChildToSubtree.at(newRoot).size() << ".");
-            SendChildEvent(childActorId, ChildToSubtree.at(newRoot));
+            SendChildEvent(newRoot, ChildToSubtree.at(newRoot));
             return true;
         }
 

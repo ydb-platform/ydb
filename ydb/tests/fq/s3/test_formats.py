@@ -104,7 +104,6 @@ class TestS3Formats:
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
-            PRAGMA s3.UseBlocksSource="true";
             SELECT *
             FROM `{storage_connection_name}`.`{filename}`
             WITH (format=`{type_format}`, SCHEMA (
@@ -167,7 +166,6 @@ class TestS3Formats:
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f'''
-            PRAGMA s3.UseBlocksSource="true";
             SELECT
                 *
             FROM `{storage_connection_name}`.`btct.parquet`
@@ -283,7 +281,7 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_custom_csv_delimiter_format(self, kikimr, s3, client, unique_prefix):
+    def test_custom_csv_delimiter_csv_with_names(self, kikimr, s3, client, unique_prefix):
         fruits = '''Fruit;Price;Weight
     Banana;3;100
     Apple;2;22
@@ -298,6 +296,38 @@ Pear,15,33'''
                 FROM `{storage_connection_name}`.`fruits.csv`
                 WITH (
                     format = csv_with_names,
+                    csv_delimiter = ";",
+                    schema = (
+                        Fruit String NOT NULL,
+                        Price Int NOT NULL,
+                        Weight Int NOT NULL
+                    )
+                );
+                '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        self.validate_result(result_set)
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_custom_csv_delimiter_csv(self, kikimr, s3, client, unique_prefix):
+        """Same as test_custom_csv_delimiter_csv_with_names but format=csv (no header row; SCHEMA defines order)."""
+        fruits = '''Banana;3;100
+Apple;2;22
+Pear;15;33'''
+        self.create_bucket_and_upload_file_body(fruits, "fruits_sep.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "fruitbucket_csv"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+                SELECT *
+                FROM `{storage_connection_name}`.`fruits_sep.csv`
+                WITH (
+                    format = csv,
                     csv_delimiter = ";",
                     schema = (
                         Fruit String NOT NULL,
@@ -354,7 +384,6 @@ Pear,15,33'''
         """csv (no header row): SCHEMA fixes field order; SELECT b, a only reorders output columns.
 
         Same idea as streaming test_read_topic_csv_projection_column_order.
-        UseBlocksSource enables TS3ParseSettings path with columns_list тЖТ ClickHouseClient.ParseFormat.
         """
         self.create_bucket_and_upload_file_body("aa,bb", "headerless_two_cols.csv", s3, kikimr)
 
@@ -362,7 +391,6 @@ Pear,15,33'''
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f"""
-            PRAGMA s3.UseBlocksSource="true";
             SELECT b, a
             FROM `{storage_connection_name}`.`headerless_two_cols.csv`
             WITH (
@@ -387,6 +415,39 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_empty_schema_rejected(self, kikimr, s3, client, unique_prefix):
+        """csv (headerless): SCHEMA = () тАФ ╨╜╨╡╤В ╨╕╨╝╤С╨╜ ╨║╨╛╨╗╨╛╨╜╨╛╨║ ╨┤╨╗╤П ╨┐╨╛╤А╤П╨┤╨║╨░ ╨┐╨╛╨╗╨╡╨╣ ╨▓ ╤Д╨░╨╣╨╗╨╡."""
+        self.create_bucket_and_upload_file_body("x", "empty_schema.csv", s3, kikimr)
+
+        storage_connection_name = unique_prefix + "emptyschemabucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f"""
+            SELECT *
+            FROM `{storage_connection_name}`.`empty_schema.csv`
+            WITH (
+                format = csv,
+                SCHEMA = ()
+            );
+            """
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        describe_result = client.describe_query(query_id).result
+        stack = list(describe_result.query.issue[0].issues)
+        issue_messages = []
+        while stack:
+            iss = stack.pop()
+            issue_messages.append(iss.message)
+            stack.extend(iss.issues)
+        describe_string = " ".join(issue_messages)
+        assert (
+            "csv format requires SCHEMA with explicitly listed column names to determine column order"
+            in describe_string
+        )
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_projection_single_column(self, kikimr, s3, client, unique_prefix):
         """csv (no header): full SCHEMA (a,b) and two fields in file; SELECT only one column (b).
 
@@ -398,7 +459,6 @@ Pear,15,33'''
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f"""
-            PRAGMA s3.UseBlocksSource="true";
             SELECT b
             FROM `{storage_connection_name}`.`headerless_select_one_col.csv`
             WITH (
@@ -432,7 +492,6 @@ Pear,15,33'''
         client.create_storage_connection(storage_connection_name, "fbucket")
 
         sql = f"""
-            PRAGMA s3.UseBlocksSource="true";
             SELECT a, b
             FROM `{storage_connection_name}`.`headerless_b_a.csv`
             WITH (

@@ -4,7 +4,10 @@
 
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 #include <ydb/services/persqueue_v1/actors/write_session_actor.h>
+
+#include <util/stream/buffer.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 
@@ -42,10 +45,13 @@ class TLocalTopicWriteSessionActor final
 public:
     struct TSessionEvents final : public TBase::TSessionEvents {
         struct TEvWriteMessage : public TEventLocal<TEvWriteMessage, TEvWriteSession::EvWriteMessage> {
-            TEvWriteMessage(TContinuationToken&& continuationToken, TWriteMessage&& message)
+            // overrideData is used when the caller pre-compresses the payload;
+            // if empty the data is copied from message.Data as-is.
+            TEvWriteMessage(TContinuationToken&& continuationToken, TWriteMessage&& message,
+                            TString overrideData = {})
                 : ContinuationToken(std::move(continuationToken))
                 , Message(std::move(message))
-                , Data(Message.Data)
+                , Data(overrideData.empty() ? TString(Message.Data) : std::move(overrideData))
             {}
 
             TContinuationToken ContinuationToken;
@@ -324,7 +330,7 @@ private:
 
 // Supposed to be used from actor system, so all blocking methods are not supported.
 // Write session is not thread safe and MUST be used from single actor.
-// NOTICE: data compression is not supported.
+// Supports RAW, GZIP and ZSTD codecs; compression is performed on the client side inside Write().
 class TLocalTopicWriteSession final : public TLocalTopicSessionBase<TWriteSessionEvent::TEvent>, public IWriteSession {
     using TBase = TLocalTopicSessionBase<TWriteSessionEvent::TEvent>;
     using TWriteEvents = TLocalTopicWriteSessionActor::TSessionEvents;
@@ -335,6 +341,8 @@ public:
         , Counters(SetupCounters(sessionSettings))
         , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(true))
         , ValidateSeqNo(sessionSettings.ValidateSeqNo_)
+        , SessionCodec(sessionSettings.Codec_)
+        , CompressionLevel(sessionSettings.CompressionLevel_)
     {
         ValidateSettings(sessionSettings);
         Start(sessionSettings);
@@ -417,7 +425,22 @@ public:
             UseAutoSeqNo();
         }
 
-        ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(std::move(continuationToken), std::move(message)));
+        if (!message.Compressed() && SessionCodec != ECodec::RAW) {
+            const uint32_t originalSize = static_cast<uint32_t>(message.Data.size());
+            TBuffer compressed;
+            const auto* codec = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<uint32_t>(SessionCodec));
+            auto coder = codec->CreateCoder(compressed, CompressionLevel);
+            coder->Write(message.Data.data(), message.Data.size());
+            coder->Finish();
+            message.Codec = SessionCodec;
+            message.OriginalSize = originalSize;
+            TString compressedData(compressed.Data(), compressed.Size());
+            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(
+                std::move(continuationToken), std::move(message), std::move(compressedData)));
+        } else {
+            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(
+                std::move(continuationToken), std::move(message)));
+        }
     }
 
     void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {
@@ -472,7 +495,8 @@ private:
     static void ValidateSettings(const TWriteSessionSettings& settings) {
         TBase::ValidateSettings(settings);
 
-        Y_VALIDATE(settings.Codec_ == ECodec::RAW, "Compression is not supported for local topic write session");
+        Y_VALIDATE(settings.Codec_ == ECodec::RAW || settings.Codec_ == ECodec::GZIP || settings.Codec_ == ECodec::ZSTD,
+                   "Only RAW, GZIP and ZSTD codecs are supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushInterval_, "BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 
@@ -529,6 +553,8 @@ private:
     const TWriterCounters::TPtr Counters;
     const bool DeduplicationEnabled = true;
     const bool ValidateSeqNo = true;
+    const ECodec SessionCodec;
+    const int32_t CompressionLevel;
     std::optional<bool> AutoSeqNo;
     TActorId WriteSessionActor;
     std::optional<NThreading::TPromise<uint64_t>> InitSeqNoPromise;

@@ -108,6 +108,7 @@ message TDqPqTopicSink {
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
     bool EnableDeduplication = 9;
+    string Codec = 10; // empty = use default (GZIP for PersQueue, RAW for DataStreams)
 }
 
 message TEvDqPqUpdateCounterValue {

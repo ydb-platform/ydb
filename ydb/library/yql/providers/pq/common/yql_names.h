@@ -23,5 +23,6 @@ constexpr TStringBuf ReadGroup = "ReadGroup";
 constexpr TStringBuf SkipJsonErrors = "SkipJsonErrors";
 constexpr TStringBuf StreamingTopicRead = "StreamingTopicRead";
 constexpr TStringBuf PartitionsBalancingIdleTimeoutUsSetting = "PartitionsBalancingIdleTimeoutUs";
+constexpr TStringBuf CodecSetting = "Codec";
 
 } // namespace NYql

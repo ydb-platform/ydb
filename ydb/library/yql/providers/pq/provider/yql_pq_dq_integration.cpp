@@ -158,6 +158,7 @@ public:
             .DataSink(write.DataSink())
             .Topic(write.Topic())
             .Input(write.Input())
+            .Settings(write.Settings())
             .Done().Ptr();
     }
 
@@ -425,6 +426,8 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == CodecSetting) {
+                        sinkDesc.SetCodec(TString(Value(setting)));
                     }
                 }
 

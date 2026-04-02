@@ -1,3 +1,4 @@
+import gzip as gzip_module
 import logging
 import pytest
 import random
@@ -8,6 +9,7 @@ import ydb
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream_with_codec
 
 logger = logging.getLogger(__name__)
 
@@ -574,6 +576,79 @@ class TestStreamingInYdb(StreamingTestBase):
         assert len(readed_data) == 10
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_write_with_codec(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "test_write_with_codec", local_topics, entity_name)
+
+        query_name = "test_write_with_codec_" + ("local" if local_topics else "remote")
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (FORMAT="json_each_row", SCHEMA=(time String NOT NULL));
+                INSERT INTO {out} WITH (codec = "raw") SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
+        self.write_stream(['{"time": "test_value"}'], endpoint=endpoint)
+
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["test_value"]
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_write_with_codec_verify_compression(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "test_write_codec_verify", local_topics, entity_name)
+
+        query_name = "test_write_codec_verify_" + ("local" if local_topics else "remote")
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (FORMAT="json_each_row", SCHEMA=(time String NOT NULL));
+                INSERT INTO {out} WITH (codec = "gzip") SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
+        self.write_stream(['{"time": "test_value"}'], endpoint=endpoint)
+
+        # Read raw compressed bytes тАФ identity decoder keeps batch._codec intact
+        GZIP_CODEC = 2
+        ep = endpoint if endpoint is not None else kikimr.endpoint
+        wire_codec, raw_messages = read_stream_with_codec(
+            self.output_topic, 1, self.consumer_name,
+            ep.endpoint, ep.database)
+
+        # 1. Verify that GZIP codec tag is present on the wire
+        assert wire_codec == GZIP_CODEC, f"Expected GZIP codec ({GZIP_CODEC}), got {wire_codec}"
+
+        # 2. Manually decompress with Python's standard gzip and verify payload
+        decompressed = gzip_module.decompress(raw_messages[0]).decode()
+        assert decompressed == "test_value"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    def test_write_invalid_codec(self, kikimr, entity_name):
+        inp, out, _ = self.get_io_names(
+            kikimr, "test_invalid_codec", local_topics=True, entity_name=entity_name)
+
+        sql = R'''
+            CREATE STREAMING QUERY `test_invalid_codec` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (FORMAT="json_each_row", SCHEMA=(time String NOT NULL));
+                INSERT INTO {out} WITH (codec = "unknown_codec") SELECT time FROM $in;
+            END DO;'''
+
+        with pytest.raises(Exception, match="Invalid codec value"):
+            kikimr.ydb_client.query(sql.format(inp=inp, out=out))
 
     @pytest.mark.parametrize(
         "kikimr",

@@ -7,6 +7,7 @@ import os
 import uuid
 
 import yatest.common
+import ydb
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.public.api.grpc.draft import ydb_datastreams_v1_pb2_grpc
@@ -84,3 +85,46 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
 
     logging.info("Data was read from {}: {}".format(path, ret))
     return ret
+
+
+def read_stream_with_codec(topic_path, count, consumer_name, endpoint, database, timeout=10):
+    """Read *count* messages without decompression.
+
+    Uses identity decoders so that the SDK does not decompress the payload and
+    ``batch._codec`` retains the original wire codec value (normally the SDK
+    overwrites it to CODEC_RAW=1 after decompression).
+
+    Returns (wire_codec_int, list_of_raw_bytes) where wire_codec_int is the
+    codec tag observed on the first batch (e.g. 2 for GZIP, 4 for ZSTD).
+    """
+    identity = lambda data: data  # noqa: E731 тАФ keep as lambda for clarity
+    # Map all known non-RAW codecs to identity so we receive compressed bytes
+    GZIP_CODEC = 2
+    ZSTD_CODEC = 4
+    decoders = {GZIP_CODEC: identity, ZSTD_CODEC: identity}
+
+    grpc_endpoint = endpoint if endpoint.startswith("grpc") else f"grpc://{endpoint}"
+    driver_config = ydb.DriverConfig(grpc_endpoint, database, auth_token="root@builtin")
+    driver = ydb.Driver(driver_config)
+    driver.wait(timeout=5)
+
+    wire_codec = None
+    raw_messages = []
+    try:
+        with driver.topic_client.reader(
+            topic_path,
+            consumer=consumer_name,
+            decoders=decoders,
+        ) as reader:
+            while len(raw_messages) < count:
+                batch = reader.receive_batch(timeout=timeout)
+                if batch is None:
+                    break
+                if wire_codec is None:
+                    wire_codec = int(batch._codec)
+                raw_messages.extend(msg.data for msg in batch.messages)
+    finally:
+        driver.stop()
+
+    logging.info("Read %d messages with codec=%s from %s", len(raw_messages), wire_codec, topic_path)
+    return wire_codec, raw_messages

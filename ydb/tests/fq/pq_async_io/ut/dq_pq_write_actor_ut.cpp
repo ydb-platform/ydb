@@ -1,4 +1,5 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor_ut.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -137,6 +138,74 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
             UNIT_ASSERT(future.Wait(WaitTimeout));
             state1 = future.GetValue();
         }
+    }
+
+    Y_UNIT_TEST(TestParseCodecString) {
+        using NYdb::NTopic::ECodec;
+        using NPrivate::ParseCodecString;
+
+        // codec name only тЖТ nullopt level
+        {
+            auto [codec, level] = ParseCodecString("zstd");
+            UNIT_ASSERT_EQUAL(codec, ECodec::ZSTD);
+            UNIT_ASSERT(!level.has_value());
+        }
+        // codec + level
+        {
+            auto [codec, level] = ParseCodecString("zstd_6");
+            UNIT_ASSERT_EQUAL(codec, ECodec::ZSTD);
+            UNIT_ASSERT(level.has_value());
+            UNIT_ASSERT_EQUAL(*level, 6);
+        }
+        // case-insensitive
+        {
+            auto [codec, level] = ParseCodecString("GZIP_3");
+            UNIT_ASSERT_EQUAL(codec, ECodec::GZIP);
+            UNIT_ASSERT(level.has_value());
+            UNIT_ASSERT_EQUAL(*level, 3);
+        }
+        // raw, no level
+        {
+            auto [codec, level] = ParseCodecString("raw");
+            UNIT_ASSERT_EQUAL(codec, ECodec::RAW);
+            UNIT_ASSERT(!level.has_value());
+        }
+        // lzop
+        {
+            auto [codec, level] = ParseCodecString("lzop");
+            UNIT_ASSERT_EQUAL(codec, ECodec::LZOP);
+            UNIT_ASSERT(!level.has_value());
+        }
+        // gzip without level
+        {
+            auto [codec, level] = ParseCodecString("gzip");
+            UNIT_ASSERT_EQUAL(codec, ECodec::GZIP);
+            UNIT_ASSERT(!level.has_value());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestWriteToTopicWithZstdCodecVerifyCompression, TPqIoTestFixture) {
+        const TString topicName = "WriteWithZstdCodecVerify";
+        PQCreateStreamWithCodecs(topicName, {NYdb::NTopic::ECodec::RAW, NYdb::NTopic::ECodec::ZSTD});
+
+        // Second consumer for codec inspection (reads without decompression)
+        AddConsumerWithCodecs(topicName, "codec_checker",
+                              {NYdb::NTopic::ECodec::RAW, NYdb::NTopic::ECodec::ZSTD});
+
+        auto settings = BuildPqTopicSinkSettings(topicName);
+        settings.SetCodec("zstd_6");
+        InitAsyncOutput(std::move(settings));
+
+        const std::vector<TString> data = {"hello", "world"};
+        AsyncOutputWrite(data);
+
+        // 1. Verify the codec tag on the wire is ZSTD
+        auto codecResult = PQReadUntilWithCodec(topicName, data.size(), "codec_checker");
+        UNIT_ASSERT_EQUAL(codecResult.Codec, NYdb::NTopic::ECodec::ZSTD);
+
+        // 2. Verify decompressed payload is correct (default consumer, auto-decompression)
+        auto plainResult = PQReadUntil(topicName, data.size());
+        UNIT_ASSERT_EQUAL(plainResult, data);
     }
 }
 

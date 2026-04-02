@@ -30,6 +30,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/python/zstandard
     ydb/tests/library
     ydb/tests/library/test_meta
     ydb/public/sdk/python

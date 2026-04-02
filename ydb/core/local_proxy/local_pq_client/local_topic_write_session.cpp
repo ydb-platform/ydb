@@ -425,6 +425,7 @@ public:
             UseAutoSeqNo();
         }
 
+        TString compressedData;
         if (!message.Compressed() && SessionCodec != ECodec::RAW) {
             const uint32_t originalSize = static_cast<uint32_t>(message.Data.size());
             TBuffer compressed;
@@ -434,13 +435,10 @@ public:
             coder->Finish();
             message.Codec = SessionCodec;
             message.OriginalSize = originalSize;
-            TString compressedData(compressed.Data(), compressed.Size());
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(
-                std::move(continuationToken), std::move(message), std::move(compressedData)));
-        } else {
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(
-                std::move(continuationToken), std::move(message)));
+            compressedData = TString(compressed.Data(), compressed.Size());
         }
+        ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvWriteMessage(
+            std::move(continuationToken), std::move(message), std::move(compressedData)));
     }
 
     void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) final {

@@ -4,6 +4,10 @@ import pytest
 import random
 import string
 import time
+import zstandard
+
+_GZIP_MAGIC = b'\x1f\x8b'
+_ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
 
 import ydb
 
@@ -643,6 +647,55 @@ class TestStreamingInYdb(StreamingTestBase):
             assert raw_messages[0][:2] == b'\x1f\x8b', \
                 "Expected GZIP magic bytes in raw payload тАФ data does not appear to be GZIP-compressed"
             decompressed = gzip_module.decompress(raw_messages[0]).decode()
+            assert decompressed == "test_value"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize("codec_str", ["gzip_5", "zstd_6"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_write_with_codec_and_level(self, kikimr, entity_name, local_topics, codec_str):
+        base_codec = codec_str.split("_")[0]
+        topic_suffix = codec_str.replace("_", "") + "_" + ("local" if local_topics else "remote")
+        inp, out, endpoint = self.get_io_names(
+            kikimr, f"test_codec_lvl_{topic_suffix}", local_topics, entity_name)
+
+        query_name = f"test_codec_lvl_{topic_suffix}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (FORMAT="json_each_row", SCHEMA=(time String NOT NULL));
+                INSERT INTO {out} WITH (codec = "{codec_str}") SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(
+            sql.format(query_name=query_name, inp=inp, out=out, codec_str=codec_str))
+        self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+
+        self.write_stream(['{"time": "test_value"}'], endpoint=endpoint)
+
+        if local_topics:
+            # pq_read auto-decompresses; a successful read proves the compressed
+            # write path (including the level suffix) works end-to-end.
+            result = self.read_stream(1, endpoint=endpoint)
+            assert result == ["test_value"], f"Unexpected result: {result}"
+        else:
+            ep = endpoint if endpoint is not None else kikimr.endpoint
+            raw_messages = read_stream_raw(
+                self.output_topic, 1, self.consumer_name,
+                ep.endpoint, ep.database)
+
+            if base_codec == "gzip":
+                assert raw_messages[0][:2] == _GZIP_MAGIC, \
+                    "Expected GZIP magic bytes тАФ payload does not appear to be GZIP-compressed"
+                decompressed = gzip_module.decompress(raw_messages[0]).decode()
+            elif base_codec == "zstd":
+                assert raw_messages[0][:4] == _ZSTD_MAGIC, \
+                    "Expected ZSTD magic bytes тАФ payload does not appear to be ZSTD-compressed"
+                decompressed = zstandard.ZstdDecompressor().decompress(raw_messages[0]).decode()
+            else:
+                raise AssertionError(f"Unhandled codec in test: {base_codec}")
+
             assert decompressed == "test_value"
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

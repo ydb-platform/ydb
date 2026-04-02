@@ -1,3 +1,4 @@
+#include "codec_string.h"
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
@@ -104,45 +105,6 @@ TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {
 
 } // anonymous namespace
 
-namespace NPrivate {
-
-// Parses a codec string of the form "<name>[_<level>]" into (ECodec, optional level).
-// The codec name is matched case-insensitively. The optional suffix "_N" (N > 0) is
-// the compression level. The caller must ensure the string is already validated by the
-// optimizer regex, so unknown names are treated as a programming error (Y_ABORT).
-std::pair<NYdb::NTopic::ECodec, std::optional<int>> ParseCodecString(TStringBuf str) {
-    // Split on the last '_'. If the suffix is a valid positive integer, it is the level.
-    NYdb::NTopic::ECodec codec = NYdb::NTopic::ECodec::RAW;
-    std::optional<int> level;
-
-    TStringBuf name = str;
-    auto underscorePos = str.rfind('_');
-    if (underscorePos != TStringBuf::npos) {
-        TStringBuf suffix = str.substr(underscorePos + 1);
-        int parsedLevel = 0;
-        if (!suffix.empty() && TryFromString(suffix, parsedLevel) && parsedLevel > 0) {
-            name = str.substr(0, underscorePos);
-            level = parsedLevel;
-        }
-    }
-
-    TString nameLower = to_lower(TString(name));
-    if (nameLower == "raw") {
-        codec = NYdb::NTopic::ECodec::RAW;
-    } else if (nameLower == "gzip") {
-        codec = NYdb::NTopic::ECodec::GZIP;
-    } else if (nameLower == "lzop") {
-        codec = NYdb::NTopic::ECodec::LZOP;
-    } else if (nameLower == "zstd") {
-        codec = NYdb::NTopic::ECodec::ZSTD;
-    } else {
-        Y_ABORT("Unknown codec name '%s' тАФ should have been caught by optimizer validation", TString(name).c_str());
-    }
-
-    return {codec, level};
-}
-
-} // namespace NPrivate
 
 class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqComputeActorAsyncOutput, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     struct TMetrics {
@@ -251,7 +213,12 @@ public:
             Finished = true;
         }
 
-        CreateSessionIfNotExists();
+        try {
+            CreateSessionIfNotExists();
+        } catch (const std::exception& e) {
+            Fail(TStringBuilder() << "Failed to initialize write session: " << e.what());
+            return;
+        }
 
         Y_ABORT_UNLESS(!batch.IsWide(), "Wide batch is not supported");
         if (!batch.ForEachRow([&](const auto& value) {
@@ -400,7 +367,7 @@ private:
             .MaxMemoryUsage(FreeSpace);
 
         if (!SinkParams.GetCodec().empty()) {
-            auto [codec, level] = NPrivate::ParseCodecString(SinkParams.GetCodec());
+            auto [codec, level] = ParseCodecString(SinkParams.GetCodec());
             settings.Codec(codec);
             if (level) {
                 settings.CompressionLevel(*level);

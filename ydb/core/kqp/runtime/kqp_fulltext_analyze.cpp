@@ -25,12 +25,6 @@ class TFulltextAnalyzeWrapper : public TMutableComputationNode<TFulltextAnalyzeW
         Ydb::Table::FulltextIndexSettings::Analyzers Analyzers;
     };
 
-    enum class EMode {
-        Fulltext = 0,
-        JsonIndexOverJson = 1,
-        JsonIndexOverJsonDocument = 2,
-    };
-
 public:
     TFulltextAnalyzeWrapper(TComputationMutables& mutables, IComputationNode* textArg, IComputationNode* settingsArg, IComputationNode* modeArg)
         : TBaseComputation(mutables)
@@ -48,26 +42,36 @@ public:
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        const auto mode = GetMode(ctx);
-
-        // Tokenize text
         TVector<TString> tokens;
-        if (mode == EMode::Fulltext) {
-            auto& settings = GetSettings(ctx);
-            if (!settings.IsValid) {
-                // Failed to parse settings, return empty list
-                return ctx.HolderFactory.GetEmptyContainerLazy();
+        switch (GetMode(ctx)) {
+            case NFulltext::EIndexMode::Fulltext: {
+                auto& settings = GetSettings(ctx);
+                if (!settings.IsValid) {
+                    // Failed to parse settings, return empty list
+                    return ctx.HolderFactory.GetEmptyContainerLazy();
+                }
+                tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
+                break;
             }
-            tokens = Analyze(TString(text.AsStringRef()), settings.Analyzers);
-        } else if (mode == EMode::JsonIndexOverJson) {
-            TString error;
-            tokens = NJsonIndex::TokenizeJson(text.AsStringRef(), error);
-            if (!error.empty()) {
-                // Failed to tokenize JSON, return empty list
-                return ctx.HolderFactory.GetEmptyContainerLazy();
+
+            case NFulltext::EIndexMode::JsonIndexOverJson: {
+                TString error;
+                tokens = NJsonIndex::TokenizeJson(text.AsStringRef(), error);
+                if (!error.empty()) {
+                    // Failed to tokenize JSON, return empty list
+                    return ctx.HolderFactory.GetEmptyContainerLazy();
+                }
+                break;
             }
-        } else if (mode == EMode::JsonIndexOverJsonDocument) {
-            tokens = NJsonIndex::TokenizeBinaryJson(text.AsStringRef());
+
+            case NFulltext::EIndexMode::JsonIndexOverJsonDocument: {
+                tokens = NJsonIndex::TokenizeBinaryJson(text.AsStringRef());
+                break;
+            }
+
+            default: {
+                MKQL_ENSURE(false, "Invalid FulltextAnalyze mode");
+            }
         }
 
         THashMap<TString, ui32> tokenFreq;
@@ -110,17 +114,12 @@ public:
         return *static_cast<TSettings*>(cachedSettings.AsBoxed().Get());
     }
 
-    EMode GetMode(TComputationContext& ctx) const {
-        switch (ModeArg->GetValue(ctx).Get<ui32>()) {
-            case 0:
-                return EMode::Fulltext;
-            case 1:
-                return EMode::JsonIndexOverJson;
-            case 2:
-                return EMode::JsonIndexOverJsonDocument;
-            default:
-                MKQL_ENSURE(false, "Invalid FulltextAnalyze mode");
+    NFulltext::EIndexMode GetMode(TComputationContext& ctx) const {
+        auto mode = ModeArg->GetValue(ctx).Get<ui32>();
+        if (mode < 1 || mode > 3) {
+            return NFulltext::EIndexMode::Invalid;
         }
+        return static_cast<NFulltext::EIndexMode>(mode);
     }
 
 private:

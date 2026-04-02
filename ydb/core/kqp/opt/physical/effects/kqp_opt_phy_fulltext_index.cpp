@@ -1,4 +1,7 @@
 #include "kqp_opt_phy_effects_impl.h"
+
+#include <ydb/core/base/fulltext.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -12,7 +15,7 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
 {
     TString settingsProto;
     TString textColumn;
-    ui32 mode = 0;  // 0 = plain fulltext, 1 = JSON index over Json, 2 = JSON index over JsonDocument
+    NFulltext::EIndexMode mode = NFulltext::EIndexMode::Invalid;
 
     if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
         YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
@@ -32,10 +35,10 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
         auto slot = unpackedType->Cast<TDataExprType>()->GetSlot();
         switch (slot) {
             case EDataSlot::Json:
-                mode = 1;
+                mode = NFulltext::EIndexMode::JsonIndexOverJson;
                 break;
             case EDataSlot::JsonDocument:
-                mode = 2;
+                mode = NFulltext::EIndexMode::JsonIndexOverJsonDocument;
                 break;
             default:
                 YQL_ENSURE(false, "Unexpected data slot for JSON index column");
@@ -53,6 +56,8 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
 
         // Serialize analyzer settings for FulltextAnalyze
         YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
+
+        mode = NFulltext::EIndexMode::Fulltext;
     }
 
     // Get text member from input row
@@ -65,7 +70,7 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
         .Literal().Build(settingsProto)
         .Done();
 
-    auto modeAtom = ctx.NewAtom(pos, ToString(mode));
+    auto modeAtom = ctx.NewAtom(pos, ToString(static_cast<ui32>(mode)));
 
     // Create callable for fulltext tokenization
     // Format: FulltextAnalyze(text: String|Utf8|Json|JsonDocument, settings: String, mode: Atom) -> List<Struct<__ydb_token, __ydb_freq>>

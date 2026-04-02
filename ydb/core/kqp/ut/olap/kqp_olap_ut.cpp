@@ -1761,10 +1761,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
-=======
-     Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
+    Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         // Columns limit 2 for tests.
         settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
@@ -1864,7 +1861,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(PushdownFilterKnownIssuies) {
->>>>>>> 3af2cec0720 ([Optimizers] Disable blocks on column limit. (#36835))
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);

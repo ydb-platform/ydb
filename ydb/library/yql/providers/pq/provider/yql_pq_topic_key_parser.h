@@ -74,6 +74,10 @@ public:
         return SkipJsonErrors;
     }
 
+    TExprNode::TPtr GetCsvDelimiter() const {
+        return CsvDelimiter;
+    }
+
     TExprNode::TPtr GetStreamingTopicRead() const {
         return StreamingTopicRead;
     }
@@ -103,6 +107,7 @@ private:
     TExprNode::TPtr WatermarkIdleTimeout;
     TExprNode::TPtr Watermark;
     TExprNode::TPtr SkipJsonErrors;
+    TExprNode::TPtr CsvDelimiter;
     TExprNode::TPtr StreamingTopicRead;
 };
 

@@ -46,7 +46,11 @@ def write_stream(path, data, partition_key=None, database=None, endpoint=None):
 #  Data plane grpc API is not implemented in datastreams.
 def read_stream(path, messages_count, commit_after_processing=True, consumer_name="test_client", timeout=None, database=None, endpoint=None):
     result_file_name = "{}-{}-read-result-{}-{}-out".format(
+<<<<<<< HEAD
         os.getenv("PYTEST_CURRENT_TEST").rsplit('/', 1)[-1].replace(":", "_").replace(" (call)", ""),
+=======
+        os.getenv("PYTEST_CURRENT_TEST").rsplit("/", 1)[1].replace(":", "_").replace(" (call)", ""),
+>>>>>>> 8a485afb837 (more csv support)
         path.replace("/", "_"),
         consumer_name,
         uuid.uuid4()

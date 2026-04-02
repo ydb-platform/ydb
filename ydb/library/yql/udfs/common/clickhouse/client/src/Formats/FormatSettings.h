@@ -2,8 +2,6 @@
 
 #include <common/types.h>
 
-#include <vector>
-
 
 namespace NDB
 {
@@ -99,8 +97,9 @@ struct FormatSettings
         bool crlf_end_of_line = false;
         bool input_format_enum_as_number = false;
         bool input_format_arrays_as_nested_csv = false;
-        // When non-empty, used as a virtual header instead of reading the first line from the file.
-        std::vector<std::string> file_column_names;
+        /// When set (with csv_with_names and with_names_use_header = false), use these names as a virtual header
+        /// without reading a header row from the stream (headerless CSV mapped by field order to column names).
+        std::vector<String> file_column_names;
     } csv;
 
     struct Custom

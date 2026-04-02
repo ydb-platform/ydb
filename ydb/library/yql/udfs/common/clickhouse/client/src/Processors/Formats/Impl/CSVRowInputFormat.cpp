@@ -1,6 +1,5 @@
 #include <IO/ReadHelpers.h>
 #include <IO/Operators.h>
-#include <IO/ReadBufferFromString.h>
 
 #include <Formats/verbosePrintString.h>
 #include <Processors/Formats/Impl/CSVRowInputFormat.h>
@@ -200,33 +199,6 @@ void CSVRowInputFormat::readPrefix()
     /// Thus, we check if this InputFormat is working with the "real" beginning of the data in case of parallel parsing.
     if (with_names && getCurrentUnitNumber() == 0)
     {
-        if (!format_settings.csv.file_column_names.empty())
-        {
-            /// Use the provided column names as a virtual header instead of reading from the file.
-            column_mapping->read_columns.assign(header.columns(), false);
-            for (const auto & column_name : format_settings.csv.file_column_names)
-            {
-                addInputColumn(column_name);
-            }
-
-            for (auto read_column : column_mapping->read_columns)
-            {
-                if (!read_column)
-                {
-                    column_mapping->have_always_default_columns = true;
-                    break;
-                }
-            }
-            for (size_t i = 0; i < column_mapping->read_columns.size(); i++)
-            {
-                if (!column_mapping->read_columns[i] && is_required_columns[i])
-                {
-                    throw Exception(String("Column `") + names_by_column_indexes[i] + "` is marked as not null, but was not found in the schema", ErrorCodes::INCORRECT_DATA);
-                }
-            }
-            return;
-        }
-
         /// This CSV file has a header row with column names. Depending on the
         /// settings, use it or skip it.
         if (format_settings.with_names_use_header)
@@ -267,6 +239,23 @@ void CSVRowInputFormat::readPrefix()
         }
         else
         {
+            if (!format_settings.csv.file_column_names.empty())
+            {
+                column_mapping->read_columns.assign(header.columns(), false);
+                for (const auto& name : format_settings.csv.file_column_names)
+                {
+                    addInputColumn(name);
+                }
+                for (auto read_column : column_mapping->read_columns)
+                {
+                    if (!read_column)
+                    {
+                        column_mapping->have_always_default_columns = true;
+                        break;
+                    }
+                }
+                return;
+            }
             skipRow(in, format_settings.csv, num_columns);
             setupAllColumnsByTableSchema();
         }

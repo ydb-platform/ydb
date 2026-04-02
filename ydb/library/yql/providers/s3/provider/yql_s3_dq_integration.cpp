@@ -29,6 +29,8 @@ using namespace NNodes;
 
 namespace {
 
+constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+
 TString GetLastName(const TString& fullName) {
     auto n = fullName.find_last_of('/');
     return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
@@ -315,7 +317,7 @@ public:
                         settingsList.push_back(
                             ctx.Builder(s3ReadObject.Object().Pos())
                                 .List()
-                                    .Atom(0, "columns_list")
+                                    .Atom(0, UserSchemaColumnsSetting)
                                     .Add(1, ctx.NewList(s3ReadObject.Object().Pos(), std::move(columnAtoms)))
                                 .Seal()
                                 .Build()
@@ -422,6 +424,7 @@ public:
 
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
+                const TStringBuf format = parseSettings.Format().Ref().Content();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.GetOrDefault());
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.GetOrDefault());
@@ -449,12 +452,15 @@ public:
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
                         const TStringBuf key = settings.Ref().Child(i)->Head().Content();
                         const auto& valueNode = settings.Ref().Child(i)->Tail();
-                        if (key == "columns_list"sv) {
+                        if (key == UserSchemaColumnsSetting) {
+                            if (format != "csv"sv) {
+                                continue;
+                            }
                             // Value is a list of column name atoms — iterate without string parsing.
                             const auto columnCount = valueNode.ChildrenSize();
-                            srcDesc.MutableColumnNames()->Reserve(columnCount);
+                            srcDesc.MutableUserSchemaColumns()->Reserve(columnCount);
                             for (size_t j = 0U; j < columnCount; ++j) {
-                                srcDesc.AddColumnNames(TString(valueNode.Child(j)->Content()));
+                                srcDesc.AddUserSchemaColumns(TString(valueNode.Child(j)->Content()));
                             }
                         } else {
                             srcDesc.MutableSettings()->insert(

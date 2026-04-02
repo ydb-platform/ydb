@@ -103,7 +103,6 @@ private:
 struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
     struct TFlushResult {
         TVector<NUdf::TUnboxedValue> Buffer;
-        TSides<TPackResult> Packs;
     };
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
@@ -111,6 +110,7 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
         , Converters_(converters)
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
+        , FastMode_(converters.Build->CanDirectExtract() && converters.Probe->CanDirectExtract())
     {}
 
     int Columns() const {
@@ -118,65 +118,79 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
     }
 
     i64 SizeTuples() const {
-        return Output_.NItems;
+        return NItems_;
     }
 
     auto MakeConsumeFn() {
         return [this](TSides<TSingleTuple> tuples) {
-            for(ESide side: EachSide) {
-                Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
-                    tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
-                    Output_.Data.SelectSide(side).PackedTuples, Output_.Data.SelectSide(side).Overflow);
+            if (FastMode_) {
+                // Directly extract each output column from the packed tuple row.
+                // Eliminates TupleDeepCopy + UnpackAll round-trip.
+                for (auto rename : *Renames_) {
+                    FastBuffer_.push_back(
+                        Converters_.SelectSide(rename.Side)->ExtractSingleValue(
+                            tuples.SelectSide(rename.Side), rename.Index));
+                }
+            } else {
+                for (ESide side : EachSide) {
+                    Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
+                        tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
+                        SlowPacked_.Data.SelectSide(side).PackedTuples,
+                        SlowPacked_.Data.SelectSide(side).Overflow);
+                }
             }
-            Output_.NItems++;
+            NItems_++;
         };
     }
 
     TFlushResult Flush() {
         TFlushResult res;
-        res.Packs.Build.NTuples = Output_.NItems;
-        res.Packs.Build.PackedTuples = std::move(Output_.Data.Build.PackedTuples);
-        res.Packs.Build.Overflow = std::move(Output_.Data.Build.Overflow);
+        if (FastMode_) {
+            res.Buffer = std::move(FastBuffer_);
+            FastBuffer_.clear();
+        } else {
+            TPackResult buildPack, probePack;
+            buildPack.NTuples = NItems_;
+            buildPack.PackedTuples = std::move(SlowPacked_.Data.Build.PackedTuples);
+            buildPack.Overflow = std::move(SlowPacked_.Data.Build.Overflow);
 
-        res.Packs.Probe.NTuples = Output_.NItems;
-        res.Packs.Probe.PackedTuples = std::move(Output_.Data.Probe.PackedTuples);
-        res.Packs.Probe.Overflow = std::move(Output_.Data.Probe.Overflow);
+            probePack.NTuples = NItems_;
+            probePack.PackedTuples = std::move(SlowPacked_.Data.Probe.PackedTuples);
+            probePack.Overflow = std::move(SlowPacked_.Data.Probe.Overflow);
 
-        // Unpack all tuples in a single O(N) pass to avoid the O(N²) cost
-        // of calling Unpack() N times (each of which scans all N tuples internally).
-        TVector<NUdf::TUnboxedValue> buildValues(Output_.NItems * BuildWidth_);
-        TVector<NUdf::TUnboxedValue> probeValues(Output_.NItems * ProbeWidth_);
-        Converters_.Build->UnpackAll(res.Packs.Build, buildValues.data());
-        Converters_.Probe->UnpackAll(res.Packs.Probe, probeValues.data());
+            TVector<NUdf::TUnboxedValue> buildValues(NItems_ * BuildWidth_);
+            TVector<NUdf::TUnboxedValue> probeValues(NItems_ * ProbeWidth_);
+            Converters_.Build->UnpackAll(buildPack, buildValues.data());
+            Converters_.Probe->UnpackAll(probePack, probeValues.data());
 
-        res.Buffer.reserve(Output_.NItems * Columns());
-        for (i64 tupleIndex = 0; tupleIndex < Output_.NItems; ++tupleIndex) {
-            const NUdf::TUnboxedValue* bRow = buildValues.data() + tupleIndex * BuildWidth_;
-            const NUdf::TUnboxedValue* pRow = probeValues.data() + tupleIndex * ProbeWidth_;
-            for (auto rename : *Renames_) {
-                if (rename.Side == ESide::Build) {
-                    res.Buffer.push_back(bRow[rename.Index]);
-                } else {
-                    res.Buffer.push_back(pRow[rename.Index]);
+            res.Buffer.reserve(NItems_ * Columns());
+            for (i64 tupleIndex = 0; tupleIndex < NItems_; ++tupleIndex) {
+                const NUdf::TUnboxedValue* bRow = buildValues.data() + tupleIndex * BuildWidth_;
+                const NUdf::TUnboxedValue* pRow = probeValues.data() + tupleIndex * ProbeWidth_;
+                for (auto rename : *Renames_) {
+                    res.Buffer.push_back(rename.Side == ESide::Build ? bRow[rename.Index] : pRow[rename.Index]);
                 }
             }
         }
-
-        Output_.NItems = 0;
+        NItems_ = 0;
         return res;
     }
 
 private:
-    struct TuplePairs {
-        i64 NItems = 0;
+    struct TSlowPacked {
         TSides<TPackResult> Data;
     };
 
-    TuplePairs Output_;
+    i64 NItems_ = 0;
+    // Fast path: values extracted directly from packed rows in the consumer.
+    TVector<NUdf::TUnboxedValue> FastBuffer_;
+    // Slow path (variable-size columns): accumulate packed tuples, unpack in Flush.
+    TSlowPacked SlowPacked_;
     const TDqJoinImplRenames* Renames_;
     TSides<IScalarLayoutConverter*> Converters_;
     const int BuildWidth_;
     const int ProbeWidth_;
+    const bool FastMode_;
 };
 
 template <EJoinKind Kind>

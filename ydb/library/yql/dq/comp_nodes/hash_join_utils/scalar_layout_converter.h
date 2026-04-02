@@ -36,6 +36,15 @@ public:
     // This is O(N) and avoids the O(N²) cost of calling Unpack() N times.
     virtual void UnpackAll(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) = 0;
 
+    // Returns true if all columns support direct extraction from a packed row
+    // (i.e., all columns are fixed-size with a single inner representation).
+    virtual bool CanDirectExtract() const = 0;
+
+    // Extract a single column value directly from a packed tuple.
+    // outerColIdx is the column index as known to the caller (matches the types[] passed to MakeScalarLayoutConverter).
+    // Only valid when CanDirectExtract() returns true.
+    virtual NYql::NUdf::TUnboxedValue ExtractSingleValue(TSingleTuple tuple, int outerColIdx) const = 0;
+
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 

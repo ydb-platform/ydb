@@ -905,12 +905,24 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Extract key columns using TDqJoinBase API
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
-    // Detect if inputs are block-typed (wide flow with block items) or scalar (struct flow).
-    // Block inputs have a non-struct item type (e.g. multi-type with block items).
-    // Note: the current type annotation (AnnotateDqMapOrDictJoin) always enforces struct inputs,
-    // so the block path is for future use when block-typed connections are supported.
+    // Detect if inputs are block-typed or scalar.
+    // Both block and scalar inputs are annotated as Struct flows, but block structs have
+    // columns of type Block<T> or Scalar<T>, while scalar structs have plain T columns.
     const auto leftRawItemType = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx);
-    const bool isBlockInput = (leftRawItemType->GetKind() != ETypeAnnotationKind::Struct);
+    bool isBlockInput = false;
+    if (leftRawItemType->GetKind() == ETypeAnnotationKind::Struct) {
+        const auto* structType = leftRawItemType->Cast<TStructExprType>();
+        for (const auto* item : structType->GetItems()) {
+            const auto colKind = item->GetItemType()->GetKind();
+            if (colKind == ETypeAnnotationKind::Block || colKind == ETypeAnnotationKind::Scalar) {
+                isBlockInput = true;
+                break;
+            }
+        }
+    } else {
+        // Non-struct item type means already-block wide flow.
+        isBlockInput = true;
+    }
 
     if (isBlockInput) {
         // Block path: inputs are already block-typed wide flows, feed directly into BlockHashJoinCore.
@@ -975,7 +987,8 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         return TExprBase(result);
     }
 
-    // Scalar path: inputs are struct-typed; expand to wide flows and use ScalarHashJoinCore.
+    // Scalar path: both inputs have plain (non-block) column types.
+    // Use ScalarHashJoinCore which processes rows without block vectorization overhead.
     const auto itemTypeLeft = leftRawItemType->Cast<TStructExprType>();
     const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
@@ -1054,10 +1067,27 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
         ctx, rightConvertedItems, pos);
 
-    auto scalarJoinCore = ctx.Builder(pos)
-        .Callable("ScalarHashJoinCore")
-            .Add(0, std::move(leftWideFlow))
-            .Add(1, std::move(rightWideFlow))
+    // Convert wide scalar streams to wide block streams for vectorised processing.
+    auto leftInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Add(0, std::move(leftWideFlow))
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightInput = ctx.Builder(pos)
+        .Callable("WideToBlocks")
+            .Callable(0, "FromFlow")
+                .Add(0, std::move(rightWideFlow))
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto blockJoinCore = ctx.Builder(pos)
+        .Callable("BlockHashJoinCore")
+            .Add(0, std::move(leftInput))
+            .Add(1, std::move(rightInput))
             .Add(2, blockHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
@@ -1067,9 +1097,17 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         .Seal()
         .Build();
 
+    auto wideResult = ctx.Builder(pos)
+        .Callable("WideFromBlocks")
+            .Add(0, std::move(blockJoinCore))
+        .Seal()
+        .Build();
+
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
-            .Add(0, std::move(scalarJoinCore))
+            .Callable(0, "ToFlow")
+                .Add(0, std::move(wideResult))
+            .Seal()
             .Lambda(1)
                 .Params("output", totalColumns)
                 .Callable("AsStruct")

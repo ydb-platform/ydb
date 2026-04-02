@@ -250,9 +250,7 @@ class TestStreamingInYdb(StreamingTestBase):
 
         with pytest.raises(ydb.issues.Error) as exc_info:
             kikimr.ydb_client.query(sql)
-        assert "csv format requires SCHEMA with explicitly listed column names to determine column order" in str(
-            exc_info.value
-        )
+        assert "UserSchemaColumns must not be empty" in str(exc_info.value)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_csv_projection_single_column(self, kikimr, entity_name, local_topics):

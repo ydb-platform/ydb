@@ -788,6 +788,78 @@ public:
         }
     }
 
+    void UnpackAll(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) override {
+        if (packed.NTuples == 0) {
+            return;
+        }
+
+        // O(N): compute column sizes once for all tuples
+        std::vector<ui64, TMKQLAllocator<ui64>> bytesPerColumn;
+        TupleLayout_->CalculateColumnSizes(
+            packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
+
+        Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
+            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << InnerExtractors_.size());
+
+        TVector<TVector<ui8>> columnsDataStorage;
+        TVector<TVector<ui8>> columnsNullBitmapStorage;
+        TVector<ui8*> columnsData;
+        TVector<ui8*> columnsNullBitmap;
+
+        for (size_t i = 0; i < InnerExtractors_.size(); ++i) {
+            auto* packer = InnerExtractors_[i];
+            if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                columnsDataStorage.emplace_back((packed.NTuples + 1) * sizeof(ui32));
+                std::memset(columnsDataStorage.back().data(), 0, (packed.NTuples + 1) * sizeof(ui32));
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                columnsNullBitmapStorage.emplace_back(1);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            } else {
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            }
+        }
+
+        // Unpack all N tuples at once — the key O(N) step
+        TupleLayout_->Unpack(
+            columnsData.data(), columnsNullBitmap.data(),
+            packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
+
+        // Pre-compute pointer offsets for each extractor (done once, not per tuple)
+        std::vector<size_t> pointerOffsets(Extractors_.size());
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            const auto& mapping = InnerMapping_[i];
+            size_t off = 0;
+            for (size_t j = 0; j < mapping.front(); ++j) {
+                off += (InnerExtractors_[j]->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) ? 2 : 1;
+            }
+            pointerOffsets[i] = off;
+        }
+
+        const ui32 numColumns = static_cast<ui32>(Extractors_.size());
+        for (ui32 tupleIndex = 0; tupleIndex < static_cast<ui32>(packed.NTuples); ++tupleIndex) {
+            for (size_t i = 0; i < Extractors_.size(); ++i) {
+                values[tupleIndex * numColumns + i] = Extractors_[i]->CreateFromUnpack(
+                    columnsData.data() + pointerOffsets[i],
+                    columnsNullBitmap.data() + pointerOffsets[i],
+                    tupleIndex,
+                    HolderFactory_);
+            }
+        }
+    }
+
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
     }

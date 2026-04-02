@@ -142,18 +142,22 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
         res.Packs.Probe.PackedTuples = std::move(Output_.Data.Probe.PackedTuples);
         res.Packs.Probe.Overflow = std::move(Output_.Data.Probe.Overflow);
 
-        res.Buffer.reserve(Output_.NItems * Columns());
-        TMKQLVector<NUdf::TUnboxedValue> buildValues(BuildWidth_);
-        TMKQLVector<NUdf::TUnboxedValue> probeValues(ProbeWidth_);
+        // Unpack all tuples in a single O(N) pass to avoid the O(N²) cost
+        // of calling Unpack() N times (each of which scans all N tuples internally).
+        TVector<NUdf::TUnboxedValue> buildValues(Output_.NItems * BuildWidth_);
+        TVector<NUdf::TUnboxedValue> probeValues(Output_.NItems * ProbeWidth_);
+        Converters_.Build->UnpackAll(res.Packs.Build, buildValues.data());
+        Converters_.Probe->UnpackAll(res.Packs.Probe, probeValues.data());
 
+        res.Buffer.reserve(Output_.NItems * Columns());
         for (i64 tupleIndex = 0; tupleIndex < Output_.NItems; ++tupleIndex) {
-            Converters_.Build->Unpack(res.Packs.Build, tupleIndex, buildValues.data());
-            Converters_.Probe->Unpack(res.Packs.Probe, tupleIndex, probeValues.data());
+            const NUdf::TUnboxedValue* bRow = buildValues.data() + tupleIndex * BuildWidth_;
+            const NUdf::TUnboxedValue* pRow = probeValues.data() + tupleIndex * ProbeWidth_;
             for (auto rename : *Renames_) {
                 if (rename.Side == ESide::Build) {
-                    res.Buffer.push_back(buildValues[rename.Index]);
+                    res.Buffer.push_back(bRow[rename.Index]);
                 } else {
-                    res.Buffer.push_back(probeValues[rename.Index]);
+                    res.Buffer.push_back(pRow[rename.Index]);
                 }
             }
         }

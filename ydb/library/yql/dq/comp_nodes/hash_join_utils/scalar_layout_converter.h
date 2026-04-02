@@ -32,6 +32,10 @@ public:
     // Unpack single tuple to scalar values
     virtual void Unpack(const TPackResult& packed, ui32 tupleIndex, NYql::NUdf::TUnboxedValue* values) = 0;
 
+    // Unpack all tuples into a flat row-major array: values[tupleIdx * numColumns + colIdx].
+    // This is O(N) and avoids the O(N²) cost of calling Unpack() N times.
+    virtual void UnpackAll(const TPackResult& packed, NYql::NUdf::TUnboxedValue* values) = 0;
+
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
 };
 

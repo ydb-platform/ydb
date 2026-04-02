@@ -2890,6 +2890,8 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
         "PARALLEL FOR is not available before language version 2026.01");
 }
 
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
+
 Y_UNIT_TEST(FunctionLangVer) {
     {
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -2915,6 +2917,8 @@ Y_UNIT_TEST(FunctionLangVer) {
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     }
 }
+
+#endif
 
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");

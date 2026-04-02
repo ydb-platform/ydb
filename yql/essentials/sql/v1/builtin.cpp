@@ -4134,12 +4134,14 @@ TNodeResult BuildBuiltinFunc(
                 return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"))));
             }
 
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
 
             switch (ctx.GetColumnReferenceState()) {
                 case EColumnRefState::MatchRecognizeMeasures:
@@ -4169,12 +4171,15 @@ TNodeResult BuildBuiltinFunc(
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
+
             TNodeResult result = (*aggrCallback).second.Callback(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
             if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
                 return UnsupportedYqlSelect(
@@ -4206,12 +4211,14 @@ TNodeResult BuildBuiltinFunc(
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
             const auto& funcInfo = builtinCallback->second;
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, funcInfo.CanonicalSqlName, funcInfo.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, funcInfo.CanonicalSqlName, funcInfo.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
             return Wrap(funcInfo.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {

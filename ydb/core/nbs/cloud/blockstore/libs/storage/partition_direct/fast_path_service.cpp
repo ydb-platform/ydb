@@ -20,7 +20,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
-constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
     NMonitoring::TDynamicCounterPtr counters,
@@ -97,15 +96,10 @@ TFastPathService::TFastPathService(
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig.GetStripeSize()
-                                 ? storageConfig.GetStripeSize()
-                                 : DefaultStripeSize}))
-    , WriteMode(GetWriteModeFromProto(storageConfig.GetWriteMode()))
-    , PBufferReplyTimeoutMicroseconds(
-          storageConfig.GetPBufferReplyTimeoutMicroseconds()
-              ? storageConfig.GetPBufferReplyTimeoutMicroseconds()
-              : DefaultPBufferReplyTimeoutMicroseconds)
           .BlocksPerStripe = storageConfig->GetStripeSize()}))
+    , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
+    , PBufferReplyTimeoutMicroseconds(
+          storageConfig->GetPBufferReplyTimeoutMicroseconds())
 {
     Y_UNUSED(ActorSystem);
 }
@@ -236,9 +230,9 @@ NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
 }
 
 void TFastPathService::ScheduleAfterDelay(
-    NYdb::NBS::TExecutorPtr executor,
+    TExecutorPtr executor,
     TDuration delay,
-    NYdb::NBS::TCallback callback)
+    TCallback callback)
 {
     Scheduler->Schedule(
         executor.get(),

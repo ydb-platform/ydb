@@ -416,9 +416,7 @@ void TPartitionActor::Start(
             .DiskId = DiskId,
             .ClientId = "client-1",
             .BlockSize = BlockSize,
-            .StripeSize = StorageConfig->GetStripeSize()
-                              ? StorageConfig->GetStripeSize()
-                              : DefaultStripeSize,
+            .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = BlockCount,
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(

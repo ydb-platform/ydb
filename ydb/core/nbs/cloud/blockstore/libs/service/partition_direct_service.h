@@ -23,9 +23,9 @@ struct IPartitionDirectService
     [[nodiscard]] virtual NWilson::TSpan CreteRootSpan(TStringBuf name) = 0;
 
     virtual void ScheduleAfterDelay(
-        NYdb::NBS::TExecutorPtr executor,
+        TExecutorPtr executor,
         TDuration delay,
-        NYdb::NBS::TCallback callback) = 0;
+        TCallback callback) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

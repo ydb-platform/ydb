@@ -3,11 +3,8 @@
 #include "direct_block_group.h"
 #include "vchunk_config.h"
 
-<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
-=======
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
->>>>>>> resolve issues
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
@@ -23,10 +20,8 @@ enum class EWriteMode: ui32
     DirectPBuffersFilling,
 };
 
-EWriteMode GetWriteModeFromProto(
-    NProto::TStorageServiceConfig::TWriteMode writeMode);
-NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
-    EWriteMode writeMode);
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 
 class TWriteRequestExecutor
     : public std::enable_shared_from_this<TWriteRequestExecutor>

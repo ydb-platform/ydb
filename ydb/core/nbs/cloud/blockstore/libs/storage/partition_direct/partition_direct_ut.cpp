@@ -46,8 +46,7 @@ struct TScopedNbsService: TDisableCopyMove
 
 [[nodiscard]] TScopedNbsService SetupStorage(
     TEnvironmentSetup& env,
-    EWriteMode writeMode,
-    ui32 syncRequestsBatchSize = 3)
+    EWriteMode writeMode)
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -78,7 +77,6 @@ struct TScopedNbsService: TDisableCopyMove
     storageConfig->SetDDiskPoolName(DDiskPoolName);
     storageConfig->SetPersistentBufferDDiskPoolName(
         PersistentBufferDDiskPoolName);
-    storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
     storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
 
     return TScopedNbsService(nbsConfig);
@@ -340,11 +338,7 @@ void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
         NKikimrServices::NBS_PARTITION,
         NActors::NLog::PRI_DEBUG);
 
-    auto scopedService = SetupStorage(
-        env,
-        writeMode,
-        1   // syncRequestsBatchSize
-    );
+    auto scopedService = SetupStorage(env, writeMode);
 
     const ui64 blockCount = 3 * BlocksPerRegion;
     auto partition = CreatePartitionTablet(env, blockCount);
@@ -716,7 +710,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env);
+        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
 
         auto partition = CreatePartitionTablet(env);
 

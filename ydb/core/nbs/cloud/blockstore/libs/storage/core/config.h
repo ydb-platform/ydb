@@ -22,6 +22,8 @@ public:
     [[nodiscard]] TDuration GetWriteHandoffDelay() const;
     [[nodiscard]] TString GetDDiskPoolName() const;
     [[nodiscard]] TString GetPersistentBufferDDiskPoolName() const;
+    [[nodiscard]] NProto::EWriteMode GetWriteMode() const;
+    [[nodiscard]] ui32 GetPBufferReplyTimeoutMicroseconds() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

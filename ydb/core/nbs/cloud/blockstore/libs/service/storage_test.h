@@ -33,9 +33,9 @@ public:
     }
 
     void ScheduleAfterDelay(
-        NYdb::NBS::TExecutorPtr executor,
+        TExecutorPtr executor,
         TDuration delay,
-        NYdb::NBS::TCallback callback) override
+        TCallback callback) override
     {
         Y_UNUSED(delay);
         executor->ExecuteSimple(std::move(callback));

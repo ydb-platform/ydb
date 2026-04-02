@@ -17,9 +17,11 @@ TStorageConfig::TStorageConfig(
 // clang-format off
 #define BLOCKSTORE_STORAGE_CONFIG_RO(xxx)                                        \
     xxx(SyncRequestsBatchSize,              ui32,     3                          )\
-    xxx(StripeSize,                         ui64,     4096                       )\
+    xxx(StripeSize,                         ui64,     512_KB                     )\
     xxx(DDiskPoolName,                      TString,  TString{}                  )\
     xxx(PersistentBufferDDiskPoolName,      TString,  TString{}                  )\
+    xxx(WriteMode,                           NProto::EWriteMode, NProto::PBufferReplication)    \
+    xxx(PBufferReplyTimeoutMicroseconds,     ui32,     50000)  \
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

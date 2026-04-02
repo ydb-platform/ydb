@@ -10,13 +10,12 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-EWriteMode GetWriteModeFromProto(
-    NProto::TStorageServiceConfig::TWriteMode writeMode)
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
 {
     switch (writeMode) {
-        case NProto::TStorageServiceConfig::PBufferReplication:
+        case NProto::EWriteMode::PBufferReplication:
             return EWriteMode::PBufferReplication;
-        case NProto::TStorageServiceConfig::DirectPBuffersFilling:
+        case NProto::EWriteMode::DirectPBuffersFilling:
             return EWriteMode::DirectPBuffersFilling;
         default:
             break;
@@ -24,14 +23,13 @@ EWriteMode GetWriteModeFromProto(
     Y_ABORT_UNLESS(false);
 }
 
-NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
-    EWriteMode writeMode)
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
 {
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
-            return NProto::TStorageServiceConfig::PBufferReplication;
+            return NProto::EWriteMode::PBufferReplication;
         case EWriteMode::DirectPBuffersFilling:
-            return NProto::TStorageServiceConfig::DirectPBuffersFilling;
+            return NProto::EWriteMode::DirectPBuffersFilling;
     }
 }
 

@@ -888,7 +888,7 @@ ui64 TDataShard::GetNextChangeRecordLockOffset(ui64 lockId) {
     return it->second.Changes.back().LockOffset + 1;
 }
 
-void TDataShard::BuildUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId) {
+void TDataShard::FillUserCtxColumns(NACLib::TUserContext::TPtr userCtx, TString& userSID, TString& userTraceId) {
     if (userCtx != nullptr) {
         userSID = userCtx->GetUserSID();
         if (userCtx->GetUserTraceId()) {
@@ -922,7 +922,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
         TString userSID;
         TString userTraceId;
-        BuildUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
+        FillUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
 
         db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
             NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
@@ -1011,7 +1011,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
         TString userSID;
         TString userTraceId;
-        BuildUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
+        FillUserCtxColumns(record.GetUserCtx(), userSID, userTraceId);
 
         db.Table<Schema::LockChangeRecordDetails>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecordDetails::Kind>(record.GetKind()),

@@ -3451,6 +3451,7 @@ void TChangefeedDescription::SerializeCommonFields(TProto& proto) const {
     proto.set_schema_changes(SchemaChanges_);
     proto.set_aws_region(TStringType{AwsRegion_});
     proto.set_user_sids(UserSIDs_);
+    proto.set_trace_ids(TraceIds_);
 
     switch (Mode_) {
     case EChangefeedMode::KeysOnly:

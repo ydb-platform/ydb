@@ -94,9 +94,11 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
         }
 
         NWilson::TTraceId traceId;
-        if (std::get<4>(detail).size() == sizeof(NWilson::TTraceId::TSerializedTraceId)) {
-            auto data = reinterpret_cast<const NWilson::TTraceId::TSerializedTraceId*>(std::get<4>(detail).data());
-            traceId = NWilson::TTraceId(*data);
+        const auto& traceIdData = std::get<4>(detail);
+        if (!traceIdData.empty()) {
+            NActorsProto::TTraceId serializedTraceId;
+            serializedTraceId.SetData(traceIdData);
+            traceId = NWilson::TTraceId(serializedTraceId);
         }
 
         it->second.push_back(

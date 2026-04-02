@@ -5,8 +5,6 @@ ydb/core/blobstorage/pdisk/ut RDMA.TestRcBuf
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
-ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
 ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecrets

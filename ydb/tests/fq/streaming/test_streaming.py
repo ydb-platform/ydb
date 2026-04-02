@@ -9,7 +9,7 @@ import ydb
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
-from ydb.tests.tools.datastreams_helpers.data_plane import read_stream_with_codec
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream_raw
 
 logger = logging.getLogger(__name__)
 
@@ -619,17 +619,18 @@ class TestStreamingInYdb(StreamingTestBase):
 
         self.write_stream(['{"time": "test_value"}'], endpoint=endpoint)
 
-        # Read raw compressed bytes тАФ identity decoder keeps batch._codec intact
-        GZIP_CODEC = 2
+        # Read raw bytes with identity decoders тАФ the SDK skips decompression
+        # so raw_messages[0] contains the compressed payload as stored on the wire.
         ep = endpoint if endpoint is not None else kikimr.endpoint
-        wire_codec, raw_messages = read_stream_with_codec(
+        raw_messages = read_stream_raw(
             self.output_topic, 1, self.consumer_name,
             ep.endpoint, ep.database)
 
-        # 1. Verify that GZIP codec tag is present on the wire
-        assert wire_codec == GZIP_CODEC, f"Expected GZIP codec ({GZIP_CODEC}), got {wire_codec}"
-
-        # 2. Manually decompress with Python's standard gzip and verify payload
+        # Verify GZIP compression by magic bytes and by successful decompression.
+        # Note: batch._codec is not used because the Python SDK resets it to RAW
+        # after applying any decoder, making it an unreliable wire-codec indicator.
+        assert raw_messages[0][:2] == b'\x1f\x8b', \
+            "Expected GZIP magic bytes in raw payload тАФ data does not appear to be GZIP-compressed"
         decompressed = gzip_module.decompress(raw_messages[0]).decode()
         assert decompressed == "test_value"
 

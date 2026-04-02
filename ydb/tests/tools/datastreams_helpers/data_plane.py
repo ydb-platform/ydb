@@ -87,18 +87,17 @@ def read_stream(path, messages_count, commit_after_processing=True, consumer_nam
     return ret
 
 
-def read_stream_with_codec(topic_path, count, consumer_name, endpoint, database, timeout=10):
+def read_stream_raw(topic_path, count, consumer_name, endpoint, database, timeout=10):
     """Read *count* messages without decompression.
 
-    Uses identity decoders so that the SDK does not decompress the payload and
-    ``batch._codec`` retains the original wire codec value (normally the SDK
-    overwrites it to CODEC_RAW=1 after decompression).
+    Registers identity decoders for all non-RAW codecs so that the SDK skips
+    decompression and returns the original compressed bytes.  ``batch._codec``
+    is NOT used because the Python SDK resets it to RAW (1) after applying any
+    decoder, making it unreliable as a wire-codec indicator.
 
-    Returns (wire_codec_int, list_of_raw_bytes) where wire_codec_int is the
-    codec tag observed on the first batch (e.g. 2 for GZIP, 4 for ZSTD).
+    Returns a list of raw (possibly compressed) byte strings.
     """
-    identity = lambda data: data  # noqa: E731 тАФ keep as lambda for clarity
-    # Map all known non-RAW codecs to identity so we receive compressed bytes
+    identity = lambda data: data  # noqa: E731
     GZIP_CODEC = 2
     ZSTD_CODEC = 4
     decoders = {GZIP_CODEC: identity, ZSTD_CODEC: identity}
@@ -108,7 +107,6 @@ def read_stream_with_codec(topic_path, count, consumer_name, endpoint, database,
     driver = ydb.Driver(driver_config)
     driver.wait(timeout=5)
 
-    wire_codec = None
     raw_messages = []
     try:
         with driver.topic_client.reader(
@@ -120,11 +118,9 @@ def read_stream_with_codec(topic_path, count, consumer_name, endpoint, database,
                 batch = reader.receive_batch(timeout=timeout)
                 if batch is None:
                     break
-                if wire_codec is None:
-                    wire_codec = int(batch._codec)
                 raw_messages.extend(msg.data for msg in batch.messages)
     finally:
         driver.stop()
 
-    logging.info("Read %d messages with codec=%s from %s", len(raw_messages), wire_codec, topic_path)
-    return wire_codec, raw_messages
+    logging.info("Read %d raw messages from %s", len(raw_messages), topic_path)
+    return raw_messages

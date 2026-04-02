@@ -2639,8 +2639,6 @@ uint64_t aws_mqtt5_client_acquire_puback(
     AWS_FATAL_ASSERT(aws_event_loop_thread_is_callers_thread(client->loop));
 
     if (publish_view->qos == AWS_MQTT5_QOS_AT_MOST_ONCE) {
-        AWS_LOGF_ERROR(
-            AWS_LS_MQTT5_CLIENT, "id=%p: PUBACK control cannot be taken for a QoS 0 PUBLISH packet.", (void *)client);
         return 0;
     }
 
@@ -2653,10 +2651,6 @@ uint64_t aws_mqtt5_client_acquire_puback(
         /* In this case we simply provide the same control_id that was already sent before. We do not want to create a
          * second control_id with the same packet_id. It is the user's responsibility to know that they have two PUBACKs
          * for the same PUBLISH. */
-        AWS_LOGF_WARN(
-            AWS_LS_MQTT5_CLIENT,
-            "id=%p: PUBACK acquire called on a PUBLISH that is already under user control.",
-            (void *)client);
         struct aws_mqtt5_manual_puback_entry *entry = elem->value;
         return entry->puback_control_id;
     }

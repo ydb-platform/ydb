@@ -1084,12 +1084,14 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateAlterColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropColumnTable:
         return CreateDropColumnTable(NextPartId(), txState);
-    case TTxState::ETxType::TxCreateColumnTableIndex:
-        return CreateNewColumnTableIndex(NextPartId(), txState);
-    case TTxState::ETxType::TxDropColumnTableIndex:
-        return CreateDropColumnTableIndex(NextPartId(), txState);
-    case TTxState::ETxType::TxAlterColumnTableIndex:
-        return CreateAlterColumnTableIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxCreateLocalIndex:
+        return CreateNewLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxDropLocalIndex:
+        return CreateDropLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxAlterLocalIndex:
+        return CreateAlterLocalIndex(NextPartId(), txState);
+    case TTxState::ETxType::TxMoveLocalIndex:
+        return CreateMoveLocalIndex(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreatePQGroup:
         return CreateNewPQ(NextPartId(), txState);
@@ -1400,9 +1402,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         if (tx.GetCreateColumnTable().HasCopyFromTable()) {
             return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
         }
-        return CreateColumnTableWithIndexes(op.NextPartId(), tx, context);
+        return CreateColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return AlterColumnTableWithIndexes(op.NextPartId(), tx, context);
+        return AlterColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
         return {CreateDropColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
@@ -1545,8 +1547,14 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateConsistentMoveTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return {CreateMoveTableIndex(op.NextPartId(), tx)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex: {
+        const auto& moving = tx.GetMoveIndex();
+        TPath tablePath = TPath::Resolve(moving.GetTablePath(), context.SS);
+        if (tablePath.IsResolved() && !tablePath.IsDeleted() && tablePath->IsColumnTable()) {
+            return CreateConsistentMoveLocalIndex(op.NextPartId(), tx, context);
+        }
         return CreateConsistentMoveIndex(op.NextPartId(), tx, context);
+    }
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence:
         return {CreateMoveSequence(op.NextPartId(), tx)};
 

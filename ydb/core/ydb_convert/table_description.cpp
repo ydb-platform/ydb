@@ -872,45 +872,65 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
         if (index.HasName()) {
             tableIndex->set_name(index.GetName());
         }
-        if (index.HasBloomFilter()) {
-            auto* bloomFilter = tableIndex->mutable_local_bloom_filter_index();
-            if (index.GetBloomFilter().HasFalsePositiveProbability()) {
-                bloomFilter->set_false_positive_probability(index.GetBloomFilter().GetFalsePositiveProbability());
-            }
-            for (ui32 colId : index.GetBloomFilter().GetColumnIds()) {
-                for (const auto& column : schema.GetColumns()) {
-                    if (column.GetId() == colId) {
-                        tableIndex->add_index_columns(column.GetName());
-                        break;
+        switch (index.Implementation_case()) {
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
+                auto* bloomFilter = tableIndex->mutable_local_bloom_filter_index();
+                if (index.GetBloomFilter().HasFalsePositiveProbability()) {
+                    bloomFilter->set_false_positive_probability(index.GetBloomFilter().GetFalsePositiveProbability());
+                }
+                for (ui32 colId : index.GetBloomFilter().GetColumnIds()) {
+                    bool found = false;
+                    for (const auto& column : schema.GetColumns()) {
+                        if (column.GetId() == colId) {
+                            tableIndex->add_index_columns(column.GetName());
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        ythrow yexception() << "column id " << colId << " not found in schema for index " << index.GetName();
                     }
                 }
+                break;
             }
-        } else if (index.HasBloomNGrammFilter()) {
-            auto* bloomNgramFilter = tableIndex->mutable_local_bloom_ngram_filter_index();
-            if (index.GetBloomNGrammFilter().HasNGrammSize()) {
-                bloomNgramFilter->set_ngram_size(index.GetBloomNGrammFilter().GetNGrammSize());
-            }
-            if (index.GetBloomNGrammFilter().HasHashesCount()) {
-                bloomNgramFilter->set_hashes_count(index.GetBloomNGrammFilter().GetHashesCount());
-            }
-            if (index.GetBloomNGrammFilter().HasFilterSizeBytes()) {
-                bloomNgramFilter->set_filter_size_bytes(index.GetBloomNGrammFilter().GetFilterSizeBytes());
-            }
-            if (index.GetBloomNGrammFilter().HasRecordsCount()) {
-                bloomNgramFilter->set_records_count(index.GetBloomNGrammFilter().GetRecordsCount());
-            }
-            if (index.GetBloomNGrammFilter().HasCaseSensitive()) {
-                bloomNgramFilter->set_case_sensitive(index.GetBloomNGrammFilter().GetCaseSensitive());
-            }
-            if (index.GetBloomNGrammFilter().HasColumnId()) {
-                ui32 colId = index.GetBloomNGrammFilter().GetColumnId();
-                for (const auto& column : schema.GetColumns()) {
-                    if (column.GetId() == colId) {
-                        tableIndex->add_index_columns(column.GetName());
-                        break;
+            case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
+                auto* bloomNgramFilter = tableIndex->mutable_local_bloom_ngram_filter_index();
+                if (index.GetBloomNGrammFilter().HasNGrammSize()) {
+                    bloomNgramFilter->set_ngram_size(index.GetBloomNGrammFilter().GetNGrammSize());
+                }
+                if (index.GetBloomNGrammFilter().HasHashesCount()) {
+                    bloomNgramFilter->set_hashes_count(index.GetBloomNGrammFilter().GetHashesCount());
+                }
+                if (index.GetBloomNGrammFilter().HasFilterSizeBytes()) {
+                    bloomNgramFilter->set_filter_size_bytes(index.GetBloomNGrammFilter().GetFilterSizeBytes());
+                }
+                if (index.GetBloomNGrammFilter().HasRecordsCount()) {
+                    bloomNgramFilter->set_records_count(index.GetBloomNGrammFilter().GetRecordsCount());
+                }
+                if (index.GetBloomNGrammFilter().HasCaseSensitive()) {
+                    bloomNgramFilter->set_case_sensitive(index.GetBloomNGrammFilter().GetCaseSensitive());
+                }
+                if (index.GetBloomNGrammFilter().HasColumnId()) {
+                    ui32 colId = index.GetBloomNGrammFilter().GetColumnId();
+                    bool found = false;
+                    for (const auto& column : schema.GetColumns()) {
+                        if (column.GetId() == colId) {
+                            tableIndex->add_index_columns(column.GetName());
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        ythrow yexception() << "column id " << colId << " not found in schema for index " << index.GetName();
                     }
                 }
+                break;
             }
+            case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
+            case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
+            case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
+            case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
+                break;
         }
     }
 
@@ -1794,9 +1814,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 }
             }
             break;
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
-
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
         };
 

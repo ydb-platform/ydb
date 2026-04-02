@@ -357,7 +357,6 @@ public:
                     return result;
                 }
             }
-
             context.SS->PersistTxState(db, OperationId);
 
             context.OnComplete.ActivateTx(OperationId);
@@ -365,20 +364,21 @@ public:
             SetState(NextState());
         } else {
             {
-                TUpdateStartContext startContext(&path, &context, &db);
-                auto status = update->Start(startContext);
-                if (status.IsFail()) {
-                    errors.AddError(status.GetErrorMessage());
-                    return result;
+                {
+                    TUpdateStartContext startContext(&path, &context, &db);
+                    auto status = update->Start(startContext);
+                    if (status.IsFail()) {
+                        errors.AddError(status.GetErrorMessage());
+                        return result;
+                    }
                 }
-            }
-
-            {
-                TUpdateFinishContext fContext(&path, &context, &db, {});
-                auto status = update->Finish(fContext);
-                if (status.IsFail()) {
-                    errors.AddError(status.GetErrorMessage());
-                    return result;
+                {
+                    TUpdateFinishContext fContext(&path, &context, &db, {});
+                    auto status = update->Finish(fContext);
+                    if (status.IsFail()) {
+                        errors.AddError(status.GetErrorMessage());
+                        return result;
+                    }
                 }
             }
             result->SetStatus(NKikimrScheme::StatusSuccess);

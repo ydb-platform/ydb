@@ -43,6 +43,73 @@ inline bool ConvertOlapIndexToCreationConfig(
     return false;
 }
 
+inline bool ConvertOlapIndexToRequested(
+    const NKikimrSchemeOp::TOlapIndexDescription& src,
+    const THashMap<ui32, TString>& columnIdToName,
+    NKikimrSchemeOp::TOlapIndexRequested& dst)
+{
+    dst.SetName(src.GetName());
+    if (src.HasClassName()) {
+        dst.SetClassName(src.GetClassName());
+    }
+
+    switch (src.Implementation_case()) {
+        case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
+            auto* bf = dst.MutableBloomFilter();
+            if (src.GetBloomFilter().HasFalsePositiveProbability()) {
+                bf->SetFalsePositiveProbability(src.GetBloomFilter().GetFalsePositiveProbability());
+            }
+            for (ui32 colId : src.GetBloomFilter().GetColumnIds()) {
+                if (auto it = columnIdToName.find(colId); it != columnIdToName.end()) {
+                    bf->AddColumnNames(it->second);
+                }
+            }
+            if (src.GetBloomFilter().HasDataExtractor()) {
+                *bf->MutableDataExtractor() = src.GetBloomFilter().GetDataExtractor();
+            }
+            if (src.GetBloomFilter().HasBitsStorage()) {
+                *bf->MutableBitsStorage() = src.GetBloomFilter().GetBitsStorage();
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
+            auto* nf = dst.MutableBloomNGrammFilter();
+            if (src.GetBloomNGrammFilter().HasColumnId()) {
+                if (auto it = columnIdToName.find(src.GetBloomNGrammFilter().GetColumnId()); it != columnIdToName.end()) {
+                    nf->SetColumnName(it->second);
+                }
+            }
+            if (src.GetBloomNGrammFilter().HasNGrammSize()) {
+                nf->SetNGrammSize(src.GetBloomNGrammFilter().GetNGrammSize());
+            }
+            if (src.GetBloomNGrammFilter().HasHashesCount()) {
+                nf->SetHashesCount(src.GetBloomNGrammFilter().GetHashesCount());
+            }
+            if (src.GetBloomNGrammFilter().HasFilterSizeBytes()) {
+                nf->SetFilterSizeBytes(src.GetBloomNGrammFilter().GetFilterSizeBytes());
+            }
+            if (src.GetBloomNGrammFilter().HasRecordsCount()) {
+                nf->SetRecordsCount(src.GetBloomNGrammFilter().GetRecordsCount());
+            }
+            if (src.GetBloomNGrammFilter().HasCaseSensitive()) {
+                nf->SetCaseSensitive(src.GetBloomNGrammFilter().GetCaseSensitive());
+            }
+            if (src.GetBloomNGrammFilter().HasDataExtractor()) {
+                *nf->MutableDataExtractor() = src.GetBloomNGrammFilter().GetDataExtractor();
+            }
+            if (src.GetBloomNGrammFilter().HasBitsStorage()) {
+                *nf->MutableBitsStorage() = src.GetBloomNGrammFilter().GetBitsStorage();
+            }
+            return true;
+        }
+        case NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex:
+        case NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch:
+        case NKikimrSchemeOp::TOlapIndexDescription::kMinMaxIndex:
+        case NKikimrSchemeOp::TOlapIndexDescription::IMPLEMENTATION_NOT_SET:
+            return false;
+    }
+}
+
 inline bool ConvertRequestedIndexToCreationConfig(
     const NKikimrSchemeOp::TOlapIndexRequested& indexProto,
     NKikimrSchemeOp::TIndexCreationConfig& config)

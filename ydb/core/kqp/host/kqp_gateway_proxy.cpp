@@ -551,7 +551,7 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     return true;
 }
 
-static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
@@ -692,7 +692,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    if (!FillCreateColumnTableIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+    if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
         return false;
     }
 

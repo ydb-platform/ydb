@@ -173,16 +173,29 @@ private:
                     olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
                     auto* ngram = olapIndex->MutableBloomNGrammFilter();
                     const auto& idxProto = index.local_bloom_ngram_filter_index();
-                    if (idxProto.ngram_size()) ngram->SetNGrammSize(idxProto.ngram_size());
-                    if (idxProto.hashes_count()) ngram->SetHashesCount(idxProto.hashes_count());
-                    if (idxProto.filter_size_bytes()) ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
-                    if (idxProto.records_count()) ngram->SetRecordsCount(idxProto.records_count());
-                    if (idxProto.has_case_sensitive()) ngram->SetCaseSensitive(idxProto.case_sensitive());
-                    for (const auto& colName : index.index_columns()) {
-                        auto it = colNameToId.find(colName);
+                    if (idxProto.ngram_size()) {
+                        ngram->SetNGrammSize(idxProto.ngram_size());
+                    }
+                    if (idxProto.hashes_count()) {
+                        ngram->SetHashesCount(idxProto.hashes_count());
+                    }
+                    if (idxProto.filter_size_bytes()) {
+                        ngram->SetFilterSizeBytes(idxProto.filter_size_bytes());
+                    }
+                    if (idxProto.records_count()) {
+                        ngram->SetRecordsCount(idxProto.records_count());
+                    }
+                    if (idxProto.has_case_sensitive()) {
+                        ngram->SetCaseSensitive(idxProto.case_sensitive());
+                    }
+                    if (index.index_columns().size() != 1) {
+                        issues.AddIssue(NYql::TIssue("Bloom NGram filter index supports exactly one column"));
+                        return false;
+                    }
+                    {
+                        auto it = colNameToId.find(index.index_columns(0));
                         if (it != colNameToId.end()) {
                             ngram->SetColumnId(it->second);
-                            break; // only one column supported
                         }
                     }
                     break;
@@ -195,7 +208,8 @@ private:
                 case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
                 case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
                 case Ydb::Table::TableIndex::kGlobalJsonIndex:
-                    Y_FAIL("This index is not supported for column tables");
+                    issues.AddIssue(NYql::TIssue("This index is not supported for column tables"));
+                    return false;
             }
         }
 

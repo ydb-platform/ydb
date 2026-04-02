@@ -1,6 +1,5 @@
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/tx/schemeshard/olap/operations/checks.h>
-
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -184,17 +183,7 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
-            return false;
-        }
-
-        if (!TableSchema.Update(schemaDiff, errors)) {
-            return false;
-        }
-
-        TableSchema.ParseIndexesFromFullSchema(description.GetSchema());
-        return true;
+        return TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK());
     }
 
 private:

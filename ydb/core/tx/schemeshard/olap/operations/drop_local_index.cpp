@@ -1,13 +1,8 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_path_element.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/schemeshard_path_element.h>
 
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/table_index.h>
-#include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace {
 
@@ -51,18 +46,16 @@ void DropPath(NIceDb::TNiceDb& db, TOperationContext& context,
 class TPropose: public TSubOperationState {
 private:
     TOperationId OperationId;
-    TTxState::ETxState& NextState;
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TDropColumnTableIndex TPropose"
+            << "TDropLocalIndex TPropose"
             << ", operationId: " << OperationId;
     }
 
 public:
-    TPropose(TOperationId id, TTxState::ETxState& nextState)
+    TPropose(TOperationId id)
         : OperationId(id)
-        , NextState(nextState)
     {
         IgnoreMessages(DebugHint(), {});
     }
@@ -77,7 +70,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropLocalIndex);
         Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -89,8 +82,9 @@ public:
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
         Y_ABORT_UNLESS(path.IsResolved());
 
-        NextState = TTxState::WaitShadowPathPublication;
-        context.SS->ChangeTxState(db, OperationId, TTxState::WaitShadowPathPublication);
+        DropPath(db, context, OperationId, *txState, path);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
 
@@ -101,143 +95,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropLocalIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
 };
 
-class TWaitRenamedPathPublication: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TPathId ActivePathId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTableIndex TWaitRenamedPathPublication"
-                << " operationId: " << OperationId;
-    }
-
-public:
-    TWaitRenamedPathPublication(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompletePublication::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompletePublication"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
-
-        Y_ABORT_UNLESS(ActivePathId == ev->Get()->PathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        context.OnComplete.RouteByTabletsFromOperation(OperationId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        Y_ABORT_UNLESS(txState->PlanStep);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet# " << ssId);
-
-        TPath path = TPath::Init(txState->TargetPathId, context.SS);
-        if (path.IsActive()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << ", no renaming has been detected for this operation");
-
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
-            return true;
-        }
-
-        auto activePath = TPath::Resolve(path.PathString(), context.SS);
-        Y_ABORT_UNLESS(activePath.IsResolved());
-
-        Y_ABORT_UNLESS(activePath != path);
-
-        ActivePathId = activePath->PathId;
-        context.OnComplete.PublishAndWaitPublication(OperationId, activePath->PathId);
-
-        return false;
-    }
-};
-
-class TDeletePathBarrier: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TDropColumnTableIndex TDeletePathBarrier"
-                << " operationId: " << OperationId;
-    }
-
-public:
-    TDeletePathBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        TPath path = TPath::Init(txState->TargetPathId, context.SS);
-
-        DropPath(db, context, OperationId, *txState, path);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-        context.OnComplete.RouteByTabletsFromOperation(OperationId);
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", operation type: " << TTxState::TypeName(txState->TxType)
-                               << ", at tablet# " << ssId);
-
-        context.OnComplete.Barrier(OperationId, "RenamePathBarrier");
-
-        return false;
-    }
-};
-
-class TDropColumnTableIndex: public TSubOperation {
-    TTxState::ETxState AfterPropose = TTxState::Invalid;
-
+class TDropLocalIndex: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -245,10 +110,6 @@ class TDropColumnTableIndex: public TSubOperation {
     TTxState::ETxState NextState(TTxState::ETxState state) const override {
         switch (state) {
         case TTxState::Propose:
-            return AfterPropose;
-        case TTxState::WaitShadowPathPublication:
-            return TTxState::DeletePathBarrier;
-        case TTxState::DeletePathBarrier:
             return TTxState::Done;
         default:
             return TTxState::Invalid;
@@ -258,11 +119,7 @@ class TDropColumnTableIndex: public TSubOperation {
     TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) override {
         switch (state) {
         case TTxState::Propose:
-            return MakeHolder<TPropose>(OperationId, AfterPropose);
-        case TTxState::WaitShadowPathPublication:
-            return MakeHolder<TWaitRenamedPathPublication>(OperationId);
-        case TTxState::DeletePathBarrier:
-            return MakeHolder<TDeletePathBarrier>(OperationId);
+            return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
         default:
@@ -280,7 +137,7 @@ public:
         const TString& name = Transaction.GetDrop().GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTableIndex Propose"
+                     "TDropLocalIndex Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", pathId: " << Transaction.GetDrop().GetId()
                          << ", operationId: " << OperationId
@@ -341,7 +198,7 @@ public:
         context.DbChanges.PersistPath(index.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropColumnTableIndex, index.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropLocalIndex, index.Base()->PathId);
         txState.MinStep = TStepId(1);
         txState.State = TTxState::Propose;
 
@@ -357,14 +214,14 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTableIndex AbortPropose"
+                     "TDropLocalIndex AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropColumnTableIndex AbortUnsafe"
+                     "TDropLocalIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -377,12 +234,12 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateDropColumnTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TDropColumnTableIndex>(id, tx);
+ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TDropLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateDropColumnTableIndex(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TDropColumnTableIndex>(id, state);
+ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TDropLocalIndex>(id, state);
 }
 
 } // namespace NKikimr::NSchemeShard

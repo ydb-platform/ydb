@@ -10,6 +10,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/host/kqp_transform.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -40,11 +41,12 @@ class TKqpNewRBOTransformer: public TGraphTransformerBase {
 public:
     TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                           TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables, const TString& cluster, const TString& database,
-                          TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry);
+                          TActorSystem* actorSystem, const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    void AddPlans(std::optional<NJson::TJsonValue> execPlan, std::optional<NJson::TJsonValue> explainPlan);
 
     void Rewind() override;
 
@@ -64,6 +66,10 @@ private:
     TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
     TAutoPtr<IGraphTransformer> PeepholeTypeAnnTransformer;
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
+    TIntrusivePtr<TKqlTransformContext> TransformCtx;
+
+    // Explain plan holder
+    std::optional<NJson::TJsonValue> PlanJson;
 
     // Special fields to request column statistics.
     TKikimrTablesData& Tables;
@@ -83,7 +89,7 @@ TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimiz
                                                        TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
                                                        const TString& cluster, const TString& database, TActorSystem* actorSystem,
-                                                       const NMiniKQL::IFunctionRegistry& funcRegistry);
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry, TIntrusivePtr<TKqlTransformContext> transformCtx);
 
 class TKqpRBOCleanupTransformer: public TSyncTransformerBase {
 public:

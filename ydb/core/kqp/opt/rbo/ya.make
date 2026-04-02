@@ -12,6 +12,7 @@ SRCS(
     kqp_rewrite_select.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_statistics.cpp
+    kqp_plan_to_json.cpp
 )
 
 PEERDIR(

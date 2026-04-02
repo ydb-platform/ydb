@@ -197,6 +197,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
         return TPathElement::EPathSubType::EPathSubTypeEmpty;
     }
 
+    // Local indexes have no impl tables, so resolve their subtype early.
+    // Global indexes fall through to the logic below that inspects impl table children.
     if (path.Base()->IsTableIndex()) {
         const auto& pathId = path.Base()->PathId;
         if (Self->Indexes.contains(pathId)) {
@@ -206,7 +208,14 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
-                default:
+                case NKikimrSchemeOp::EIndexTypeInvalid:
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
                     break;
             }
         }
@@ -1533,8 +1542,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
             *entry.MutableBloomNGrammFilterDescription() = std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
             break;
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
+        case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
     }
 }

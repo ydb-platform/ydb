@@ -3093,7 +3093,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         type = EIndexType::LocalBloomNgramFilter;
         specializedIndexSettings = TLocalBloomNgramFilterSettings::FromProto(proto.local_bloom_ngram_filter_index());
         break;
-    default: // fallback to global sync
+    case TProto::TYPE_NOT_SET:
         type = EIndexType::GlobalSync;
         globalIndexSettings.resize(1);
         break;

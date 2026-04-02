@@ -1916,4 +1916,88 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
             TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(1)});
         }
     }
+
+    Y_UNIT_TEST(MoveColumnTableLocalIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableMoveIndex(true));
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        // Create column table with two bloom filter indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [3]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify initial state: two indexes
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"key"}),
+            });
+        }
+
+        // Move bloom_key -> bloom_key_renamed
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key", "bloom_key_renamed", false);
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify: old path gone, new path exists
+        {
+            auto descr = DescribePath(runtime, "/MyRoot/TestTable");
+            TestDescribeResult(descr, {NLs::PathExist, NLs::ChildrenCount(2)});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key");
+            TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTable/bloom_key_renamed");
+            TestDescribeResult(descr, {
+                NLs::PathExist,
+                NLs::IndexType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter),
+                NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+                NLs::IndexKeys({"key"}),
+            });
+        }
+
+        // Move non-existent index -> error
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "non_existent", "something", false,
+            {NKikimrScheme::StatusPathDoesNotExist});
+
+        // Move to existing name without overwrite -> error
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
+            {NKikimrScheme::StatusSchemeError});
+    }
 }

@@ -67,7 +67,7 @@ bool IsCreate(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxCreateColumnTableIndex:
+        case TxCreateLocalIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateSequence:
@@ -108,7 +108,7 @@ bool IsCreate(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
-        case TxDropColumnTableIndex:
+        case TxDropLocalIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxFinalizeBuildIndex:
@@ -137,7 +137,7 @@ bool IsCreate(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
-        case TxAlterColumnTableIndex:
+        case TxAlterLocalIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -175,6 +175,7 @@ bool IsCreate(ETxType t) {
             return false; // IsCreate
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
             return true; // IsCreate
         case TxRotateCdcStream:
@@ -205,7 +206,7 @@ bool IsDrop(ETxType t) {
         case TxForceDropSubDomain:
         case TxForceDropExtSubDomain:
         case TxDropTableIndex:
-        case TxDropColumnTableIndex:
+        case TxDropLocalIndex:
         case TxDropSolomonVolume:
         case TxRmDir:
         case TxDropCdcStream:
@@ -242,7 +243,7 @@ bool IsDrop(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxCreateColumnTableIndex:
+        case TxCreateLocalIndex:
         case TxFillIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
@@ -278,7 +279,7 @@ bool IsDrop(ETxType t) {
         case TxAlterTable:
         case TxAlterOlapStore:
         case TxAlterColumnTable:
-        case TxAlterColumnTableIndex:
+        case TxAlterLocalIndex:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -318,6 +319,7 @@ bool IsDrop(ETxType t) {
             return false; // IsDrop
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
             return false; // IsDrop
         case TxTruncateTable:
@@ -357,7 +359,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBackupCollection:
             return true; // CanDeleteParts
         case TxDropTableIndex:
-        case TxDropColumnTableIndex:
+        case TxDropLocalIndex:
         case TxRmDir:
         case TxFinalizeBuildIndex:
         case TxDropExternalTable:
@@ -384,7 +386,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSolomonVolume:
         case TxCreateRtmrVolume:
         case TxCreateTableIndex:
-        case TxCreateColumnTableIndex:
+        case TxCreateLocalIndex:
         case TxCreateCdcStream:
         case TxCreateCdcStreamAtTable:
         case TxCreateCdcStreamAtTableWithInitialScan:
@@ -432,13 +434,14 @@ bool CanDeleteParts(ETxType t) {
         case TxAlterUserAttributes:
         case TxFillIndex:
         case TxAlterTableIndex:
-        case TxAlterColumnTableIndex:
+        case TxAlterLocalIndex:
         case TxAlterSolomonVolume:
         case TxAlterCdcStream:
         case TxAlterCdcStreamAtTable:
         case TxAlterCdcStreamAtTableDropSnapshot:
         case TxMoveTable:
         case TxMoveTableIndex:
+        case TxMoveLocalIndex:
         case TxMoveSequence:
         case TxAlterSequence:
         case TxAlterReplication:

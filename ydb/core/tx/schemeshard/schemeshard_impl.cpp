@@ -1746,7 +1746,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateSolomonVolume:
     case TTxState::TxCreateRtmrVolume:
     case TTxState::TxCreateTableIndex:
-    case TTxState::TxCreateColumnTableIndex:
+    case TTxState::TxCreateLocalIndex:
     case TTxState::TxCreateOlapStore:
     case TTxState::TxCreateColumnTable:
     case TTxState::TxCreateCdcStream:
@@ -1781,7 +1781,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateLock:
     case TTxState::TxDropLock:
     case TTxState::TxAlterTableIndex:
-    case TTxState::TxAlterColumnTableIndex:
+    case TTxState::TxAlterLocalIndex:
     case TTxState::TxAlterSolomonVolume:
     case TTxState::TxDropTableIndexAtMainTable:
     case TTxState::TxAlterOlapStore:
@@ -1821,7 +1821,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropKesus:
     case TTxState::TxDropSolomonVolume:
     case TTxState::TxDropTableIndex:
-    case TTxState::TxDropColumnTableIndex:
+    case TTxState::TxDropLocalIndex:
     case TTxState::TxDropOlapStore:
     case TTxState::TxDropColumnTable:
     case TTxState::TxDropCdcStream:
@@ -1861,6 +1861,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
         Y_UNREACHABLE();
     case TTxState::TxMoveTable:
     case TTxState::TxMoveTableIndex:
+    case TTxState::TxMoveLocalIndex:
     case TTxState::TxMoveSequence:
     case TTxState::TxRotateCdcStream:
         return TPathElement::EPathState::EPathStateCreate;

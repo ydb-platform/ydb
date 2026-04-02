@@ -517,15 +517,18 @@ ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState st
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewColumnTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateNewColumnTableIndex(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateDropColumnTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropColumnTableIndex(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateAlterColumnTableIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateAlterColumnTableIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, TTxState::ETxState state);
 
-TVector<ISubOperation::TPtr> CreateColumnTableWithIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
-TVector<ISubOperation::TPtr> AlterColumnTableWithIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperation::TPtr> CreateConsistentMoveLocalIndex(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);

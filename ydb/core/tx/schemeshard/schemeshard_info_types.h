@@ -2824,8 +2824,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 Y_ENSURE(success || description.empty(), description);
                 break;
             }
-            default:
-                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(type));
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 break;
         }
     }
@@ -2900,7 +2899,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
                 break;
-            default:
+            case NKikimrSchemeOp::EIndexTypeInvalid:
                 errMsg += InvalidIndexType(config.GetType());
                 return nullptr;
         }

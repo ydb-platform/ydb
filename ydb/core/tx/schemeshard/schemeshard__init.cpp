@@ -5795,9 +5795,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
-        THashSet<TPathId> pathsUnderOperation;
+        // Skip tables being created or altered — AlterColumnTableWithLocalIndexes
+        // is a composite operation that may also create index scheme objects.
+        THashSet<TPathId> tablesUnderOperation;
         for (const auto& [opId, txState] : Self->TxInFlight) {
-            pathsUnderOperation.insert(txState.TargetPathId);
+            if (txState.TxType == TTxState::TxCreateColumnTable
+                || txState.TxType == TTxState::TxAlterColumnTable)
+            {
+                tablesUnderOperation.insert(txState.TargetPathId);
+            }
         }
 
         bool anyCreated = false;
@@ -5808,12 +5814,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!tableInfo.IsStandalone()) {
                 continue;
             }
-            if (pathsUnderOperation.contains(tablePathId)) {
+            if (tablesUnderOperation.contains(tablePathId)) {
                 continue;
             }
 
             const auto& tableDesc = tableInfo.Description;
-            if (!tableDesc.HasSchema() || tableDesc.GetSchema().IndexesSize() == 0) {
+            if (tableDesc.GetSchema().IndexesSize() == 0) {
                 continue;
             }
 

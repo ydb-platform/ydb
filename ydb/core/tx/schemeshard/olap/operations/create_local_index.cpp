@@ -1,6 +1,6 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace {
 
@@ -13,7 +13,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TCreateColumnTableIndex TPropose"
+            << "TCreateLocalIndex TPropose"
             << " operationId# " << OperationId;
     }
 
@@ -34,7 +34,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLocalIndex);
         Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -63,14 +63,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateLocalIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
 };
 
-class TCreateColumnTableIndex: public TSubOperation {
+class TCreateLocalIndex: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -106,7 +106,7 @@ public:
         const TString& name = tableIndexCreation.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTableIndex Propose"
+                     "TCreateLocalIndex Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -207,7 +207,7 @@ public:
         auto newIndexPath = dstPath.Base();
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateColumnTableIndex, newIndexPath->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateLocalIndex, newIndexPath->PathId);
         txState.State = TTxState::Propose;
 
         newIndexPath->PathState = NKikimrSchemeOp::EPathStateCreate;
@@ -229,14 +229,14 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTableIndex AbortPropose"
+                     "TCreateLocalIndex AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTableIndex AbortUnsafe"
+                     "TCreateLocalIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -249,12 +249,12 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateNewColumnTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TCreateColumnTableIndex>(id, tx);
+ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TCreateLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateNewColumnTableIndex(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TCreateColumnTableIndex>(id, state);
+ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TCreateLocalIndex>(id, state);
 }
 
 } // namespace NKikimr::NSchemeShard

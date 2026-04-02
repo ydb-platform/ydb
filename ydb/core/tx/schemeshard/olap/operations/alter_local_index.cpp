@@ -1,6 +1,6 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace {
 
@@ -13,7 +13,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TAlterColumnTableIndex TPropose"
+            << "TAlterLocalIndex TPropose"
             << " operationId# " << OperationId;
     }
 
@@ -34,7 +34,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterLocalIndex);
         Y_ABORT_UNLESS(txState->State == TTxState::Propose);
 
         NIceDb::TNiceDb db(context.GetDB());
@@ -64,14 +64,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterColumnTableIndex);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxAlterLocalIndex);
 
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
 };
 
-class TAlterColumnTableIndex: public TSubOperation {
+class TAlterLocalIndex: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -107,7 +107,7 @@ public:
         const TString& name = tableIndexCreation.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterColumnTableIndex Propose"
+                     "TAlterLocalIndex Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", operationId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -159,7 +159,7 @@ public:
         alterData->SpecializedIndexDescription = newIndexData->AlterData->SpecializedIndexDescription;
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTableIndex, indexPath.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterLocalIndex, indexPath.Base()->PathId);
         txState.State = TTxState::Propose;
 
         indexPath.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
@@ -173,14 +173,14 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterColumnTableIndex AbortPropose"
+                     "TAlterLocalIndex AbortPropose"
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterColumnTableIndex AbortUnsafe"
+                     "TAlterLocalIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -193,12 +193,12 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterColumnTableIndex(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TAlterColumnTableIndex>(id, tx);
+ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TAlterLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateAlterColumnTableIndex(TOperationId id, TTxState::ETxState state) {
-    return MakeSubOperation<TAlterColumnTableIndex>(id, state);
+ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, TTxState::ETxState state) {
+    return MakeSubOperation<TAlterLocalIndex>(id, state);
 }
 
 } // namespace NKikimr::NSchemeShard

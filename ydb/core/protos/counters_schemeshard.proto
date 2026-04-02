@@ -284,9 +284,10 @@ enum ESimpleCounters {
 
     COUNTER_IN_FLIGHT_OPS_TxPrepareIndexValidation = 220 [(CounterOpts) = {Name: "InFlightOps/PrepareIndexValidation"}];
 
-    COUNTER_IN_FLIGHT_OPS_TxCreateColumnTableIndex = 221 [(CounterOpts) = {Name: "InFlightOps/CreateColumnTableIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropColumnTableIndex = 222 [(CounterOpts) = {Name: "InFlightOps/DropColumnTableIndex"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterColumnTableIndex = 223 [(CounterOpts) = {Name: "InFlightOps/AlterColumnTableIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateLocalIndex = 221 [(CounterOpts) = {Name: "InFlightOps/CreateLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 222 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 223 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
+    COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 224 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
 }
 
 enum ECumulativeCounters {
@@ -470,9 +471,10 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxPrepareIndexValidation = 140 [(CounterOpts) = {Name: "FinishedOps/PrepareIndexValidation"}];
 
-    COUNTER_FINISHED_OPS_TxCreateColumnTableIndex = 141 [(CounterOpts) = {Name: "FinishedOps/CreateColumnTableIndex"}];
-    COUNTER_FINISHED_OPS_TxDropColumnTableIndex = 142 [(CounterOpts) = {Name: "FinishedOps/DropColumnTableIndex"}];
-    COUNTER_FINISHED_OPS_TxAlterColumnTableIndex = 143 [(CounterOpts) = {Name: "FinishedOps/AlterColumnTableIndex"}];
+    COUNTER_FINISHED_OPS_TxCreateLocalIndex = 141 [(CounterOpts) = {Name: "FinishedOps/CreateLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxDropLocalIndex = 142 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxAlterLocalIndex = 143 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
+    COUNTER_FINISHED_OPS_TxMoveLocalIndex = 144 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
 }
 
 enum EPercentileCounters {

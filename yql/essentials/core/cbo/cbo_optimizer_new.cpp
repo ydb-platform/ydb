@@ -483,13 +483,20 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
                                        leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));
 
+    result.JoinDepth = std::max(leftStats.JoinDepth, rightStats.JoinDepth) + 1;
+
     /*
         - to avoid selectivity underflow and stop over-propagation
         - prevent exponential collapse
         - avoid keeping early joins from dominating plan choice
-    */ 
-    result.Selectivity = std::min(1.0, std::pow(selectivity, 0.2));
-    result.Selectivity = std::max(result.Selectivity, 1e-4);
+    */
+    const ui32 MAX_DEPTH = 4;
+    if (result.JoinDepth > MAX_DEPTH) {
+        result.Selectivity = 1.0;
+    } else {
+        result.Selectivity = std::min(1.0, std::pow(selectivity, 0.2));
+        result.Selectivity = std::max(result.Selectivity, 1e-4);
+    }
 
     return result;
 }

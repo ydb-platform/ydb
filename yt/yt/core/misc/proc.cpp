@@ -387,6 +387,15 @@ bool IsUserspaceThread(size_t tid)
 #endif
 }
 
+std::string GetCurrentProcessName()
+{
+#ifdef __linux__
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#else
+    THROW_ERROR_EXCEPTION("Current process name is not available for this platform");
+#endif
+}
+
 void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_

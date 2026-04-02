@@ -10,7 +10,7 @@
 
 - C++
 
-  [Пример читателя на GitHub](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader)
+  [Пример читателя](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_reader), [пример продьюсера](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/topic_writer/producer/basic_write) на GitHub
 
 - Go
 
@@ -497,17 +497,41 @@
 
 ### Подключение к топику для записи сообщений {#start-writer}
 
-На данный момент поддерживается подключение только с совпадающими идентификаторами [источника и группы сообщений](../../concepts/datamodel/topic#producer-id) (`producer_id` и `message_group_id`), в будущем это ограничение будет снято.
+Для C++ запись сообщений в топик реализована двумя интерфейсами:
+
+- `IProducer` — более высокоуровневая абстракция для записи, похожая на `Producer` для Apache Kafka. Он выбирает партицию для сообщения по ключу (`Key`) или по явному `Partition`. Гарантирует локальность по ключу (сообщения с одним ключом будут обработаны читателями в строгом порядке даже при включенном [автопартиционировании](../../concepts/datamodel/topic#autopartitioning)).
+
+Подтверждения (ack) от продьюсера приходят в том же порядке, в котором сообщения были отправлены, при использовании `AcksHandler`.
+
+- `IWriteSession` — низкоуровневый вариант. Сессия привязана к `producer_id` и (в рамках одной сессии) пишет в одну партицию. Она умеет корректно обрабатывать ошибки при перестроениях партиций (например, в сценариях автопартиционирования), обеспечивает высокопроизводительную запись, но не предназначена для одновременной записи в несколько партиций. Обеспечивает порядок доставки сообщений в партиции (в потребителе сообщения будут прочитаны в том же порядке, что и отправлены). При указании `ProducerId` в `TWriteSessionSettings` предоставляет гарантию exactly once на уровне записи.
 
 {% list tabs group=lang %}
 
 - C++
 
+  Продьюсер создаётся через `TTopicClient::CreateProducer()`. Обязательны `Path` и `ProducerIdPrefix`. Полный список настроек — [TProducerSettings](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h).
+
+  ```cpp
+  auto settings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer");
+
+  auto producer = topicClient.CreateProducer(settings);
+  ```
+
+  Партиция для сообщения выбирается одним из двух способов:
+
+  * **Bound** (по умолчанию) — по диапазонам ключей, которые сервер задаёт для каждой партиции. Ключ сообщения сопоставляется с диапазоном `[from, to)`.
+  * **KafkaHash** (`PartitionChooserStrategy::KafkaHash`) — по хешу ключа, аналогично [Kafka API](../kafka-api/index.md) при передаче ключа. Этот способ нельзя использовать при включённом [автопартиционировании](../../concepts/datamodel/topic#autopartitioning).
+
+
+  Для `IWriteSession` поддерживается только сценарий с совпадающими идентификаторами [источника и группы сообщений](../../concepts/datamodel/topic#producer-id) (`producer_id` и `message_group_id`).
+
   Подключение к топику на запись представлено объектом сессии записи с интерфейсом `IWriteSession` или `ISimpleBlockingWriteSession` (вариант для простой записи по одному сообщению без подтверждения, блокирующейся при превышении числа inflight записей или размера буфера SDK). Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
 
   Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
 
-  Пример создания сессии записи с интерфейсом `IWriteSession`.
+  Пример создания сессии записи с интерфейсом `IWriteSession`:
 
   ```cpp
   std::string producerAndGroupID = "group-id";
@@ -638,6 +662,34 @@
 
 - C++
 
+  `Write()` добавляет сообщение в буфер и возвращает `TWriteResult`. `Flush()` ждёт отправки на сервер.
+
+  Ключ (для выбора партиции по хешу) и партиция — иммутабельные, задаются первым аргументом конструктора:
+
+  ```cpp
+  std::string payload = "payload";
+  // Запись с ключом: партиция выбирается по хешу ключа
+  for (int i = 0; i < 10; ++i) {
+    std::string key = "key-" + std::to_string(i);
+    NYdb::NTopic::TWriteMessage msg(key, payload);
+    assert(producer->Write(std::move(msg)).IsQueued());
+  }
+  // Запись в указанную партицию
+  std::uint32_t partitionId = 0;
+  NYdb::NTopic::TWriteMessage msgToPartition(partitionId, payload);
+  assert(producer->Write(std::move(msgToPartition)).IsQueued());
+  assert(producer->Flush().GetValueSync().IsSuccess());
+  ```
+
+  После записи можно также закрыть продьюсер, чтобы завершить запись.
+
+  ```cpp
+  assert(producer->Close(TDuration::Seconds(1)).IsSuccess());
+  // продьюсер закрыт, писать в него больше нельзя
+  ```
+
+  {% cut "(работа с низкоуровневым интерфейсом `IWriteSession`)" %}
+
   Асинхронная запись возможна через интерфейс `IWriteSession`.
 
   Работа пользователя с объектом `IWriteSession` в общем устроена как обработка цикла событий с тремя типами событий: `TReadyToAcceptEvent`, `TAcksEvent` и `TSessionClosedEvent`.
@@ -670,6 +722,8 @@
       }
   }
   ```
+
+  {% endcut %}
 
 - Go
 
@@ -805,33 +859,56 @@
 
 - C++
 
-  Получение подтверждений от сервера возможно через интерфейс `IWriteSession`.
+  Подтверждения приходят в обработчик `AcksHandler` в настройках продьюсера. В одном `TAcksEvent` могут содержаться ответы о нескольких сообщениях. Варианты: запись подтверждена (`EES_WRITTEN`), дубликат (`EES_ALREADY_WRITTEN`), отброшено (`EES_DISCARDED`).
 
-  Ответы о записи сообщений на сервере приходят клиенту SDK в виде событий `TAcksEvent`. В одном событии могут содержаться ответы о нескольких отправленных ранее сообщениях. Варианты ответа: запись подтверждена (`EES_WRITTEN`), запись отброшена как дубликат ранее записанного сообщения (`EES_ALREADY_WRITTEN`) или запись отброшена по причине сбоя (`EES_DISCARDED`).
+  ```cpp
+  auto settings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer")
+      .EventHandlers(
+          NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
+              .HandlersExecutor(executor)
+              .AcksHandler(
+                  [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
+                      for (const auto& ack : event.Acks) {
+                          if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
+                              std::cout << "Acknowledged seqNo " << ack.SeqNo << std::endl;
+                          }
+                      }
+                  }
+              ));
 
-  Пример установки обработчика TAcksEvent для сессии записи:
+  auto producer = topicClient.CreateProducer(settings);
+  ```
+
+  Альтернатива: `Flush()` возвращает `TFlushResult` с подтверждением отправки сообщений из буфера.
+
+  {% cut "(работа с низкоуровневым интерфейсом `IWriteSession`)" %}
+
+  Получение подтверждений от сервера возможно через интерфейс `IWriteSession`. Ответы приходят в виде событий `TAcksEvent`. Пример установки обработчика:
 
   ```cpp
   auto settings = NYdb::NTopic::TWriteSessionSettings()
-    // other settings are set here
-    .EventHandlers(
-      NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
-        .AcksHandler(
-          [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
-            for (const auto& ack : event.Acks) {
-              if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
-                ackedSeqNo.insert(ack.SeqNo);
-                std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
-              }
-            }
-          }
-        )
-    );
+      .Path("my-topic")
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID)
+      .EventHandlers(
+          NYdb::NTopic::TWriteSessionSettings::TEventHandlers()
+              .AcksHandler(
+                  [&](NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) {
+                      for (const auto& ack : event.Acks) {
+                          if (ack.State == NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState::EES_WRITTEN) {
+                              ackedSeqNo.insert(ack.SeqNo);
+                              std::cout << "Acknowledged message with seqNo " << ack.SeqNo << std::endl;
+                          }
+                      }
+                  }
+              );
 
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
-  В такой сессии записи события `TAcksEvent` не будут приходить пользователю в `GetEvent` / `GetEvents`, вместо этого SDK при получении подтверждений от сервера будет вызывать переданный обработчик. Аналогично можно настраивать обработчики на остальные типы событий.
+  {% endcut %}
 
 - Go
 
@@ -954,19 +1031,32 @@
 
 - C++
 
-  Сжатие, которое используется при отправке сообщений методом `Write`, задаётся при [создании сессии записи](#start-writer) настройками `Codec` и `CompressionLevel`. По умолчанию выбирается кодек GZIP.
-  Пример создания сессии записи без сжатия сообщений:
+  Кодек задаётся в `TProducerSettings` при [создании продьюсера](#start-writer): `Codec` и `CompressionLevel`. По умолчанию GZIP.
+
+  ```cpp
+  auto settings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer")
+      .Codec(NYdb::NTopic::ECodec::RAW);
+
+  auto producer = topicClient.CreateProducer(settings);
+  ```
+
+  {% cut "(работа с низкоуровневым интерфейсом `IWriteSession`)" %}
+
+  Сжатие задаётся при создании сессии записи настройками `Codec` и `CompressionLevel`. Метод `WriteEncoded` позволяет отправить сообщение с указанием кодека и размера расжатого сообщения. Используемый кодек должен быть разрешён в настройках топика.
 
   ```cpp
   auto settings = NYdb::NTopic::TWriteSessionSettings()
-    // other settings are set here
-    .Codec(ECodec::RAW);
+      .Path("my-topic")
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID)
+      .Codec(NYdb::NTopic::ECodec::RAW);
 
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
-  Если необходимо в рамках сессии записи отправить сообщение, сжатое другим кодеком, можно использовать метод `WriteEncoded` с указанием кодека и размера расжатого сообщения. Для успешной записи этим способом используемый кодек должен быть разрешён в настройках топика.
-
+  {% endcut %}
 
 - Go
 
@@ -1016,8 +1106,19 @@
 
 - C++
 
-  Если в настройках сессии записи не указывается опция `ProducerId`, будет создана сессия записи без дедупликации.
-  Пример создания такой сессии записи:
+  По умолчанию продьюсер **не** использует дедупликацию, если в настройках не задан `ProducerIdPrefix`.
+
+  Чтобы включить дедупликацию и получить гарантию exactly-once на уровне продьюсера, задайте префикс:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TProducerSettings()
+      .Path("my-topic")
+      .ProducerIdPrefix("my-producer");
+  ```
+
+  {% cut "(работа с низкоуровневым интерфейсом `IWriteSession`)" %}
+
+  Сессия записи без дедупликации — не указывайте `ProducerId`:
 
   ```cpp
   auto settings = NYdb::NTopic::TWriteSessionSettings()
@@ -1027,6 +1128,8 @@
   ```
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
+
+  {% endcut %}
 
 - Java
 
@@ -1043,26 +1146,44 @@
 
 - C++
 
-  Воспользоваться функцией записи метаданных можно с помощью метода `Write()`, принимающего `TWriteMessage` объект:
+  Метаданные задаются в `TWriteMessage` через `MessageMeta()`:
+
+  ```cpp
+  std::string payload = "payload";
+  NYdb::NTopic::TWriteMessage message(payload);
+  message.MessageMeta({
+      {"meta-key", "meta-value"},
+      {"another-key", "value"}
+  });
+  producer->Write(std::move(message));
+  ```
+
+  {% cut "(работа с низкоуровневым интерфейсом `IWriteSession`)" %}
+
+  Запись метаданных через сессию `IWriteSession` и событие `TReadyToAcceptEvent`:
 
   ```cpp
   auto settings = NYdb::NTopic::TWriteSessionSettings()
       .Path(myTopicPath)
-  // set all other settings;
-  ;
+      .ProducerId(producerAndGroupID)
+      .MessageGroupId(producerAndGroupID);
 
   auto session = topicClient.CreateWriteSession(settings);
 
   std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> event = session->GetEvent(/*block=*/true);
-  NYdb::NTopic::TWriteMessage message("This is yet another message").MessageMeta({
+  std::string messageData = "This is yet another message";
+  NYdb::NTopic::TWriteMessage msg(messageData);
+  msg.MessageMeta({
       {"meta-key", "meta-value"},
       {"another-key", "value"}
   });
 
   if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
-      session->Write(std::move(event.ContinuationToken), std::move(message));
+      session->Write(std::move(readyEvent->ContinuationToken), std::move(msg));
   }
   ```
+
+  {% endcut %}
 
 - Java
 
@@ -1147,23 +1268,28 @@
 
 - C++
 
-  Для записи в топик в транзакции необходимо передать ссылку на объект транзакции в метод `Write` сессии записи.
+  Для записи в топик в транзакции используйте продьюсер (`IProducer`) и передайте транзакцию через параметр `Tx` в сообщении (`TWriteMessage`).
 
   [Пример на GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/examples/topic_writer/transaction/main.cpp)
 
   ```c++
   NYdb::NQuery::TQueryClient queryClient(driver);
 
-  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+  auto producer = /* созданный IProducer (TTopicClient::CreateProducer) */;
+
+  NYdb::NStatusHelpers::ThrowOnError(queryClient.RetryQuerySync([&producer](NYdb::NQuery::TSession session) -> NYdb::TStatus {
       auto beginTxResult = session.BeginTransaction().GetValueSync();
       if (!beginTxResult.IsSuccess()) {
           return beginTxResult;
       }
       auto tx = beginTxResult.GetTransaction();
 
-      NYdb::NTopic::TWriteMessage writeMessage("message");
+      std::string payload = "message";
+      NYdb::NTopic::TWriteMessage writeMessage(payload);
 
-      topicSession->Write(std::move(writeMessage), tx);
+      writeMessage.Tx(tx);
+      producer->Write(std::move(writeMessage));
+      producer->Flush().GetValueSync();
       return tx.Commit().GetValueSync();
   }));
   ```

@@ -114,7 +114,8 @@ inline bool HasSpillingFlag(const TCallable& callable) {
     xx(SystemPython3_10, 16, systempython3_10, false) \
     xx(SystemPython3_11, 17, systempython3_11, false) \
     xx(SystemPython3_12, 18, systempython3_12, false) \
-    xx(SystemPython3_13, 19, systempython3_13, false)
+    xx(SystemPython3_13, 19, systempython3_13, false) \
+    xx(SystemPython3_14, 20, systempython3_14, false)
 // clang-format on
 
 enum class EScriptType {

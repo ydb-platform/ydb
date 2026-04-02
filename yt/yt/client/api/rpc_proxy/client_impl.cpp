@@ -2016,7 +2016,13 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     req->set_partition_mode(static_cast<NProto::EPartitionTablesMode>(options.PartitionMode));
 
-    req->set_data_weight_per_partition(options.DataWeightPerPartition);
+    if (options.DataWeightPerPartition) {
+        req->set_data_weight_per_partition(*options.DataWeightPerPartition);
+    }
+
+    if (options.CompressedDataSizePerPartition) {
+        req->set_compressed_data_size_per_partition(*options.CompressedDataSizePerPartition);
+    }
 
     if (options.MaxPartitionCount) {
         req->set_max_partition_count(*options.MaxPartitionCount);

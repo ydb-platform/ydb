@@ -108,7 +108,7 @@ bool IsSystemError(const TError& error)
 
 TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
     : FD_(fd)
-{}
+{ }
 
 TFileDescriptorGuard::~TFileDescriptorGuard()
 {
@@ -146,7 +146,7 @@ TFileDescriptor TFileDescriptorGuard::Release() noexcept
 void TFileDescriptorGuard::Reset() noexcept
 {
     if (FD_ != -1) {
-        YT_VERIFY(TryClose(FD_, false));
+        YT_VERIFY(TryClose(FD_, /*ignoreBadFD*/ false));
         FD_ = -1;
     }
 }

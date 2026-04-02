@@ -140,7 +140,7 @@ public:
     }
 
 private:
-    static constexpr int TypicalCount = 8;
+    static constexpr int TypicalCount = 2;
     TCompactVector<T, TypicalCount> Callbacks_;
     TCompactVector<TFutureCallbackCookie, TypicalCount> SpareCookies_;
 };
@@ -228,7 +228,7 @@ public:
     using TUniqueVoidResultHandler = TCallback<void(TError&&)>;
 
     using TCancelHandler = TCallback<void(const TError&)>;
-    using TCancelHandlers = TCompactVector<TCancelHandler, 8>;
+    using TCancelHandlers = TCompactVector<TCancelHandler, 2>;
 
     void RefFuture()
     {
@@ -367,11 +367,11 @@ protected:
     //! Protects the following section of members.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
     std::atomic<bool> Canceled_ = false;
-    TError CancelationError_;
     std::atomic<bool> Set_;
     std::atomic<bool> AbandonedUnset_ = false;
-    TError ResultError_;
     bool HasHandlers_ = false;
+    TError CancelationError_;
+    TError ResultError_;
     TVoidResultHandlers VoidResultHandlers_;
     TCancelHandlers CancelHandlers_;
     mutable std::unique_ptr<NThreading::TEvent> ReadyEvent_;

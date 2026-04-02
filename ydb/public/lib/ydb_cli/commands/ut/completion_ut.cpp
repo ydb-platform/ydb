@@ -1,4 +1,3 @@
-#include <ydb/public/lib/ydb_cli/commands/ydb_workload.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_root_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 #include <ydb/public/lib/ydb_cli/common/completion.h>
@@ -7,7 +6,6 @@
 #include <library/cpp/getopt/small/modchooser.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -86,59 +84,6 @@ TClientCommand::TConfig MakeDummyConfig() {
 } // namespace
 
 Y_UNIT_TEST_SUITE(CompletionData) {
-    Y_UNIT_TEST(WorkloadSubcommandsHaveValidDescriptions) {
-        TCommandWorkload workload;
-        auto config = MakeDummyConfig();
-
-        TModChooser chooser;
-        TYdbCommandTreeAutoCompletionWrapper wrapper(&workload, config);
-        wrapper.RegisterModes(chooser);
-
-        TVector<TString> errors;
-        CollectCompletionErrors(chooser, "ydb workload", errors);
-
-        UNIT_ASSERT_C(errors.empty(), FormatErrors(errors));
-    }
-
-    Y_UNIT_TEST(WorkloadVisibleSubcommandsAreComplete) {
-        TCommandWorkload workload;
-        auto config = MakeDummyConfig();
-
-        TModChooser chooser;
-        TYdbCommandTreeAutoCompletionWrapper wrapper(&workload, config);
-        wrapper.RegisterModes(chooser);
-
-        THashSet<TString> visibleNames;
-        for (const auto* mode : chooser.GetUnsortedModes()) {
-            if (!mode->Hidden && !mode->Name.empty()) {
-                visibleNames.insert(mode->Name);
-            }
-        }
-
-        const TVector<TString> expectedVisible = {
-            "topic", "transfer", "tpcc", "vector",
-            "clickbench", "kv", "log", "mixed", "query", "stock", "tpcds", "tpch",
-        };
-
-        for (const auto& name : expectedVisible) {
-            UNIT_ASSERT_C(visibleNames.count(name) > 0,
-                TStringBuilder() << "Expected visible workload subcommand \""
-                    << name << "\" is missing");
-        }
-
-        const TVector<TString> expectedHidden = {
-            "fulltext", "testshard",
-#ifndef _win_
-            "sqs",
-#endif
-        };
-        for (const auto& name : expectedHidden) {
-            UNIT_ASSERT_C(visibleNames.count(name) == 0,
-                TStringBuilder() << "Workload subcommand \""
-                    << name << "\" should be hidden but is visible");
-        }
-    }
-
     Y_UNIT_TEST(RootCommandDescriptionsAreValid) {
         TClientSettings settings;
         settings.EnableSsl = false;

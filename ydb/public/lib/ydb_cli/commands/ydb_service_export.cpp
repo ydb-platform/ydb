@@ -596,6 +596,8 @@ TCommandExportToNfs::TCommandExportToNfs()
         "As a server-side operation, export files are written in massively parallel to an identical NFS-mounted directory path accessed by all YDB hosts.\n"
         "Ensure this directory is mounted on every YDB host.")
 {
+    CompletionDescription = "Create export to a shared NFS directory";
+
     TItemNfs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Database path to a directory or a table to be exported", true}},
         {"Destination", {{"destination", "dst", "d"}, "Path in file system (relative to fs-path)", true}},

@@ -482,6 +482,8 @@ TCommandImportFromNfs::TCommandImportFromNfs()
         "and table data files from an identical path on every YDB host.\n"
         "Files are sourced from a directory mounted across all YDB hosts.")
 {
+    CompletionDescription = "Create import from a shared NFS directory";
+
     TItemNfs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to fs-path)", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},

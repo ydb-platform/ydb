@@ -11,8 +11,7 @@ namespace NYql::NDq {
 
 // Parses a codec string of the form "<name>[_<level>]" into (ECodec, optional level).
 // The codec name is matched case-insensitively.  The optional suffix "_N" (N > 0) is
-// the compression level.  The caller must ensure the string is already validated by the
-// optimizer regex, so unknown names are treated as a programming error (Y_ABORT).
+// the compression level.  Throws yexception on an unknown codec name.
 std::pair<NYdb::NTopic::ECodec, std::optional<int>> ParseCodecString(TStringBuf str);
 
 } // namespace NYql::NDq

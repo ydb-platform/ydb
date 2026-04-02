@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/protos
     ydb/library/actors/core
     ydb/library/persqueue/counter_time_keeper
+    ydb/library/persqueue/topic_parser
 )
 
 END()

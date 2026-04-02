@@ -181,14 +181,17 @@ public:
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
         const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
-        // PqReadTopic: optional UserSchemaColumns (8), optional Watermark (9) тАФ yql_pq_expr_nodes.json.
+        // PqReadTopic: optional Watermark (8), optional UserSchemaColumns (9) тАФ yql_pq_expr_nodes.json.
         const TExprNode* userSchemaColumnsArg = nullptr;
         TExprNode::TPtr watermarkNode;
+        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
+            const auto w = input->ChildPtr(TPqReadTopic::idx_Watermark);
+            if (!TCoVoid::Match(w.Get())) {
+                watermarkNode = w;
+            }
+        }
         if (input->ChildrenSize() > TPqReadTopic::idx_UserSchemaColumns) {
             userSchemaColumnsArg = input->Child(TPqReadTopic::idx_UserSchemaColumns);
-        }
-        if (input->ChildrenSize() > TPqReadTopic::idx_Watermark) {
-            watermarkNode = input->ChildPtr(TPqReadTopic::idx_Watermark);
         }
 
         if (!EnsureWorldType(*world, ctx)) {

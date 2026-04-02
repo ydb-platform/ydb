@@ -239,6 +239,13 @@ public:
             userSchemaColumnsList = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
         }
 
+        TExprNode::TPtr watermarkArg;
+        if (auto watermark = topicKeyParser.GetWatermark()) {
+            watermarkArg = std::move(watermark);
+        } else {
+            watermarkArg = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
@@ -248,11 +255,8 @@ public:
             .Compression().Value(topicKeyParser.GetCompression()).Build()
             .LimitHint<TCoVoid>().Build()
             .Settings(settings.Done())
+            .Watermark(std::move(watermarkArg))
             .UserSchemaColumns(std::move(userSchemaColumnsList));
-
-        if (auto watermark = topicKeyParser.GetWatermark()) {
-            builder.Watermark(std::move(watermark));
-        }
 
         return Build<TCoRight>(ctx, read.Pos())
             .Input(builder.Done())

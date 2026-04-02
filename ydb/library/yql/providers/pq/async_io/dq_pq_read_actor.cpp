@@ -1149,7 +1149,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
         }
 
         const TStringBuf format(settings.GetFormat());
-        YQL_ENSURE(format == "json_each_row"sv || format == "raw"sv,
+        const TStringBuf normalizedFormat = format.empty() ? "raw"sv : format;
+        YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
             "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
         return CreateDqPqRdReadActor(

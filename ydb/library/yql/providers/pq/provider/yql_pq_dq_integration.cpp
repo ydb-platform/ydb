@@ -106,23 +106,10 @@ public:
             const auto token = "cluster:default_" + clusterName;
 
             const auto pos = read->Pos();
-            const TStringBuf format = pqReadTopic.Format().Ref().Content();
 
             // DqPqTopicSource.Columns = final output row (may shrink after e.g. ExtractMembers).
             // columns_list / UserSchemaColumns = fixed topic/userschema order for csv parsing; unchanged by projection.
-            if (format == "csv"sv) {
-                const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
-                YQL_ENSURE(maybeUserSchema, "PqReadTopic csv: UserSchemaColumns is required");
-                const auto* usc = maybeUserSchema.Cast().Ptr().Get();
-                YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc),
-                    "PqReadTopic csv: UserSchemaColumns must be a list of column name atoms");
-                YQL_ENSURE(usc->ChildrenSize() > 0,
-                    "PqReadTopic csv: UserSchemaColumns must not be empty");
-                for (auto child : usc->Children()) {
-                    YQL_ENSURE(child->IsAtom(),
-                        "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
-                }
-            }
+            // Non-empty csv UserSchemaColumns is validated in HandleReadTopic (yql_pq_datasource_type_ann.cpp), same as S3.
 
             // Same member order/names as PqReadTopic row type (RowSpec + metadata, PqReadTopic.Columns projection).
             const auto& typeItems = rowType->GetItems();

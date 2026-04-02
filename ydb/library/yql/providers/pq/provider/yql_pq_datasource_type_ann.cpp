@@ -223,6 +223,22 @@ public:
             return TStatus::Error;
         }
 
+        // Same requirement and wording as S3 read (yql_s3_datasource_type_ann.cpp): csv needs explicit column order.
+        static constexpr TStringBuf CsvRequiresExplicitSchemaColumnNames =
+            "csv format requires SCHEMA with explicitly listed column names to determine column order"sv;
+        if (format->Content() == "csv"sv) {
+            if (input->ChildrenSize() <= TPqReadTopic::idx_UserSchemaColumns) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                return TStatus::Error;
+            }
+            const auto* userSchemaColumns = input->Child(TPqReadTopic::idx_UserSchemaColumns);
+            if (TCoVoid::Match(userSchemaColumns) || !userSchemaColumns->IsList() ||
+                userSchemaColumns->ChildrenSize() == 0) {
+                ctx.AddError(TIssue(ctx.GetPosition(userSchemaColumns->Pos()), TString{CsvRequiresExplicitSchemaColumnNames}));
+                return TStatus::Error;
+            }
+        }
+
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),

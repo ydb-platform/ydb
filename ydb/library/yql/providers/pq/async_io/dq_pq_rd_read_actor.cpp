@@ -582,8 +582,9 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     YQL_ENSURE(outputItemType->IsStruct(), "Output type " << outputTypeYson << " is not struct");
     const auto structType = static_cast<TStructType*>(outputItemType);
 
-    const auto format = SourceParams.GetFormat();
-    YQL_ENSURE(format == "json_each_row"sv || format == "raw"sv,
+    const TStringBuf format = SourceParams.GetFormat();
+    const TStringBuf normalizedFormat = format.empty() ? "raw"sv : format;
+    YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
         "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
     // Build input schema and unpacker (packed rows from row dispatcher; not raw csv/json strings)

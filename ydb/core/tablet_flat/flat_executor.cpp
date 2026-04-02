@@ -4382,6 +4382,8 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NBackup::TEvChangelogFailed, Handle);
         hFunc(NBackup::TEvStartNewBackup, Handle);
         hFunc(NBackup::TEvWriteChangelogAck, Handle);
+        hFunc(NBackup::TEvSnapshotStats, Handle);
+        hFunc(NBackup::TEvChangelogStats, Handle);
     default:
         break;
     }
@@ -5194,9 +5196,10 @@ void TExecutor::StartNewBackup() {
             QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
         BackupSnapshotInProgress = true;
+        Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(1);
 
         auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
-        CommitManager->BackupLogic.Start(this, SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
+        CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
     }
 }
 
@@ -5210,6 +5213,7 @@ void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
+    Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
         Owner->BackupSnapshotComplete(OwnerCtx());
 
@@ -5219,6 +5223,7 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
             ScheduleRetryBackup();
         }
     } else {
+        Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_ERRORS].Increment(1);
         FailBackup("Backup snapshot failed: " + ev->Get()->Error);
     }
 }
@@ -5228,6 +5233,7 @@ void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
         return;
     }
 
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_ERRORS].Increment(1);
     FailBackup("Backup changelog failed: " + ev->Get()->Error);
 }
 
@@ -5256,6 +5262,17 @@ void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
     }
 
     StartNewBackup();
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotStats::TPtr& ev) {
+    Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_BYTES_WRITTEN].Increment(ev->Get()->BytesWritten);
+}
+
+void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
+    const auto* msg = ev->Get();
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_BYTES_WRITTEN].Increment(msg->BytesWritten);
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->FlushLatency.MicroSeconds());
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
 }
 
 }

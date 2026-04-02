@@ -619,6 +619,8 @@ class TExecutor
     void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
     void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
     void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotStats::TPtr &ev);
+    void Handle(NBackup::TEvChangelogStats::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

@@ -27,6 +27,7 @@
 
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
+#include <util/system/hp_timer.h>
 
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
@@ -254,6 +255,7 @@ public:
             SchemaFile.Write(stringOut.Data(), stringOut.Size());
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
+            Send(Owner, new TEvSnapshotStats(stringOut.Size()));
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
@@ -350,6 +352,7 @@ public:
                 it->second.File.Write(msg->SnapshotData.Data(), msg->SnapshotData.Size());
                 it->second.Sha256.Update(msg->SnapshotData.Data(), msg->SnapshotData.Size());
                 WrittenBytes += msg->SnapshotData.Size();
+                Send(Owner, new TEvSnapshotStats(msg->SnapshotData.Size()));
             } catch (const TIoException& e) {
                 return ReplyAndDie(false, TStringBuilder() << "Failed to write snapshot table data " << it->second.File.GetName() << ": " << e.what());
             }
@@ -433,6 +436,8 @@ public:
             TFile checksumFile(checksumPath, EOpenModeFlag::CreateNew | EOpenModeFlag::WrOnly);
             checksumFile.Write(manifestChecksum.data(), manifestChecksum.size());
             checksumFile.Flush();
+
+            Send(Owner, new TEvSnapshotStats(manifestStr.size() + manifestChecksum.size()));
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to write manifest: " << e.what());
         }
@@ -909,6 +914,10 @@ public:
 
             size_t changesSize = Buffer.Size() - changesStart;
             Checksum.Update(Buffer.data() + changesStart, changesSize);
+
+            if (!BufferCreatedAt) {
+                BufferCreatedAt = msg->CreatedAt;
+            }
         }
 
         Send(Owner, new TEvWriteChangelogAck(msgSize));
@@ -942,6 +951,7 @@ public:
 
     void Flush() {
         if (!Buffer.Empty()) {
+            THPTimer timer;
             try {
                 ChangelogFile.Write(Buffer.data(), Buffer.size());
                 ChangelogFile.Flush();
@@ -949,7 +959,16 @@ public:
             } catch (const TIoException& e) {
                 return ReplyAndDie(TStringBuilder() << "Failed to write changelog data " << ChangelogFile.GetName() << ": " << e.what());
             }
+            TDuration flushLatency = TDuration::Seconds(timer.Passed());
+
+            ui64 flushedBytes = Buffer.size();
             Buffer.Clear();
+
+            Y_ENSURE(BufferCreatedAt);
+            TDuration lag = TActivationContext::Monotonic() - *BufferCreatedAt;
+            BufferCreatedAt = std::nullopt;
+
+            Send(Owner, new TEvChangelogStats(flushedBytes, flushLatency, lag));
 
             try {
                 WriteChangelogChecksum();
@@ -1013,6 +1032,7 @@ private:
     std::optional<ui64> SnapshotWrittenBytes;
 
     TSha256Hasher Checksum;
+    std::optional<TMonotonic> BufferCreatedAt;
 };
 
 IActor* CreateSnapshotWriter(TActorId owner, const NKikimrConfig::TSystemTabletBackupConfig& config,

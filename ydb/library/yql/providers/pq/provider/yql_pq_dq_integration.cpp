@@ -530,7 +530,7 @@ private:
     }
 
     static bool IsSupportedFormatInSharedReading(std::string_view format) {
-        return format == "json_each_row" || format == "raw";
+        return format == "json_each_row"sv || format == "raw"sv;
     }
 
 public:
@@ -556,8 +556,7 @@ public:
         if (clusterConfiguration->SharedReading && !IsSupportedFormatInSharedReading(format)) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
                 TStringBuilder() << "Cluster has shared reading enabled, but format \"" << format
-                    << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "
-                    "Disable shared reading in the cluster configuration or use a supported format."));
+                    << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "));
             return {};
         }
 

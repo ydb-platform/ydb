@@ -218,7 +218,6 @@ public:
             YQL_ENSURE(usedColumnNames.insert(TString(item->GetName())).second);
         }
 
-        // Must match DqPqTopicSource.RowType order (read / projection / column order), not TPqTopic RowSpec.
         const auto oldRowType = dqPqTopicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         if (oldRowType->GetSize() == usedColumnNames.size()) {
             return node;
@@ -287,21 +286,14 @@ public:
             return node;
         }
 
-        // FlatMap lambda may still be Void (stub) before lambda is filled in later passes тАФ do not cast to TCoLambda yet.
-        const TExprNode* const flatMapLambdaNode = flatmap.Ref().Child(flatmap.Ref().ChildrenSize() - 1);
-        if (TCoVoid::Match(flatMapLambdaNode) || !TCoLambda::Match(flatMapLambdaNode)) {
-            return node;
-        }
-        const TCoLambda flatMapLambda(flatMapLambdaNode);
-
-        NPushdown::TPredicateNode predicate = MakePushdownNode(flatMapLambda, ctx, node.Pos(), TPushdownSettings());
+        NPushdown::TPredicateNode predicate = MakePushdownNode(flatmap.Lambda(), ctx, node.Pos(), TPushdownSettings());
         if (predicate.IsEmpty()) {
             return node;
         }
 
         TStringBuilder err;
         NYql::NConnector::NApi::TPredicate predicateProto;
-        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatMapLambda.Args().Arg(0), &predicateProto, err)) {
+        if (!NYql::SerializeFilterPredicate(ctx, predicate.ExprNode.Cast(), flatmap.Lambda().Args().Arg(0), &predicateProto, err)) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Failed to serialize filter predicate for source: " + err));
             return node;
         }

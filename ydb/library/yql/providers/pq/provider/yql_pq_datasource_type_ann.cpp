@@ -255,11 +255,8 @@ public:
         }
 
         if (userSchemaColumnsArg && !TCoVoid::Match(userSchemaColumnsArg)) {
-            if (!userSchemaColumnsArg->IsList()) {
-                ctx.AddError(TIssue(ctx.GetPosition(userSchemaColumnsArg->Pos()),
-                    "UserSchemaColumns must be a list of column name atoms (userschema order)"));
-                return TStatus::Error;
-            }
+            YQL_ENSURE(userSchemaColumnsArg->IsList(),
+                "UserSchemaColumns must be a list of column name atoms (userschema order)");
             for (const auto& atomNode : userSchemaColumnsArg->Children()) {
                 if (!EnsureAtom(*atomNode, ctx)) {
                     return TStatus::Error;
@@ -267,13 +264,12 @@ public:
             }
             const auto* rowSpecType = topic->GetTypeAnn()->Cast<TListExprType>()
                 ->GetItemType()->Cast<TStructExprType>();
+            // Internal invariant for TPqReadTopic before DQ-level rewrites:
+            // UserSchemaColumns is built from source SCHEMA and must be a subset of Topic.RowSpec.
             for (const auto& atomNode : userSchemaColumnsArg->Children()) {
                 const TString columnName(atomNode->Content());
-                if (!rowSpecType->FindItem(columnName)) {
-                    ctx.AddError(TIssue(ctx.GetPosition(atomNode->Pos()), TStringBuilder()
-                        << "userschemacolumns: unknown data column: " << columnName));
-                    return TStatus::Error;
-                }
+                YQL_ENSURE(rowSpecType->FindItem(columnName),
+                    "userschemacolumns: unknown data column: " << columnName);
             }
         }
 

@@ -217,11 +217,10 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
         ++retryCount;
         if (queryInfo.AlterTable) {
             throw TMisuseException() << "Generic query doesn't support alter table. Use data query (--executer data)";
-        } else if (queryInfo.UseReadRows) {
-            throw TMisuseException() << "Generic query doesn't support readrows. Use data query (--executer data)";
         } else {
+            auto mode = queryInfo.UseStaleRO ? NYdb::NQuery::TTxSettings::StaleRO() : NYdb::NQuery::TTxSettings::SerializableRW();
             auto result = session.ExecuteQuery(queryInfo.Query.c_str(),
-                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TTxControl::BeginTx(mode).CommitTx(),
                 queryInfo.Params, genericQuerySettings
             );
             return result;

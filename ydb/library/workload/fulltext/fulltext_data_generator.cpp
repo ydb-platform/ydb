@@ -34,11 +34,28 @@ namespace NYdbWorkload {
             return count > 0 ? count - 1 : 0;
         }
 
+        ui64 CountDirLines(const TFsPath& path) {
+            ui64 lineCount = 0;
+            const TFsPath dataPath(path);
+            if (dataPath.IsDirectory()) {
+                TVector<TFsPath> children;
+                dataPath.List(children);
+                for (const auto& child : children) {
+                    if (child.IsFile()) {
+                        lineCount += CountFileLines(child);
+                    }
+                }
+            } else {
+                lineCount = CountFileLines(dataPath);
+            }
+            return lineCount;
+        }
+
         TString BuildIndexDDL(const TFulltextWorkloadParams& params) {
             TStringBuilder ddl;
             ddl << "ALTER TABLE `" << params.GetFullTableName(params.TableName.c_str()) << "`\n";
             ddl << "ADD INDEX `" << params.IndexName << "`\n";
-            ddl << "GLOBAL USING " << params.IndexType << "\n";
+            ddl << "GLOBAL SYNC USING " << params.IndexType << "\n";
             ddl << "ON (`text`)\n";
 
             ddl << "WITH (";
@@ -198,7 +215,7 @@ namespace NYdbWorkload {
     }
 
     TBulkDataGeneratorList TFulltextFilesDataInitializer::DoGetBulkInitialData() {
-        const ui64 lineCount = CountFileLines(DataFiles);
+        const ui64 lineCount = CountDirLines(DataFiles);
         return {
             std::make_shared<TDataGenerator>(
                 *this,

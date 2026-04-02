@@ -12,6 +12,9 @@
 #include <util/string/strip.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <functional>
 
 namespace NYdb::NConsoleClient {
     namespace {

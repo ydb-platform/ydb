@@ -30,7 +30,6 @@ namespace NYdbWorkload {
         bool AutoPartitioningByLoad = true;
 
         TString QueryTable;
-        ui64 TopSize = 1000;
         ui64 Limit = 0;
 
         int RunWorkloadType = -1;

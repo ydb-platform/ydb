@@ -115,6 +115,8 @@ namespace NYdbWorkload {
         TString queryText;
         if (Evaluator) {
             static thread_local std::mt19937 rng(std::random_device{}());
+            Y_ENSURE(Params.SelectMinQueryLen <= Params.SelectMaxQueryLen,
+                "min-query-len (" << Params.SelectMinQueryLen << ") must be <= max-query-len (" << Params.SelectMaxQueryLen << ")");
             std::uniform_int_distribution<size_t> queryLenDist(Params.SelectMinQueryLen, Params.SelectMaxQueryLen);
             for (int attempt = 0; queryText.empty() && attempt < 10; ++attempt) {
                 queryText = Evaluator->GenerateSentence(queryLenDist(rng), rng);
@@ -174,6 +176,9 @@ namespace NYdbWorkload {
     }
 
     TQueryInfoList TFulltextWorkloadGenerator::Upsert() {
+        Y_ENSURE(Evaluator, "Markov model must be loaded for upsert workload. Specify --model.");
+        Y_ENSURE(Params.UpsertMinSentenceLen <= Params.UpsertMaxSentenceLen,
+            "min-sentence-len (" << Params.UpsertMinSentenceLen << ") must be <= max-sentence-len (" << Params.UpsertMaxSentenceLen << ")");
         static thread_local std::mt19937 rng(std::random_device{}());
         static thread_local std::uniform_int_distribution<ui64> idDist;
         std::uniform_int_distribution<size_t> sentenceLenDist(Params.UpsertMinSentenceLen, Params.UpsertMaxSentenceLen);

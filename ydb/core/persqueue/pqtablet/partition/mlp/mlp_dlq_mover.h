@@ -41,6 +41,9 @@ private:
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
     STFUNC(StateWrite);
 
+    void WriteToTopic(NKikimrClient::TCmdReadResult::TResult& result);
+    void WriteToSQS(NKikimrClient::TCmdReadResult::TResult& result);
+
     void ReplySuccess();
     void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
 
@@ -48,6 +51,8 @@ private:
 
 private:
     TDLQMoverSettings Settings;
+    const bool IsSQSCompatibility;
+    TString SQSQueueName;
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;

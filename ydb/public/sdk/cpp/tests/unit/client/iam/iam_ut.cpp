@@ -38,7 +38,7 @@ public:
 
     TMetadataServer()
         : PortHolder(NTesting::GetFreePort())
-        , Port(static_cast<ui16>(PortHolder))
+        , Port(static_cast<std::uint16_t>(PortHolder))
         , HttpOptions(Port)
         , HttpServer(this, HttpOptions)
     {
@@ -53,7 +53,7 @@ public:
         return new TRequest(this);
     }
 
-    void SetResponse(HttpCodes code, const TString& response) {
+    void SetResponse(HttpCodes code, const std::string& response) {
         StatusCode = code;
         Response = response;
     }
@@ -73,7 +73,7 @@ public:
     THttpServer::TOptions HttpOptions;
     THttpServer HttpServer;
     HttpCodes StatusCode = HTTP_OK;
-    TString Response;
+    std::string Response;
     mutable std::mutex Lock;
     int RequestCount = 0;
 };

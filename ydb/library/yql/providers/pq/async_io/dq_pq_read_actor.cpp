@@ -4,14 +4,14 @@
 #include "dq_pq_read_actor_base.h"
 #include "probes.h"
 
-#include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/log_backend/actor_log_backend.h>
+#include <contrib/ydb/core/base/appdata_fwd.h>
+#include <contrib/ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <contrib/ydb/library/actors/core/actor.h>
+#include <contrib/ydb/library/actors/core/event_local.h>
+#include <contrib/ydb/library/actors/core/events.h>
+#include <contrib/ydb/library/actors/core/hfunc.h>
+#include <contrib/ydb/library/actors/core/log.h>
+#include <contrib/ydb/library/actors/log_backend/actor_log_backend.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -22,10 +22,10 @@
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/composite/yql_pq_composite_read_session.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
-#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <contrib/ydb/public/sdk/cpp/adapters/issue/issue.h>
+#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <contrib/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>

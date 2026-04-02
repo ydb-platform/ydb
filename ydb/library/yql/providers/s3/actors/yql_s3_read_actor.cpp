@@ -6,16 +6,16 @@
 #include "yql_s3_read_actor.h"
 #include "yql_s3_source_queue.h"
 
-#include <ydb/core/base/events.h>
+#include <contrib/ydb/core/base/events.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actor_coroutine.h>
-#include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/event_local.h>
-#include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/util/datetime.h>
-#include <ydb/library/services/services.pb.h>
+#include <contrib/ydb/library/actors/core/actor_bootstrapped.h>
+#include <contrib/ydb/library/actors/core/actor_coroutine.h>
+#include <contrib/ydb/library/actors/core/events.h>
+#include <contrib/ydb/library/actors/core/event_local.h>
+#include <contrib/ydb/library/actors/core/hfunc.h>
+#include <contrib/ydb/library/actors/core/log.h>
+#include <contrib/ydb/library/actors/util/datetime.h>
+#include <contrib/ydb/library/services/services.pb.h>
 
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
@@ -29,7 +29,7 @@
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
-#include <ydb/core/util/exceptions.h>
+#include <contrib/ydb/core/util/exceptions.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>

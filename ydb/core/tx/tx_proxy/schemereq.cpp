@@ -25,6 +25,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
+#include <algorithm>
 #include <util/string/cast.h>
 
 namespace {
@@ -63,6 +64,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
+        bool IsTierExternalDataSource = false;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -75,6 +77,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     };
 
     TVector<TPathToResolve> ResolveForACL;
+    enum class EAclResolveStage {
+        Primary,
+        TierSecrets
+    };
+
+    EAclResolveStage AclResolveStage = EAclResolveStage::Primary;
 
     std::optional<NACLib::TUserToken> UserToken;
     bool CheckAdministrator = false;
@@ -759,6 +767,127 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return true;
     }
 
+    static TVector<TString> ExtractTierExternalDataSourcePaths(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme) {
+        TVector<TString> result;
+        switch (pbModifyScheme.GetOperationType()) {
+            case NKikimrSchemeOp::ESchemeOpAlterTable: {
+                const auto& alterTable = pbModifyScheme.GetAlterTable();
+                if (!alterTable.HasTTLSettings() || !alterTable.GetTTLSettings().HasEnabled()) {
+                    break;
+                }
+
+                for (auto&& tier : alterTable.GetTTLSettings().GetEnabled().GetTiers()) {
+                    if (tier.HasEvictToExternalStorage()) {
+                        result.emplace_back(tier.GetEvictToExternalStorage().GetStorage());
+                    }
+                }
+
+                break;
+            }
+            case NKikimrSchemeOp::ESchemeOpAlterColumnTable: {
+                const auto& alterColumnTable = pbModifyScheme.GetAlterColumnTable();
+                if (!alterColumnTable.HasAlterTtlSettings() || !alterColumnTable.GetAlterTtlSettings().HasEnabled()) {
+                    break;
+                }
+
+                for (auto&& tier : alterColumnTable.GetAlterTtlSettings().GetEnabled().GetTiers()) {
+                    if (tier.HasEvictToExternalStorage()) {
+                        result.emplace_back(tier.GetEvictToExternalStorage().GetStorage());
+                    }
+                }
+
+                break;
+            }
+            default:
+                break;
+        }
+
+        return result;
+    }
+
+    void AddTierExternalDataSourceResolveTasks(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TVector<TString>& workingDir) {
+        THashSet<TString> uniquePaths;
+        for (auto&& tierStoragePath : ExtractTierExternalDataSourcePaths(pbModifyScheme)) {
+            TVector<TString> path = tierStoragePath.StartsWith("/")
+                ? SplitPath(tierStoragePath)
+                : Merge(workingDir, SplitPath(tierStoragePath));
+
+            const TString canonicalPath = CanonizePath(JoinPath(path));
+            if (!uniquePaths.emplace(canonicalPath).second) {
+                continue;
+            }
+
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = std::move(path);
+            toResolve.RequireAccess = NACLib::EAccessRights::DescribeSchema;
+            toResolve.IsTierExternalDataSource = true;
+            ResolveForACL.push_back(std::move(toResolve));
+        }
+    }
+
+    static void CollectSecretNamesFromAuth(const NKikimrSchemeOp::TAuth& auth, TVector<TString>& out) {
+        switch (auth.identity_case()) {
+            case NKikimrSchemeOp::TAuth::kServiceAccount:
+                out.emplace_back(auth.GetServiceAccount().GetSecretName());
+                return;
+            case NKikimrSchemeOp::TAuth::kBasic:
+                out.emplace_back(auth.GetBasic().GetPasswordSecretName());
+                return;
+            case NKikimrSchemeOp::TAuth::kMdbBasic:
+                out.emplace_back(auth.GetMdbBasic().GetServiceAccountSecretName());
+                out.emplace_back(auth.GetMdbBasic().GetPasswordSecretName());
+                return;
+            case NKikimrSchemeOp::TAuth::kAws:
+                out.emplace_back(auth.GetAws().GetAwsAccessKeyIdSecretName());
+                out.emplace_back(auth.GetAws().GetAwsSecretAccessKeySecretName());
+                return;
+            case NKikimrSchemeOp::TAuth::kToken:
+                out.emplace_back(auth.GetToken().GetTokenSecretName());
+                return;
+            case NKikimrSchemeOp::TAuth::kNone:
+            case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+                return;
+        }
+    }
+
+    TVector<TPathToResolve> BuildTierSecretResolveTasks(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolvedEntries) const {
+        THashSet<TString> uniqueSecrets;
+        TVector<TString> secretNames;
+        const size_t size = std::min(ResolveForACL.size(), resolvedEntries.size());
+        for (size_t i = 0; i < size; ++i) {
+            const auto& request = ResolveForACL[i];
+            if (!request.IsTierExternalDataSource) {
+                continue;
+            }
+
+            const auto& entry = resolvedEntries[i];
+            if (!entry.ExternalDataSourceInfo) {
+                continue;
+            }
+
+            CollectSecretNamesFromAuth(entry.ExternalDataSourceInfo->Description.GetAuth(), secretNames);
+        }
+
+        TVector<TPathToResolve> result;
+        for (auto&& secretName : secretNames) {
+            if (!secretName.StartsWith("/")) {
+                continue;
+            }
+
+            if (!uniqueSecrets.emplace(secretName).second) {
+                continue;
+            }
+
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = SplitPath(secretName);
+            toResolve.RequireAccess = NACLib::EAccessRights::SelectRow;
+            toResolve.RequireRedirect = false;
+            result.push_back(std::move(toResolve));
+        }
+
+        return result;
+    }
+
     bool ExtractResolveForACL(NKikimrSchemeOp::TModifyScheme& pbModifyScheme) {
         ui32 accessToUserAttrs = pbModifyScheme.HasAlterUserAttributes() ? NACLib::EAccessRights::WriteUserAttributes : NACLib::EAccessRights::NoAccess;
         auto workingDir = SplitPath(pbModifyScheme.GetWorkingDir());
@@ -806,6 +935,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterTable:
+        case NKikimrSchemeOp::ESchemeOpAlterColumnTable: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            AddTierExternalDataSourceResolveTasks(pbModifyScheme, workingDir);
+            break;
+        }
         case NKikimrSchemeOp::ESchemeOpDropIndex:
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
@@ -819,7 +956,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpBackup:
         case NKikimrSchemeOp::ESchemeOpAlterSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpAlterColumnStore:
-        case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
@@ -1654,6 +1790,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
         Y_ABORT_UNLESS(navigate->ResultSet.size() == ResolveForACL.size());
 
+        if (AclResolveStage == EAclResolveStage::Primary) {
+            SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
+        }
+
         // Check user access level, permissions on scheme objects and other restrictions/permissions
         if (UserToken) {
             if (!CheckAccess(navigate->ResultSet, ctx)) {
@@ -1661,14 +1801,26 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
         }
 
-        // Check doc-api restrictions on operations
-        if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
-            if (!CheckDocApi(navigate->ResultSet, ctx)) {
-                return Die(ctx);
+        if (AclResolveStage == EAclResolveStage::Primary) {
+            if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
+                if (!CheckDocApi(navigate->ResultSet, ctx)) {
+                    return Die(ctx);
+                }
+            }
+
+            if (GetRequestEv().HasModifyScheme()) {
+                auto secretResolveTasks = BuildTierSecretResolveTasks(GetModifyScheme(), navigate->ResultSet);
+                if (!secretResolveTasks.empty()) {
+                    ResolveForACL = std::move(secretResolveTasks);
+                    auto resolveRequest = ResolveRequestForACL();
+                    if (resolveRequest) {
+                        AclResolveStage = EAclResolveStage::TierSecrets;
+                        ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest.Release()));
+                        return;
+                    }
+                }
             }
         }
-
-        SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "Actor# " << ctx.SelfID.ToString()

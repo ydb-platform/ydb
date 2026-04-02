@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import boto3
 import json
 import logging
 
@@ -19,6 +18,12 @@ class TestS3Formats:
         s3_helpers.create_bucket_and_upload_file(
             filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
         )
+        kikimr.control_plane.wait_bootstrap(1)
+
+    def create_bucket_and_upload_file_body(
+        self, body, object_key, s3, kikimr, content_type="text/plain", bucket_name="fbucket"
+    ):
+        s3_helpers.create_bucket_and_put_object(s3.s3_url, bucket_name, object_key, body, content_type)
         kikimr.control_plane.wait_bootstrap(1)
 
     def validate_result(self, result_set):
@@ -195,23 +200,11 @@ class TestS3Formats:
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_format(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
         fruits = '''Fruit,Price,Weight
 Banana,3,100
 Apple,2,22
 Pear,15,33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -239,20 +232,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_input_compression(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("ibucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        s3_client.put_object(Body="blahblahblah", Bucket='ibucket', Key='fruits', ContentType='text/plain')
-
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="ibucket")
         storage_connection_name = unique_prefix + "input_bucket"
         client.create_storage_connection(storage_connection_name, "ibucket")
 
@@ -274,20 +254,7 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_invalid_output_compression(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("obucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        s3_client.put_object(Body="blahblahblah", Bucket='obucket', Key='fruits', ContentType='text/plain')
-
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("blahblahblah", "fruits", s3, kikimr, bucket_name="obucket")
         storage_connection_name = unique_prefix + "output_bucket"
         client.create_storage_connection(storage_connection_name, "obucket")
 
@@ -310,23 +277,11 @@ Pear,15,33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_custom_csv_delimiter_format(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
         fruits = '''Fruit;Price;Weight
     Banana;3;100
     Apple;2;22
     Pear;15;33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -358,16 +313,7 @@ Pear,15,33'''
 
         Locks ClickHouseClient.ParseFormat reading parsed columns by name (not only by position).
         """
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL="public-read")
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        s3_client.put_object(Body="b,a\nbb,aa\n", Bucket="fbucket", Key="two_cols.csv", ContentType="text/plain")
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("b,a\nbb,aa\n", "two_cols.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "twocolbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -403,16 +349,7 @@ Pear,15,33'''
         Same idea as streaming test_read_topic_csv_projection_column_order.
         UseBlocksSource enables TS3ParseSettings path with columns_list тЖТ ClickHouseClient.ParseFormat.
         """
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL="public-read")
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        s3_client.put_object(Body="aa,bb", Bucket="fbucket", Key="headerless_two_cols.csv", ContentType="text/plain")
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("aa,bb", "headerless_two_cols.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "headerless_twocolbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -448,18 +385,7 @@ Pear,15,33'''
 
         Ensures columns_list / parse still maps file positions to names when output is a strict subset.
         """
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL="public-read")
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        s3_client.put_object(
-            Body="aa,bb", Bucket="fbucket", Key="headerless_select_one_col.csv", ContentType="text/plain"
-        )
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("aa,bb", "headerless_select_one_col.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "headerless_onecolbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -493,16 +419,7 @@ Pear,15,33'''
 
         First CSV field binds to b, second to a; SELECT a, b only reorders output columns.
         """
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL="public-read")
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        s3_client.put_object(Body="bb,aa", Bucket="fbucket", Key="headerless_b_a.csv", ContentType="text/plain")
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body("bb,aa", "headerless_b_a.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "headerless_ba_bucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -561,22 +478,13 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_with_names_header_missing_not_null_column(self, kikimr, s3, client, unique_prefix):
         """NOT NULL column from SCHEMA is absent from the file header (CSVRowInputFormat readPrefix)."""
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL="public-read")
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
         # Header lists only Fruit and Price; Weight is required by SCHEMA but not in the CSV header row.
         csv_body = """Fruit,Price
 Banana,3
 Apple,2
 Pear,15
 """
-        s3_client.put_object(Body=csv_body, Bucket="fbucket", Key="fruits_missing_col.csv", ContentType="text/plain")
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(csv_body, "fruits_missing_col.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -778,23 +686,11 @@ Pear,15
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_with_infer_and_unsupported_option(self, kikimr, s3, client, unique_prefix):
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-
         fruits = '''Fruit,Price,Weight
 Banana,3,100
 Apple,2,22
 Pear,15,33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(fruits, "fruits.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -849,10 +745,7 @@ Pear,15,33'''
         # Same file as test_csv_format_no_header (3 columns, no header row).
         # Request a single column that is not the first in alphabetical order
         # (Fruit < Price < Weight тЖТ Price is the middle column).
-        s3_helpers.create_bucket_and_upload_file(
-            "test_no_header.csv", s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
-        )
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file("test_no_header.csv", s3.s3_url, "fbucket")
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -889,21 +782,11 @@ Pear,15,33'''
         # Physical file columns are Weight,Price,Fruit (first row 100,3,Banana).
         # SCHEMA lists Weight, Price, Fruit тАФ parser must map by position, not by name
         # matching alphabetical order. Result column order from API may be sorted by name.
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-
         # File columns: Weight,Price,Fruit (reversed order)
         fruits = '''100,3,Banana
 22,2,Apple
 33,15,Pear'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_reversed.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(fruits, "fruits_reversed.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")
@@ -939,20 +822,10 @@ Pear,15,33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_format_custom_delimiter(self, kikimr, s3, client, unique_prefix):
         # csv format with custom delimiter (semicolon)
-        s3_client = boto3.client(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
-        )
-        bucket = resource.Bucket("fbucket")
-        bucket.create(ACL='public-read')
-
         fruits = '''Banana;3;100
 Apple;2;22
 Pear;15;33'''
-        s3_client.put_object(Body=fruits, Bucket='fbucket', Key='fruits_semicolon.csv', ContentType='text/plain')
-        kikimr.control_plane.wait_bootstrap(1)
+        self.create_bucket_and_upload_file_body(fruits, "fruits_semicolon.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "fruitbucket"
         client.create_storage_connection(storage_connection_name, "fbucket")

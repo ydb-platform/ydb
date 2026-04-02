@@ -180,6 +180,8 @@ double TKqpProviderContext::ComputeJoinCost(
 ) const  {
     Y_UNUSED(outputByteSize);
 
+    double interactionPenalty = 0.5 * std::pow(leftStats.Nrows * rightStats.Nrows, 0.7);
+
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
             if (OptLevel == 3) {
@@ -194,9 +196,9 @@ double TKqpProviderContext::ComputeJoinCost(
             return rightStats.Nrows + outputRows;
 
         case EJoinAlgoType::MapJoin:
-            return 1.5 * (leftStats.ByteSize + 1.8 * rightStats.ByteSize + outputRows);
+            return 1.5 * (leftStats.Nrows + 1.8 * rightStats.Nrows + outputRows + interactionPenalty);
         case EJoinAlgoType::GraceJoin:
-            return 1.5 * (leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputRows);
+            return 1.5 * (leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows + interactionPenalty);
         default:
             return TBaseProviderContext::ComputeJoinCost(leftStats, rightStats, outputRows, outputByteSize, joinAlgo);
     }

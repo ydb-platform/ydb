@@ -184,10 +184,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
     bool shuffleRightSide) const {
     auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
     if (shuffleLeftSide) {
-        stats.Cost += leftStats.Nrows;
+        stats.Cost += 0.5 * leftStats.Nrows;
     }
     if (shuffleRightSide) {
-        stats.Cost += rightStats.Nrows;
+        stats.Cost += 0.5 * rightStats.Nrows;
     }
 
     return stats;
@@ -220,7 +220,6 @@ TMaybe<double> ComputeSelectivityCorrection(
     const TVector<TJoinColumn>& rightJoinKeys
 ) {
     if (leftStats.Type == EStatisticsType::BaseTable && leftStats.ColumnStatistics && rightStats.ColumnStatistics && !leftJoinKeys.empty() && !rightJoinKeys.empty()) {
-        // YQL_CLOG(TRACE, CoreDq) << "Histogram-based selectivity correction used";
         auto lhs = leftJoinKeys[0].AttributeName;
         auto rhs = rightJoinKeys[0].AttributeName;
 
@@ -245,8 +244,6 @@ TMaybe<double> ComputeSelectivityCorrection(
             } else {
                 // correction = total PK / overlapping PK
                 auto selectivityCorrection = leftStats.Nrows / static_cast<double>(overlapCard.GetRef());
-                // YQL_CLOG(TRACE, CoreDq) << "Overlapping cardinality: " << overlapCard.GetRef();
-                // YQL_CLOG(TRACE, CoreDq) << "Cardinality correction: " << selectivityCorrection;
                 return selectivityCorrection;
             }
         }
@@ -477,6 +474,7 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     }
 
     double current_cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
+
     // cost model is dominated by inputs (i.e. not output size). Also, double counting costs.
     cost += current_cost + leftStats.Cost + rightStats.Cost;
 
@@ -490,11 +488,11 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         - prevent exponential collapse
         - avoid keeping early joins from dominating plan choice
     */
-    const ui32 MAX_DEPTH = 4;
+    const ui32 MAX_DEPTH = 3;
     if (result.JoinDepth > MAX_DEPTH) {
         result.Selectivity = 1.0;
     } else {
-        result.Selectivity = std::min(1.0, std::pow(selectivity, 0.2));
+        result.Selectivity = std::min(1.0, std::pow(selectivity, 0.8));
         result.Selectivity = std::max(result.Selectivity, 1e-4);
     }
 

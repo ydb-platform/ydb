@@ -611,8 +611,8 @@ public:
         return TOpIterator(nullptr);
     }
 
-    NJson::TJsonValue GetExecutionJson(ui32 explainFlags = 0x00);
-    NJson::TJsonValue GetExplainJson(ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;
     TExprNode::TPtr Node;

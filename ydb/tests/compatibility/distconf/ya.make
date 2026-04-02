@@ -14,7 +14,6 @@ SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TIMEOUT(150)
-TAG(ya:manual)
 
 
 DEPENDS(

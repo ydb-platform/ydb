@@ -908,21 +908,26 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Detect if inputs are block-typed or scalar.
     // Both block and scalar inputs are annotated as Struct flows, but block structs have
     // columns of type Block<T> or Scalar<T>, while scalar structs have plain T columns.
-    const auto leftRawItemType = GetSequenceItemType(blockHashJoin.LeftInput(), false, ctx);
-    bool isBlockInput = false;
-    if (leftRawItemType->GetKind() == ETypeAnnotationKind::Struct) {
-        const auto* structType = leftRawItemType->Cast<TStructExprType>();
+    // Non-struct item types (wide/multi flows) also indicate block/wide processing.
+    // If EITHER input is block/wide, we use BlockHashJoinCore (block path).
+    auto hasBlockItemType = [](const TTypeAnnotationNode* itemType) -> bool {
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            // Non-struct: wide or block flow.
+            return true;
+        }
+        const auto* structType = itemType->Cast<TStructExprType>();
         for (const auto* item : structType->GetItems()) {
             const auto colKind = item->GetItemType()->GetKind();
             if (colKind == ETypeAnnotationKind::Block || colKind == ETypeAnnotationKind::Scalar) {
-                isBlockInput = true;
-                break;
+                return true;
             }
         }
-    } else {
-        // Non-struct item type means already-block wide flow.
-        isBlockInput = true;
-    }
+        return false;
+    };
+
+    const auto leftRawItemType  = GetSequenceItemType(blockHashJoin.LeftInput(),  false, ctx);
+    const auto rightRawItemType = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx);
+    const bool isBlockInput = hasBlockItemType(leftRawItemType) || hasBlockItemType(rightRawItemType);
 
     if (isBlockInput) {
         // Block path: inputs are already block-typed wide flows, feed directly into BlockHashJoinCore.
@@ -1207,7 +1212,30 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
         input = next;
     }
 
-    auto wrappedInput = NNodes::TExprBase(input);
+    // DqPhyHashCombine is a scalar combiner: its lambdas use Member/AggrAdd etc.
+    // If the stripped input is still block-wide, we must convert to scalar BEFORE
+    // passing it to the combiner. Failing to do so causes a segfault at runtime.
+    NNodes::TExprBase wrappedInput(input);
+    if (inputIsBlocks) {
+        if (inputIsFlow) {
+            wrappedInput = NNodes::TExprBase(ctx.Builder(node.Pos())
+                .Callable("ToFlow")
+                    .Callable(0, "WideFromBlocks")
+                        .Callable(0, "FromFlow")
+                            .Add(0, input)
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build());
+        } else {
+            wrappedInput = NNodes::TExprBase(ctx.Builder(node.Pos())
+                .Callable("WideFromBlocks")
+                    .Add(0, input)
+                .Seal()
+                .Build());
+        }
+        inputIsBlocks = false;
+    }
 
     auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
         .Input(wrappedInput)
@@ -1219,25 +1247,6 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, T
     .Done();
 
     auto dqPhyCombinePtr = dqPhyCombine.Ptr();
-
-    if (inputIsBlocks) {
-        if (inputIsFlow) {
-            dqPhyCombinePtr = ctx.Builder(node.Pos())
-                .Callable("WideFromBlocks")
-                    .Callable(0, "FromFlow")
-                    .Add(0, dqPhyCombinePtr)
-                    .Seal()
-                .Seal()
-                .Build();
-            inputIsFlow = false;
-        } else {
-            dqPhyCombinePtr = ctx.Builder(node.Pos())
-                .Callable("WideFromBlocks")
-                .Add(0, dqPhyCombinePtr)
-                .Seal()
-                .Build();
-        }
-    }
 
     if (inputIsFlow && !outputIsFlow) {
         dqPhyCombinePtr = ctx.Builder(node.Pos())

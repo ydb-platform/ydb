@@ -24,16 +24,6 @@ TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
     , UseFSMForSortElimination(useFSMForSortElimination)
 { }
 
-TDqStatisticsTransformerBase::TDqStatisticsTransformerBase(
-    TTypeAnnotationContext* typeCtx,
-    const bool useFSMForSortElimination
-)
-    : TypeCtx(typeCtx)
-    , Pctx(nullptr)
-    , ShufflingOrderingsByJoinLabels(nullptr)
-    , UseFSMForSortElimination(useFSMForSortElimination)
-{ }
-
 void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto inputNode = TExprBase(input);
     auto stats = typeCtx->GetStats(inputNode.Raw());
@@ -83,7 +73,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
             // we need to take each generic callable and see if it includes a lambda
             // if so - we will map the input to the callable to the argument of the lambda
             if (input->IsCallable()) {
-                OnPropagateToLambdaArgument(input);
+                PropagateStatisticsToLambdaArgument(input, TypeCtx);
             }
 
             return true;
@@ -91,7 +81,7 @@ IGraphTransformer::TStatus TDqStatisticsTransformerBase::DoTransform(TExprNode::
         [&](const TExprNode::TPtr& input) {
             AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
             if (UseFSMForSortElimination) {
-                OnPropagateTableAliases(input);
+                PropogateTableAliasesFromChildren(input, TypeCtx);
             }
 
             return true;
@@ -198,13 +188,5 @@ bool TDqStatisticsTransformerBase::AfterLambdas(const TExprNode::TPtr& input, TE
 }
 
 void TDqStatisticsTransformerBase::Rewind() { }
-
-void TDqStatisticsTransformerBase::OnPropagateToLambdaArgument(const TExprNode::TPtr& input) {
-    PropagateStatisticsToLambdaArgument(input, TypeCtx);
-}
-
-void TDqStatisticsTransformerBase::OnPropagateTableAliases(const TExprNode::TPtr& input) {
-    PropogateTableAliasesFromChildren(input, TypeCtx);
-}
 
 } // namespace NYql::NDq

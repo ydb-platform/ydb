@@ -1313,6 +1313,9 @@ private:
     TInterestingOrderingsCollector InterestingOrderingsCollector;
 };
 
+// Forward declaration (defined below)
+static void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+
 /**
  * DoTransform method matches operators and callables in the query DAG and
  * uses pre-computed statistics and costs of the children to compute their cost.
@@ -1322,14 +1325,30 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
     TExprNode::TPtr& output,
     TExprContext& ctx
 ) {
-
     output = input;
     if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    auto runPass = [&] {
+        VisitExprLambdasLast(
+            input,
+            [&](const TExprNode::TPtr& input) {
+                BeforeLambdas(input, ctx) || BeforeLambdasSpecific(input, ctx) || BeforeLambdasUnmatched(input, ctx);
+                if (input->IsCallable()) {
+                    PropagateStatisticsToLambdaArgument(input, KqpStats);
+                }
+                return true;
+            },
+            [&](const TExprNode::TPtr& input) {
+                AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
+                PropogateTableAliasesFromChildren(input, KqpStats);
+                return true;
+            });
+    };
+
     if (!KqpStats->ShufflingsFSM) {
-        TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+        runPass();
         /* ^ we have to propogate statistics to work with aliases */
 
         auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx, KqpStats);
@@ -1337,8 +1356,9 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
     }
 
     TxStats.clear();
+    runPass();
 
-    return TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+    return IGraphTransformer::TStatus::Ok;
 }
 
 bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1532,14 +1552,6 @@ bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExpr
         matched = false;
     }
     return matched;
-}
-
-void TKqpStatisticsTransformer::OnPropagateToLambdaArgument(const TExprNode::TPtr& input) {
-    PropagateStatisticsToLambdaArgument(input, KqpStats);
-}
-
-void TKqpStatisticsTransformer::OnPropagateTableAliases(const TExprNode::TPtr& input) {
-    PropogateTableAliasesFromChildren(input, KqpStats);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,

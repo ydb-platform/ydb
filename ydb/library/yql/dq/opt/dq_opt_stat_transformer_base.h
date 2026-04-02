@@ -8,18 +8,11 @@ namespace NYql::NDq {
 
 class TDqStatisticsTransformerBase : public TSyncTransformerBase {
 public:
-    // Full constructor: for subclasses that use the default stat inference with TypeCtx and IProviderContext.
     TDqStatisticsTransformerBase(
         TTypeAnnotationContext* typeCtx,
         const IProviderContext& ctx,
         const TOptimizerHints& hints = {},
         TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels = nullptr,
-        const bool useFSMForSortElimination = false
-    );
-
-    // Minimal constructor: for subclasses that override all stat inference methods themselves.
-    explicit TDqStatisticsTransformerBase(
-        TTypeAnnotationContext* typeCtx,
         const bool useFSMForSortElimination = false
     );
 
@@ -30,23 +23,16 @@ protected:
     virtual bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
     virtual bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) = 0;
 
-    virtual bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
-    virtual bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
-    virtual bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
-
-    // Called from DoTransform for each callable node (before-lambdas phase).
-    // Default: PropagateStatisticsToLambdaArgument(input, TypeCtx).
-    virtual void OnPropagateToLambdaArgument(const TExprNode::TPtr& input);
-
-    // Called from DoTransform for each node (after-lambdas phase) when UseFSMForSortElimination is true.
-    // Default: PropogateTableAliasesFromChildren(input, TypeCtx).
-    virtual void OnPropagateTableAliases(const TExprNode::TPtr& input);
-
     TTypeAnnotationContext* TypeCtx;
-    const IProviderContext* Pctx;  // May be null for subclasses that override BeforeLambdas.
+    const IProviderContext* Pctx;
     TOptimizerHints Hints;
     TShufflingOrderingsByJoinLabels* ShufflingOrderingsByJoinLabels;
     const bool UseFSMForSortElimination;
+
+private:
+    bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+    bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
+    bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
 };
 
 } // namespace NYql::NDq

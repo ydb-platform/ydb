@@ -2048,7 +2048,13 @@ public:
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
+<<<<<<< HEAD
         } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
+=======
+
+            txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
+        } else if (txCtx->BufferActorId && !isRollback) {
+>>>>>>> 1218badeda6 (Disable immediate commit for topic (#37091))
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }

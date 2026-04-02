@@ -838,7 +838,7 @@ void CompactTable(
     NTable::TTableClient client(driver);
     auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
         TOperation::TOperationId::COMPACTION, NTable::TAlterTableSettings()
-            .Compact(NTable::TCompact())
+            .Compact(NTable::TCompact(false, 1000)))
     );
     LOG_T("Compacting table " << table << ": " << id.ToString());
     loadState.CompactionStates.emplace_back(id, table, table);

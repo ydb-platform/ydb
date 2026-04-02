@@ -254,6 +254,7 @@ struct TEvPQ {
             ui32 UncompressedSize;
             TString PartitionKey;
             TString ExplicitHashKey;
+            TString ChoosePartitionKey;
             bool External;
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data

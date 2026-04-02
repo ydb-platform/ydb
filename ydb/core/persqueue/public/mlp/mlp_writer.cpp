@@ -76,6 +76,9 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
     cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
     cmdWrite.SetExternalOperation(true);
+    if (item.MessageGroupId) {
+        cmdWrite.SetChoosePartitionKey(AsKeyBound(Hash(*item.MessageGroupId)));
+    }
 
     NKikimrPQClient::TDataChunk proto;
     proto.SetCodec(0); // NPersQueue::CODEC_RAW

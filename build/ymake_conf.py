@@ -2642,7 +2642,10 @@ class Cuda(object):
             architectures.append('sm_90a')
 
         if version >= (12, 8):
-            architectures.extend(['sm_100', 'sm_100a', 'sm_100f', 'sm_120', 'sm_120a', 'sm_120f'])
+            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
+        if version >= (12, 9):
+            architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
 
         return ':'.join(architectures)
 

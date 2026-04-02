@@ -137,6 +137,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
 
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disconnected simultaneously while other cluster parts (pile) remain operational. A pile can remain operational when other cluster nodes are disconnected. Pile are used in [bridge mode](#bridge) to divide the cluster into several parts with synchronous replication between them. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
+
 ### Table {#table}
 
 A **table** is a structured piece of information arranged in rows and columns. Each row represents a single record or entry, while each column represents a specific attribute or field with a particular data type.
@@ -587,6 +595,14 @@ Information in state storage is volatile. Thus, it is lost when the power is tur
 
 Due to its nature, the state storage service operates in a best-effort manner. For example, the absence of several tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not state storage.
 
+### Board {#board}
+
+**Board** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [endpoints](connect.md#endpoint).
+
+### Scheme board {#scheme-board}
+
+**SchemeBoard** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [schemes](#global-schema).
+
 #### Compaction {#compaction}
 
 **Compaction** is the internal background process of rebuilding [LSM tree](#lsm-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
@@ -594,6 +610,12 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 #### gRPC proxy {#grpc-proxy}
 
 A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+
+### Distributed configuration {#distributed-configuration}
+
+**Distributed configuration** or **DistConf** is an internal cluster [configuration](../devops/configuration-management/configuration-v2/config-overview.md) mechanism that handles startup and configuration of [static nodes](#static-node), automatic management of [static storage groups](#static-group), and [State storage](#state-storage). Distributed configuration starts before any [tablets](#tablet), [storage groups](#storage-group), or [State storage](#state-storage).
+
+For more on how distributed configuration works, see [{#T}](../contributor/configuration-v2.md).
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -696,7 +718,7 @@ As in many other database management systems, {{ ydb-short-name }} queries can p
 
 #### Transaction lock invalidation {#tli}
 
-**Transaction lock invalidation** (TLI) is a situation where one transaction (the breaker) writes data and thereby breaks the [optimistic locks](#optimistic-locking) of another transaction (the victim). The victim detects this at commit time and receives a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+**Transaction lock invalidation** (TLI) is the standard behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the breaker) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this at the victim's commit time and rolls it back with a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
 
 #### Prepare stage {#prepare-stage}
 

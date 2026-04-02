@@ -1,6 +1,7 @@
 #include "mlp_consumer_order.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <util/generic/serialized_enum.h>

@@ -1,5 +1,7 @@
 #include "ydb_metrics_mapper.h"
+
 #include "metric_value_aggregator.h"
+#include "ydb_metrics_target_counters_base.h"
 
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
@@ -17,7 +19,14 @@ namespace NKikimr {
 template <const NProtoBuf::EnumDescriptor* SimpleDesc(),
           const NProtoBuf::EnumDescriptor* CumulativeDesc(),
           const NProtoBuf::EnumDescriptor* PercentileDesc()>
-class TYdbMetricsMapperImpl : public TYdbMetricsMapper {
+class TYdbMetricsMapperImpl
+    : public TYdbMetricsMapper
+    , private TYdbMetricsTargetCountersBase<
+        SimpleDesc,
+        CumulativeDesc,
+        PercentileDesc,
+        true /* ParseSourceCounters */
+    > {
 public:
     /**
      * The constructor, which creates all the necessary target counters.
@@ -43,8 +52,8 @@ public:
         SourceTabletTypeName = fileDesc->options().GetExtension(SourceCountersTabletTypeName);
 
         // Create all target simple counters
-        CreateTargetCountersForCounterType<
-            TSimpleCountersOpts,
+        this->template CreateTargetCountersForCounterType<
+            typename TYdbMetricsMapperImpl::TSimpleCountersOpts,
             decltype(SimpleCounters),
             [](auto /* counterOptions */, auto targetCounterGroup, auto /* index */, auto name) {
                 return targetCounterGroup->GetNamedCounter(
@@ -54,14 +63,14 @@ public:
                 );
             }
         >(
-            SimpleCountersOpts(),
+            this->SimpleCountersOpts(),
             targetCounterGroup,
             SimpleCounters
         );
 
         // Create all target cumulative counters
-        CreateTargetCountersForCounterType<
-            TCumulativeCountersOpts,
+        this->template CreateTargetCountersForCounterType<
+            typename TYdbMetricsMapperImpl::TCumulativeCountersOpts,
             decltype(CumulativeCounters),
             [](auto /* counterOptions */, auto targetCounterGroup, auto /* index */, auto name) {
                 return targetCounterGroup->GetNamedCounter(
@@ -71,18 +80,18 @@ public:
                 );
             }
         >(
-            CumulativeCountersOpts(),
+            this->CumulativeCountersOpts(),
             targetCounterGroup,
             CumulativeCounters
         );
 
         // Create all target percentile counters
-        CreateTargetCountersForCounterType<
-            TPercentileCountersOpts,
+        this->template CreateTargetCountersForCounterType<
+            typename TYdbMetricsMapperImpl::TPercentileCountersOpts,
             decltype(PercentileCounters),
-            CreateExplicitHistogram
+            TYdbMetricsMapperImpl::CreateExplicitHistogram
         >(
-            PercentileCountersOpts(),
+            this->PercentileCountersOpts(),
             targetCounterGroup,
             PercentileCounters
         );
@@ -117,95 +126,6 @@ public:
     }
 
 private:
-    using TSimpleCountersOpts = NAux::TAppParsedOpts<SimpleDesc, true>;
-    using TCumulativeCountersOpts = NAux::TAppParsedOpts<CumulativeDesc, true>;
-    using TPercentileCountersOpts = NAux::TAppParsedOpts<PercentileDesc, true>;
-
-    static const TSimpleCountersOpts* SimpleCountersOpts() {
-        return NAux::GetAppOpts<SimpleDesc, true>();
-    }
-
-    static const TCumulativeCountersOpts* CumulativeCountersOpts() {
-        return NAux::GetAppOpts<CumulativeDesc, true>();
-    }
-
-    static const TPercentileCountersOpts* PercentileCountersOpts() {
-        return NAux::GetAppOpts<PercentileDesc, true>();
-    }
-
-    /**
-     * Create an explicit histogram with the bucket boundaries defined
-     * in the corresponding protobuf enum definition.
-     *
-     * @param[in] counterOptions The parsed enum options for the target counters
-     * @param[in] targetCounterGroup The counter group where the target (mapped) counters are created
-     * @param[in] index The index for the corresponding enum value in the protobuf file
-     * @param[in] name The name of the histogram to create
-     *
-     * @return The corresponding explicit histogram counter
-     */
-    static NMonitoring::THistogramPtr CreateExplicitHistogram(
-        const TPercentileCountersOpts* counterOptions,
-        NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        size_t index,
-        const char* name
-    ) {
-        // Use the specified range boundaries for the histogram buckets
-        const auto& allRanges = counterOptions->GetRanges(index);
-
-        NMonitoring::TBucketBounds bucketBounds;
-        bucketBounds.reserve(allRanges.size());
-
-        for (const auto& range : allRanges) {
-            bucketBounds.push_back(range.RangeVal);
-        }
-
-        return targetCounterGroup->GetNamedHistogram(
-            "name",
-            name,
-            NMonitoring::ExplicitHistogram(bucketBounds),
-            false /* derivative */
-        );
-    }
-
-    /**
-     * Create all target counters of the given counter type (simple, cumulative, percentile).
-     *
-     * @tparam TCounterOptions The type of the parsed enum options for target counters
-     * @tparam TTargetCounters The type of the container with the target counters
-     * @tparam CreateTargetCounter The function, which creates the given target counter
-     *
-     * @param[in] counterOptions The parsed enum options for the target counters
-     * @param[in] targetCounterGroup The counter group where the target (mapped) counters are created
-     * @param[in,out] targetCounters The container where the target counters will be saved
-     */
-    template <
-        class TCounterOptions,
-        class TTargetCounters,
-        decltype(TTargetCounters::value_type::TargetCounter) CreateTargetCounter(
-            const TCounterOptions* counterOptions,
-            NMonitoring::TDynamicCounterPtr targetCounterGroup,
-            size_t index,
-            const char* name
-        )
-    >
-    void CreateTargetCountersForCounterType(
-        const TCounterOptions* counterOptions,
-        NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        TTargetCounters& targetCounters
-    ) {
-        targetCounters.reserve(counterOptions->Size);
-
-        for (size_t i = 0; i < counterOptions->Size; ++i) {
-            targetCounters.emplace_back().TargetCounter = CreateTargetCounter(
-                counterOptions,
-                targetCounterGroup,
-                i,
-                counterOptions->GetNames()[i]
-            );
-        }
-    }
-
     /**
      * Find all source counters for all target counters of the given counter type
      * (simple, cumulative, percentile).
@@ -384,11 +304,11 @@ private:
         //          it will use different parameters and the corresponding metric
         //          values will be distorted.
         if (!FindSourceCountersForCounterType<
-                TSimpleCountersOpts,
+                typename TYdbMetricsMapperImpl::TSimpleCountersOpts,
                 decltype(SimpleCounters),
                 &NMonitoring::TDynamicCounters::FindNamedCounter
             >(
-                SimpleCountersOpts(),
+                this->SimpleCountersOpts(),
                 parentCounterGroups,
                 SimpleCounters
             )
@@ -398,11 +318,11 @@ private:
 
         // Look up source counters for all cumulative counters
         if (!FindSourceCountersForCounterType<
-                TCumulativeCountersOpts,
+                typename TYdbMetricsMapperImpl::TCumulativeCountersOpts,
                 decltype(CumulativeCounters),
                 &NMonitoring::TDynamicCounters::FindNamedCounter
             >(
-                CumulativeCountersOpts(),
+                this->CumulativeCountersOpts(),
                 parentCounterGroups,
                 CumulativeCounters
             )
@@ -412,11 +332,11 @@ private:
 
         // Look up source counters for all percentile counters
         if (!FindSourceCountersForCounterType<
-                TPercentileCountersOpts,
+                typename TYdbMetricsMapperImpl::TPercentileCountersOpts,
                 decltype(PercentileCounters),
                 &NMonitoring::TDynamicCounters::FindNamedHistogram
             >(
-                PercentileCountersOpts(),
+                this->PercentileCountersOpts(),
                 parentCounterGroups,
                 PercentileCounters
             )
@@ -467,21 +387,24 @@ private:
     /**
      * The list of source-target counter pairs used for mapping simple counters.
      *
-     * @note The size matches the number of simple counters from TSimpleCountersOpts.
+     * @note The size matches the number of simple counters from TSimpleCountersOpts,
+     *       with the order being the same as well.
      */
     std::vector<TMappedCounter> SimpleCounters;
 
     /**
      * The list of source-target counter pairs used for mapping cumulative counters.
      *
-     * @note The size matches the number of cumulative counters from TCumulativeCountersOpts.
+     * @note The size matches the number of cumulative counters from TCumulativeCountersOpts,
+     *       with the order being the same as well.
      */
     std::vector<TMappedCounter> CumulativeCounters;
 
     /**
      * The list of source-target counter pairs used for mapping percentile counters.
      *
-     * @note The size matches the number of percentile counters from TPercentileCountersOpts.
+     * @note The size matches the number of percentile counters from TPercentileCountersOpts,
+     *       with the order being the same as well.
      */
     std::vector<TMappedHistogram> PercentileCounters;
 };

@@ -1,4 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_transaction.proto";
 
 import "ydb/core/protos/base.proto";
 

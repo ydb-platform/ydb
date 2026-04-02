@@ -6,6 +6,7 @@
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <library/cpp/json/json_writer.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
 #include <util/system/hp_timer.h>
@@ -195,20 +196,30 @@ void TCommandLatency::Config(TConfig& config) {
     config.Opts->AddLongOption(
         'p', "percentile", TStringBuilder() << "Latency percentile")
             .RequiredArgument("DOUBLE").AppendTo(&Percentiles);
+    TVector<NLastGetopt::NComp::TChoice> formatChoices;
+    for (auto val : GetEnumAllValues<EFormat>()) {
+        formatChoices.emplace_back(ToString(val));
+    }
     config.Opts->AddLongOption(
         'f', "format", TStringBuilder() << "Output format. Available options: " << availableFormats)
-            .OptionalArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT);
+            .RequiredArgument("STRING").StoreResult(&Format).DefaultValue(DEFAULT_FORMAT)
+            .Completer(NLastGetopt::NComp::Choice(std::move(formatChoices)));
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (auto val : GetEnumAllValues<TCommandPing::EPingKind>()) {
+        kindChoices.emplace_back(ToString(val));
+    }
     config.Opts->AddLongOption(
         'k', "kind", TStringBuilder() << "Use only specified ping kind. Available options: " << availableKinds)
-            .OptionalArgument("STRING").StoreResult(&RunKind).DefaultValue(DEFAULT_RUN_KIND);
+            .RequiredArgument("STRING").StoreResult(&RunKind).DefaultValue(DEFAULT_RUN_KIND)
+            .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 
     // actor chain options
     config.Opts->AddLongOption(
         "chain-length", TStringBuilder() << "Chain length (ActorChain kind only)")
-            .OptionalArgument("INT").StoreResult(&ChainConfig->ChainLength_).DefaultValue(ChainConfig->ChainLength_);
+            .RequiredArgument("INT").StoreResult(&ChainConfig->ChainLength_).DefaultValue(ChainConfig->ChainLength_);
     config.Opts->AddLongOption(
         "chain-work-duration", TStringBuilder() << "Duration of work in usec for each actor in the chain (ActorChain kind only)")
-            .OptionalArgument("INT").StoreResult(&ChainConfig->WorkUsec_).DefaultValue(ChainConfig->WorkUsec_);
+            .RequiredArgument("INT").StoreResult(&ChainConfig->WorkUsec_).DefaultValue(ChainConfig->WorkUsec_);
     config.Opts->AddLongOption(
         "no-tail-chain", TStringBuilder() << "Don't use Tail sends and registrations (ActorChain kind only)")
             .StoreTrue(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);

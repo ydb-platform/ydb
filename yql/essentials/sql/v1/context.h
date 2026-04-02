@@ -202,7 +202,7 @@ public:
     TString AddSimpleUdf(const TString& udf);
     void SetPackageVersion(const TString& packageName, ui32 version);
 
-    bool IsStreamingService(const TStringBuf service) const;
+    bool IsStreamingService(TStringBuf service) const;
 
     bool CheckColumnReference(TPosition pos, const TString& name) {
         const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
@@ -440,6 +440,7 @@ public:
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
     bool WindowNewPipeline = false;
+    bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

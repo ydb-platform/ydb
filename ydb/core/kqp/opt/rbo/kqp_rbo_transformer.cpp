@@ -8,7 +8,6 @@ using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
-
 namespace {
 
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
@@ -241,9 +240,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprC
 
     TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return TStatus::Ok;
@@ -313,7 +312,7 @@ void TKqpNewRBOTransformer::ApplyColumnStatistics() {
         YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
     } else {
         for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
-            TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
+            TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
         }
     }
 }
@@ -410,7 +409,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Assign physical stages.
     TVector<std::unique_ptr<IRule>> assignPhysicalStageRules;
     assignPhysicalStageRules.emplace_back(std::make_unique<TAssignStagesRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign stages", std::move(assignPhysicalStageRules)));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign physical stages", std::move(assignPhysicalStageRules)));
+
+    // Optimize physical stages.
+    TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
 }
 
 void TKqpRBOCleanupTransformer::Rewind() {

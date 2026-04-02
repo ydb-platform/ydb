@@ -986,10 +986,16 @@ class TJsonNodes : public TViewerPipeClient {
             case EPeerRole::Any:
                 return true;
             case EPeerRole::Database:
+                if (Database == DomainPath) {
+                    return IsStaticNode(nodeStateInfo);
+                }
                 return GetScopeId(nodeStateInfo.GetScopeId()) == FilterPeerScopeId;
             case EPeerRole::Static:
                 return IsStaticNode(nodeStateInfo);
             case EPeerRole::Other:
+                if (Database == DomainPath) {
+                    return !IsStaticNode(nodeStateInfo);
+                }
                 return GetScopeId(nodeStateInfo.GetScopeId()) != FilterPeerScopeId && !IsStaticNode(nodeStateInfo);
             default:
                 return false;

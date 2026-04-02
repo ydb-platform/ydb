@@ -25,7 +25,7 @@ Below are the steps required to enable the node authentication and authorization
 
     {% endnote %}
 
-1. The command-line parameters for [starting database nodes](initial-deployment.md#start-dynnode) must include options that specify the paths to the trusted CA certificate, the node certificate, and the node key files. The required additional command-line parameters are:
+1. The command-line parameters for [starting database nodes](initial-deployment/deployment-configuration-v1.md#start-dynnode) must include options that specify the paths to the trusted CA certificate, the node certificate, and the node key files. The required additional command-line parameters are:
 
     | **Command-line option** | **Description** |
     |-------------------------|-----------------|

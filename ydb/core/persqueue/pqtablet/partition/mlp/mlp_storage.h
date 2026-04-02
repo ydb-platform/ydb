@@ -7,6 +7,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 

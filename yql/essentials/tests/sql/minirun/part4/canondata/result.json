@@ -321,6 +321,20 @@
             "uri": "https://{canondata_backend}/1942100/de4286ebae2208adb7d59ec6e551ff7be1e282bd/resource.tar.gz#test.test_agg_phases-sum_if-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-topfreq_opt-default.txt-Debug]": [
+        {
+            "checksum": "83ce58aeec1b9ac84b6b8e922e86f4d7",
+            "size": 4613,
+            "uri": "https://{canondata_backend}/1900335/ed736294f7d6e292310df0b8094dc8d873ae99e6/resource.tar.gz#test.test_agg_phases-topfreq_opt-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-topfreq_opt-default.txt-Results]": [
+        {
+            "checksum": "1986426c28ba12556e9a1082f98911d9",
+            "size": 15380,
+            "uri": "https://{canondata_backend}/1900335/ed736294f7d6e292310df0b8094dc8d873ae99e6/resource.tar.gz#test.test_agg_phases-topfreq_opt-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases_agg_apply-count_all_null-default.txt-Debug]": [
         {
             "checksum": "defcd4527c0040910a5cce97dcde8924",
@@ -2043,6 +2057,20 @@
             "checksum": "1dc48deabab3b0fced48b3ed70251afc",
             "size": 1189,
             "uri": "https://{canondata_backend}/937458/7d5fe8c90d2c6ae42045aa9fc2babd60f26d3828/resource.tar.gz#test.test_select_yql-group_by_a_sum_distinct_b-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-grouping_sets_a_implicit-default.txt-Debug]": [
+        {
+            "checksum": "80f85c9a7cba803de6269e55aca73a72",
+            "size": 896,
+            "uri": "https://{canondata_backend}/1880306/5c0478f904e1655770d9d63c9e2b11b2b1184db2/resource.tar.gz#test.test_select_yql-grouping_sets_a_implicit-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-grouping_sets_a_implicit-default.txt-Results]": [
+        {
+            "checksum": "a3dd3366e2ea685e2513892e19548809",
+            "size": 1187,
+            "uri": "https://{canondata_backend}/1880306/5c0478f904e1655770d9d63c9e2b11b2b1184db2/resource.tar.gz#test.test_select_yql-grouping_sets_a_implicit-default.txt-Results_/results.txt"
         }
     ],
     "test.test[select_yql-in_smart_parenthesis_context_3-default.txt-Debug]": [

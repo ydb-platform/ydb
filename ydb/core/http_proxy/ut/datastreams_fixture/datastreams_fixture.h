@@ -80,6 +80,7 @@ public:
         bool EnableMetering : 1 = false;
         bool EnableSqsTopic : 1 = false;
         bool EnforceUserTokenRequirement : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);
@@ -174,6 +175,19 @@ public:
         return json;
     }
 
+    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 5) {
+        for (ui32 i = 0; i < retries; ++i) {
+            auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
+            if (expectedHttpCode == 200) {
+                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                return json;
+            }
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_FAIL("Failed to send message, max retries reached");
+        return {};
+    }
+
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
     }
@@ -233,7 +247,7 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement);
+    void InitKikimr(const TInitParameters& initParameters);
 
     void InitAccessServiceService();
 
@@ -287,6 +301,25 @@ class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(TInitParameters{
             .EnableSqsTopic = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForSQSTopicWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForKinesisWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
         });
     }
 };

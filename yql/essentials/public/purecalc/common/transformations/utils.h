@@ -45,8 +45,8 @@ TExprNode::TPtr NodeToBlocks(
  */
 TExprNode::TPtr ApplyToIterable(
     const TPositionHandle& pos,
-    const TExprNode::TPtr iterable,
-    const TExprNode::TPtr lambda,
+    const TExprNode::TPtr& iterable,
+    const TExprNode::TPtr& lambda,
     bool wrapLMap,
     TExprContext& ctx);
 

@@ -1,3 +1,5 @@
+#include "ut_helpers.h"
+
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
@@ -5,13 +7,12 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NActors;
 using namespace NKikimr;
+using namespace NKikimr::NDetailedMetricsTests;
 using namespace NKikimr::NTabletFlatExecutor;
 
 namespace {
@@ -57,30 +58,6 @@ void ForceCounterRecalculation(
             edgeActorId,
             new NActors::TEvents::TEvWakeup()
         )
-    );
-}
-
-/**
- * Normalizes the given JSON to be well formatted with all keys sorted.
- *
- * @warning This function sorts only maps by the key value. It does not sort
- *          items in arrays at all. Luckily, all counters and groups in TDynamicCounters
- *          are stored in SORTED maps, which means that the array of sensors
- *          is always inherently sorted in a stable order. This makes it safe
- *          to compare sensor arrays directly without sorting them.
- *
- * @param jsonString The JSON to normalize (as a string)
- *
- * @return The corresponding normalized JSON
- */
-TString NormalizeJson(const TString& jsonString) {
-    NJson::TJsonValue parsedJson;
-    UNIT_ASSERT(NJson::ReadJsonTree(TStringBuf(jsonString), &parsedJson));
-
-    return NJson::WriteJson(
-        parsedJson,
-        true /* formatOutput */,
-        true /* sortkeys */
     );
 }
 

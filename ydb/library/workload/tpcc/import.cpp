@@ -1112,13 +1112,11 @@ public:
                         for (const auto& table: TPCC_TABLES) {
                             CompactTable(drivers.front(), LoadState, Config, table, Log.get());
                         }
-/*
                         for (const auto& indexState: LoadState.IndexBuildStates) {
                             TStringBuilder indexImplTable;
                             indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
                             CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
                         }
-*/
                         LoadState.State = TImportState::EWAIT_COMPACTION;
                     } else {
                         LoadState.State = TImportState::ESUCCESS;

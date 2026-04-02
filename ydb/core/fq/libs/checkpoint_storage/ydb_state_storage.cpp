@@ -560,6 +560,7 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
 
             auto query = Sprintf(R"(
                 --!syntax_v1
+                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
 
                 declare $graph_id as string;
@@ -622,6 +623,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 
             auto query = Sprintf(R"(
                 --!syntax_v1
+                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
                 PRAGMA TablePathPrefix("%s");
 
@@ -701,6 +703,7 @@ TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
 
             auto query = Sprintf(R"(
                 --!syntax_v1
+                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
 
                 declare $graph_id as string;
@@ -740,6 +743,7 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
 
             auto query = Sprintf(R"(
                 --!syntax_v1
+                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
 
                 declare $graph_id as string;
@@ -802,6 +806,7 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
 
     auto query = Sprintf(R"(
         --!syntax_v1
+        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -848,6 +853,7 @@ TFuture<TStatus> TStateStorage::UpsertRow(const TContextPtr& context) {
 
             auto query = Sprintf(R"(
                 --!syntax_v1
+                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
 
                 declare $task_id as Uint64;

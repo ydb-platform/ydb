@@ -374,6 +374,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TCreateScriptOperationQuery::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $run_script_actor_id AS Text;
@@ -719,6 +720,7 @@ public:
 
         TString sql = R"(
             -- TScriptLeaseUpdater::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -907,6 +909,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TRestartScriptOperationQuery::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1153,6 +1156,7 @@ public:
     void RestartScriptExecution() {
         TString sql = R"(
             -- TRestartScriptOperationQuery::RestartScriptExecution
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $lease_duration AS Interval;
@@ -1544,6 +1548,7 @@ public:
 
         const TString sql = R"(
             -- TCheckLeaseStatusQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1878,6 +1883,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1913,6 +1919,7 @@ public:
 
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::OnOperationDeleted
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -1982,6 +1989,7 @@ public:
 
         TString sql = R"(
             -- TForgetScriptExecutionOperationQueryActor::DeleteScriptResults
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
@@ -2191,6 +2199,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TGetScriptExecutionOperationQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -2593,6 +2602,7 @@ public:
         }
         sql << R"(
             -- TListScriptExecutionOperationsQuery::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $page_size AS Uint64;
             DECLARE $user_sid AS Optional<Text>;
@@ -2858,6 +2868,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TResetScriptExecutionRetriesQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -2934,6 +2945,7 @@ public:
     void DropRetryState() {
         TString sql = R"(
             -- TResetScriptExecutionRetriesQueryActor::DropRetryState
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $retry_state AS Optional<JsonDocument>;
@@ -3288,6 +3300,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TSaveScriptExecutionResultMetaQuery::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_metas AS JsonDocument;
@@ -3352,6 +3365,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TSaveScriptExecutionResultQuery::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
@@ -3542,6 +3556,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TGetScriptExecutionResultQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -3680,6 +3695,7 @@ public:
 
         TString sql = R"(
             -- TGetScriptExecutionResultQuery::FetchScriptResults
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
@@ -3890,6 +3906,7 @@ public:
 
         TString sql = R"(
             -- TSaveScriptExternalEffectActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $customer_supplied_id AS Text;
@@ -4008,6 +4025,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TSaveScriptFinalStatusActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -4197,6 +4215,7 @@ public:
     void FinishScriptExecution() {
         auto sql = TStringBuilder() << R"(
             -- TSaveScriptFinalStatusActor::FinishScriptExecution
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $operation_status AS Int32;
@@ -4403,6 +4422,7 @@ public:
 
         TString sql = R"(
             -- TScriptFinalizationFinisherActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
 
@@ -4549,6 +4569,7 @@ public:
     void UpdateOperationFinalStatus() {
         auto sql = TStringBuilder() << R"(
             -- TScriptFinalizationFinisherActor::UpdateOperationFinalStatus
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $operation_status AS Int32;
@@ -4665,6 +4686,7 @@ public:
 
         auto parameters = TStringBuilder() << R"(
             -- TScriptProgressActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
             DECLARE $plan_compressed AS Optional<String>;
@@ -4762,6 +4784,7 @@ public:
 
         TString sql = R"(
             -- TListExpiredLeasesQueryActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $max_lease_deadline AS Timestamp;
             DECLARE $max_listed_leases AS Uint64;
 
@@ -4944,6 +4967,7 @@ public:
 
         TString sql = fmt::format(R"(
             -- TSaveScriptExecutionPhysicalGraphActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
             DECLARE $graph_compressed AS String;
@@ -5012,6 +5036,7 @@ public:
     void OnRunQuery() override {
         TString sql = R"(
             -- TGetScriptExecutionPhysicalGraphActor::OnRunQuery
+            PRAGMA ydb.DqChannelVersion = "1";
             DECLARE $execution_id AS Text;
             DECLARE $database AS Text;
 

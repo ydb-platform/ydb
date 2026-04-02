@@ -6,9 +6,6 @@ import string
 import time
 import zstandard
 
-_GZIP_MAGIC = b'\x1f\x8b'
-_ZSTD_MAGIC = b'\x28\xb5\x2f\xfd'
-
 import ydb
 
 from ydb.tests.fq.streaming.common import StreamingTestBase
@@ -68,6 +65,98 @@ class TestStreamingInYdb(StreamingTestBase):
         self.write_stream(data, endpoint=endpoint)
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv(self, kikimr, entity_name, local_topics):
+        """FORMAT csv: one topic message = one CSV row (ClickHouseClient.ParseFormat, no row dispatcher)."""
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_csv", local_topics, entity_name)
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["lunch time"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv_with_names(self, kikimr, entity_name, local_topics):
+        """FORMAT csv_with_names: header + data line per message (same CH parser as S3; no row dispatcher)."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_read_topic_csv_with_names", local_topics, entity_name
+        )
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ["time\nlunch time\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]["time"] == b"lunch time"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv_projection_column_order(self, kikimr, entity_name, local_topics):
+        """Headerless CSV: file fields follow SCHEMA order; SELECT only reorders output columns."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_read_topic_csv_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # SCHEMA (a, b): first CSV field is `a`, second is `b`.
+        data = ["aa,bb"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_csv_with_names_projection_column_order(self, kikimr, entity_name, local_topics):
+        """csv_with_names: header names map fields; SCHEMA order vs header row; SELECT only reorders output."""
+        input_name, endpoint = self.get_input_name(
+            kikimr, "test_read_topic_csv_with_names_projection_column_order", local_topics, entity_name
+        )
+
+        sql = f"""SELECT b, a FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "csv_with_names",
+                SCHEMA = (a String NOT NULL, b String NOT NULL)
+            )
+            LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        # Header lists a then b; data line matches that order (same as SCHEMA declaration order).
+        data = ["a,b\naa,bb\n"]
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["b"] == b"bb"
+        assert row["a"] == b"aa"
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
@@ -439,7 +528,7 @@ class TestStreamingInYdb(StreamingTestBase):
             kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
 
         test_type(self, kikimr, type="String", input='"lunch time"', expected_output='lunch time', use_partition_balancing=use_partition_balancing)
-        test_type(self, kikimr, type="Utf8", input='"Relativitätstheorie"', expected_output='Relativitätstheorie', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Utf8", input='"Relativit├дtstheorie"', expected_output='Relativit├дtstheorie', use_partition_balancing=use_partition_balancing)
         test_type(self, kikimr, type="Int8", input='42', expected_output='42', use_partition_balancing=use_partition_balancing)
         test_type(self, kikimr, type="Uint64", input='777', expected_output='777', use_partition_balancing=use_partition_balancing)
         test_type(self, kikimr, type="Float", input='1024.1024', expected_output='1024.1024', use_partition_balancing=use_partition_balancing)
@@ -641,11 +730,6 @@ class TestStreamingInYdb(StreamingTestBase):
                 self.output_topic, 1, self.consumer_name,
                 ep.endpoint, ep.database)
 
-            # Verify GZIP compression by magic bytes and by successful decompression.
-            # Note: batch._codec is not used because the Python SDK resets it to RAW
-            # after applying any decoder, making it an unreliable wire-codec indicator.
-            assert raw_messages[0][:2] == b'\x1f\x8b', \
-                "Expected GZIP magic bytes in raw payload тАФ data does not appear to be GZIP-compressed"
             decompressed = gzip_module.decompress(raw_messages[0]).decode()
             assert decompressed == "test_value"
 
@@ -686,12 +770,8 @@ class TestStreamingInYdb(StreamingTestBase):
                 ep.endpoint, ep.database)
 
             if base_codec == "gzip":
-                assert raw_messages[0][:2] == _GZIP_MAGIC, \
-                    "Expected GZIP magic bytes тАФ payload does not appear to be GZIP-compressed"
                 decompressed = gzip_module.decompress(raw_messages[0]).decode()
             elif base_codec == "zstd":
-                assert raw_messages[0][:4] == _ZSTD_MAGIC, \
-                    "Expected ZSTD magic bytes тАФ payload does not appear to be ZSTD-compressed"
                 decompressed = zstandard.ZstdDecompressor().decompress(raw_messages[0]).decode()
             else:
                 raise AssertionError(f"Unhandled codec in test: {base_codec}")

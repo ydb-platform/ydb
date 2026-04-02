@@ -3,6 +3,7 @@
 #include "yql_pq_helpers.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/providers/common/config/yql_configuration_transformer.h>
@@ -122,16 +123,20 @@ public:
             .Metadata().Add(sourceMetadata).Build()
             .Done();
 
-        TExprNode::TPtr columns;
-        if (auto columnOrder = topicKeyParser.GetColumnOrder()) {
-            columns = std::move(columnOrder);
-        } else {
-            columns = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
-        }
+        TExprNode::TPtr columns = topicKeyParser.GetColumnOrder();
 
         auto format = topicKeyParser.GetFormat();
         if (format.empty()) {
             format = "raw";
+        }
+
+        // csv: physical field order only as explicit atom list in userschema (third argument / tail), same as S3 ColumnOrder.
+        if (format == TStringBuf("csv")) {
+            if (!columns || !columns->IsList()) {
+                ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder()
+                    << "Pq read: csv format requires userschema column order as a list of column name atoms (third argument of userschema)"));
+                return nullptr;
+            }
         }
 
         auto settings = Build<TCoNameValueTupleList>(ctx, read.Pos());
@@ -214,6 +219,10 @@ public:
             settings.Add(std::move(skipJsonErrors));
         }
 
+        if (auto csvDelimiter = topicKeyParser.GetCsvDelimiter()) {
+            settings.Add(std::move(csvDelimiter));
+        }
+
         if (auto streamingTopicRead = topicKeyParser.GetStreamingTopicRead()) {
             if (!topicKeyParser.ParseStreamingTopicRead(*streamingTopicRead, ctx)) {
                 return nullptr;
@@ -221,15 +230,25 @@ public:
             settings.Add(std::move(streamingTopicRead));
         }
 
+        TExprNode::TPtr userSchemaColumnsList;
+        if (format == TStringBuf("csv")) {
+            YQL_ENSURE(columns && columns->IsList());
+            // Own copy: Columns may later be rewritten to projection order; UserSchemaColumns must keep file order.
+            userSchemaColumnsList = ctx.NewList(read.Pos(), columns->ChildrenList());
+        } else {
+            userSchemaColumnsList = Build<TCoVoid>(ctx, read.Pos()).Done().Ptr();
+        }
+
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())
             .World(read.World())
             .DataSource(read.DataSource())
             .Topic(std::move(topicNode))
-            .Columns(std::move(columns))
+            .Columns(columns ? std::move(columns) : Build<TCoVoid>(ctx, read.Pos()).Done().Ptr())
             .Format().Value(format).Build()
             .Compression().Value(topicKeyParser.GetCompression()).Build()
             .LimitHint<TCoVoid>().Build()
-            .Settings(settings.Done());
+            .Settings(settings.Done())
+            .UserSchemaColumns(std::move(userSchemaColumnsList));
 
         if (auto watermark = topicKeyParser.GetWatermark()) {
             builder.Watermark(std::move(watermark));

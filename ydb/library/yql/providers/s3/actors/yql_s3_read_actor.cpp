@@ -2291,17 +2291,27 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             }
         }
 
-        readSpec->Format = params.GetFormat();
+        const TString format = params.GetFormat();
+        // csv format (no file header) is handled by csv_with_names parser with a virtual header from SCHEMA.
+        readSpec->Format = (format == "csv") ? "csv_with_names" : format;
 
         if (readSpec->Format == "csv_with_names") {
             readSpec->Settings.csv.empty_as_default = true;
         }
 
-        if (const auto it = settings.find("compression"); settings.cend() != it)
+        if (const auto it = settings.find("compression"); settings.cend() != it) {
             readSpec->Compression = it->second;
+        }
 
-        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty())
+        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty()) {
             readSpec->Settings.csv.delimiter = it->second[0];
+        }
+
+        if (format == "csv") {
+            for (const auto& col : params.GetColumnNames()) {
+                readSpec->Settings.csv.file_column_names.emplace_back(col);
+            }
+        }
 
         if (const auto it = settings.find("data.datetime.formatname"); settings.cend() != it) {
             readSpec->Settings.date_time_format_name = ToDateTimeFormat(it->second);

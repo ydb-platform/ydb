@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 
 #include <algorithm>
+#include <util/generic/vector.h>
 
 namespace NYql {
 
@@ -25,7 +26,8 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     NKikimr::NMiniKQL::TType* parseItemType,
     NKikimr::NMiniKQL::TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx,
-    bool useBlocks = false);
+    bool useBlocks = false,
+    const TVector<TString>* csvHeaderlessColumnOrder = nullptr);
 
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx, bool useBlocks = false);
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx);

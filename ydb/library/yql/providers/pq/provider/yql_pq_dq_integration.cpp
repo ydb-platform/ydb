@@ -16,6 +16,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/utils/log/log.h>
@@ -29,6 +31,37 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+/// Row field order for DqPqTopicSource.Columns / runtime row (LookupColumnOrder on PqReadTopic, then struct order).
+TVector<TString> GetPqReadTopicRowNamesInUserSchemaOrder(const TPqReadTopic& pqReadTopic, const TTypeAnnotationContext* types) {
+    YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "PqReadTopic has no type annotation");
+    const auto* rowType = pqReadTopic.Ref().GetTypeAnn()
+        ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
+        ->GetItemType()->Cast<TStructExprType>();
+    const size_t n = rowType->GetSize();
+
+    if (types) {
+        if (const auto order = types->LookupColumnOrder(pqReadTopic.Ref())) {
+            if (order->Size() == n) {
+                TVector<TString> out;
+                out.reserve(n);
+                for (size_t i = 0; i < n; ++i) {
+                    out.push_back(order->at(i).LogicalName);
+                }
+                return out;
+            }
+            YQL_CLOG(DEBUG, ProviderPq) << "LookupColumnOrder size " << order->Size()
+                << " != row type size " << n << ", using struct member order for PqReadTopic columns";
+        }
+    }
+
+    TVector<TString> out;
+    out.reserve(n);
+    for (const auto* item : rowType->GetItems()) {
+        out.push_back(TString(item->GetName()));
+    }
+    return out;
+}
 
 class TPqDqIntegration : public TDqIntegrationBase {
 public:
@@ -87,15 +120,14 @@ public:
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
-            const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+            // DqPqTopicSource.Columns: row/ColumnOrder order (projection-aware via SetColumnOrder), not csv file order.
             const auto pos = read->Pos();
-
+            const auto orderedNames = GetPqReadTopicRowNamesInUserSchemaOrder(pqReadTopic, State_->Types);
             TExprNode::TListType colNames;
-            colNames.reserve(typeItems.size());
-            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
-                [&](const TItemExprType* item) {
-                    return ctx.NewAtom(pos, item->GetName());
-                });
+            colNames.reserve(orderedNames.size());
+            for (const auto& name : orderedNames) {
+                colNames.push_back(ctx.NewAtom(pos, name));
+            }
             auto columnNames = ctx.NewList(pos, std::move(colNames));
 
             auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
@@ -333,8 +365,7 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
-                const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                for (const auto& item : rowSchema->GetItems()) {
+                for (const auto& item : fullRowType->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
@@ -734,9 +765,23 @@ public:
             .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
             .Done());
 
+        TExprNode::TPtr formatSettingsNode = pqReadTopic.Settings().Ptr();
+        if (TStringBuf(pqReadTopic.Format().Ref().Content()) == TStringBuf("csv")) {
+            const auto maybeUserSchemaColumns = pqReadTopic.UserSchemaColumns();
+            YQL_ENSURE(maybeUserSchemaColumns);
+            TExprNode::TPtr columnsList = maybeUserSchemaColumns.Cast().Ptr();
+            YQL_ENSURE(columnsList->IsList() && !TCoVoid::Match(columnsList.Get()));
+            TExprNode::TListType merged = formatSettingsNode->ChildrenList();
+            merged.push_back(ctx.NewList(pos, {
+                ctx.NewAtom(pos, "columns_list"),
+                std::move(columnsList),
+            }));
+            formatSettingsNode = ctx.NewList(pos, std::move(merged));
+        }
+
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build("formatSettings")
-            .Value(std::move(pqReadTopic.Settings()))
+            .Value(std::move(formatSettingsNode))
             .Done());
 
         TVector<TCoNameValueTuple> innerSettings;

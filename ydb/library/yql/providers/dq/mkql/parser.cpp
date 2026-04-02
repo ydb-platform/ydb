@@ -150,8 +150,13 @@ TRuntimeNode BuildParseCall(
     TType* parseItemType,
     TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx,
-    bool useBlocks)
+    bool useBlocks,
+    const TVector<TString>* csvHeaderlessColumnOrder)
 {
+    TString formatFull(format);
+    const size_t bracePos = formatFull.find('{');
+    const TStringBuf formatBase = bracePos == TString::npos ? TStringBuf(formatFull) : TStringBuf(formatFull.data(), bracePos);
+
     const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
     const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
@@ -211,7 +216,7 @@ TRuntimeNode BuildParseCall(
         input = WrapWithDecompress(input, inputItemType, compression, ctx);
     }
 
-    if (format == "raw") {
+    if (formatBase == "raw"sv) {
         auto parseLambda = [&](TRuntimeNode item) {
             if (parseItemStructType->GetMembersCount() == 0) {
                 return ctx.ProgramBuilder.NewStruct(parseItemType, {});
@@ -252,7 +257,7 @@ TRuntimeNode BuildParseCall(
                 return parseLambda(item);
             }
         );
-    } else if (format == "json_list") {
+    } else if (formatBase == "json_list"sv) {
         auto parseToListLambda = [&](TRuntimeNode blob) {
             const auto json = ctx.ProgramBuilder.StrictFromString(
                 blob,
@@ -321,10 +326,34 @@ TRuntimeNode BuildParseCall(
             writer.Write(v.first, v.second);
         }
 
+        const bool csvVirtualHeader = csvHeaderlessColumnOrder && !csvHeaderlessColumnOrder->empty();
+        MKQL_ENSURE(!csvVirtualHeader || bracePos == TString::npos,
+            "csv format with virtual column list (columns_list) must not use {...} suffix on format name");
+        if (csvVirtualHeader) {
+            writer.Write("with_names_use_header", false);
+            writer.Write("empty_as_default", true);
+            writer.WriteKey("columns_list");
+            writer.OpenArray();
+            for (const auto& col : *csvHeaderlessColumnOrder) {
+                writer.Write(col);
+            }
+            writer.CloseArray();
+        }
+
         writer.CloseMap();
         writer.Flush();
         if (settingsAsJson == "{}") {
             settingsAsJson.clear();
+        }
+
+        TString formatForCh = TString{formatBase};
+        if (csvVirtualHeader && formatForCh == "csv"sv) {
+            formatForCh = "csv_with_names";
+        }
+
+        TString typeConfig = csvVirtualHeader ? formatForCh : formatFull;
+        if (!settingsAsJson.empty()) {
+            typeConfig += settingsAsJson;
         }
 
         const auto userType = ctx.ProgramBuilder.NewTupleType({
@@ -333,7 +362,7 @@ TRuntimeNode BuildParseCall(
             userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format + settingsAsJson), {input}));
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, typeConfig), {input}));
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,
@@ -403,9 +432,21 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
     }
 
     std::vector<std::pair<std::string_view, std::string_view>> formatSettings;
+    TVector<TString> csvHeaderlessColumns;
     if (auto settings = GetSetting(wrapper.Settings().Cast().Ref(), "formatSettings")) {
         settings->Tail().ForEachChild([&](const TExprNode& v) {
-            formatSettings.emplace_back(v.Child(0)->Content(), v.Child(1)->Content());
+            const TStringBuf key = v.Child(0)->Content();
+            const auto& valNode = *v.Child(1);
+            if (key == "columns_list"sv && valNode.IsList()) {
+                csvHeaderlessColumns.reserve(valNode.ChildrenSize());
+                for (ui32 i = 0; i < valNode.ChildrenSize(); ++i) {
+                    MKQL_ENSURE(valNode.Child(i)->IsAtom(), "columns_list must be a list of atoms");
+                    csvHeaderlessColumns.push_back(TString(valNode.Child(i)->Content()));
+                }
+            } else {
+                MKQL_ENSURE(valNode.IsAtom(), "Expected atom format setting value");
+                formatSettings.emplace_back(key, valNode.Content());
+            }
         });
     }
 
@@ -439,7 +480,8 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         parseItemType,
         finalItemType,
         ctx,
-        useBlocks);
+        useBlocks,
+        csvHeaderlessColumns.empty() ? nullptr : &csvHeaderlessColumns);
 }
 
 TMaybe<TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx) {

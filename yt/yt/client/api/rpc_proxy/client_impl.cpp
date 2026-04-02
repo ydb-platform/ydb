@@ -2066,7 +2066,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
 
                 auto rowBatchReader = New<TRowBatchReader>(std::move(inputStream), /*isStreamWithStatistics*/ false);
 
-                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters=*/ {});
+                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters*/ {});
             }));
         }));
 }

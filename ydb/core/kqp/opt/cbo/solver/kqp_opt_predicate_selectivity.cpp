@@ -1,3 +1,4 @@
+#include "kqp_opt_predicate_selectivity.h"
 #include "kqp_opt_stat.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>

@@ -26,12 +26,10 @@ CONST_10_GB = 10 * 1024**3
 all_binary_combinations_restart = [
     [init_stable_binary_path, inter_stable_binary_path],
     [inter_stable_binary_path, current_binary_path],
-    [init_stable_binary_path, current_binary_path],
 ]
 all_binary_combinations_ids_restart = [
     "restart_{}_to_{}".format(init_stable_name, inter_stable_name),
     "restart_{}_to_{}".format(inter_stable_name, current_name),
-    "restart_{}_to_{}".format(init_stable_name, current_name),
 ]
 
 

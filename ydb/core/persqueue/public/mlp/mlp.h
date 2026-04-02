@@ -17,6 +17,7 @@ enum EEv : ui32 {
     EvWriteResponse,
     EvChangeResponse,
     EvPurgeResponse,
+    EvDescribeResponse,
     EvEnd
 };
 
@@ -92,6 +93,22 @@ struct TEvPurgeResponse : public NActors::TEventLocal<TEvPurgeResponse, EEv::EvP
 
     Ydb::StatusIds::StatusCode Status;
     TString ErrorDescription;
+};
+
+struct TEvDescribeResponse : public NActors::TEventLocal<TEvDescribeResponse, EEv::EvDescribeResponse> {
+    TEvDescribeResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorDescription = {})
+        : Status(status)
+        , ErrorDescription(std::move(errorDescription))
+    {
+    }
+
+    Ydb::StatusIds::StatusCode Status;
+    TString ErrorDescription;
+
+    TInstant TopicCreated;
+    ui64 ApproximateMessageCount;
+    ui64 ApproximateDelayedMessageCount;
+    ui64 ApproximateLockedMessageCount;
 };
 
 
@@ -180,5 +197,16 @@ struct TPurgerSettings {
 // Return TEvPurgeResponse
 IActor* CreatePurger(const NActors::TActorId& parentId, TPurgerSettings&& settings);
 
+// Return TEvDescribeResponse
+struct TDescribeSettings {
+    TString DatabasePath;
+    TString TopicName;
+    TString Consumer;
+
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+// Return TEvDescribeResponse
+IActor* CreateDescriber(const NActors::TActorId& parentId, TDescribeSettings&& settings);
 
 } // NKikimr::NPQ::NMLP

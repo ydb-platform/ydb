@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     autopartitioning_manager.cpp
+    partitioning_keys_manager.cpp
     consumer_offset_tracker.cpp
     message_id_deduplicator.cpp
     offload_actor.cpp
@@ -43,6 +44,7 @@ PEERDIR(
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
     ydb/library/actors/core
+    ydb/library/kll_median
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
 )

@@ -83,12 +83,6 @@
 /ydb/tests/compatibility @ydb-platform/engineering
 /ydb/tests/stress @ydb-platform/engineering
 
-#Orphan components @spuchin @maximyurchuk @kirrysin @ydb-platform/duty
-/ydb/services/ydb @ydb-platform/duty
-/ydb/core/util @ydb-platform/duty
-/ydb/core/client @ydb-platform/duty
-/ydb/core/engine @ydb-platform/duty
-
 #Distributed Storage Team @the-ancient-1 TEAM:@ydb-platform/blobstorage
 /ydb/core/blobstorage @ydb-platform/blobstorage
 /ydb/core/mind/bscontroller @ydb-platform/blobstorage
@@ -104,6 +98,8 @@
 /ydb/tests/functional/dstool @ydb-platform/blobstorage
 /ydb/tests/compatibility/distconf @ydb-platform/blobstorage
 /ydb/tests/stress/testshard_workload @ydb-platform/blobstorage
+/ydb/tools/stress_tool @ydb-platform/blobstorage
+/ydb/core/load_test @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -150,6 +146,7 @@
 /ydb/core/public_http/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/tests/compatibility/streaming @ydb-platform/fq
+/ydb/core/external_sources/s3 @ydb-platform/fq
 
 #@ydb-platform/ui-backend
 /ydb/core/viewer @ydb-platform/ui-backend

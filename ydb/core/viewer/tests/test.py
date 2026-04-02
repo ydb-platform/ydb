@@ -1696,3 +1696,13 @@ class TestViewer(object):
         result = cls.get_viewer_normalized("/viewer/peers")
         cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
         return result
+
+    @classmethod
+    def test_viewer_domain_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'tablets': False,
+            'database': cls.domain_name,
+            'fields_required': 'ConnectStatus',
+            'filter_peer_role': 'database',
+        })
+        return result

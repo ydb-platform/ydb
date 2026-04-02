@@ -1,7 +1,8 @@
 #include "kqp_operator.h"
 
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
 
 /***
  * All the methods to compute metadata and statistics are collected in this file

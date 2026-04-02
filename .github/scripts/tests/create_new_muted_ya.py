@@ -229,6 +229,7 @@ def aggregate_test_data(all_data, period_days):
                     'mute_count': 0,
                     'skip_count': 0,
                     'owner': test.get('owner'),
+                    'owner_date': test.get('date_window'),
                     'is_muted': test.get('is_muted'),
                     'is_muted_date': test.get('date_window'),  # Store the date used for is_muted.
                     'state': test.get('state'),
@@ -251,7 +252,13 @@ def aggregate_test_data(all_data, period_days):
                 if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
-            
+
+                # Owner must follow the latest day in the window (tests_monitor owner can change
+                # when TESTOWNERS is updated); the first row is the earliest date due to sort order.
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('owner_date', 0)):
+                    aggregated[full_name]['owner'] = test.get('owner')
+                    aggregated[full_name]['owner_date'] = test.get('date_window')
+
             # Accumulate aggregated counters.
             aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
             aggregated[full_name]['fail_count'] += test.get('fail_count', 0)
@@ -261,6 +268,7 @@ def aggregate_test_data(all_data, period_days):
     # Compute success_rate, build summary, and collapse state history for each test.
     date_window_range = f"{start_date.strftime('%Y-%m-%d')}:{today.strftime('%Y-%m-%d')}"
     for test_data in aggregated.values():
+        test_data.pop('owner_date', None)
         test_data['date_window'] = date_window_range
         total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
         if total_runs > 0:

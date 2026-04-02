@@ -212,6 +212,7 @@ public:
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
+        AFL_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
     }
 

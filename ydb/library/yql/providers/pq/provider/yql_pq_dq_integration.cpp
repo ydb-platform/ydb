@@ -26,42 +26,14 @@
 
 #include <util/string/builder.h>
 
+#include <string_view>
+
 namespace NYql {
 
 using namespace NNodes;
+using namespace std::literals::string_view_literals;
 
 namespace {
-
-/// Row field order for DqPqTopicSource.Columns / runtime row (LookupColumnOrder on PqReadTopic, then struct order).
-TVector<TString> GetPqReadTopicRowNamesInUserSchemaOrder(const TPqReadTopic& pqReadTopic, const TTypeAnnotationContext* types) {
-    YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "PqReadTopic has no type annotation");
-    const auto* rowType = pqReadTopic.Ref().GetTypeAnn()
-        ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
-        ->GetItemType()->Cast<TStructExprType>();
-    const size_t n = rowType->GetSize();
-
-    if (types) {
-        if (const auto order = types->LookupColumnOrder(pqReadTopic.Ref())) {
-            if (order->Size() == n) {
-                TVector<TString> out;
-                out.reserve(n);
-                for (size_t i = 0; i < n; ++i) {
-                    out.push_back(order->at(i).LogicalName);
-                }
-                return out;
-            }
-            YQL_CLOG(DEBUG, ProviderPq) << "LookupColumnOrder size " << order->Size()
-                << " != row type size " << n << ", using struct member order for PqReadTopic columns";
-        }
-    }
-
-    TVector<TString> out;
-    out.reserve(n);
-    for (const auto* item : rowType->GetItems()) {
-        out.push_back(TString(item->GetName()));
-    }
-    return out;
-}
 
 class TPqDqIntegration : public TDqIntegrationBase {
 public:
@@ -120,15 +92,33 @@ public:
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
-            // DqPqTopicSource.Columns: row/ColumnOrder order (projection-aware via SetColumnOrder), not csv file order.
             const auto pos = read->Pos();
-            const auto orderedNames = GetPqReadTopicRowNamesInUserSchemaOrder(pqReadTopic, State_->Types);
-            TExprNode::TListType colNames;
-            colNames.reserve(orderedNames.size());
-            for (const auto& name : orderedNames) {
-                colNames.push_back(ctx.NewAtom(pos, name));
+            const TStringBuf format = pqReadTopic.Format().Ref().Content();
+
+            // DqPqTopicSource.Columns = final output row (may shrink after e.g. ExtractMembers).
+            // columns_list / UserSchemaColumns = fixed topic/userschema order for csv parsing; unchanged by projection.
+            if (format == "csv"sv) {
+                const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
+                YQL_ENSURE(maybeUserSchema, "PqReadTopic csv: UserSchemaColumns is required");
+                const auto* usc = maybeUserSchema.Cast().Ptr().Get();
+                YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc),
+                    "PqReadTopic csv: UserSchemaColumns must be a list of column name atoms");
+                YQL_ENSURE(usc->ChildrenSize() > 0,
+                    "PqReadTopic csv: UserSchemaColumns must not be empty");
+                for (auto child : usc->Children()) {
+                    YQL_ENSURE(child->IsAtom(),
+                        "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
+                }
             }
-            auto columnNames = ctx.NewList(pos, std::move(colNames));
+
+            // Same member order/names as PqReadTopic row type (RowSpec + metadata, PqReadTopic.Columns projection).
+            const auto& typeItems = rowType->GetItems();
+            TExprNode::TListType colNames;
+            colNames.reserve(typeItems.size());
+            for (const TItemExprType* item : typeItems) {
+                colNames.push_back(ctx.NewAtom(pos, item->GetName()));
+            }
+            TExprNode::TPtr columnNames = ctx.NewList(pos, std::move(colNames));
 
             auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
             if (!settings) {
@@ -329,7 +319,24 @@ public:
                         streamingTopicRead = FromString<bool>(Value(setting));
                     } else if (name == PartitionsBalancingIdleTimeoutUsSetting) {
                         *srcDesc.MutablePartitionsBalancingIdleTimeout() = NProtoInterop::CastToProto(TDuration::MicroSeconds(FromString<ui64>(Value(setting))));
+                    } else if (name == "columns_list"sv) {
+                        if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
+                            const TExprNode& list = maybeList.Cast().Ref();
+                            YQL_ENSURE(list.IsList(), "columns_list must be a list of atoms");
+                            for (ui32 j = 0; j < list.ChildrenSize(); ++j) {
+                                YQL_ENSURE(list.Child(j)->IsAtom(), "columns_list must be a list of atoms");
+                                srcDesc.AddColumnNames(TString(list.Child(j)->Content()));
+                            }
+                        }
                     }
+                }
+
+                if (sharedReading && !IsSupportedFormatInSharedReading(TStringBuf(format))) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "Shared reading is enabled but format \"" << format
+                            << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "
+                            "Disable shared reading in cluster configuration or use a supported format."));
+                    return;
                 }
 
                 YQL_ENSURE(streamingTopicRead, "Finite topic reading is not supported");
@@ -365,7 +372,9 @@ public:
                     srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
-                for (const auto& item : fullRowType->GetItems()) {
+                // Proto Columns / ColumnTypes: same order as annotated row struct (fullRowType), not DqPqTopicSource.Columns expr.
+                // ColumnNames from columns_list: userschema order for headerless csv (same role as S3 TSource.ColumnNames).
+                for (const auto* item : fullRowType->GetItems()) {
                     srcDesc.AddColumns(TString(item->GetName()));
                     srcDesc.AddColumnTypes(NCommon::WriteTypeToYson(item->GetItemType(), NYT::NYson::EYsonFormat::Text));
                 }
@@ -527,6 +536,10 @@ private:
         }
     }
 
+    static bool IsSupportedFormatInSharedReading(std::string_view format) {
+        return format == "json_each_row" || format == "raw";
+    }
+
 public:
     TExprNode::TPtr BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
@@ -547,8 +560,16 @@ public:
 
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
+        if (clusterConfiguration->SharedReading && !IsSupportedFormatInSharedReading(format)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                TStringBuilder() << "Cluster has shared reading enabled, but format \"" << format
+                    << "\" is not supported in shared reading mode; supported formats: json_each_row, raw. "
+                    "Disable shared reading in the cluster configuration or use a supported format."));
+            return {};
+        }
+
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        const bool useSharedReading = UseSharedReading(clusterConfiguration, format);
+        const bool useSharedReading = clusterConfiguration->SharedReading;
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
@@ -741,6 +762,21 @@ public:
             }
         }
 
+        if (format == "csv"sv) {
+            const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
+            YQL_ENSURE(maybeUserSchema, "PqReadTopic csv: UserSchemaColumns is required");
+            TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
+            YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc.Get()));
+            YQL_ENSURE(usc->ChildrenSize() > 0);
+            for (auto child : usc->Children()) {
+                YQL_ENSURE(child->IsAtom(), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
+            }
+            props.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("columns_list")
+                .Value(std::move(usc))
+                .Done());
+        }
+
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
             .Done().Ptr();
@@ -763,16 +799,21 @@ public:
             .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
             .Done());
 
+        // Like S3: columns_list in formatSettings тАФ immutable userschema/file column order for csv CH parser (not projection Columns).
         TExprNode::TPtr formatSettingsNode = pqReadTopic.Settings().Ptr();
-        if (TStringBuf(pqReadTopic.Format().Ref().Content()) == TStringBuf("csv")) {
-            const auto maybeUserSchemaColumns = pqReadTopic.UserSchemaColumns();
-            YQL_ENSURE(maybeUserSchemaColumns);
-            TExprNode::TPtr columnsList = maybeUserSchemaColumns.Cast().Ptr();
-            YQL_ENSURE(columnsList->IsList() && !TCoVoid::Match(columnsList.Get()));
+        if (pqReadTopic.Format().Ref().Content() == TStringBuf("csv")) {
+            const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
+            YQL_ENSURE(maybeUserSchema, "PqReadTopic csv: UserSchemaColumns is required");
+            TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
+            YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc.Get()));
+            YQL_ENSURE(usc->ChildrenSize() > 0);
+            for (auto child : usc->Children()) {
+                YQL_ENSURE(child->IsAtom(), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
+            }
             TExprNode::TListType merged = formatSettingsNode->ChildrenList();
             merged.push_back(ctx.NewList(pos, {
                 ctx.NewAtom(pos, "columns_list"),
-                std::move(columnsList),
+                ctx.NewList(pos, usc->ChildrenList()),
             }));
             formatSettingsNode = ctx.NewList(pos, std::move(merged));
         }
@@ -791,7 +832,7 @@ public:
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
-        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
+        Add(innerSettings, SharedReading, ToString(clusterConfiguration->SharedReading), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -813,10 +854,6 @@ public:
             ythrow yexception() << "Unknown pq cluster \"" << cluster << "\"";
         }
         return clusterConfiguration;
-    }
-
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
     }
 
 private:

@@ -865,6 +865,7 @@ private:
     }
 
     // must be called (visited) with bound allocator
+    // Raw topic message bytes only; csv / json_each_row / etc. are parsed in MKQL via TryWrapWithParser (ClickHouse) after this source.
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
@@ -1146,6 +1147,10 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 PQReadDefaultFreeSpace,
                 infoAggregator);
         }
+
+        const TStringBuf format(settings.GetFormat());
+        YQL_ENSURE(format == "json_each_row"sv || format == "raw"sv,
+            "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
         return CreateDqPqRdReadActor(
             args.TypeEnv,

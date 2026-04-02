@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/http/server
     library/cpp/json
-    library/cpp/testing/unittest
+    library/cpp/testing/common
     ydb/public/sdk/cpp/src/client/iam
 )
 

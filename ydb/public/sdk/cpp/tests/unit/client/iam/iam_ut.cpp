@@ -4,7 +4,7 @@
 #include <library/cpp/http/server/response.h>
 #include <library/cpp/json/json_writer.h>
 
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <gtest/gtest.h>
 
@@ -37,7 +37,8 @@ public:
     };
 
     TMetadataServer()
-        : Port(PortManager.GetPort())
+        : PortHolder(NTesting::GetFreePort())
+        , Port(static_cast<ui16>(PortHolder))
         , HttpOptions(Port)
         , HttpServer(this, HttpOptions)
     {
@@ -52,7 +53,7 @@ public:
         return new TRequest(this);
     }
 
-    void SetResponse(HttpCodes code, const std::string& response) {
+    void SetResponse(HttpCodes code, const TString& response) {
         StatusCode = code;
         Response = response;
     }
@@ -67,12 +68,12 @@ public:
         RequestCount = 0;
     }
 
-    TPortManager PortManager;
+    NTesting::TPortHolder PortHolder;
     uint16_t Port;
     THttpServer::TOptions HttpOptions;
     THttpServer HttpServer;
     HttpCodes StatusCode = HTTP_OK;
-    std::string Response;
+    TString Response;
     mutable std::mutex Lock;
     int RequestCount = 0;
 };

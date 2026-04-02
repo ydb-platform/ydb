@@ -511,13 +511,14 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
 }
 
 void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
-    //Set Start Offset
+    // We keep the service information about the partition. For supportive partitions, we additionally
+    // persist statistics on how many were written.
     auto write = request->Record.AddCmdWrite();
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    //meta.SetStartOffset(GetStartOffset());
-    //meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
+    meta.SetStartOffset(GetStartOffset());
+    meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), GetEndOffset()));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
     meta.SetNextMessageIdDeduplicatorWAL(MessageIdDeduplicator.NextMessageIdDeduplicatorWAL);
@@ -570,10 +571,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     if (Config.GetEnableCompactification()) {
         return false;
     }
+
     const auto& partConfig = Config.GetPartitionConfig();
-
-    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
-
+    const auto lifetimeLimit = TDuration::Seconds(partConfig.GetLifetimeSeconds());
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
     const auto now = ctx.Now();
 
@@ -581,6 +581,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
         const auto& nextKey = CompactionBlobEncoder.DataKeysBody[1];
         const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+
         if (ImportantConsumersNeedToKeepCurrentKey(firstKey, nextKey, now)) {
             break;
         }

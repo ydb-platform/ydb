@@ -6,7 +6,6 @@
 #include <util/stream/fwd.h>
 #include <util/system/types.h>
 #include <util/str_stl.h>
-#include <util/string/builder.h>
 
 #include <compare>
 #include <functional>

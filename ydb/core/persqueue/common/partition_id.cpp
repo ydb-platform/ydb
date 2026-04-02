@@ -2,6 +2,7 @@
 
 #include <util/digest/multi.h>
 #include <util/stream/output.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NPQ {
 

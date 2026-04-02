@@ -37,8 +37,8 @@ on:
         required: false
         type: string
         default: ''
-      blacklist_file_content:
-        description: 'Content of blacklist file'
+      blacklist_paths:
+        description: 'Newline-separated list of paths to blacklist (each path will be expanded with its subdirectories)'
         required: false
         type: string
         default: ''
@@ -342,13 +342,24 @@ jobs:
 
       - name: Create blacklist file
         id: create-blacklist
-        if: inputs.blacklist_file_content != ''
+        if: inputs.blacklist_paths != ''
         shell: bash
         env:
-          BLACKLIST_CONTENT: ${{ inputs.blacklist_file_content }}
+          BLACKLIST_PATHS: ${{ inputs.blacklist_paths }}
         run: |
           BLACKLIST_FILE="${{ runner.temp }}/test_blacklist.txt"
-          printf "%s\n" "$BLACKLIST_CONTENT" > "$BLACKLIST_FILE"
+          > "$BLACKLIST_FILE"
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            path=$(echo "$path" | xargs)
+            [ -z "$path" ] && continue
+            echo "- path: $path" >> "$BLACKLIST_FILE"
+            if [ -d "$path" ]; then
+              find "$path" -mindepth 1 -type d | sort | while IFS= read -r subdir; do
+                echo "- path: $subdir" >> "$BLACKLIST_FILE"
+              done
+            fi
+          done <<< "$BLACKLIST_PATHS"
           echo "blacklist_file=$BLACKLIST_FILE" >> $GITHUB_OUTPUT
           echo "Blacklist file created at $BLACKLIST_FILE with content:"
           cat "$BLACKLIST_FILE"

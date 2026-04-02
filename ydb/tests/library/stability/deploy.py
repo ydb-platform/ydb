@@ -599,6 +599,77 @@ class StressUtilDeployer:
             )
         self.nemesis_started = False
 
+    def _stop_nemesis_services(self, nemesis_log: list[str]) -> bool:
+        """Stop ``nemesis-agent`` systemd services on all cluster hosts.
+
+        Runs ``./nemesis stop --yaml-config-location <path>`` as a subprocess.
+        Resets ``self.nemesis_installed`` to ``False`` on success.
+
+        Returns:
+            ``True`` if services were stopped successfully, ``False`` on failure.
+        """
+        if not self.nemesis_installed:
+            nemesis_log.append("Nemesis services not installed, nothing to stop")
+            return True
+
+        nemesis_binary_path = os.getenv("NEMESIS_BINARY")
+        if nemesis_binary_path:
+            nemesis_binary = yatest.common.binary_path(nemesis_binary_path)
+        else:
+            nemesis_binary = yatest.common.binary_path(
+                "ydb/tests/stability/nemesis/nemesis"
+            )
+
+        yaml_config_location = self.cluster_path or self.yaml_config
+        if not yaml_config_location:
+            nemesis_log.append(
+                "No cluster config path available for nemesis stop "
+                "(neither cluster_path nor yaml_config set)"
+            )
+            logging.error(nemesis_log[-1])
+            return False
+
+        cmd = (
+            f"{nemesis_binary} stop "
+            f"--yaml-config-location {yaml_config_location}"
+        )
+        nemesis_log.append(f"Stopping nemesis services: {cmd}")
+        logging.info(f"Stopping nemesis services via: {cmd}")
+
+        try:
+            start_time = time_module.time()
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=os.path.dirname(nemesis_binary),
+            )
+            elapsed = time_module.time() - start_time
+
+            nemesis_log.append(f"Exit code: {result.returncode}")
+            nemesis_log.append(f"Execution time: {elapsed:.2f}s")
+            if result.stdout:
+                nemesis_log.append(f"stdout:\n{result.stdout}")
+            if result.stderr:
+                nemesis_log.append(f"stderr:\n{result.stderr}")
+
+            if result.returncode != 0:
+                nemesis_log.append(
+                    f"Nemesis stop failed with exit code {result.returncode}"
+                )
+                return False
+
+            nemesis_log.append("Nemesis services stopped successfully")
+            self.nemesis_installed = False
+            return True
+
+        except Exception as exc:
+            nemesis_log.append(f"Error stopping nemesis services: {exc}")
+            logging.error(f"Error stopping nemesis services: {exc}")
+            return False
+
     # ------------------------------------------------------------------
     # Public entry point
     # ------------------------------------------------------------------

@@ -44,7 +44,15 @@ class ParallelWorkloadTestBase:
         )
         deployer = StressUtilDeployer(binaries_deploy_path, cluster_path=self.cluster_path, yaml_config=self.yaml_config, static_location='/home/pefavel/ydbwork/ydb/ydb/tests/stability/nemesis/static')
         yield deployer
-        deployer._manage_nemesis(False, [], 'teardown')
+        teardown_log: list[str] = []
+        deployer._manage_nemesis(False, [], 'teardown', teardown_log)
+        deployer._stop_nemesis_services(teardown_log)
+        if teardown_log:
+            allure.attach(
+                "\n".join(teardown_log),
+                "Nemesis Teardown Summary",
+                attachment_type=allure.attachment_type.TEXT,
+            )
 
     @pytest.fixture(autouse=True, scope="session")
     def health_checker_daemon(self, binary_deployer: StressUtilDeployer):
@@ -381,7 +389,7 @@ class ParallelWorkloadTestBase:
             recoverability_execution_result = stress_executor.execute_stress_runs(
                 stress_deployer,
                 workload_params,
-                600,
+                1200,
                 preparation_result,
                 False
             )

@@ -37,6 +37,8 @@ def get_testowners_for_tests(tests_data):
     """
     For each test entry, set owners from repo ``.github/TESTOWNERS`` (``TESTOWNERS_FILE``).
 
+    Mutates each entry in ``tests_data`` and returns the same list (for chaining).
+
     Same owner string format as test_results: ``;;`` / ``:`` between tokens.
 
     Entry may be a dict with key ``suite_folder`` (upload pipeline) or any object with
@@ -45,11 +47,9 @@ def get_testowners_for_tests(tests_data):
     with open(TESTOWNERS_FILE, 'r') as file:
         data = file.readlines()
         owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))
-        tests_data_with_owners = []
         for test in tests_data:
             target_path = _suite_path_for_codeowners(test)
             owners = owners_obj.of(target_path)
             owners_str = ';;'.join([':'.join(x) for x in owners])
             _set_owners_field(test, owners_str)
-            tests_data_with_owners.append(test)
-        return tests_data_with_owners
+        return tests_data

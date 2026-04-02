@@ -2296,9 +2296,9 @@ static void s_aws_mqtt5_operation_puback_manual_completion(
     (void)completion_view;
     struct aws_mqtt5_operation_puback *puback_op = operation->impl;
 
-    /* Completion callback on manual PUBACK.
+    /* Completion callback on manual publish acknowledgement.
      * Completion callback options are not currently bound out as there is an edge case where
-     * we would return a successful completion of the manual puback as a redriven PUBLISH packet
+     * we would return a successful completion of the manual publish acknowledgement as a redriven PUBLISH packet
      * is simultaneously received. This could cause confusion to the user and cause them to
      * assume the redriven PUBLISH is a new PUBLISH and not a duplicate of the one they have just
      * gotten a PUBACK invoke success from. We may re-instate this in the future upon customer
@@ -2306,14 +2306,14 @@ static void s_aws_mqtt5_operation_puback_manual_completion(
      * event we need to track down bugs for a user or ourselves.
      */
     if (puback_op->completion_options.completion_callback != NULL) {
-        // Convert error_code to manual puback result
-        enum aws_mqtt5_manual_puback_result puback_result = AWS_MQTT5_MPR_SUCCESS;
+        // Convert error_code to manual publish acknowledgement result
+        enum aws_mqtt5_manual_publish_acknowledgement_result puback_result = AWS_MQTT5_MPAR_SUCCESS;
         if (error_code != AWS_OP_SUCCESS) {
             /* There is a significant list of possible errors that could have occurred during the processing of a
              * PUBACK. Instead of mapping each one, we report a CRT failure which should indicate the important part.
              * That the PUBACK was not sent and it's likely they will receive a duplicate PUBLISH. If they want more
              * details the logs will need to be investigated. */
-            puback_result = AWS_MQTT5_MPR_CRT_FAILURE;
+            puback_result = AWS_MQTT5_MPAR_CRT_FAILURE;
         }
         puback_op->completion_options.completion_callback(
             puback_result, puback_op->completion_options.completion_user_data);
@@ -2343,7 +2343,7 @@ static void s_destroy_operation_puback(void *object) {
 struct aws_mqtt5_operation_puback *aws_mqtt5_operation_puback_new(
     struct aws_allocator *allocator,
     const struct aws_mqtt5_packet_puback_view *puback_options,
-    const struct aws_mqtt5_manual_puback_completion_options *completion_options) {
+    const struct aws_mqtt5_manual_publish_acknowledgement_completion_options *completion_options) {
     AWS_PRECONDITION(allocator != NULL);
     AWS_PRECONDITION(puback_options != NULL);
 

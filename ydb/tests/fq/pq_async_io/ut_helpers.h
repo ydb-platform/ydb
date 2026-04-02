@@ -112,36 +112,9 @@ std::vector<TString> PQReadUntil(
 void PQCreateStream(
     const TString& streamName);
 
-// Create a topic via DataStreams API and set the given SupportedCodecs on the topic
-// and on the default consumer. Use when the default RAW-only codec list is not enough.
-void PQCreateStreamWithCodecs(
-    const TString& streamName,
-    std::vector<NYdb::NTopic::ECodec> supportedCodecs);
-
 void AddReadRule(
     NYdb::TDriver& driver,
     const TString& streamName);
-
-// Add a named consumer with the given SupportedCodecs to an existing topic.
-void AddConsumerWithCodecs(
-    const TString& streamName,
-    const TString& consumerName,
-    std::vector<NYdb::NTopic::ECodec> supportedCodecs);
-
-struct TReadResultWithCodec {
-    NYdb::NTopic::ECodec Codec;   // codec tag from the first batch on the wire
-    std::vector<TString> RawData; // compressed payloads (not decompressed)
-};
-
-// Read messages without decompression (Decompress=false) so that the ECodec tag is
-// preserved in the batch. Returns the codec observed on the first batch alongside the
-// raw (still-compressed) payload bytes.
-TReadResultWithCodec PQReadUntilWithCodec(
-    const TString& topic,
-    ui64 count,
-    const TString& consumerName = DefaultPqConsumer,
-    const TString& endpoint = GetDefaultPqEndpoint(),
-    TDuration timeout = TDuration::Seconds(30));
 
 std::vector<TMessage> UVPairParser(const NUdf::TUnboxedValue& item);
 std::vector<TString> UVParser(const NUdf::TUnboxedValue& item);

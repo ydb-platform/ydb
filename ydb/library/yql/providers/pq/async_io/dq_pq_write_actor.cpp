@@ -1,4 +1,3 @@
-#include "codec_string.h"
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
@@ -266,12 +265,7 @@ public:
         }
 
         if (!Buffer.empty() && ContinuationToken) {
-            try {
-                WriteNextMessage(std::move(*ContinuationToken));
-            } catch (const std::exception& e) {
-                Fail(TStringBuilder() << "Topic write error: " << e.what());
-                return;
-            }
+            WriteNextMessage(std::move(*ContinuationToken));
             ContinuationToken = std::nullopt;
         }
 
@@ -320,16 +314,6 @@ private:
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
     )
 
-    // Override base HandleTopicEvent to catch exceptions thrown inside the SDK
-    // compression executor lambda (e.g. unknown codec in TCodecMap::GetOrThrow).
-    void HandleTopicEvent(TEvPrivate::TEvExecuteTopicEvent::TPtr& event) {
-        try {
-            event->Get()->Execute();
-        } catch (const std::exception& e) {
-            Fail(TStringBuilder() << "Topic write session error: " << e.what());
-        }
-    }
-
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
         if (!Inited) {
             Init();
@@ -363,19 +347,10 @@ private:
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix)
-            .MaxMemoryUsage(FreeSpace);
-
-        if (!SinkParams.GetCodec().empty()) {
-            auto [codec, level] = ParseCodecString(SinkParams.GetCodec());
-            settings.Codec(codec);
-            if (level) {
-                settings.CompressionLevel(*level);
-            }
-        } else {
-            settings.Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
+            .MaxMemoryUsage(FreeSpace)
+            .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
                 : NYdb::NTopic::ECodec::GZIP);
-        }
 
         settings.DeduplicationEnabled(EnableDeduplication);
         if (EnableDeduplication) {
@@ -547,13 +522,7 @@ private:
             }
 
             if (!Self.Buffer.empty()) {
-                try {
-                    Self.WriteNextMessage(std::move(ev.ContinuationToken));
-                } catch (const std::exception& e) {
-                    TIssues issues;
-                    issues.AddIssue(TStringBuilder() << "Topic write error: " << e.what());
-                    return issues;
-                }
+                Self.WriteNextMessage(std::move(ev.ContinuationToken));
                 return std::nullopt;
             }
 

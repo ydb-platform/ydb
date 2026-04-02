@@ -27,7 +27,6 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
 
-    contrib/libs/re2
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/dq/opt
     ydb/library/yql/providers/common/db_id_async_resolver

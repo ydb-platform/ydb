@@ -457,8 +457,6 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
-                    } else if (name == CodecSetting) {
-                        sinkDesc.SetCodec(TString(Value(setting)));
                     }
                 }
 

@@ -5,7 +5,6 @@ SIZE(MEDIUM)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 SRCS(
-    codec_string_ut.cpp
     dq_pq_rd_read_actor_ut.cpp
     dq_pq_read_actor_ut.cpp
     dq_pq_write_actor_ut.cpp

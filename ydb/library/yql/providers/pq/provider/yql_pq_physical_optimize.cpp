@@ -12,8 +12,6 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
-#include <contrib/libs/re2/re2/re2.h>
-
 namespace NYql {
 
 namespace {
@@ -47,7 +45,7 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx, TStringBuf codecStr = {}) const {
+    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -64,29 +62,9 @@ public:
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
         }
 
-        if (!codecStr.empty()) {
-            Add(props, CodecSetting, TString(codecStr), pos, ctx);
-        }
-
         return Build<TCoNameValueTupleList>(ctx, pos)
             .Add(props)
             .Done();
-    }
-
-    static bool ValidateCodecSetting(TStringBuf codecStr, TPositionHandle pos, TExprContext& ctx) {
-        // Accepts: raw, gzip, lzop, zstd (case-insensitive)
-        // Optionally followed by _<positive-integer> compression level
-        // Valid examples: "raw", "zstd", "zstd_6", "GZIP_3"
-        static const RE2 validCodecRe("(?i)(raw|gzip|lzop|zstd)(_[1-9][0-9]*)?");
-        if (!RE2::FullMatch(re2::StringPiece(codecStr.data(), codecStr.size()), validCodecRe)) {
-            ctx.AddError(TIssue(ctx.GetPosition(pos),
-                TStringBuilder() << "Invalid codec value: '" << codecStr
-                    << "'. Expected: <name>[_<level>] where name is one of "
-                       "raw, gzip, lzop, zstd and level is a positive integer "
-                       "(e.g. \"zstd_6\")."));
-            return false;
-        }
-        return true;
     }
 
     TMaybeNode<TExprBase> PqWriteTopic(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
@@ -113,27 +91,9 @@ public:
 
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqWriteTopic `" << topicNode.Cluster().StringValue() << "`.`" << topicNode.Path().StringValue() << "`";
 
-        // Extract user-specified codec from WITH clause settings.
-        // ParseWriteTableSettings stores unrecognised keys in lowercase, so
-        // the key is "codec", not CodecSetting ("Codec").
-        TStringBuf codecStr;
-        for (size_t i = 0; i < write.Settings().Size(); ++i) {
-            TCoNameValueTuple setting = write.Settings().Item(i);
-            if (setting.Name().Value() == "codec") {
-                if (auto maybeVal = setting.Value().Maybe<TCoAtom>()) {
-                    codecStr = maybeVal.Cast().Value();
-                }
-                break;
-            }
-        }
-
-        if (!codecStr.empty() && !ValidateCodecSetting(codecStr, write.Pos(), ctx)) {
-            return nullptr;
-        }
-
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx, codecStr));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
@@ -174,26 +134,11 @@ public:
             return nullptr;
         }
 
-        TStringBuf codecStr;
-        for (size_t i = 0; i < insert.Settings().Size(); ++i) {
-            TCoNameValueTuple setting = insert.Settings().Item(i);
-            if (setting.Name().Value() == "codec") {
-                if (auto maybeVal = setting.Value().Maybe<TCoAtom>()) {
-                    codecStr = maybeVal.Cast().Value();
-                }
-                break;
-            }
-        }
-
-        if (!codecStr.empty() && !ValidateCodecSetting(codecStr, insert.Pos(), ctx)) {
-            return nullptr;
-        }
-
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx, codecStr))
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)

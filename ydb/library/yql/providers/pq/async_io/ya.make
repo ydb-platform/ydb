@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     dq_pq_info_aggregation_actor.cpp
-    codec_string.cpp
     dq_pq_meta_extractor.cpp
     dq_pq_rd_read_actor.cpp
     dq_pq_read_actor.cpp

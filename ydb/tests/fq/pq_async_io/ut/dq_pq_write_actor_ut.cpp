@@ -138,30 +138,6 @@ Y_UNIT_TEST_SUITE(TPqWriterTest) {
             state1 = future.GetValue();
         }
     }
-
-    Y_UNIT_TEST_F(TestWriteToTopicWithZstdCodecVerifyCompression, TPqIoTestFixture) {
-        const TString topicName = "WriteWithZstdCodecVerify";
-        PQCreateStreamWithCodecs(topicName, {NYdb::NTopic::ECodec::RAW, NYdb::NTopic::ECodec::ZSTD});
-
-        // Second consumer for codec inspection (reads without decompression)
-        AddConsumerWithCodecs(topicName, "codec_checker",
-                              {NYdb::NTopic::ECodec::RAW, NYdb::NTopic::ECodec::ZSTD});
-
-        auto settings = BuildPqTopicSinkSettings(topicName);
-        settings.SetCodec("zstd_6");
-        InitAsyncOutput(std::move(settings));
-
-        const std::vector<TString> data = {"hello", "world"};
-        AsyncOutputWrite(data);
-
-        // 1. Verify the codec tag on the wire is ZSTD
-        auto codecResult = PQReadUntilWithCodec(topicName, data.size(), "codec_checker");
-        UNIT_ASSERT_EQUAL(codecResult.Codec, NYdb::NTopic::ECodec::ZSTD);
-
-        // 2. Verify decompressed payload is correct (default consumer, auto-decompression)
-        auto plainResult = PQReadUntil(topicName, data.size());
-        UNIT_ASSERT_EQUAL(plainResult, data);
-    }
 }
 
 } // NYql::NDq

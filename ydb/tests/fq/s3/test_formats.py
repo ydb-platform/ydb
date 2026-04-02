@@ -441,6 +441,49 @@ Pear,15,33'''
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_csv_projection_single_column(self, kikimr, s3, client, unique_prefix):
+        """csv (no header): full SCHEMA (a,b) and two fields in file; SELECT only one column (b).
+
+        Ensures columns_list / parse still maps file positions to names when output is a strict subset.
+        """
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        bucket = resource.Bucket("fbucket")
+        bucket.create(ACL="public-read")
+        s3_client = boto3.client(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+        s3_client.put_object(Body="aa,bb", Bucket="fbucket", Key="headerless_select_one_col.csv", ContentType="text/plain")
+        kikimr.control_plane.wait_bootstrap(1)
+
+        storage_connection_name = unique_prefix + "headerless_onecolbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f"""
+            PRAGMA s3.UseBlocksSource="true";
+            SELECT b
+            FROM `{storage_connection_name}`.`headerless_select_one_col.csv`
+            WITH (
+                format = csv,
+                SCHEMA = (
+                    a String NOT NULL,
+                    b String NOT NULL
+                )
+            );
+            """
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        assert len(result_set.columns) == 1
+        assert result_set.columns[0].name == "b"
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].bytes_value == b"bb"
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_projection_column_order_non_alphabetical_schema(self, kikimr, s3, client, unique_prefix):
         """Same as test_csv_projection_column_order but SCHEMA lists b, a (not alphabetical a, b).
 

@@ -1499,6 +1499,75 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             }
         }
 
+        void HierIndexesScenario() {
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+            csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+            TLocalHelper(*Kikimr).CreateTestOlapStandaloneTable();
+            auto tableClient = Kikimr->GetTableClient();
+
+            WriteTestData(*Kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
+            WriteTestData(*Kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
+
+            {
+                auto alterQuery =
+                    TStringBuilder() <<
+                    R"(ALTER TABLE `/Root/olapTable` ADD COLUMN checkIndexesColumn Utf8;)";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            {
+                auto alterQuery =
+                    TStringBuilder() <<
+                    R"(
+                    ALTER OBJECT `/Root/olapTable`
+                    (TYPE TABLE)
+                    SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_checkIndexesColumn, TYPE=BLOOM_NGRAMM_FILTER,
+                        FEATURES=`{"column_name" : "checkIndexesColumn", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512,
+                                    "records_count" : 3000, "case_sensitive" : false,
+                                    "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+                    )";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+
+            {
+                auto alterQuery =
+                    TStringBuilder() <<
+                    R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                  {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s", "expected_blobs_size" : 2048000, "portions_count_available" : 1},
+                               {"class_name" : "Zero"}]}`);
+                )";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+
+            csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+            UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
+
+            {
+                ExecuteSQL(R"(
+                PRAGMA OptimizeSimpleILIKE;
+                PRAGMA AnsiLike;
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
+                    FROM `/Root/olapTable`
+                    WHERE checkIndexesColumn = "56789")",
+                    "[[0u;]]");
+                UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesSkippingOnSelect().Val(), 0);
+            }
+        }
+
 
         void ExecuteDifferentConfigurationScenarios(const TString& indexesConfig, const TString& like) {
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
@@ -1715,6 +1784,10 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         Y_UNUSED(UseQueryService);
         TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().ExecuteAddColumnWithIndexesScenario();
+    }
+
+    Y_UNIT_TEST(CheckHierIndex) {
+        TTestIndexesScenario().SetStorageId("__DEFAULT").Initialize().HierIndexesScenario();
     }
 
     TString scriptDifferentIndexesConfig = R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,

@@ -40,12 +40,15 @@ TMaybe<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
     if (topic.Ref().ChildrenSize() <= TPqReadTopic::idx_Watermark) {
         return Nothing();
     }
-    const TExprNode* w = topic.Ref().Child(TPqReadTopic::idx_Watermark);
-    if (TCoVoid::Match(w)) {
+    const TExprNode::TPtr watermarkPtr = topic.Ref().ChildPtr(TPqReadTopic::idx_Watermark);
+    if (!watermarkPtr) {
         return Nothing();
     }
-    YQL_ENSURE(TCoLambda::Match(w));
-    return TCoLambda(w);
+    if (TCoVoid::Match(watermarkPtr.Get())) {
+        return Nothing();
+    }
+    YQL_ENSURE(TCoLambda::Match(watermarkPtr.Get()));
+    return TCoLambda(watermarkPtr);
 }
 
 class TPqDqIntegration : public TDqIntegrationBase {
@@ -156,7 +159,7 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .WatermarkExpr(pqReadTopic.Watermark())
+                    .WatermarkExpr(pqReadTopic.Watermark().Maybe<TCoLambda>())
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))

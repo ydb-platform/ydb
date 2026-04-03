@@ -130,7 +130,7 @@
 /ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
 /ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
 /ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
-/ydb/tests/stress/topic/tests @ydb-platform/Topics
+/ydb/tests/stress/topic/ @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 

@@ -1,13 +1,15 @@
 #include <ydb/core/kqp/topics/kqp_topics.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpTopics) {
 
 static
-bool ShouldSkipConflictCheck(bool skipConflictCheck, bool trackProducerId) {
-    return skipConflictCheck && !trackProducerId;
+bool ShouldSkipConflictCheck(bool skipConflictCheck, const TMaybe<bool>& trackProducerId) {
+    bool effectiveTrackProducerId = trackProducerId.GetOrElse(true);
+    return skipConflictCheck && !effectiveTrackProducerId;
 }
 
 static
@@ -97,7 +99,7 @@ Y_UNIT_TEST(OnlyReadOperations) {
 }
 
 static
-void TestReadWriteOperations(bool skipConflictCheck, bool trackProducerId) {
+void TestReadWriteOperations(bool skipConflictCheck, const TMaybe<bool>& trackProducerId) {
     const TString TOPIC_A = "topic_A";
     const TString TOPIC_B = "topic_B";
     const ui32 PARTITION = 0;
@@ -109,7 +111,9 @@ void TestReadWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     NTopic::TTopicOperations topicOps;
 
     topicOps.SetSkipConflictCheck(skipConflictCheck);
-    topicOps.SetTrackProducerId(trackProducerId);
+    if (trackProducerId) {
+        topicOps.SetTrackProducerId(*trackProducerId);
+    }
 
     AddReadOperation(topicOps, TOPIC_A, PARTITION, 100, 105, "consumer");
     AddWriteOperation(topicOps, TOPIC_B, PARTITION, 100'001);
@@ -138,24 +142,32 @@ void TestReadWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     AssertWriteOperation(txs, TABLETID_B, 1, 0, shouldSkip);
 }
 
-Y_UNIT_TEST(ReadWriteOperations) {
+Y_UNIT_TEST(ReadWriteOperations_NoSkipConflictCheck_NoTrackProducerId) {
+    TestReadWriteOperations(false, Nothing());
+}
+
+Y_UNIT_TEST(ReadWriteOperations_NoSkipConflictCheck_TrackProducerIdFalse) {
     TestReadWriteOperations(false, false);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_TrackProducerId) {
+Y_UNIT_TEST(ReadWriteOperations_NoSkipConflictCheck_TrackProducerIdTrue) {
     TestReadWriteOperations(false, true);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck) {
+Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck_NoTrackProducerId) {
+    TestReadWriteOperations(true, Nothing());
+}
+
+Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck_TrackProducerIdFalse) {
     TestReadWriteOperations(true, false);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck_TrackProducerId) {
+Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck_TrackProducerIdTrue) {
     TestReadWriteOperations(true, true);
 }
 
 static
-void TestOnlyWriteOperations(bool skipConflictCheck, bool trackProducerId) {
+void TestOnlyWriteOperations(bool skipConflictCheck, const TMaybe<bool>& trackProducerId) {
     const TString TOPIC = "topic";
     const ui32 PARTITION = 0;
     const ui64 TABLETID = 1'000'000;
@@ -165,7 +177,9 @@ void TestOnlyWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     NTopic::TTopicOperations topicOps;
 
     topicOps.SetSkipConflictCheck(skipConflictCheck);
-    topicOps.SetTrackProducerId(trackProducerId);
+    if (trackProducerId) {
+        topicOps.SetTrackProducerId(*trackProducerId);
+    }
 
     AddWriteOperation(topicOps, TOPIC, PARTITION, 100'001);
 
@@ -189,24 +203,32 @@ void TestOnlyWriteOperations(bool skipConflictCheck, bool trackProducerId) {
     AssertWriteOperation(txs, TABLETID, 1, 0, shouldSkip);
 }
 
-Y_UNIT_TEST(OnlyWriteOperations) {
+Y_UNIT_TEST(OnlyWriteOperations_NoSkipConflictCheck_NoTrackProducerId) {
+    TestOnlyWriteOperations(false, Nothing());
+}
+
+Y_UNIT_TEST(OnlyWriteOperations_NoSkipConflictCheck_TrackProducerIdFalse) {
     TestOnlyWriteOperations(false, false);
 }
 
-Y_UNIT_TEST(OnlyWriteOperations_TrackProducerId) {
+Y_UNIT_TEST(OnlyWriteOperations_NoSkipConflictCheck_TrackProducerIdTrue) {
     TestOnlyWriteOperations(false, true);
 }
 
-Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck) {
+Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck_NoTrackProducerId) {
+    TestOnlyWriteOperations(true, Nothing());
+}
+
+Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck_TrackProducerIdFalse) {
     TestOnlyWriteOperations(true, false);
 }
 
-Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck_TrackProducerId) {
+Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck_TrackProducerIdTrue) {
     TestOnlyWriteOperations(true, true);
 }
 
 static
-void TestReadWriteOperationsOnePartition(bool skipConflictCheck, bool trackProducerId) {
+void TestReadWriteOperationsOnePartition(bool skipConflictCheck, const TMaybe<bool>& trackProducerId) {
     const TString TOPIC = "topic";
     const ui32 PARTITION = 0;
     const ui64 TABLETID = 1'000'000;
@@ -216,7 +238,9 @@ void TestReadWriteOperationsOnePartition(bool skipConflictCheck, bool trackProdu
     NTopic::TTopicOperations topicOps;
 
     topicOps.SetSkipConflictCheck(skipConflictCheck);
-    topicOps.SetTrackProducerId(trackProducerId);
+    if (trackProducerId) {
+        topicOps.SetTrackProducerId(*trackProducerId);
+    }
 
     AddReadOperation(topicOps, TOPIC, PARTITION, 100, 105, "consumer");
     AddWriteOperation(topicOps, TOPIC, PARTITION, 100'001);
@@ -239,19 +263,27 @@ void TestReadWriteOperationsOnePartition(bool skipConflictCheck, bool trackProdu
     AssertWriteOperation(txs, TABLETID, 2, 1, shouldSkip);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_OnePartition) {
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_NoSkipConflictCheck_NoTrackProducerId) {
+    TestReadWriteOperationsOnePartition(false, Nothing());
+}
+
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_NoSkipConflictCheck_TrackProducerIdFalse) {
     TestReadWriteOperationsOnePartition(false, false);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_OnePartition_TrackProducerId) {
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_NoSkipConflictCheck_TrackProducerIdTrue) {
     TestReadWriteOperationsOnePartition(false, true);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck) {
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_NoTrackProducerId) {
+    TestReadWriteOperationsOnePartition(true, Nothing());
+}
+
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_TrackProducerIdFalse) {
     TestReadWriteOperationsOnePartition(true, false);
 }
 
-Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_TrackProducerId) {
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck_TrackProducerIdTrue) {
     TestReadWriteOperationsOnePartition(true, true);
 }
 

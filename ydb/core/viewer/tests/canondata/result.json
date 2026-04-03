@@ -711,9 +711,8 @@
             "result": false
         },
         "restart_pdisk_monitoring_force": {
-            "debugMessage": "text",
-            "error": "Running this operation will cause at least 4 groups (2181038080, 2181038081, 2181038082, ...) to become unavailable",
-            "result": false
+            "status_code": 403,
+            "text": "Access denied"
         },
         "restart_pdisk_root": {
             "debugMessage": "text",

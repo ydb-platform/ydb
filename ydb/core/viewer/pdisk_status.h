@@ -33,6 +33,10 @@ public:
         if (!Viewer->CheckAccessMonitoring(GetRequest())) {
             return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
         }
+        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
+        if (Force && !Viewer->CheckAccessAdministration(GetRequest())) {
+            return TBase::ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", "Access denied"));
+        }
         ui32 nodeId = 0;
         ui32 pDiskId = 0;
         TVector<TString> parts = StringSplitter(Params.Get("pdisk_id")).Split('-').SkipEmpty();
@@ -51,7 +55,6 @@ public:
         }
         DriveStatus.MutableHostKey()->SetNodeId(nodeId);
         DriveStatus.SetPDiskId(pDiskId);
-        Force = FromStringWithDefault<bool>(Params.Get("force"), Force);
         if (PostData.IsMap()) {
             if (PostData.Has("decommit_status")) {
                 NKikimrBlobStorage::EDecommitStatus decommitStatus = NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET;

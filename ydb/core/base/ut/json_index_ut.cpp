@@ -5,24 +5,29 @@
 
 namespace NKikimr::NJsonIndex {
 
-using TQueries = TVector<TString>;
 using namespace NYql::NJsonPath;
 
 namespace {
 
-TQueries ParseAndCollect(const TString& jsonPath) {
+using TCallableType = TQueryCollector::ECallableType;
+
+TVector<TString> ParseAndCollect(const TString& jsonPath, TCallableType callableType = TCallableType::JsonExists) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    TQueryCollector collector(path);
+    TQueryCollector collector(path, callableType);
     auto result = collector.Collect();
     UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
-    return result.GetQueries();
+    return result.GetTokens();
 }
 
 template <bool ParserError = false>
-void ValidateError(const TString& jsonPath, const TString& errorMessage) {
+void ValidateError(
+    const TString& jsonPath,
+    const TString& errorMessage,
+    TCallableType callableType = TCallableType::JsonExists)
+{
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
 
@@ -31,7 +36,7 @@ void ValidateError(const TString& jsonPath, const TString& errorMessage) {
     } else {
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-        TQueryCollector collector(path);
+        TQueryCollector collector(path, callableType);
         auto result = collector.Collect();
         UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
@@ -39,11 +44,17 @@ void ValidateError(const TString& jsonPath, const TString& errorMessage) {
     }
 }
 
-void ValidateQueries(const TString& jsonPath, const TQueries& expectedQueries) {
-    UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect(jsonPath), expectedQueries);
+void ValidateQueries(
+    const TString& jsonPath,
+    const TVector<TString>& expectedQueries,
+    TCallableType callableType = TCallableType::JsonExists)
+{
+    UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect(jsonPath, callableType), expectedQueries);
 }
 
 }  // namespace
+
+using TCallableType = TQueryCollector::ECallableType;
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
 
@@ -177,6 +188,127 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("false", {});
         ValidateQueries("null", {});
         ValidateQueries("\"string\"", {});
+    }
+
+    // Binary arithmetic operators extract tokens from both operands and finish
+    Y_UNIT_TEST(CollectPath_BinaryArithmetic) {
+        // Path on the left, literal on the right - only left token
+        ValidateQueries("$.key + 1", {"\3key"});
+        ValidateQueries("$.key - 1", {"\3key"});
+        ValidateQueries("$.key * 2", {"\3key"});
+        ValidateQueries("$.key / 2", {"\3key"});
+        ValidateQueries("$.key % 2", {"\3key"});
+
+        // Literal on the left, path on the right - only right token
+        ValidateQueries("1 + $.key", {"\3key"});
+        ValidateQueries("1 - $.key", {"\3key"});
+        ValidateQueries("1 * $.key", {"\3key"});
+        ValidateQueries("1 / $.key", {"\3key"});
+        ValidateQueries("1 % $.key", {"\3key"});
+
+        // Context object on the left
+        ValidateQueries("$ + 1", {""});
+        ValidateQueries("$ * 2", {""});
+
+        // Deeper paths as left operand
+        ValidateQueries("$.a.b.c + 1", {"\1a\1b\1c"});
+        ValidateQueries("$.a.b - 1", {"\1a\1b"});
+
+        // Array access on the left operand
+        ValidateQueries("$.key[0] + 1", {"\3key"});
+        ValidateQueries("$.arr[last] * 2", {"\3arr"});
+
+        // Wildcard on the left - collection already finished by wildcard
+        ValidateQueries("$.* + 1", {""});
+        ValidateQueries("$.a.* - 1", {"\1a"});
+
+        // Both operands are paths - tokens from both are collected (AND)
+        ValidateQueries("$.a + $.b", {"\1a", "\1b"});
+        ValidateQueries("$.a.b - $.c.d", {"\1a\1b", "\1c\1d"});
+
+        // Both operands are literals - no path to collect
+        ValidateQueries("1 + 2", {});
+        ValidateQueries("1.5 * 2.0", {});
+    }
+
+    // Non-trivial combinations of unary and binary arithmetic operators
+    Y_UNIT_TEST(CollectPath_ArithmeticCombinations) {
+        // Unary applied to binary: tokens from both binary operands, then Finish
+        ValidateQueries("-($.a + 1)", {"\1a"});
+        ValidateQueries("+($.a - 1)", {"\1a"});
+        ValidateQueries("-($.a * $.b)", {"\1a", "\1b"});
+        ValidateQueries("-(1 + $.b)", {"\1b"});
+
+        // Binary with unary left operand
+        ValidateQueries("-$.a + $.b", {"\1a", "\1b"});
+        ValidateQueries("+$.a - $.b", {"\1a", "\1b"});
+        ValidateQueries("-$.key + 1", {"\3key"});
+        ValidateQueries("+$.key * 2", {"\3key"});
+
+        // Binary with unary right operand - right token still collected
+        ValidateQueries("$.a + (-$.b)", {"\1a", "\1b"});
+        ValidateQueries("$.a * (+$.b)", {"\1a", "\1b"});
+        ValidateQueries("1 + (-$.b)", {"\1b"});
+
+        // Chained binary (left-associative): all three path tokens collected
+        ValidateQueries("$.a + $.b + $.c", {"\1a", "\1b", "\1c"});
+        ValidateQueries("$.a - $.b - $.c", {"\1a", "\1b", "\1c"});
+        ValidateQueries("$.a * $.b * $.c", {"\1a", "\1b", "\1c"});
+
+        // Mixed precedence: * binds tighter than +, but all paths still collected
+        ValidateQueries("$.a + $.b * $.c", {"\1a", "\1b", "\1c"});
+        ValidateQueries("$.a * $.b + $.c", {"\1a", "\1b", "\1c"});
+
+        // Double unary combined with binary
+        ValidateQueries("-(-$.a) + $.b", {"\1a", "\1b"});
+        ValidateQueries("-(+$.a) * 2", {"\1a"});
+
+        // Longer paths on both sides
+        ValidateQueries("$.a.b.c + $.x.y.z", {"\1a\1b\1c", "\1x\1y\1z"});
+        ValidateQueries("$.a.b.c * 3.14", {"\1a\1b\1c"});
+
+        // Method result used as operand of binary - method finishes, but token still collected
+        ValidateQueries("$.key.size() + 1", {"\3key"});
+        ValidateQueries("$.key.abs() * 2", {"\3key"});
+        ValidateQueries("$.a.size() + $.b.floor()", {"\1a", "\1b"});
+    }
+
+    Y_UNIT_TEST(CollectPath_BinaryArithmeticWildcard) {
+        // Wildcard on left, path on right - both collected
+        ValidateQueries("$.a.* + $.b", {"\1a", "\1b"});
+        ValidateQueries("$.* + $.b", {"", "\1b"});
+        ValidateQueries("$.* - $.a.b", {"", "\1a\1b"});
+
+        // Path on left, wildcard on right
+        ValidateQueries("$.a + $.*", {"\1a", ""});
+        ValidateQueries("$.a.b + $.*", {"\1a\1b", ""});
+
+        // Wildcard on both sides - two wildcard tokens collected
+        ValidateQueries("$.* + $.*", {"", ""});
+        ValidateQueries("$.a.* + $.*", {"\1a", ""});
+        ValidateQueries("$.* + $.a.*", {"", "\1a"});
+    }
+
+    Y_UNIT_TEST(CollectPath_BinaryArithmeticErrors) {
+        const TString varError = "Variables are not supported at the moment";
+
+        // Error on left - propagated immediately, right not collected
+        ValidateError("$var + $.b", varError);
+        ValidateError("$var - $.b", varError);
+        ValidateError("$var * $.b", varError);
+        ValidateError("$var / $.b", varError);
+        ValidateError("$var % $.b", varError);
+
+        // Error on right - left tokens lost, error propagated
+        ValidateError("$.a + $var", varError);
+        ValidateError("$.a - $var", varError);
+        ValidateError("$.a * $var", varError);
+
+        // Both sides error
+        ValidateError("$var + $var", varError);
+
+        // Error propagates through chained binary: ($.a + $var) + $.c
+        ValidateError("$.a + $var + $.c", varError);
     }
 
     // Variables are not supported now

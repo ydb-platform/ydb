@@ -20,6 +20,7 @@ private:
     bool CaseSensitive = NDefaults::CaseSensitive;
     ui32 NGrammSize = NDefaults::NGrammSize;
     double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
+    ui32 FilterSizeBytes = 0;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
     void Initialize() {
@@ -30,6 +31,8 @@ private:
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
         HashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
         AFL_VERIFY(TConstants::CheckHashesCount(HashesCount));
+        FilterSizeBytes = TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability);
+        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
     }
 
     virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
@@ -86,6 +89,14 @@ protected:
                 return false;
             }
         }
+        if (bFilter.HasFilterSizeBytes()) {
+            const ui32 value = bFilter.GetFilterSizeBytes();
+            if (!TConstants::CheckFilterSizeBytes(value)) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", "incorrect filter_size_bytes value");
+                return false;
+            }
+            FilterSizeBytes = value;
+        }
 
         if (!bFilter.HasColumnId() || !bFilter.GetColumnId()) {
             return false;
@@ -99,7 +110,15 @@ protected:
         auto* filterProto = proto.MutableBloomNGrammFilter();
         TBase::SerializeToProtoImpl(*filterProto);
         AFL_VERIFY(TConstants::CheckNGrammSize(NGrammSize));
+        const ui32 hashesCount = TConstants::CalcHashesCount(FalsePositiveProbability);
+        const ui32 recordsCount = TConstants::CalcDeprecatedRecordsCount(FalsePositiveProbability);
+        AFL_VERIFY(TConstants::CheckFilterSizeBytes(FilterSizeBytes));
+        AFL_VERIFY(TConstants::CheckHashesCount(hashesCount));
+        AFL_VERIFY(TConstants::CheckRecordsCount(recordsCount));
         filterProto->SetNGrammSize(NGrammSize);
+        filterProto->SetHashesCount(hashesCount);
+        filterProto->SetFilterSizeBytes(FilterSizeBytes);
+        filterProto->SetRecordsCount(recordsCount);
         filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
         filterProto->SetColumnId(GetColumnId());
         filterProto->SetCaseSensitive(CaseSensitive);

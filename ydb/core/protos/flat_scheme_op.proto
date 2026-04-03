@@ -484,7 +484,7 @@ message TOlapIndexRequested {
     }
 }
 
-message TOlapIndexMove {
+message TOlapMoveIndex {
     optional string SourceName = 1;
     optional string DestinationName = 2;
     optional bool ReplaceDestination = 3 [default = false];
@@ -724,7 +724,7 @@ message TAlterColumnTableSchema {
     optional TColumnTableRequestedOptions Options = 12;
     repeated TFamilyDescription AddColumnFamily = 13;
     repeated TFamilyDescription AlterColumnFamily = 14;
-    repeated TOlapIndexMove MoveIndex = 15;
+    repeated TOlapMoveIndex MoveIndex = 15;
 }
 
 // Schema presets are used to manage multiple tables with the same schema

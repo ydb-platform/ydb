@@ -2460,9 +2460,8 @@ public:
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex) {
                                 auto* proto = add_index->mutable_local_bloom_filter_index();
-                                if (localBloomFilterDesc.FalsePositiveProbability) {
-                                    proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
-                                }
+                                const double fpp = localBloomFilterDesc.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                                proto->set_false_positive_probability(fpp);
                             }
 
                             if (add_index->type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {

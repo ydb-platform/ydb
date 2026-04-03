@@ -5,7 +5,7 @@ namespace NKikimr::NSchemeShard {
 namespace {
 
 bool ValidateMoveIndexOperation(
-    const NKikimrSchemeOp::TOlapIndexMove& rename,
+    const NKikimrSchemeOp::TOlapMoveIndex& rename,
     TSet<TString>& renameSources,
     TSet<TString>& renameDestinations,
     IErrorCollector& errors

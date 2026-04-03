@@ -64,14 +64,17 @@ public:
         if (falsePositiveProbability <= 0 || falsePositiveProbability >= 1) {
             return TConclusionStatus::Fail("FalsePositiveProbability have to be in interval (0, 1)");
         }
+
         if (!CheckNGrammSize(nGrammSize)) {
             return TConclusionStatus::Fail("ngramm_size have to be in bloom ngramm filter in interval " + GetNGrammSizeIntervalString());
         }
+
         const ui32 hashesCount = CalcHashesCount(falsePositiveProbability);
         if (!CheckHashesCount(hashesCount)) {
             return TConclusionStatus::Fail(
                 "false_positive_probability have to produce hashes_count in interval " + GetHashesCountIntervalString());
         }
+
         return TConclusionStatus::Success();
     }
 };

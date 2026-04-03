@@ -60,8 +60,8 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
     if (!jsonInfo[NIndexParameters::NGrammSize].IsUInteger()) {
         return TConclusionStatus::Fail("ngramm_size have to be in bloom filter features as uint field");
     }
-    NGrammSize = jsonInfo[NIndexParameters::NGrammSize].GetUInteger();
 
+    NGrammSize = jsonInfo[NIndexParameters::NGrammSize].GetUInteger();
     std::optional<ui32> hashesCount;
     if (jsonInfo.Has(NIndexParameters::HashesCount)) {
         if (!jsonInfo[NIndexParameters::HashesCount].IsUInteger()) {
@@ -152,6 +152,9 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     filterProto->SetColumnName(GetColumnName());
     filterProto->SetCaseSensitive(CaseSensitive);
     filterProto->SetNGrammSize(NGrammSize);
+    filterProto->SetHashesCount(TConstants::CalcHashesCount(FalsePositiveProbability));
+    filterProto->SetFilterSizeBytes(TConstants::CalcDeprecatedFilterSizeBytes(FalsePositiveProbability));
+    filterProto->SetRecordsCount(TConstants::CalcDeprecatedRecordsCount(FalsePositiveProbability));
     filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
     *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }

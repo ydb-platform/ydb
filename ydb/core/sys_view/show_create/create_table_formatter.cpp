@@ -18,6 +18,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -720,18 +721,34 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
     if (isLocalBloomFilter) {
         const auto& settings = index.local_bloom_filter_index();
-        Stream << " WITH ("
-               << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
-               << ")";
+        if (settings.has_false_positive_probability()) {
+            Stream << " WITH ("
+                   << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
+                   << ")";
+        }
     }
 
     if (isLocalBloomNgramFilter) {
         const auto& settings = index.local_bloom_ngram_filter_index();
-        Stream << " WITH ("
-               << NIndexParameters::NGrammSize << "=" << settings.ngram_size()
-               << ", " << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
-               << ", " << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false")
-               << ")";
+        TStringBuilder with;
+        const char* sep = "";
+        if (settings.has_ngram_size()) {
+            with << sep << NIndexParameters::NGrammSize << "=" << settings.ngram_size();
+            sep = ", ";
+        }
+
+        if (settings.has_false_positive_probability()) {
+            with << sep << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability();
+            sep = ", ";
+        }
+
+        if (settings.has_case_sensitive()) {
+            with << sep << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false");
+        }
+
+        if (!with.empty()) {
+            Stream << " WITH (" << with << ")";
+        }
     }
 }
 

@@ -583,9 +583,9 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 bloom->AddColumnIds(columnIdIt->second);
                 const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
-                if (settings.FalsePositiveProbability) {
-                    bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
-                }
+                const double fpp = settings.FalsePositiveProbability.value_or(
+                    NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                bloom->SetFalsePositiveProbability(fpp);
 
                 break;
             }

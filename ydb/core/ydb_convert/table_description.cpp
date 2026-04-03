@@ -1159,7 +1159,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 
                 upsert->SetClassName("BLOOM_FILTER");
                 auto* bloom = upsert->MutableBloomFilter();
-                bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
+                const auto& bloomSettings = index.local_bloom_filter_index();
+                const double bloomFpp = bloomSettings.has_false_positive_probability()
+                    ? bloomSettings.false_positive_probability()
+                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+                bloom->SetFalsePositiveProbability(bloomFpp);
                 bloom->AddColumnNames(index.index_columns(0));
                 break;
             }
@@ -1173,9 +1177,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
-                const double fpp = ngramSettings.false_positive_probability();
-                ngram->SetNGrammSize(ngramSettings.ngram_size());
-                ngram->SetCaseSensitive(ngramSettings.case_sensitive());
+                const double fpp = ngramSettings.has_false_positive_probability()
+                    ? ngramSettings.false_positive_probability()
+                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
+                ngram->SetNGrammSize(ngramSettings.has_ngram_size() ? ngramSettings.ngram_size() : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize);
+                ngram->SetCaseSensitive(ngramSettings.has_case_sensitive() ? ngramSettings.case_sensitive() : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
                 ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
                 ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
                 ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));

@@ -57,7 +57,7 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
 
         for node_id, node in cluster.nodes.items():
             self._logger.info("Node %d: host=%s, bridge_pile_name=%s, bridge_pile_id=%s",
-                             node_id, node.host, node.bridge_pile_name, node.bridge_pile_id)
+                              node_id, node.host, node.bridge_pile_name, node.bridge_pile_id)
             if node.bridge_pile_id is not None and node.bridge_pile_name is not None:
                 bridge_pile_to_nodes[node.bridge_pile_id].append(node)
                 pile_id_to_name[node.bridge_pile_id] = node.bridge_pile_name
@@ -65,7 +65,7 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
         bridge_piles = list(bridge_pile_to_nodes.keys())
         self._logger.info("Found bridge piles: %s", bridge_piles)
         self._logger.info("Bridge pile to nodes mapping: %s",
-                         {pile_id: [node.host for node in nodes] for pile_id, nodes in bridge_pile_to_nodes.items()})
+                          {pile_id: [node.host for node in nodes] for pile_id, nodes in bridge_pile_to_nodes.items()})
         self._logger.info("Pile ID to name mapping: %s", pile_id_to_name)
         return bridge_pile_to_nodes, bridge_piles, pile_id_to_name
 
@@ -178,8 +178,8 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
             return True
         else:
             self._logger.warning("Pile %s is in state %s, NOT valid for failover (expected one of: %s)",
-                                pile_name, state_name,
-                                [get_pile_state_name(s) for s in VALID_FAILOVER_STATES])
+                                 pile_name, state_name,
+                                 [get_pile_state_name(s) for s in VALID_FAILOVER_STATES])
             return False
 
     def _validate_pile_state_for_rejoin(self, pile_name, bridge_client):
@@ -194,8 +194,8 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
             return True
         else:
             self._logger.warning("Pile %s is in state %s, NOT valid for rejoin (expected one of: %s)",
-                                pile_name, state_name,
-                                [get_pile_state_name(s) for s in VALID_REJOIN_STATES])
+                                 pile_name, state_name,
+                                 [get_pile_state_name(s) for s in VALID_REJOIN_STATES])
             return False
 
     def _manage_bridge_state(self):
@@ -214,7 +214,7 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
 
         pile_states = self._bridge_clients[another_pile_id].per_pile_state
         self._logger.info("Current bridge state: %s",
-                         [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
+                          [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
 
         # Convert pile ID to pile name for bridge operations
         pile_name = self._pile_id_to_name[self._current_pile_id]
@@ -274,14 +274,14 @@ class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
 
         pile_states = self._bridge_clients[another_pile_id].per_pile_state
         self._logger.info("Current bridge state: %s",
-                         [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
+                          [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
 
         # Convert pile ID to pile name for bridge operations
         pile_name = self._pile_id_to_name[self._current_pile_id]
 
         if not self._validate_pile_state_for_rejoin(pile_name, self._bridge_clients[another_pile_id]):
             self._logger.warning("Skipping rejoin for pile %s due to invalid state (pile may already be joined)",
-                                pile_name)
+                                 pile_name)
             return
 
         self._logger.info("OPERATION: rejoin for pile %d (pile_name=%s)", self._current_pile_id, pile_name)

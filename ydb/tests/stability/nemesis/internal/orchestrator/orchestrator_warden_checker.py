@@ -20,11 +20,11 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execu
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import (
     ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS,
-    collect_orchestrator_cluster_safety_warden_pairs,
+    collect_orchestrator_cluster_safety_specs,
 )
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
     SafetyWardenRun,
-    build_safety_runs_from_pairs,
+    build_safety_runs,
 )
 
 logger = logging.getLogger(__name__)
@@ -171,8 +171,10 @@ class OrchestratorWardenChecker:
                 self._publish_running(liveness_results, safety_results)
 
                 agg_specs = list(ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS)
-                cluster_pairs = collect_orchestrator_cluster_safety_warden_pairs(cluster)
-                local_runs: List[SafetyWardenRun] = build_safety_runs_from_pairs(cluster_pairs, log_prefix="")
+
+                # Use unified SafetyCheckSpec pipeline for cluster safety
+                cluster_safety_specs = collect_orchestrator_cluster_safety_specs(cluster)
+                _slot_names, local_runs = build_safety_runs(cluster_safety_specs, log_prefix="")
 
                 async def _run_local_run(run: SafetyWardenRun) -> List[WardenCheckResult]:
                     return await loop.run_in_executor(None, run)

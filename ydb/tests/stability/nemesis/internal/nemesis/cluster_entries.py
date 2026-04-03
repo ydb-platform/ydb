@@ -1,36 +1,23 @@
-"""Register app-local cluster nemesis actors (wire ids = public type names, no ``Lib`` prefix)."""
+"""
+All nemesis type entries for the catalog.
+
+Core nemesis (network, node kill, time skew), cluster-specific entries (tablet
+kills, daemon kills, disk operations, rolling updates), and topology-conditional
+entries (datacenter / bridge pile scenarios).
+
+Topology-conditional entries are registered only when ``cluster.yaml``
+advertises the corresponding sections; see ``runners.yaml_gates``.
+"""
 
 from __future__ import annotations
 
 from typing import Any, Type
 
 from ydb.tests.library.common.types import TabletTypes
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host_planner import (
-    PinnedFirstHostPlanner,
-)
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_planner import (
-    SerialStaggeredInjectPlanner,
-)
-from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_disk import (
-    ClusterSafelyBreakDiskNemesis,
-    ClusterSafelyCleanupDisksNemesis,
-)
-from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_hive import (
-    ClusterKickTabletsFromNodeNemesis,
-    ClusterReBalanceTabletsNemesis,
-)
-from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_node import (
-    ClusterKillNodeDaemonNemesis,
-    ClusterKillSlotDaemonNemesis,
-    ClusterRollingUpdateNemesis,
-    ClusterSerialKillNodeNemesis,
-    ClusterSerialKillSlotsNemesis,
-    ClusterStopStartNodeNemesis,
-    ClusterSuspendNodeNemesis,
-)
-from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_tablets import (
+from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterBulkChangeTabletGroupNemesis,
     ClusterChangeTabletGroupNemesis,
+    ClusterKickTabletsFromNodeNemesis,
     ClusterKillBlockstorePartitionNemesis,
     ClusterKillBlockstoreVolumeNemesis,
     ClusterKillBsControllerNemesis,
@@ -40,11 +27,41 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_tablets import
     ClusterKillKeyValueNemesis,
     ClusterKillMediatorNemesis,
     ClusterKillNodeBrokerNemesis,
+    ClusterKillNodeDaemonNemesis,
     ClusterKillPersQueueNemesis,
     ClusterKillSchemeShardNemesis,
+    ClusterKillSlotDaemonNemesis,
     ClusterKillTenantSlotBrokerNemesis,
     ClusterKillTxAllocatorNemesis,
+    ClusterReBalanceTabletsNemesis,
+    ClusterRollingUpdateNemesis,
+    ClusterSafelyBreakDiskNemesis,
+    ClusterSafelyCleanupDisksNemesis,
+    ClusterSerialKillNodeNemesis,
+    ClusterSerialKillSlotsNemesis,
+    ClusterStopStartNodeNemesis,
+    ClusterSuspendNodeNemesis,
+    KillNodeNemesis,
+    NetworkNemesis,
+    TimeSkewNemesis,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.kill_node_planner import (
+    KillNodeNemesisPlanner,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
+    NetworkNemesisPlanner,
+    TimeSkewNemesisPlanner,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host_planner import (
+    PinnedFirstHostPlanner,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_planner import (
+    SerialStaggeredInjectPlanner,
+)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 _CHANGE_TABLET_TYPES = (TabletTypes.PERSQUEUE, TabletTypes.FLAT_DATASHARD, TabletTypes.KEYVALUEFLAT)
 
@@ -52,6 +69,11 @@ _UI_GROUP = "ClusterChaos"
 _TABLET_UI_GROUP = "ClusterTablets"
 _DATACENTER_UI_GROUP = "DatacenterChaos"
 _BRIDGE_UI_GROUP = "BridgePileChaos"
+
+
+# ---------------------------------------------------------------------------
+# Planner factories
+# ---------------------------------------------------------------------------
 
 
 def _pinned_planner_factory(nemesis_type_key: str) -> PinnedFirstHostPlanner:
@@ -66,7 +88,10 @@ def _serial_staggered_slot_planner_factory(nemesis_type_key: str) -> SerialStagg
     return SerialStaggeredInjectPlanner(nemesis_type_key, target_kind="slot")
 
 
-# (type key, actor class, schedule_sec)
+# ---------------------------------------------------------------------------
+# Kill-tablet specs (type key, actor class, schedule_sec)
+# ---------------------------------------------------------------------------
+
 _KILL_TABLET_SPECS: tuple[tuple[str, Type[Any], int], ...] = (
     ("KillCoordinatorNemesis", ClusterKillCoordinatorNemesis, 180),
     ("KillHiveNemesis", ClusterKillHiveNemesis, 180),
@@ -84,10 +109,42 @@ _KILL_TABLET_SPECS: tuple[tuple[str, Type[Any], int], ...] = (
 )
 
 
-def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
-    """Entries merged into ``catalog.NEMESIS_TYPES``."""
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+
+def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
+    """All nemesis type entries for ``catalog.NEMESIS_TYPES``."""
     out: dict[str, dict[str, Any]] = {}
 
+    # --- core nemesis (network / node / time skew) --------------------------
+    out["NetworkNemesis"] = {
+        "runner": NetworkNemesis(),
+        "schedule": 200,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": NetworkNemesisPlanner,
+    }
+    out["KillNodeNemesis"] = {
+        "runner": KillNodeNemesis(),
+        "schedule": 200,
+        "ui_group": "NodeNemesis",
+        "planner_cls": KillNodeNemesisPlanner,
+    }
+    # out["DnsNemesis"] = {
+    #     "runner": DnsNemesis(),
+    #     "schedule": 120,
+    #     "ui_group": "NetworkNemesis",
+    #     "planner_cls": DnsNemesisPlanner,
+    # },
+    out["TimeSkewNemesis"] = {
+        "runner": TimeSkewNemesis(),
+        "schedule": 400,
+        "ui_group": "NetworkNemesis",
+        "planner_cls": TimeSkewNemesisPlanner,
+    }
+
+    # --- tablet kills -------------------------------------------------------
     for wire, cls, sched in _KILL_TABLET_SPECS:
         out[wire] = {
             "runner": cls(),
@@ -119,6 +176,7 @@ def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "ui_group": _TABLET_UI_GROUP,
         }
 
+    # --- daemon kills -------------------------------------------------------
     out["KillSlotDaemonNemesis"] = {
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
@@ -130,6 +188,7 @@ def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "ui_group": _UI_GROUP,
     }
 
+    # --- serial kills -------------------------------------------------------
     out["SerialKillNodeNemesis"] = {
         "runner": ClusterSerialKillNodeNemesis(),
         "schedule": 300,
@@ -143,6 +202,7 @@ def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_factory": _serial_staggered_slot_planner_factory,
     }
 
+    # --- disk / rolling / stop-start / suspend ------------------------------
     for wire, cls, sched in (
         ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400),
         ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400),
@@ -157,6 +217,7 @@ def cluster_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "planner_factory": _pinned_planner_factory,
         }
 
+    # --- topology-conditional (datacenter / bridge pile) --------------------
     out.update(_topology_conditional_entries())
     return out
 
@@ -173,7 +234,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     extra: dict[str, dict[str, Any]] = {}
 
     if yaml_has_multi_datacenter(path):
-        from ydb.tests.stability.nemesis.internal.nemesis.runners.datacenter import (
+        from ydb.tests.stability.nemesis.internal.nemesis.runners import (
             ClusterDataCenterIptablesBlockPortsNemesis,
             ClusterDataCenterRouteUnreachableNemesis,
             ClusterDataCenterStopNodesNemesis,
@@ -192,7 +253,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
             }
 
     if yaml_has_bridge_piles_section(path):
-        from ydb.tests.stability.nemesis.internal.nemesis.runners.bridge_pile import (
+        from ydb.tests.stability.nemesis.internal.nemesis.runners import (
             ClusterBridgePileIptablesBlockPortsNemesis,
             ClusterBridgePileRouteUnreachableNemesis,
             ClusterBridgePileStopNodesNemesis,

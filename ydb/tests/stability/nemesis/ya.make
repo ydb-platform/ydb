@@ -12,7 +12,7 @@ PY_SRCS(
     internal/nemesis/local_network.py
     internal/nemesis/monitored_actor.py
     internal/nemesis/cluster_context.py
-    internal/nemesis/cluster_registry.py
+    internal/nemesis/cluster_entries.py
     internal/nemesis/runners/__init__.py
     internal/nemesis/runners/network.py
     internal/nemesis/runners/node_local.py
@@ -25,7 +25,6 @@ PY_SRCS(
     internal/nemesis/runners/yaml_gates.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
-    internal/agent/agent_safety_runs.py
     internal/agent/nemesis/runner.py
     internal/orchestrator/install.py
     internal/orchestrator/orchestrator_warden_execution.py

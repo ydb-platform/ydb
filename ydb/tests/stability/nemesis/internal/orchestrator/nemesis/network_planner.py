@@ -8,8 +8,6 @@ from dataclasses import dataclass, field
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
-NETWORK_NEMESIS = "NetworkNemesis"
-
 # Payloads — keep in sync with NetworkNemesis actor (catalog)
 PAYLOAD_INJECT = {"op": "isolate_node"}
 PAYLOAD_EXTRACT = {"op": "clear_network_isolation"}
@@ -24,13 +22,13 @@ class _NetworkIsolationState:
 class NetworkNemesisPlanner(NemesisPlannerBase):
     """Holds isolation set on the orchestrator; produces DispatchCommand lists for agents."""
 
-    nemesis_type = NETWORK_NEMESIS
     PAYLOAD_INJECT = PAYLOAD_INJECT
     PAYLOAD_EXTRACT = PAYLOAD_EXTRACT
 
     def __init__(self, max_affected: int = 4) -> None:
         super().__init__()
         self._state = _NetworkIsolationState(max_affected=max_affected)
+        self.nemesis_type = "NetworkNemesis"
 
     def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
         if not hosts:
@@ -65,7 +63,6 @@ class NetworkNemesisPlanner(NemesisPlannerBase):
         self._state.isolated_hosts.discard(host)
 
 
-DNS_NEMESIS = "DnsNemesis"
 PAYLOAD_DNS_INJECT: dict = {}
 PAYLOAD_DNS_EXTRACT: dict = {}
 
@@ -73,7 +70,6 @@ PAYLOAD_DNS_EXTRACT: dict = {}
 class DnsNemesisPlanner(NetworkNemesisPlanner):
     """Same host-set bookkeeping as :class:`NetworkNemesisPlanner`, max one DNS-isolated host."""
 
-    nemesis_type = DNS_NEMESIS
     PAYLOAD_INJECT = PAYLOAD_DNS_INJECT
     PAYLOAD_EXTRACT = PAYLOAD_DNS_EXTRACT
 
@@ -81,7 +77,6 @@ class DnsNemesisPlanner(NetworkNemesisPlanner):
         super().__init__(max_affected=1)
 
 
-TIME_SKEW_NEMESIS = "TimeSkewNemesis"
 PAYLOAD_TIME_SKEW_INJECT = {"delta_sec": 300}
 PAYLOAD_TIME_SKEW_EXTRACT: dict = {}
 
@@ -89,7 +84,6 @@ PAYLOAD_TIME_SKEW_EXTRACT: dict = {}
 class TimeSkewNemesisPlanner(NetworkNemesisPlanner):
     """Track hosts with skewed clock; inject carries ``delta_sec`` (seconds forward)."""
 
-    nemesis_type = TIME_SKEW_NEMESIS
     PAYLOAD_INJECT = PAYLOAD_TIME_SKEW_INJECT
     PAYLOAD_EXTRACT = PAYLOAD_TIME_SKEW_EXTRACT
 

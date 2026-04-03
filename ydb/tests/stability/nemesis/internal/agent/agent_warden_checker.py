@@ -1,7 +1,7 @@
 """
 AgentWardenChecker — runs safety checks in parallel on the background event loop
-(blocking callables via run_in_executor). Each factory is invoked once per run in
-collect_agent_safety_warden_pairs.
+(blocking callables via run_in_executor). Each spec is invoked once per run in
+collect_agent_safety_check_specs.
 """
 
 from __future__ import annotations
@@ -11,18 +11,18 @@ import logging
 import socket
 import threading
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
-from ydb.tests.stability.nemesis.internal.agent.agent_safety_runs import (
-    AgentSafetyRun,
-    build_agent_safety_runs_from_pairs,
-)
 from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import (
     AgentSafetyContext,
-    collect_agent_safety_warden_pairs,
+    collect_agent_safety_check_specs,
 )
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
 from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
+from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
+    SafetyWardenRun,
+    build_safety_runs,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -82,7 +82,8 @@ class AgentWardenChecker:
             started = datetime.utcnow().isoformat() + "Z"
             ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
             try:
-                pairs: List[Tuple[str, Any]] = collect_agent_safety_warden_pairs(ctx)
+                specs = collect_agent_safety_check_specs(ctx)
+                slot_names, runs = build_safety_runs(specs, log_prefix=ctx.log_prefix)
             except Exception as e:
                 logger.error("Failed to collect agent safety wardens: %s", e)
                 self._is_running = False
@@ -96,7 +97,6 @@ class AgentWardenChecker:
                 )
                 return True
 
-            slot_names = [name for name, _ in pairs]
             initial_safety = [
                 WardenCheckResult(
                     name=name,
@@ -113,26 +113,25 @@ class AgentWardenChecker:
             )
 
         logger.info("Starting agent safety checks")
-        self._event_loop.submit(self._run_checks_async(pairs, ctx.log_prefix, slot_names))
+        self._event_loop.submit(self._run_checks_async(runs, ctx.log_prefix, slot_names))
         return True
 
     async def _run_checks_async(
         self,
-        pairs: List[Tuple[str, Any]],
+        runs: List[SafetyWardenRun],
         log_prefix: str,
         slot_names: List[str],
     ):
         logger.info("Agent safety checks execution started")
 
         try:
-            runs: List[AgentSafetyRun] = build_agent_safety_runs_from_pairs(pairs, log_prefix)
             loop = asyncio.get_running_loop()
             n = len(runs)
             if n != len(slot_names):
                 raise RuntimeError("slot_names length does not match runs")
             batches: List[List[WardenCheckResult] | None] = [None] * n
 
-            async def _run_at_index(i: int, run: AgentSafetyRun) -> tuple[int, List[WardenCheckResult]]:
+            async def _run_at_index(i: int, run: SafetyWardenRun) -> tuple[int, List[WardenCheckResult]]:
                 batch = await loop.run_in_executor(None, run)
                 return i, batch
 

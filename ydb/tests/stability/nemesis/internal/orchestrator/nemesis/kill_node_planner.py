@@ -8,7 +8,6 @@ from dataclasses import dataclass, field
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
-NODE_KILLER = "NodeKiller"
 
 PAYLOAD_INJECT = {"mode": "kill_one_ic_port_process", "signal": "SIGKILL"}
 PAYLOAD_EXTRACT = {"mode": "noop"}
@@ -22,13 +21,13 @@ class _KillNodeState:
 class KillNodeNemesisPlanner(NemesisPlannerBase):
     """Tracks hosts targeted by scheduled injects (for extract fan-out on schedule disable)."""
 
-    nemesis_type = NODE_KILLER
     PAYLOAD_INJECT = PAYLOAD_INJECT
     PAYLOAD_EXTRACT = PAYLOAD_EXTRACT
 
     def __init__(self) -> None:
         super().__init__()
         self._state = _KillNodeState()
+        self.nemesis_type = "KillNodeNemesis"
 
     def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
         if not hosts:
@@ -36,7 +35,7 @@ class KillNodeNemesisPlanner(NemesisPlannerBase):
         target = random.choice(hosts)
         with self._lock:
             self._state.affected_hosts.add(target)
-        return [dispatch(NODE_KILLER, target, "inject", PAYLOAD_INJECT)]
+        return [dispatch(self.nemesis_type, target, "inject", PAYLOAD_INJECT)]
 
     def _drain_tracked_hosts(self) -> list[str]:
         targets = list(self._state.affected_hosts)

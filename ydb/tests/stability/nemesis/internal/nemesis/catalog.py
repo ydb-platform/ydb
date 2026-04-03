@@ -9,32 +9,23 @@ Single registry:
 
 ChaosOrchestratorStore receives a planner map from build_all_planners().
 
-Optional cluster topology nemeses (datacenter / bridge pile) are merged from
-``cluster_registry`` only when ``cluster.yaml`` (``YAML_CONFIG_LOCATION`` /
-``Settings.yaml_config_location``) contains the corresponding sections; see
-``runners.yaml_gates``.
+All nemesis entries (core + cluster + topology-conditional) are built in
+``cluster_entries.all_nemesis_type_entries()``.
+Runner classes are re-exported from ``runners/__init__.py``.
 """
 
 from __future__ import annotations
 
 from typing import Any, Type
 
-from ydb.tests.stability.nemesis.internal.nemesis.cluster_registry import cluster_nemesis_type_entries
-from ydb.tests.stability.nemesis.internal.nemesis.runners.network import NetworkNemesis, TimeSkewNemesis
-from ydb.tests.stability.nemesis.internal.nemesis.runners.node_local import KillNodeNemesis
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.kill_node_planner import (
-    NODE_KILLER,
-    KillNodeNemesisPlanner,
-)
+from ydb.tests.stability.nemesis.internal.nemesis.cluster_entries import all_nemesis_type_entries
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
-    NETWORK_NEMESIS,
-    NetworkNemesisPlanner,
-    TIME_SKEW_NEMESIS,
-    TimeSkewNemesisPlanner,
-)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
+
+# ---------------------------------------------------------------------------
+# UI groups
+# ---------------------------------------------------------------------------
 
 NEMESIS_UI_GROUPS: dict[str, dict[str, str]] = {
     "NetworkNemesis": {
@@ -58,33 +49,16 @@ NEMESIS_UI_GROUPS: dict[str, dict[str, str]] = {
 }
 
 
-NEMESIS_TYPES: dict[str, dict[str, Any]] = {
-    # NETWORK_NEMESIS: {
-    #     "runner": NetworkNemesis(),
-    #     "schedule": 200,
-    #     "ui_group": "NetworkNemesis",
-    #     "planner_cls": NetworkNemesisPlanner,
-    # },
-    NODE_KILLER: {
-        "runner": KillNodeNemesis(),
-        "schedule": 200,
-        "ui_group": "NodeNemesis",
-        "planner_cls": KillNodeNemesisPlanner,
-    },
-    # DNS_NEMESIS: {
-    #     "runner": DnsNemesis(),
-    #     "schedule": 120,
-    #     "ui_group": "NetworkNemesis",
-    #     "planner_cls": DnsNemesisPlanner,
-    # },
-    # TIME_SKEW_NEMESIS: {
-    #     "runner": TimeSkewNemesis(),
-    #     "schedule": 400,
-    #     "ui_group": "NetworkNemesis",
-    #     "planner_cls": TimeSkewNemesisPlanner,
-    # },
-    # **cluster_nemesis_type_entries(),
-}
+# ---------------------------------------------------------------------------
+# Main registry
+# ---------------------------------------------------------------------------
+
+NEMESIS_TYPES: dict[str, dict[str, Any]] = all_nemesis_type_entries()
+
+
+# ---------------------------------------------------------------------------
+# Planner construction
+# ---------------------------------------------------------------------------
 
 
 def build_all_planners() -> dict[str, NemesisPlannerBase]:
@@ -101,6 +75,11 @@ def build_all_planners() -> dict[str, NemesisPlannerBase]:
         else:
             merged[key] = DefaultRandomHostPlanner(nemesis_type=key)
     return merged
+
+
+# ---------------------------------------------------------------------------
+# API helpers
+# ---------------------------------------------------------------------------
 
 
 def get_all_nemesis_types() -> list[str]:

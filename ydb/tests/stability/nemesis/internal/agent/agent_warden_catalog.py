@@ -1,4 +1,4 @@
-"""Agent-side warden catalog: safety checks."""
+"""Agent-side warden catalog: safety checks using unified SafetyCheckSpec."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from ydb.tests.library.wardens.logs import (
     kikimr_start_logs_safety_warden_factory,
     kikimr_crit_and_alert_logs_safety_warden_factory,
 )
+from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
 
 
 @dataclass(frozen=True)
@@ -41,27 +42,48 @@ def _pairs_from_wardens(factory_name: str, wardens: Iterable[Any]) -> List[Tuple
     ]
 
 
-def collect_agent_safety_warden_pairs(ctx: AgentSafetyContext) -> List[Tuple[str, Any]]:
-    """One (slot_name, warden) per slot: log factories once each, then unified verify-failed warden."""
-    pairs = _pairs_from_wardens(
-        kikimr_start_logs_safety_warden_factory.__name__,
-        kikimr_start_logs_safety_warden_factory(
-            ctx.local_hosts,
-            None,
-            ctx.log_directory,
-            lines_after=5,
-            cut=True,
-            modification_days=1,
+def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyCheckSpec]:
+    """
+    Agent safety check specs.
+
+    Each spec wraps a factory that produces ``(slot_name, warden)`` pairs.
+    To add a new agent safety check, append a ``SafetyCheckSpec`` to this list.
+    """
+    return [
+        SafetyCheckSpec(
+            name="kikimr_start_logs",
+            description="Check Kikimr start logs for errors",
+            build_pairs=lambda: _pairs_from_wardens(
+                kikimr_start_logs_safety_warden_factory.__name__,
+                kikimr_start_logs_safety_warden_factory(
+                    ctx.local_hosts,
+                    None,
+                    ctx.log_directory,
+                    lines_after=5,
+                    cut=True,
+                    modification_days=1,
+                ),
+            ),
         ),
-    )
-    pairs += _pairs_from_wardens(
-        kikimr_grep_dmesg_safety_warden_factory.__name__,
-        kikimr_grep_dmesg_safety_warden_factory(ctx.local_hosts, None, lines_after=5),
-    )
-    pairs += _pairs_from_wardens(
-        kikimr_crit_and_alert_logs_safety_warden_factory.__name__,
-        kikimr_crit_and_alert_logs_safety_warden_factory(ctx.local_hosts, None),
-    )
-    unified = UnifiedAgentVerifyFailedSafetyWarden(hours_back=24)
-    pairs.append((_agent_safety_slot_name("unified_agent_verify_failed", unified, 0), unified))
-    return pairs
+        SafetyCheckSpec(
+            name="kikimr_grep_dmesg",
+            description="Grep dmesg for Kikimr-related errors",
+            build_pairs=lambda: _pairs_from_wardens(
+                kikimr_grep_dmesg_safety_warden_factory.__name__,
+                kikimr_grep_dmesg_safety_warden_factory(ctx.local_hosts, None, lines_after=5),
+            ),
+        ),
+        SafetyCheckSpec(
+            name="kikimr_crit_and_alert_logs",
+            description="Check Kikimr logs for CRIT and ALERT entries",
+            build_pairs=lambda: _pairs_from_wardens(
+                kikimr_crit_and_alert_logs_safety_warden_factory.__name__,
+                kikimr_crit_and_alert_logs_safety_warden_factory(ctx.local_hosts, None),
+            ),
+        ),
+        SafetyCheckSpec(
+            name="unified_agent_verify_failed",
+            description="Check for VERIFY failed errors in unified agent logs",
+            build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
+        ),
+    ]

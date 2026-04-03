@@ -50,6 +50,9 @@
 ## Структура `internal/`
 
 - **Общее** (и orchestrator, и agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
+- **`internal/nemesis/runners/`** — все runner-классы (акторы nemesis). `__init__.py` реэкспортирует все классы для удобного импорта.
+- **`internal/nemesis/cluster_entries.py`** — кластерные nemesis-записи (tablet kills, daemon kills, disk ops, datacenter/bridge pile), вынесены из `catalog.py` для читаемости.
+- **`internal/nemesis/catalog.py`** — главный реестр `NEMESIS_TYPES`, UI-группы, `build_all_planners()` и API-хелперы. Импортирует core-runner'ы из `runners/` и кластерные записи из `cluster_entries.py`.
 - **`internal/agent/`** — только агент: `agent_warden_checker.py`, `nemesis/runner.py` (`NemesisManager`).
 - **`internal/orchestrator/`** — только оркестратор: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики). Состояние оркестратора (hosts, healthcheck, chaos store) живёт в `routers/orchestrator_router.py`.
 
@@ -74,6 +77,8 @@
 ## Расширение: свой nemesis
 
 Реестр и UI-группы: **`internal/nemesis/catalog.py`** (`NEMESIS_TYPES`, `NEMESIS_UI_GROUPS`).
+Кластерные nemesis-записи: **`internal/nemesis/cluster_entries.py`** (`all_nemesis_type_entries()`).
+Все runner-классы реэкспортируются из **`internal/nemesis/runners/__init__.py`**.
 
 ### Как выполняется nemesis
 
@@ -128,21 +133,46 @@
 
 ## Расширение: liveness и safety checks
 
-Каталоги: **`internal/agent/agent_warden_catalog.py`** (агент: **`collect_agent_safety_warden_pairs`**, фабрики в **`ydb/tests/library/wardens/logs.py`** и т.п.), **`internal/orchestrator/orchestrator_warden_catalog.py`** (оркестратор). Список проверок до запуска в UI/API не отдаётся — строки появляются в **`GET /api/hosts/warden/results`** после **`Run Checks`**.
+Единый интерфейс регистрации safety-проверок — **`SafetyCheckSpec`** (`internal/safety_warden_execution.py`). И агент, и оркестратор используют один и тот же датакласс и один и тот же pipeline исполнения:
+
+```
+specs → collect_safety_warden_pairs(specs) → build_safety_runs(specs) → run_in_executor
+```
+
+Каталоги: **`internal/agent/agent_warden_catalog.py`** (`collect_agent_safety_check_specs`), **`internal/orchestrator/orchestrator_warden_catalog.py`** (`collect_orchestrator_cluster_safety_specs`). Список проверок до запуска в UI/API не отдаётся — строки появляются в **`GET /api/hosts/warden/results`** после **`Run Checks`**.
+
+### SafetyCheckSpec
+
+```python
+@dataclass(frozen=True)
+class SafetyCheckSpec:
+    name: str
+    description: str = ""
+    build_pairs: Optional[Callable[[], List[Tuple[str, Any]]]] = None   # фабрика → несколько wardens
+    build_warden: Optional[Callable[[], Any]] = None                    # один warden
+```
+
+Укажите **ровно одно** из `build_pairs` / `build_warden`:
+
+- **`build_pairs`** — фабрика, возвращающая `[(slot_name, warden), ...]`. Используется для агентских log-фабрик, которые порождают несколько wardens за раз.
+- **`build_warden`** — возвращает один warden; `name` спека используется как `slot_name`.
+
+Оба вида wardens должны реализовывать `list_of_safety_violations() -> list`.
 
 ### Где что выполняется
 
 | Категория | Где исполняется | Как попадает в отчёт |
 |-----------|-----------------|----------------------|
 | **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (набор из `ORCHESTRATOR_LIVENESS_CHECKS`, исполнение `run_orchestrator_liveness_cli_batch` в `orchestrator_warden_execution.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
-| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно) | По каждому хосту в том же JSON |
-| **Safety (orchestrator)** | **Оркестратор** (`OrchestratorWardenChecker`): кортежи **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** и **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** (агрегация — `unified_agent_verify_failed_aggregated.py`) | В `_orchestrator.safety_checks` |
+| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно). Спеки из `collect_agent_safety_check_specs(ctx)` | По каждому хосту в том же JSON |
+| **Safety (orchestrator cluster)** | **Оркестратор** (`OrchestratorWardenChecker`): спеки из `collect_orchestrator_cluster_safety_specs(cluster)`, тот же `build_safety_runs` pipeline | В `_orchestrator.safety_checks` |
+| **Safety (orchestrator aggregated)** | **Оркестратор**: кортеж `ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS` (агрегация по агентам — `unified_agent_verify_failed_aggregated.py`) | В `_orchestrator.safety_checks` |
 
 Агенты **liveness не запускают** (в отчёте по хосту блок liveness пустой).
 
 ### Добавить liveness check
 
-1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: **`OrchestratorLivenessCheck`** с **`name`**, **`description`**, **`build=lambda c: ...`** (как у агента).
+1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: **`OrchestratorLivenessCheck`** с **`name`**, **`description`**, **`build=lambda c: ...`**.
 2. Команда **`nemesis liveness`** вызывает **`run_orchestrator_liveness_cli_batch`** — дублировать список не нужно.
 
 Исполнение: бинарь на оркестраторе вызывает `nemesis liveness`, внутри — тот же каталог.
@@ -151,13 +181,34 @@
 
 Зависит от **location** (`agent` / `orchestrator`).
 
-**Agent (`location: "agent"`)** — проверка с доступом к **локальным** логам / dmesg и т.п.:
+**Agent** — проверка с доступом к **локальным** логам / dmesg и т.п.:
 
-1. В **`internal/agent/agent_warden_catalog.py`** расширьте **`collect_agent_safety_warden_pairs`**: добавляйте пары **`(slot_name, warden)`** с уникальной строкой **`slot_name`** (см. **`_agent_safety_slot_name`**). Либо добавьте вызов новой фабрики по образцу **`kikimr_start_logs_safety_warden_factory`** / **`kikimr_grep_dmesg_safety_warden_factory`**.
+1. В **`internal/agent/agent_warden_catalog.py`** добавьте `SafetyCheckSpec` в список, возвращаемый **`collect_agent_safety_check_specs(ctx)`**.
+2. Для фабрики, порождающей несколько wardens, используйте **`build_pairs`** (см. `kikimr_start_logs_safety_warden_factory`).
+3. Для одиночного warden используйте **`build_warden`** (см. `UnifiedAgentVerifyFailedSafetyWarden`).
 
-**Orchestrator (`location: "orchestrator"`)** — логика на оркестраторе (кластер и/или агрегация по агентам):
+```python
+SafetyCheckSpec(
+    name="my_new_check",
+    description="Description for logs",
+    build_warden=lambda: MyNewSafetyWarden(...),
+)
+```
 
-1. Локальная по кластеру: в **`orchestrator_warden_catalog.py`** — элемент в кортеже **`ORCHESTRATOR_CLUSTER_SAFETY_CHECKS`** с **`build=lambda c: ...`**. Сбор пар **`collect_orchestrator_cluster_safety_warden_pairs`** и запуск через **`build_safety_runs_from_pairs`** (**`internal/safety_warden_execution.py`**, тот же путь, что на агенте).
-2. Агрегированная: элемент в **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** с **`agent_source_class_name`** и **`impl`** (**`aggregate(...)`**; ожидание — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**). Вызов — **`run_orchestrator_aggregated_safety`**.
+**Orchestrator (cluster)** — проверка по кластеру (PDisks, таблеты и т.п.):
+
+1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте `SafetyCheckSpec` в список, возвращаемый **`collect_orchestrator_cluster_safety_specs(cluster)`**. Кластер захватывается замыканием в `build_warden`.
+
+```python
+SafetyCheckSpec(
+    name="MyClusterCheck",
+    description="Check something cluster-wide",
+    build_warden=lambda: MyClusterSafetyWarden(cluster, timeout_seconds=30),
+)
+```
+
+**Orchestrator (aggregated)** — агрегация safety-ответов агентов:
+
+1. Элемент в **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** с **`agent_source_class_name`** и **`impl`**. Ожидание агентов — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**, вызов — **`run_orchestrator_aggregated_safety`**.
 
 Для новых агрегаторов: в **`safety_checks`** ищите строку по **`name`** (точное совпадение или первый токен — см. **`UnifiedAgentVerifyFailedAggregated._row_matches_class`**).

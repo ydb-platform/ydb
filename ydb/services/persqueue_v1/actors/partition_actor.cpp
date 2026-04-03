@@ -650,6 +650,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
         WTime = resp.GetWriteTimestampMS();
 
     InitDone = true;
+    CommitProcessingIsEnabled = !!PipeClient;
     PipeGeneration = 0; //reset tries counter - all ok
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INIT DONE " << Partition
                         << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset);
@@ -661,6 +662,8 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     } else {
         InitStartReading(ctx);
     }
+
+    MakeCommit(ctx);
 }
 
 void TPartitionActor::HandleDirectReadRestoreSession(const NKikimrClient::TPersQueuePartitionResponse& result, const TActorContext& ctx) {
@@ -1219,7 +1222,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .DoFirstRetryInstantly = true
         };
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
-        CommitProcessingIsEnabled = true;
+        CommitProcessingIsEnabled = InitDone;
         auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);

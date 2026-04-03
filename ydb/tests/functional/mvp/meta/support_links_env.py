@@ -28,7 +28,7 @@ MISSING_CLUSTER_PARAMETER_ERROR = (
 
 
 def mvp_meta_bin():
-    return yatest.common.binary_path("ydb/mvp/meta/bin/mvp_meta")
+    return yatest.common.binary_path(os.getenv("MVP_META_BINARY"))
 
 
 class MetaService:

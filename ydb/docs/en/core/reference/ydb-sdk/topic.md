@@ -235,7 +235,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
   For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
-  Example of adding an [important consumer](../../concepts/topic#important-consumer) and setting two days [retention time](../../concepts/topic#retention-time) for the topic:
+  Example of adding an [important consumer](../../concepts/datamodel/topic.md#important-consumer) and setting two days [retention time](../../concepts/datamodel/topic.md#retention-time) for the topic:
 
   ```cpp
   auto alterSettings = NYdb::NTopic::TAlterTopicSettings()

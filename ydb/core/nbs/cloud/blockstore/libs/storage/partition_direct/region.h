@@ -6,6 +6,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,6 +21,7 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
+        TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -29,6 +32,8 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
+        EWriteMode writeMode,
+        ui32 pbufferReplyTimeoutMicroseconds,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 

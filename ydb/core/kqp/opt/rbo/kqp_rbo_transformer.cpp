@@ -409,7 +409,12 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Assign physical stages.
     TVector<std::unique_ptr<IRule>> assignPhysicalStageRules;
     assignPhysicalStageRules.emplace_back(std::make_unique<TAssignStagesRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign stages", std::move(assignPhysicalStageRules)));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign physical stages", std::move(assignPhysicalStageRules)));
+
+    // Optimize physical stages.
+    TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
 }
 
 void TKqpRBOCleanupTransformer::Rewind() {

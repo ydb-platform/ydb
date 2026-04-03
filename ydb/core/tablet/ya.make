@@ -56,8 +56,11 @@ SRCS(
     tablet_tracing_signals.h
     detailed_metrics/metric_value_aggregator.cpp
     detailed_metrics/metric_value_aggregator.h
+    detailed_metrics/ydb_metrics_aggregator.cpp
+    detailed_metrics/ydb_metrics_aggregator.h
     detailed_metrics/ydb_metrics_mapper.cpp
     detailed_metrics/ydb_metrics_mapper.h
+    detailed_metrics/ydb_metrics_target_counters_base.h
     private/aggregated_counters.cpp
     private/aggregated_counters.h
     private/labeled_db_counters.cpp

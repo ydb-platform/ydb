@@ -104,6 +104,7 @@ public:
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
+                                    .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
                                     .SecurityObject = entry.SecurityObject
                                 };

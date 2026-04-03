@@ -5,6 +5,8 @@ from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+from ydb.tests.olap.lib.ydb_cluster import YdbCluster
+import ydb.tests.olap.lib.remote_execution as remote_execution
 import logging
 
 
@@ -26,6 +28,11 @@ class TpccSuiteBase(LoadSuiteBase):
             # cls.check_tables_size(folder=cls.get_tpcc_path(), tables={})
             pass
         cls._remote_cli_path = YdbCliHelper.deploy_remote_cli()
+
+        # cleanup previous executions
+        if not remote_execution.is_localhost(YdbCluster.get_client_host()):
+            remote_execution.execute_command(YdbCluster.get_client_host(), 'sudo pkill -9 -x ydb', raise_on_error=False)
+
         wh_count = 0
         try:
             wh_count = ScenarioTestHelper(None).get_table_rows_count(f'{cls.get_tpcc_path()}/warehouse')

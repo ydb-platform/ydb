@@ -144,6 +144,11 @@ namespace NKikimr::NStorage {
             return; // we are either doing something, or binding is already in progress
         }
 
+        Y_ABORT_UNLESS(QuorumValid);
+        if (MajorityOfNodesConnected) {
+            return;
+        }
+
         const TMonotonic now = TActivationContext::Monotonic();
 
         // try to bind to node from the same pile

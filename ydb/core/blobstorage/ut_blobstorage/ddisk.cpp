@@ -83,7 +83,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
-
             PBCreds = Creds;
             {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
@@ -100,7 +99,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             ServiceId = MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
 
             PersId = node.GetPersistentBufferDDiskId();
-            PBServiceId = MakeBlobStorageDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
+            PBServiceId = MakeBlobStoragePersistentBufferId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
 
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
@@ -179,7 +178,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);
             }
-
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 

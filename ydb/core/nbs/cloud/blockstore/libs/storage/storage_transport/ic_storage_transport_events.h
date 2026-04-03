@@ -220,6 +220,54 @@ struct TEvTransportPrivate
         ~TListPBufferEntries();
     };
 
+    // TODO delete this 'using' after name's fix on the YDB's side.
+    using TProtoEvWriteToManyPersistentBuffersResult =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult;
+    using TProtoEvWriteToManyPersistentBuffers =
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffers;
+
+    struct TWriteToManyPBuffers: TDisableCopyMove
+    {
+        using TResult = TProtoEvWriteToManyPersistentBuffersResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const ui64 Lsn;
+        const NKikimr::NDDisk::TWriteInstruction Instruction;
+        const TVector<NKikimrBlobStorage::NDDisk::TDDiskId> PersistentBufferIds;
+        const ui32 ReplyTimeoutMicroseconds;
+
+        const TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TWriteToManyPBuffers(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
+            const ui64 lsn,
+            const NKikimr::NDDisk::TWriteInstruction instruction,
+            TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
+            ui32 replyTimeoutMicroseconds,
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Lsn(lsn)
+            , Instruction(instruction)
+            , PersistentBufferIds(std::move(persistentBufferIds))
+            , ReplyTimeoutMicroseconds(replyTimeoutMicroseconds)
+            , Data(data)
+            , TraceId(std::move(traceId))
+
+        {}
+
+        ~TWriteToManyPBuffers();
+    };
+
     enum EEvents
     {
         EvConnect,
@@ -229,6 +277,7 @@ struct TEvTransportPrivate
         EvReadFromDDisk,
         EvSyncWithPBuffer,
         EvListPBufferEntries,
+        EvWriteToManyPBuffers,
     };
 
     using TEvConnect = TRequestEvent<TConnect, EEvents::EvConnect>;
@@ -250,6 +299,9 @@ struct TEvTransportPrivate
 
     using TEvListPBufferEntries =
         TRequestEvent<TListPBufferEntries, EEvents::EvListPBufferEntries>;
+
+    using TEvWriteToManyPBuffers =
+        TRequestEvent<TWriteToManyPBuffers, EEvents::EvWriteToManyPBuffers>;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NTransport

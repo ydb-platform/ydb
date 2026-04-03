@@ -359,7 +359,7 @@ THolder<IWorkloadQueryGenerator> TMixedWorkloadParams::CreateGenerator() const {
 }
 
 TString TMixedWorkloadParams::GetWorkloadName() const {
-    return "Log";
+    return "Mixed";
 }
 
 } // namespace NMixed

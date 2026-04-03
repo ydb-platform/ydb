@@ -34,7 +34,7 @@ More about initial deployment:
 
 * [Ansible](../devops/deployment-options/ansible/initial-deployment.md)
 * [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
-* [Manually](../devops/deployment-options/manual/initial-deployment.md)
+* [Manually](../devops/deployment-options/manual/initial-deployment/index.md)
 
 {% endnote %}
 

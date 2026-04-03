@@ -100,7 +100,10 @@ TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
-    , TTabletExecutedFlat(info, tablet, new NKikimr::NMiniKQL::TMiniKQLFactory)
+    , TTabletBase<TPartitionActor>(
+          tablet,
+          NKikimr::TTabletStorageInfoPtr(info),
+          nullptr)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
@@ -155,6 +158,15 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         TPartitionIds ids;
         LoadTabletInfo(ctx, ids);
         Start(ctx, std::move(ids));
+    }
+
+    if (!Executor()->GetStats().IsFollower()) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "Executing InitSchema transaction");
+        ExecuteTx(ctx, CreateTx<TInitSchema>());
+        ExecuteTx(ctx, CreateTx<TReadWriteMeta>("BARKOVBG"));
     }
 
     // allow pipes to connect

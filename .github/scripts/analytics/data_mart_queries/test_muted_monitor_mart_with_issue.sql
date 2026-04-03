@@ -44,6 +44,7 @@ FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
+    AND tm.build_type = gim.build_type
 WHERE tm.date_window >= CurrentUtcDate() - 2 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
     AND tm.is_test_chunk = 0

@@ -56,12 +56,13 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
     CREATE TABLE IF NOT EXISTS `{table_path}` (
         `full_name` Utf8 NOT NULL,
         `branch` Utf8 NOT NULL,
+        `build_type` Utf8 NOT NULL,
         `github_issue_url` Utf8,
         `github_issue_title` Utf8,
         `github_issue_number` Uint64 NOT NULL,
         `github_issue_state` Utf8 NOT NULL,
         `github_issue_created_at` Timestamp,
-        PRIMARY KEY (full_name,branch,github_issue_number,github_issue_state)
+        PRIMARY KEY (full_name, branch, build_type, github_issue_number, github_issue_state)
     )
     PARTITION BY HASH(full_name)
     WITH (
@@ -88,6 +89,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
+                    'build_type': latest_issue.get('build_type', 'relwithdebinfo'),
                     'github_issue_url': latest_issue['url'],
                     'github_issue_title': latest_issue['title'],
                     'github_issue_number': latest_issue['issue_number'],
@@ -105,6 +107,7 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types = ydb.BulkUpsertColumns()
     column_types.add_column('full_name', ydb.PrimitiveType.Utf8)
     column_types.add_column('branch', ydb.PrimitiveType.Utf8)
+    column_types.add_column('build_type', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_url', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_title', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_number', ydb.OptionalType(ydb.PrimitiveType.Uint64))

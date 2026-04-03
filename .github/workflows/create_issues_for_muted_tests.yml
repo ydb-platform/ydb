@@ -22,13 +22,29 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-      ((github.event_name == 'pull_request' && 
+      ((github.event_name == 'pull_request' &&
       github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
-      github.event.pull_request.base.ref == 'main') || 
+      startsWith(github.event.pull_request.head.ref, 'update-muted-ya')) ||
       github.event_name == 'workflow_dispatch')
 
     steps:
+      - name: Double-check mute-unmute label via API
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number
+            });
+            const labels = pr.labels.map(l => l.name);
+            console.log('PR labels:', labels);
+            if (!labels.includes('mute-unmute')) {
+              core.setFailed(`PR #${pr.number} does not have mute-unmute label (labels: ${labels.join(', ')}), skipping`);
+            }
+
       - name: Set environment variables for branches
         run: |
           echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref || 'main' }}" >> $GITHUB_ENV
@@ -108,15 +124,4 @@ jobs:
         continue-on-error: true
         run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
 
-      - name: Send team-specific messages to Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
-        run: |
-          python .github/scripts/telegram/parse_and_send_team_issues.py \
-            --on-mute-change-update \
-            --file "${{ steps.create_issues.outputs.created_issues_file }}" \
-            --bot-token "$TELEGRAM_BOT_TOKEN" \
-            --team-channels "$TEAM_CHANNELS" \
-            --include-plots \
-            --delay 2
+      # Telegram notifications moved to send_telegram_digest.yml (scheduled, batched 3x/day)

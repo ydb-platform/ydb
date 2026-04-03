@@ -346,6 +346,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
 def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
+    build_type = test_data[0].get('build_type', 'relwithdebinfo')
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
@@ -384,6 +385,9 @@ def generate_github_issue_title_and_body(test_data):
         f"Branch:<!--branch_list_start-->\n"
         f"{branch}\n"
         f"<!--branch_list_end-->\n\n"
+        f"Build type:<!--build_type_list_start-->\n"
+        f"{build_type}\n"
+        f"<!--build_type_list_end-->\n\n"
         f"**Add line to [muted_ya.txt](https://github.com/ydb-platform/ydb/blob/main/.github/config/muted_ya.txt):**\n"
         "```\n"
         f"{test_mute_strings_string}\n"
@@ -410,7 +414,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             body = content['body']
-            tests, branches = parse_body(body)
+            tests, branches, build_type = parse_body(body)
 
             field_values = issue.get('fieldValues', {}).get('nodes', [])
             for field_value in field_values:

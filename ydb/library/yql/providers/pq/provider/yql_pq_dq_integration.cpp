@@ -40,12 +40,13 @@ TMaybe<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
     if (topic.Ref().ChildrenSize() <= TPqReadTopic::idx_Watermark) {
         return Nothing();
     }
-    const TExprNode* w = topic.Ref().Child(TPqReadTopic::idx_Watermark);
-    if (TCoVoid::Match(w)) {
+    TExprNode::TPtr wmPtr = topic.Ref().ChildPtr(static_cast<ui32>(TPqReadTopic::idx_Watermark));
+    if (TCoVoid::Match(wmPtr.Get())) {
         return Nothing();
     }
-    YQL_ENSURE(TCoLambda::Match(w));
-    return TCoLambda(w);
+    YQL_ENSURE(TCoLambda::Match(wmPtr.Get()));
+    // Own the child pointer: node builders (e.g. WatermarkExpr(...)) call TExprBase::Ptr().
+    return TCoLambda(std::move(wmPtr));
 }
 
 class TPqDqIntegration : public TDqIntegrationBase {

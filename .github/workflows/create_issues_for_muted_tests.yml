@@ -42,7 +42,8 @@ jobs:
             const labels = pr.labels.map(l => l.name);
             console.log('PR labels:', labels);
             if (!labels.includes('mute-unmute')) {
-              core.setFailed(`PR #${pr.number} does not have mute-unmute label (labels: ${labels.join(', ')}), skipping`);
+              core.notice(`PR #${pr.number} does not have mute-unmute label (labels: ${labels.join(', ')}), skipping`);
+              process.exit(0);
             }
 
       - name: Set environment variables for branches

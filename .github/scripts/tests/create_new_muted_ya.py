@@ -875,7 +875,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
         _DIGEST_QUEUE_SCHEMA.format(table_path=table_path),
     )
 
-    now_us = int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp() * 1_000_000)
+    now_dt = datetime.datetime.now(tz=datetime.timezone.utc)
 
     rows = []
     for item in queue_items:
@@ -890,7 +890,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
             'owner_team':          item['owner_team'],
             'branch':              branch,
             'build_type':          build_type,
-            'enqueued_at':         now_us,
+            'enqueued_at':         now_dt,
             'sent_at':             None,
         })
 

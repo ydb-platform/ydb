@@ -152,7 +152,7 @@ void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config)
     CONSTS_INTERACTION_MULT = config->OptCBOConstsInteractionsMult.Get().GetOrElse(CONSTS_INTERACTION_MULT);
     CONSTS_INTERACTION_POW = config->OptCBOConstsInteractionsPow.Get().GetOrElse(CONSTS_INTERACTION_POW);
 
-    CONSTS_MAPJOIN_LEFT_SIDE_MULT = config->OptCBOConstsMapJoinLeftSideMult.Get().GetOrElse(CONSTS_MAPJOIN_LEFT_SIDE_POW);
+    CONSTS_MAPJOIN_LEFT_SIDE_MULT = config->OptCBOConstsMapJoinLeftSideMult.Get().GetOrElse(CONSTS_MAPJOIN_LEFT_SIDE_MULT);
     CONSTS_MAPJOIN_LEFT_SIDE_POW = config->OptCBOConstsMapJoinLeftSidePow.Get().GetOrElse(CONSTS_MAPJOIN_LEFT_SIDE_POW);
     CONSTS_MAPJOIN_RIGHT_SIDE_MULT = config->OptCBOConstsMapJoinRightSideMult.Get().GetOrElse(CONSTS_MAPJOIN_RIGHT_SIDE_MULT);
     CONSTS_MAPJOIN_RIGHT_SIDE_POW = config->OptCBOConstsMapJoinRightSidePow.Get().GetOrElse(CONSTS_MAPJOIN_RIGHT_SIDE_POW);
@@ -208,7 +208,7 @@ double TKqpProviderContext::ComputeJoinCost(
 ) const  {
     Y_UNUSED(outputByteSize);
 
-    double interactionPenalty = CONSTS_INTERACTION_MULT  * std::pow(leftStats.Nrows * rightStats.Nrows, CONSTS_INTERACTION_POW);
+    double interactionPenalty = CONSTS_INTERACTION_MULT * std::pow(leftStats.Nrows * rightStats.Nrows, CONSTS_INTERACTION_POW);
 
     switch(joinAlgo) {
         case EJoinAlgoType::LookupJoin:
@@ -570,7 +570,7 @@ TOptimizerStatistics TKqpProviderContext::ComputeJoinStats(
     if (result.JoinDepth > MAX_DEPTH) {
         result.Selectivity = 1.0;
     } else {
-        result.Selectivity = CONSTS_SEL_MULT * std::min(1.0, std::pow(selectivity, CONSTS_SEL_POW));
+        result.Selectivity = std::min(1.0, CONSTS_SEL_MULT * std::pow(selectivity, CONSTS_SEL_POW));
         result.Selectivity = std::max(result.Selectivity, 1e-4);
     }
 

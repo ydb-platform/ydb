@@ -299,7 +299,7 @@ public:
                     }
                 }
 
-                YQL_ENSURE(streamingTopicRead, "Finite topic reading is not supported");
+                srcDesc.SetStreamingMode(streamingTopicRead);
 
                 for (auto prop : topic.Props()) {
                     const TStringBuf name = Name(prop);
@@ -663,9 +663,13 @@ public:
             }
         }
 
-        if (!streamingTopicReadEnabled) {
+        if (State_->StreamingTopicsReadByDefault && !streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
             return nullptr;
+        }
+
+        if (!State_->StreamingTopicsReadByDefault && streamingTopicReadEnabled) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only"));
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {

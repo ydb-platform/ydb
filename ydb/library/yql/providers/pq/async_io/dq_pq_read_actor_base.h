@@ -12,8 +12,16 @@ class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
     using TPartitionKey = ::NPq::TPartitionKey;
 
+    struct TPartitonInfo {
+        //TPartitionKey Partition;
+
+        // TODO optional?
+        ui64 Offset = 0;                        // offset, data for which was sended to CA + 1 (next expected)
+        std::optional<ui64> EndOffset;          // end offset in topic on start   
+    };
+
     const ui64 InputIndex = 0;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
+    THashMap<TPartitionKey, TPartitonInfo> PartitionToOffset; // {cluster, partition} -> offset of next event.
     const TTxId TxId;
     NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;

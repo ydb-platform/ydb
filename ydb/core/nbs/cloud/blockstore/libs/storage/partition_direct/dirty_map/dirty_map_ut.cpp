@@ -482,7 +482,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto desired = TLocationMask::Make(true, true, true, true, false);
         dirtyMap.UpdateConfig(desired, {});
 
-        dirtyMap.SetWriteWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
+        dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
 
         TLocationMask requested =
             TLocationMask::Make(true, true, true, false, false);
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Only 3 DDisks available by default. For some requests, ddisk will not
         // be sufficient for quorum.
-        dirtyMap.SetWriteWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
+        dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
 
         TLocationMask requested =
             TLocationMask::Make(true, true, true, false, false);
@@ -595,6 +595,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
             VChunkSize / DefaultBlockSize);
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         dirtyMap.WriteFinished(
             123,
@@ -604,7 +605,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Lock range on DDisk
         auto lockHandle =
-            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10));
+            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
 
         // Flush hints should not be generated when DDisk is locked.
         auto flushHint = dirtyMap.MakeFlushHint(1);

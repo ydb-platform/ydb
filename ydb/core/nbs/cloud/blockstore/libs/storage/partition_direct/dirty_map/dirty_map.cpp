@@ -152,11 +152,11 @@ TString TEraseHints::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskState::Init(ui64 blockCount, ui64 freshWatermark)
+void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
 {
-    BlockCount = blockCount;
-    SetReadWatermark(freshWatermark);
-    SetWriteWatermark(freshWatermark);
+    TotalBlockCount = totalBlockCount;
+    SetFlushWatermark(operationalBlockCount);
+    SetReadWatermark(operationalBlockCount);
 }
 
 TDDiskState::EState TDDiskState::GetState() const
@@ -166,40 +166,45 @@ TDDiskState::EState TDDiskState::GetState() const
 
 bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
 {
-    return State == EState::Operational || ReadReady >= range.End;
+    return State == EState::Operational || OperationalBlockCount >= range.End;
 }
 
 bool TDDiskState::NeedFlushToDDisk(TBlockRange64 range) const
 {
-    return State == EState::Operational || range.Start < WriteReady;
+    return State == EState::Operational || range.Start < FlushableBlockCount;
 }
 
 void TDDiskState::SetReadWatermark(ui64 blockCount)
 {
-    ReadReady = blockCount;
+    OperationalBlockCount = blockCount;
     UpdateState();
 }
 
-void TDDiskState::SetWriteWatermark(ui64 blockCount)
+void TDDiskState::SetFlushWatermark(ui64 blockCount)
 {
-    WriteReady = blockCount;
+    FlushableBlockCount = blockCount;
     UpdateState();
 }
 
-ui64 TDDiskState::GetReadWatermark() const
+ui64 TDDiskState::GetOperationalBlockCount() const
 {
-    return ReadReady;
+    return OperationalBlockCount;
 }
 
 TString TDDiskState::DebugPrint() const
 {
-    return TStringBuilder() << "{" << ToString(State) << "," << ReadReady << ","
-                            << WriteReady << "}";
+    return TStringBuilder()
+           << "{" << ToString(State) << "," << OperationalBlockCount << ","
+           << FlushableBlockCount << "}";
 }
 
 void TDDiskState::UpdateState()
 {
-    State = (ReadReady == BlockCount && WriteReady == BlockCount)
+    Y_ABORT_UNLESS(OperationalBlockCount <= TotalBlockCount);
+    Y_ABORT_UNLESS(FlushableBlockCount <= TotalBlockCount);
+
+    State = (OperationalBlockCount == TotalBlockCount &&
+             FlushableBlockCount == TotalBlockCount)
                 ? EState::Operational
                 : EState::Fresh;
 }
@@ -369,6 +374,11 @@ void TInflightInfo::FlushFailed(TRoute route)
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
 }
 
+TLocationMask TInflightInfo::GetRequestedFlushes() const
+{
+    return FlushRequested;
+}
+
 bool TInflightInfo::RequestErase(ELocation location)
 {
     Y_ABORT_UNLESS(IsPBuffer(location));
@@ -488,7 +498,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             0,
             TBlockRange64::WithLength(0, range.Size()),
             range,
-            TRangeLock(this, range));
+            TRangeLock(this, range, locationMask));
     };
 
     auto makeHint =
@@ -508,7 +518,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
             lsn,
             TBlockRange64::WithLength(0, range.Size()),
             range,
-            locationMask.OnlyDDisk() ? TRangeLock(this, range)
+            locationMask.OnlyDDisk() ? TRangeLock(this, range, locationMask)
                                      : TRangeLock(this, lsn));
     };
 
@@ -691,7 +701,7 @@ void TBlocksDirtyMap::EraseFinished(
 void TBlocksDirtyMap::MarkFresh(ELocation location, ui64 bytesOffset)
 {
     DDiskStates[location].SetReadWatermark(bytesOffset / BlockSize);
-    DDiskStates[location].SetWriteWatermark(bytesOffset / BlockSize);
+    DDiskStates[location].SetFlushWatermark(bytesOffset / BlockSize);
 }
 
 std::optional<ui64> TBlocksDirtyMap::GetFreshWatermark(ELocation location) const
@@ -699,7 +709,7 @@ std::optional<ui64> TBlocksDirtyMap::GetFreshWatermark(ELocation location) const
     if (DDiskStates[location].GetState() == TDDiskState::EState::Operational) {
         return std::nullopt;
     }
-    return DDiskStates[location].GetReadWatermark() * BlockSize;
+    return DDiskStates[location].GetOperationalBlockCount() * BlockSize;
 }
 
 void TBlocksDirtyMap::SetReadWatermark(ELocation location, ui64 bytesOffset)
@@ -707,9 +717,9 @@ void TBlocksDirtyMap::SetReadWatermark(ELocation location, ui64 bytesOffset)
     DDiskStates[location].SetReadWatermark(bytesOffset / BlockSize);
 }
 
-void TBlocksDirtyMap::SetWriteWatermark(ELocation location, ui64 bytesOffset)
+void TBlocksDirtyMap::SetFlushWatermark(ELocation location, ui64 bytesOffset)
 {
-    DDiskStates[location].SetWriteWatermark(bytesOffset / BlockSize);
+    DDiskStates[location].SetFlushWatermark(bytesOffset / BlockSize);
 }
 
 size_t TBlocksDirtyMap::GetInflightCount() const
@@ -732,10 +742,26 @@ void TBlocksDirtyMap::UnlockPBuffer(ui64 lsn)
 }
 
 ILockableRanges::TLockRangeHandle TBlocksDirtyMap::LockDDiskRange(
-    TBlockRange64 range)
+    TBlockRange64 range,
+    TLocationMask mask)
 {
+    // Checking that there are no inflight flushes for the range in which the
+    // reading is being done.
+    Inflight.EnumerateOverlapping(
+        range,
+        [&](TInflightMap::TFindItem& item)
+        {
+            const auto state = item.Value.GetState();
+
+            if (state != TInflightInfo::EState::PBufferFlushing) {
+                Y_ABORT_UNLESS(
+                    item.Value.GetRequestedFlushes().LogicalAnd(mask).Empty());
+            }
+            return TInflightMap::EEnumerateContinuation::Continue;
+        });
+
     const TLockRangeHandle handle = ++InflightDDiskReadsGenerator;
-    InflightDDiskReads.AddRange(handle, range);
+    InflightDDiskReads.AddRange(handle, range, mask);
     return handle;
 }
 

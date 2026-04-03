@@ -121,18 +121,18 @@ public:
         Operational,   // The ddisk is fully functional and can be read from
                        // anywhere.
         Fresh,   // The ddisk is only partially filled, and you can only read
-                 // from the blocks below the FreshWatermark.
+                 // from the blocks below the OperationalBlockCount.
     };
 
-    void Init(ui64 blockCount, ui64 freshWatermark);
+    void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
     [[nodiscard]] bool NeedFlushToDDisk(TBlockRange64 range) const;
 
     void SetReadWatermark(ui64 blockCount);
-    void SetWriteWatermark(ui64 blockCount);
-    [[nodiscard]] ui64 GetReadWatermark() const;
+    void SetFlushWatermark(ui64 blockCount);
+    [[nodiscard]] ui64 GetOperationalBlockCount() const;
 
     [[nodiscard]] TString DebugPrint() const;
 
@@ -141,14 +141,15 @@ private:
 
     EState State = EState::Operational;
 
-    ui64 BlockCount = 0;
+    ui64 TotalBlockCount = 0;
 
-    // If the block address below ReadReady, then it can be read from DDisk.
-    ui64 ReadReady = 0;
+    // If the block address below OperationalBlockCount, then it can be read
+    // from DDisk.
+    ui64 OperationalBlockCount = 0;
 
-    // If the block address below WriteReady, then it should be written to
-    // DDisk.
-    ui64 WriteReady = 0;
+    // If the block address below FlushableBlockCount, then it should be written
+    // (flushed) to DDisk.
+    ui64 FlushableBlockCount = 0;
 };
 
 struct IReadyQueue
@@ -230,6 +231,7 @@ public:
     [[nodiscard]] ELocation RequestFlush(ELocation destination);
     void ConfirmFlush(TRoute route);
     void FlushFailed(TRoute route);
+    [[nodiscard]] TLocationMask GetRequestedFlushes() const;
 
     // Returns true when erase request needed.
     [[nodiscard]] bool RequestErase(ELocation location);
@@ -300,7 +302,7 @@ public:
     // Sets the mark up to which the disk can be read.
     void SetReadWatermark(ELocation location, ui64 bytesOffset);
     // Sets the mark to which writes should be flushed to the ddisk.
-    void SetWriteWatermark(ELocation location, ui64 bytesOffset);
+    void SetFlushWatermark(ELocation location, ui64 bytesOffset);
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
@@ -308,7 +310,9 @@ public:
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
     void UnlockPBuffer(ui64 lsn) override;
-    TLockRangeHandle LockDDiskRange(TBlockRange64 range) override;
+    TLockRangeHandle LockDDiskRange(
+        TBlockRange64 range,
+        TLocationMask mask) override;
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
@@ -326,7 +330,7 @@ private:
 
     using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
     using TInflightDDiskReadsMap =
-        TBlockRangeMap<ILockableRanges::TLockRangeHandle, TEmpty>;
+        TBlockRangeMap<ILockableRanges::TLockRangeHandle, TLocationMask>;
 
     [[nodiscard]] TLocationMask FilterLocations(
         TLocationMask mask,

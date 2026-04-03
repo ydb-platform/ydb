@@ -108,6 +108,8 @@ public:
 
     static TLocationMask MakeEmpty();
 
+    static TLocationMask MakeOne(ELocation location);
+
     static TLocationMask Make(
         bool primary0,
         bool primary1,

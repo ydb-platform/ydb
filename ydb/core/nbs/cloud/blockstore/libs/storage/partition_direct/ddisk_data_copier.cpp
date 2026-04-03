@@ -47,6 +47,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
 {
     switch (State) {
         case EState::Stopped: {
+            State = EState::Running;
             break;
         }
         case EState::Stopping: {
@@ -60,7 +61,6 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
 
     if (auto watermark = DirtyMap->GetFreshWatermark(Destination)) {
         FreshWatermark = *watermark;
-        State = EState::Running;
         Complete = NewPromise<EResult>();
         StartCopyRange();
         return Complete.GetFuture();
@@ -103,6 +103,7 @@ void TDDiskDataCopier::StartCopyRange()
             break;
         }
         case EState::Stopping: {
+            State = EState::Stopped;
             Complete.SetValue(EResult::Interrupted);
             return;
         }
@@ -121,12 +122,12 @@ void TDDiskDataCopier::StartCopyRange()
 
     TCopyRangeRequestStatePtr state = std::make_shared<TCopyRangeRequestState>(
         range,
-        TRangeLock(DirtyMap, range));
+        TRangeLock(DirtyMap, range, TLocationMask::MakeOne(Destination)));
     state->Span = CreateSpan();
     state->Lock.Arm();
     state->Data.resize(CopyRangeSize);
 
-    DirtyMap->SetWriteWatermark(Destination, futureWatermark);
+    DirtyMap->SetFlushWatermark(Destination, futureWatermark);
 
     auto readHint = DirtyMap->MakeReadHint(range);
     Y_ABORT_UNLESS(!readHint.RangeHints.empty());

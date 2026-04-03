@@ -182,6 +182,14 @@ TLocationMask TLocationMask::MakeEmpty()
     return {};
 }
 
+// static
+TLocationMask TLocationMask::MakeOne(ELocation location)
+{
+    TLocationMask mask;
+    mask.Set(location);
+    return mask;
+}
+
 //    static
 TLocationMask TLocationMask::Make(
     bool primary0,

@@ -219,9 +219,7 @@ constexpr char NullTMinMaxFlag = '0';
 
 TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType> &fieldType) {
     if (data[0] == NullTMinMaxFlag) {
-        return TMinMax{
-            *arrow::StructScalar::Make({arrow::MakeNullScalar(fieldType), arrow::MakeNullScalar(fieldType)}, 
-            {"min", "max"}).ValueOrDie()};
+        return MakeNull(fieldType);
     }
     std::vector<std::shared_ptr<arrow::Scalar>> fields;
     ui64 offset = 1;
@@ -243,9 +241,9 @@ TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<a
     };
     fields.push_back(readNext());
     fields.push_back(readNext());
-        return TMinMax{
+        return 
             *arrow::StructScalar::Make(fields, 
-            {"min", "max"}).ValueOrDie()};
+            {"min", "max"}).ValueOrDie();
 }
 
 std::string TMinMax::ToBinaryString() const {
@@ -271,8 +269,9 @@ std::string TMinMax::ToBinaryString() const {
 
 NJson::TJsonValue TMinMax::Json() const {
     NJson::TJsonValue json;
-    // MinMax.value
-    for(auto& field: MinMax.value)
+    json.InsertValue("min", Min()->ToString());
+    json.InsertValue("max", Max()->ToString());
+    return json;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

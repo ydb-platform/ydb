@@ -1,5 +1,6 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -13,19 +14,9 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
     return NArrow::GetArrayDataSize(Array);
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialArray::DoGetMaxScalar() const {
-    auto v = NArrow::MinMax(Array);
-    // v->field(arrow::FieldRef{"min"})
-    // auto minMaxPos = NArrow::FindMinMaxPosition(Array);
-    return NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
-}
 
 TMinMax TTrivialArray::DoGetMinMaxScalars() const {
-    auto minMaxPos = NArrow::FindMinMaxPosition(Array);
-    TMinMax result;
-    result.Min = NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.first));
-    result.Max = NArrow::TStatusValidator::GetValid(Array->GetScalar(minMaxPos.second));
-    return result;
+    return ComputeMinMaxWithArrowNext(Array);
 }
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
@@ -102,42 +93,9 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
 }
 
 TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
-    TMinMax result;
-    for (auto&& i : Array->chunks()) {
-        if (!i->length()) {
-            continue;
-        }
-        auto minMaxPos = NArrow::FindMinMaxPosition(i);
-        auto scalarMin = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.first));
-        auto scalarMax = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.second));
-
-        if (!result.Max || ScalarCompare(result.Max, scalarMax) < 0) {
-            result.Max = scalarMax;
-        }
-
-        if (!result.Min || ScalarCompare(result.Min, scalarMin) > 0) {
-            result.Min = scalarMin;
-        }
-    }
-
-    return result;
+    return ComputeMinMaxWithArrowNext(Array);
 }
 
-std::shared_ptr<arrow::Scalar> TTrivialChunkedArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
-    for (auto&& i : Array->chunks()) {
-        if (!i->length()) {
-            continue;
-        }
-        auto minMaxPos = NArrow::FindMinMaxPosition(i);
-        auto scalarCurrent = NArrow::TStatusValidator::GetValid(i->GetScalar(minMaxPos.second));
-        if (!result || ScalarCompare(result, scalarCurrent) < 0) {
-            result = scalarCurrent;
-        }
-    }
-
-    return result;
-}
 
 ui32 TTrivialChunkedArray::DoGetValueRawBytes() const {
     ui32 result = 0;

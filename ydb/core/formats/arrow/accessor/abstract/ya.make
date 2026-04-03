@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
+    contrib/libs/apache/arrow_next
     ydb/library/conclusion
     ydb/services/metadata/abstract
     ydb/library/actors/core
@@ -14,6 +15,7 @@ SRCS(
     constructor.cpp
     request.cpp
     accessor.cpp
+    minmax_with_arrow_next.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(accessor.h)

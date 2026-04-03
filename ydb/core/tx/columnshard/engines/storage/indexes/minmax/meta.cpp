@@ -34,52 +34,6 @@ inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::sh
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
 
-namespace NSerializePair {
-constexpr static const char* MaxFieldName = "Max";
-constexpr static const char* MinFieldName = "Min";
-using TSizeType = ui32;
-inline TString Serialize(const NArrow::NAccessor::TMinMax& typedPair) {
-    TString minSerialized = NArrow::NScalar::TSerializer::SerializePayloadToString(typedPair.Min).DetachResult();
-    TString maxSerialized = NArrow::NScalar::TSerializer::SerializePayloadToString(typedPair.Max).DetachResult();
-    TString res;
-    auto writeNext = [&](TStringBuf data) {
-        TSizeType dataSize = data.size();
-        ui64 resSize = res.size();
-        res.resize(resSize + sizeof(TSizeType));
-        memcpy(res.MutRef().data() + resSize, &dataSize, sizeof(TSizeType));
-        res.append(data);
-    };
-    writeNext(minSerialized);
-    writeNext(maxSerialized);
-    return res;
-}
-inline NArrow::NAccessor::TMinMax Deserialize(TStringBuf data, const std::shared_ptr<arrow::DataType>& type) {
-    NArrow::NAccessor::TMinMax typed;
-    ui64 offset = 0;
-    auto readNext = [&] {
-        TSizeType size = 0;
-        AFL_VERIFY(offset <= data.size() && sizeof(TSizeType) <= data.size() - offset )("details",
-                                                               Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
-                                                                   data.size(), offset, sizeof(TSizeType)));
-        memcpy(&size, data.data() + offset, sizeof(size));
-        offset += sizeof(TSizeType);
-        AFL_VERIFY(offset <= data.size() && size <= data.size() - offset)(
-                                                  "details", Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
-                                                                 data.size(), offset, size));
-        auto res =
-            NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(TStringBuf{ data.data() + offset, data.data() + offset + size }, type)
-                .DetachResult();
-        offset += size;
-        return res;
-    };
-    typed.Min = readNext();
-    typed.Max = readNext();
-
-    return typed;
-}
-
-}   // namespace NSerializePair
-
 bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
@@ -104,25 +58,18 @@ TConclusionStatus TIndexMeta::DoCheckModificationCompatibility(const IIndexMeta&
 }
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
-    NArrow::NAccessor::TMinMax thisChunkIndex;
+    TChunkedColumnReader cReader = *reader.begin();
+    auto thisChunkIndex = NArrow::NAccessor::TMinMax::MakeNull(cReader.GetCurrentChunk()->GetDataType());
     AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
     {
-        TChunkedColumnReader cReader = *reader.begin();
         for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
             NArrow::NAccessor::TMinMax currentScalar = cReader.GetCurrentChunk()->GetMinMaxScalars();
-            AFL_VERIFY(currentScalar.Max);
-            if (!thisChunkIndex.Max || thisChunkIndex.Max < currentScalar.Max) {
-                thisChunkIndex.Max = currentScalar.Max;
-            }
-            AFL_VERIFY(currentScalar.Min);
-            if (!thisChunkIndex.Min || thisChunkIndex.Min > currentScalar.Min) {
-                thisChunkIndex.Min = currentScalar.Min;
-            }
+            thisChunkIndex.UniteWith(currentScalar);
         }
     }
-    AFL_VERIFY(thisChunkIndex.Max->type->Equals(thisChunkIndex.Min->type));
+    AFL_VERIFY(thisChunkIndex.Max()->type->Equals(thisChunkIndex.Min()->type));
 
-    auto serializedIndex = NSerializePair::Serialize(thisChunkIndex);
+    TString serializedIndex = thisChunkIndex.ToBinaryString();
     return { std::make_shared<NChunks::TPortionIndexChunk>(
         TChunkAddress(GetIndexId(), 0), recordsCount, serializedIndex.size(), serializedIndex) };
 }
@@ -140,8 +87,7 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
 bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat,
     const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
-    NArrow::NAccessor::TMinMax chunkValue =
-        NSerializePair::Deserialize(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+    auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
     return !Skip(chunkValue, requestValue, op);
 }
 
@@ -149,26 +95,23 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
     const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
-            return requestValue < chunkValue.Min || requestValue > chunkValue.Max;
+            return requestValue < chunkValue.Min() || requestValue > chunkValue.Max();
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Less:
-            return requestValue <= chunkValue.Min;
+            return requestValue <= chunkValue.Min();
         case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:
-            return requestValue >= chunkValue.Max;
+            return requestValue >= chunkValue.Max();
         case NArrow::NSSA::TIndexCheckOperation::EOperation::LessOrEqual:
-            return requestValue < chunkValue.Min;
+            return requestValue < chunkValue.Min();
         case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
-            return requestValue > chunkValue.Max;
+            return requestValue > chunkValue.Max();
         default:
             AFL_VERIFY_UNREACHABLE();
     }
 }
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
     auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-    NArrow::NAccessor::TMinMax pair = NSerializePair::Deserialize(data, gotType);
-    NJson::TJsonValue json;
-    json.InsertValue(NSerializePair::MinFieldName, pair.Min ? pair.Min->ToString() : std::string{});
-    json.InsertValue(NSerializePair::MaxFieldName, pair.Max ? pair.Max->ToString() : std::string{});
-    return json;
+    auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType);
+    return minmax.Json();
 }
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();

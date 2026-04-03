@@ -1,6 +1,8 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
+#include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -149,24 +151,9 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     return *result;
 }
 
-std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
-    if (!ArrayDictionary->length()) {
-        return result;
-    }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
-    return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
-}
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
-    TMinMax result;
-    if (!ArrayDictionary->length()) {
-        return result;
-    }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
-    result.Min = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.first));
-    result.Max = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
-    return result;
+    return ComputeMinMaxWithArrowNext(ArrayDictionary);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

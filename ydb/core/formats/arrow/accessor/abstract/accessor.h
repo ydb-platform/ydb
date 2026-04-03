@@ -12,7 +12,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
-
+#include "minmax_with_arrow_next.h"
 namespace NKikimr::NScheme {
 class TTypeInfo;
 }
@@ -40,28 +40,7 @@ public:
     TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
 };
 
-struct TMinMax {
-    arrow::StructScalar MinMax;
-    bool IsNull() const {
-        auto min = Min();
-        return min->Equals(arrow::MakeNullScalar(min->type));
-    }
-    std::shared_ptr<arrow::Scalar> Min() const {
-        return MinMax.field(arrow::FieldRef{"min"}).ValueOrDie();
-    }
-
-    std::shared_ptr<arrow::Scalar> Max() const {
-        return MinMax.field(arrow::FieldRef{"max"}).ValueOrDie();
-    }
-
-    static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
-
-    std::string ToBinaryString() const;
-
-    NJson::TJsonValue Json() const;
-    
-};
-
+struct TMInMax;
 class IChunkedArray {
 public:
     // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
@@ -316,7 +295,6 @@ protected:
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
     virtual TMinMax DoGetMinMaxScalars() const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
@@ -478,7 +456,7 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
         AFL_VERIFY(GetRecordsCount());
-        return DoGetMaxScalar();
+        return GetMinMaxScalars().Max();
     }
 
     TMinMax GetMinMaxScalars() const {

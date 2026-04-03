@@ -2795,9 +2795,12 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         dstRoot = CanonizePath(GetDestinationPath());
     }
 
-    TString sourcePrefix = NBackup::NormalizeExportPrefix(GetSource());
-    if (sourcePrefix) {
-        sourcePrefix.push_back('/');
+    TString sourcePrefix;
+    if (Kind == EKind::S3) {
+        sourcePrefix = NBackup::NormalizeExportPrefix(GetS3Settings().source_prefix());
+        if (sourcePrefix) {
+            sourcePrefix.push_back('/');
+        }
     }
 
     auto combineDstPath = [&](const TString& path, const TString& rootPath) -> TString {

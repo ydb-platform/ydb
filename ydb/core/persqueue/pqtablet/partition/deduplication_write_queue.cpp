@@ -9,6 +9,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
+#include <util/generic/overloaded.h>
 #include <util/string/join.h>
 #include <ranges>
 
@@ -78,6 +79,16 @@ private:
         absl::flat_hash_set<TString> UnresolvedDeduplicationIds;
     };
 
+    struct TReserveBytesRequest {
+        explicit TReserveBytesRequest(TEvPQ::TEvReserveBytes::TPtr event)
+            : Event(std::move(event))
+        {
+        }
+        TEvPQ::TEvReserveBytes::TPtr Event;
+    };
+
+    using TQueueRequest = std::variant<TWriteRequest, TReserveBytesRequest>;
+
     struct TWriteRequestMessageIndex {
         TWriteRequest* RequestPtr;
         size_t MessageIndex = -1;
@@ -113,7 +124,7 @@ private:
     absl::flat_hash_map<ui64, TTabletInfo> TabletInfo;
     const TDuration MaxDeduplicationTimeInterval = TDuration::Minutes(5);
 
-    TDeque<TWriteRequest> Queue;
+    TDeque<TQueueRequest> Queue;
     using TDeduplicationInfoMap = absl::flat_hash_map<TString, TDeduplicationInfo>;
     TDeduplicationInfoMap DeduplicationInfo;
     bool BypassMode = false;
@@ -130,11 +141,18 @@ private:
         return true;
     }
 
-    void Handle(TEvPQ::TEvWrite::TPtr& ev) {
-        PQ_LOG_D("Handle TEvWrite: " << LabeledOutput(BypassMode));
+    bool TryBypass(auto& ev) {
         TryToSwitchToBypassMode();
         if (BypassMode) {
-            SendEvent(ev);
+            SendEvent(std::move(ev));
+            return true;
+        }
+        return false;
+    }
+
+    void Handle(TEvPQ::TEvWrite::TPtr& ev) {
+        PQ_LOG_D("Handle TEvWrite: " << LabeledOutput(BypassMode));
+        if (TryBypass(ev)) {
             return;
         }
 
@@ -155,8 +173,8 @@ private:
         for (const auto& [messageDeduplicationId, _] : messageIndices) {
             unresolvedDeduplicationIds.insert(messageDeduplicationId);
         }
-        Queue.emplace_back(std::move(ev), std::move(unresolvedDeduplicationIds));
-        TWriteRequest& record = Queue.back();
+        Queue.emplace_back(std::in_place_type<TWriteRequest>, std::move(ev), std::move(unresolvedDeduplicationIds));
+        TWriteRequest& record = std::get<TWriteRequest>(Queue.back());
         for (const auto& [messageDeduplicationId, indices] : messageIndices) {
             auto [deduplicationInfoIt, newDeduplicationId] = DeduplicationInfo.try_emplace(messageDeduplicationId);
             auto& deduplicationInfo = deduplicationInfoIt->second;
@@ -172,6 +190,16 @@ private:
         }
         ProcessQueue();
     }
+
+    void Handle(TEvPQ::TEvReserveBytes::TPtr& ev) {
+        PQ_LOG_D("Handle TEvReserveBytes: " << LabeledOutput(BypassMode));
+        if (TryBypass(ev)) {
+            return;
+        }
+        Queue.emplace_back(std::in_place_type<TReserveBytesRequest>, std::move(ev));
+        ProcessQueue();
+    }
+
 
     void SendRequests(const TDeduplicationInfoMap::iterator it) {
         auto& [messageDeduplicationId, info] = *it;
@@ -280,6 +308,7 @@ private:
     static bool SetChecked(EWriteExternalDeduplicationStatus& status) {
         if (status == EWriteExternalDeduplicationStatus::Unchecked) {
             status = EWriteExternalDeduplicationStatus::Checked;
+            return true;
         }
         return false;
     };
@@ -290,13 +319,32 @@ private:
         Forward(ev, PartitionActorId);
     }
 
+    void SendEvent(TEvPQ::TEvReserveBytes::TPtr ev) {
+        bool prevFromDeduplicatedQueue = std::exchange(ev->Get()->FromDeduplicatedQueue, true);
+        Y_ASSERT(prevFromDeduplicatedQueue == false);
+        PQ_LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << !prevFromDeduplicatedQueue);
+        Forward(ev, PartitionActorId);
+    }
+
     void ProcessQueue() {
         while (!Queue.empty()) {
             auto& req = Queue.front();
-            if (!req.UnresolvedDeduplicationIds.empty()) {
+            bool proceed = std::visit(TOverloaded{
+                [&](TWriteRequest& req) {
+                    if (!req.UnresolvedDeduplicationIds.empty()) {
+                        return false;
+                    }
+                    SendEvent(req.Event);
+                    return true;
+                },
+                [&](TReserveBytesRequest& req) {
+                    SendEvent(req.Event);
+                    return true;
+                }
+            }, req);
+            if (!proceed) {
                 break;
             }
-            SendEvent(req.Event);
             Queue.pop_front();
         }
         TryToSwitchToBypassMode();
@@ -342,6 +390,7 @@ private:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPQ::TEvWrite, Handle);
+            hFunc(TEvPQ::TEvReserveBytes, Handle);
             hFunc(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvPoison, PassAway);

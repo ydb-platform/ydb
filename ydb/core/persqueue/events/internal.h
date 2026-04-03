@@ -661,6 +661,7 @@ struct TEvPQ {
         TString OwnerCookie;
         ui64 MessageNo;
         bool LastRequest;
+        bool FromDeduplicatedQueue = false;
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {

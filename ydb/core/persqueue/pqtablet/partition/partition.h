@@ -1294,6 +1294,7 @@ private:
     TMessageIdDeduplicator MessageIdDeduplicator;
     bool AddMessageDeduplicatorKeys(TEvKeyValue::TEvRequest* request);
     std::optional<ui64> DeduplicateByMessageId(const TEvPQ::TEvWrite::TMsg& msg, const ui64 offset);
+    bool ShouldUseDeduplicationQueue() const;
     TActorId DeduplicationQueueActor;
 
 

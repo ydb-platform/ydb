@@ -221,6 +221,11 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
 
+    if (ShouldUseDeduplicationQueue() && !ev->Get()->FromDeduplicatedQueue) {
+        Forward(ev, DeduplicationQueueActor);
+        return;
+    }
+
     const TString& ownerCookie = ev->Get()->OwnerCookie;
     TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
     const ui64& messageNo = ev->Get()->MessageNo;
@@ -632,6 +637,10 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     Send(TabletActorId, std::move(ev));
 }
 
+bool TPartition::ShouldUseDeduplicationQueue() const {
+    return DeduplicationQueueActor && !MirroringEnabled(Config);
+}
+
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Received TPartition::TEvWrite");
 
@@ -643,7 +652,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     const bool mirroredPartition = MirroringEnabled(Config);
 
-    if (DeduplicationQueueActor && !mirroredPartition && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
+    if (ShouldUseDeduplicationQueue() && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
         LOG_D("Forwarding TPartition::TEvWrite to DeduplicationQueueActor");
         Forward(ev, DeduplicationQueueActor);
         return;

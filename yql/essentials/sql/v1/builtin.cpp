@@ -4492,22 +4492,34 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     std::map<TString, TFuncInfo> map;
     for (const auto& [key, info] : builtinFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
+            map[TString(info.CanonicalSqlName)] = {
+                .Kind = TString(info.Kind),
+                .MinLangVer = info.MinLangVer,
+                .MaxLangVer = info.MaxLangVer,
+            };
         }
     }
 
     for (const auto& [key, info] : aggrFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
+            map[TString(info.CanonicalSqlName)] = {
+                .Kind = TString(info.Kind),
+                .MinLangVer = info.MinLangVer,
+                .MaxLangVer = info.MaxLangVer,
+            };
         }
     }
 
     for (const auto& [key, info] : coreFuncs) {
-        map.emplace(info.Name, TFuncInfo{"Normal"});
+        map[TString(info.Name)] = {
+            .Kind = "Normal",
+        };
     }
 
     for (const auto& [key, name] : simplePgFuncs) {
-        map.emplace(TString("SimplePg::") + key, TFuncInfo{"Normal"});
+        map[TString("SimplePg::") + key] = {
+            .Kind = "Normal",
+        };
     }
 
     for (const auto& [name, info] : map) {

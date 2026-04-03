@@ -139,6 +139,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     ui64 topicInd = 0;
     for (auto topicReq: Message->Topics) {
         auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
+        ui64 partitionReqInd = 0;
         for (auto partitionRequest: topicReq.Partitions) {
             readId++;
             if (topicIt == TopicAndTablets.end()) {
@@ -199,12 +200,13 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                                                                                        .TopicPath = topicIt->second.TopicNameConverter->GetPrimaryPath()};
                 PendingResponses++;
                 commits.push_back(commitReq);
-                KqpCommitTopicIndexes.insert(topicInd);
+                KqpCommitTopicToPartitions[topicInd].emplace_back(partitionReqInd);
                 KAFKA_LOG_D("Add commit request in txn for group# " << Message->GroupId.value() <<
                     ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
                     ", partition# " << partitionRequest.PartitionIndex <<
                     ", offset# " << partitionRequest.CommittedOffset);
             }
+            partitionReqInd++;
         }
         topicInd++;
     }
@@ -243,9 +245,10 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
             Error = EKafkaErrors::ILLEGAL_GENERATION;
         }
 
-        for (ui64 i : KqpCommitTopicIndexes) {
-            auto topicReq =  Message->Topics[i];
-            for (auto partitionRequest: topicReq.Partitions) {
+        for (const auto& [topicReqInd, partitionReqIndexes] : KqpCommitTopicToPartitions) {
+            auto topicReq =  Message->Topics[topicReqInd];
+            for (const ui64 partitionReqInd : partitionReqIndexes) {
+                auto partitionRequest = topicReq.Partitions[partitionReqInd];
                 AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }
@@ -256,9 +259,10 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
     NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep step = Kqp->Handle(ev, ctx);
     KAFKA_LOG_D("Handled TEvQuery response on step=" << int(step));
     if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
-        for (ui64 i : KqpCommitTopicIndexes) {
-            auto topicReq =  Message->Topics[i];
-            for (auto partitionRequest: topicReq.Partitions) {
+        for (const auto& [topicReqInd, partitionReqIndexes] : KqpCommitTopicToPartitions) {
+            auto topicReq =  Message->Topics[topicReqInd];
+            for (const ui64 partitionReqInd : partitionReqIndexes) {
+                auto partitionRequest = topicReq.Partitions[partitionReqInd];
                 AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }

@@ -87,5 +87,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             Y_ENSURE(false, "Unsupported table source type");
     }
 
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
+
     return source;
 }

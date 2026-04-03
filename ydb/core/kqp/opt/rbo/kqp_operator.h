@@ -22,7 +22,7 @@ enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filt
 
 // clang-format off
 #define PHASE_ENUM(X) \
-    X(NotDefined)     \
+    X(Undefined)     \
     X(Intermediate)   \
     X(Final)
 
@@ -456,21 +456,40 @@ public:
     // Make private.
     TExpression LimitCond;
 private:
-    EOpPhase LimitPhase;
+    EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 
 class TOpSort: public IUnaryOperator {
 public:
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements,
             std::optional<TExpression> limitCond = std::nullopt);
+    TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+            std::optional<TExpression> limitCond, const EOpPhase sortPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    EOpPhase GetSortPhase() const {
+        return SortPhase;
+    }
+    void SetSortPhase(const EOpPhase phase) {
+        SortPhase = phase;
+    }
+    TVector<TSortElement> GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    bool IsTopSort() const { return LimitCond.has_value(); }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
+
+private:
+    EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
 /***

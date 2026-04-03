@@ -1,0 +1,62 @@
+name: Send-telegram-digest
+
+on:
+  schedule:
+    # Active UTC hours defined in telegram_notification_config.json (8, 14, 20).
+    # Run every hour between 8–21 UTC so GH schedule drift doesn't miss a window.
+    - cron: "0 8-21 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run all profiles regardless of schedule hour"
+        type: boolean
+        default: false
+      profile:
+        description: "Run only this profile ID (leave empty for all active)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Dry run: print messages without sending"
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  send-digest:
+    name: Send digest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install ydb "ydb[yc]" requests matplotlib numpy
+
+      - name: Send digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+          YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ -n "${{ inputs.profile }}" ]; then
+            ARGS="$ARGS --profile ${{ inputs.profile }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 .github/scripts/telegram/send_digest.py \
+            --config .github/config/telegram_notification_config.json \
+            $ARGS

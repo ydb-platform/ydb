@@ -1252,12 +1252,12 @@
             {
                 "ColumnId": 2,
                 "ColumnName": "StoragePool",
-                "ColumnType": "String"
+                "ColumnType": "Utf8"
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "Active",
-                "ColumnType": "Bool"
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],

@@ -125,8 +125,9 @@ public:
                 return {};
             }
 
-            TString serializedWatermarkExpr;
-            if (const auto maybeWatermarkLambda = TryPqReadTopicWatermarkLambda(pqReadTopic)) {
+            TMaybe<TCoLambda> maybeWatermarkLambda = TryPqReadTopicWatermarkLambda(pqReadTopic);
+            TMaybe<TCoAtom> watermarkSerialized;
+            if (maybeWatermarkLambda) {
                 const auto& watermark = maybeWatermarkLambda.GetRef();
 
                 TStringBuilder err;
@@ -135,10 +136,33 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to proto: " + err));
                     return {};
                 }
+                TString serializedWatermarkExpr;
                 if (!watermarkExprProto.SerializeToString(&serializedWatermarkExpr)) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Failed to serialize Watermark Expr to string"));
                     return {};
                 }
+                watermarkSerialized = Build<TCoAtom>(ctx, watermark.Pos()).Value(std::move(serializedWatermarkExpr)).Done();
+            }
+
+            if (maybeWatermarkLambda && watermarkSerialized) {
+                return Build<TDqSourceWrap>(ctx, pos)
+                    .Input<TDqPqTopicSource>()
+                        .World(pqReadTopic.World())
+                        .Topic(pqReadTopic.Topic())
+                        .Columns(std::move(columnNames))
+                        .Settings(std::move(settings))
+                        .Token<TCoSecureParam>()
+                            .Name().Build(token)
+                            .Build()
+                        .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
+                        .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
+                        .WatermarkExpr(maybeWatermarkLambda.GetRef())
+                        .WatermarkSerialized(watermarkSerialized.Cast())
+                        .Build()
+                    .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
+                    .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
+                    .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
+                    .Done().Ptr();
             }
 
             return Build<TDqSourceWrap>(ctx, pos)
@@ -152,7 +176,6 @@ public:
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
                     .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .Watermark().Value(serializedWatermarkExpr).Build()
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
@@ -391,7 +414,10 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
-                auto serializedWatermarkExpr = topicSource.Watermark().Ref().Content();
+                TString serializedWatermarkExpr;
+                if (const auto maybeWm = topicSource.WatermarkSerialized()) {
+                    serializedWatermarkExpr = TString(maybeWm.Cast().Ref().Content());
+                }
                 TString watermarkExprSql;
                 if (!serializedWatermarkExpr.empty()) {
                     NYql::NConnector::NApi::TExpression watermarkExprProto;

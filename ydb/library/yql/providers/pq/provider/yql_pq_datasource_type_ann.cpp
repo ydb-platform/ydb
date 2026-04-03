@@ -314,7 +314,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7, 9, ctx)) {
             return TStatus::Error;
         }
 
@@ -352,9 +352,26 @@ public:
             return TStatus::Error;
         }
 
-        if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
-            const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
-            if (!EnsureAtom(*watermark, ctx)) {
+        if (TDqPqTopicSource::idx_WatermarkExpr < input->ChildrenSize()) {
+            auto& watermarkExpr = input->ChildRef(TDqPqTopicSource::idx_WatermarkExpr);
+            const auto status = ConvertToLambda(watermarkExpr, ctx, 1, 1);
+            if (status != TStatus::Ok) {
+                return status;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+                return TStatus::Error;
+            }
+            if (!watermarkExpr->GetTypeAnn()) {
+                return TStatus::Repeat;
+            }
+            if (!EnsureSpecificDataType(*watermarkExpr, EDataSlot::Timestamp, ctx, true)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (TDqPqTopicSource::idx_WatermarkSerialized < input->ChildrenSize()) {
+            const auto watermarkSerialized = input->Child(TDqPqTopicSource::idx_WatermarkSerialized);
+            if (!EnsureAtom(*watermarkSerialized, ctx)) {
                 return TStatus::Error;
             }
         }

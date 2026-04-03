@@ -625,9 +625,6 @@ public:
         if (QueryState->HasTopicOperations()) {
             const NKikimrKqp::TTopicOperationsRequest& operations = QueryState->GetTopicOperationsFromRequest();
 
-            bool trackProducerId = !operations.HasTrackProducerId() || operations.GetTrackProducerId();
-            QueryState->TxCtx->TopicOperations.SetTrackProducerId(trackProducerId);
-
             if (operations.HasTabletId()) {
                 for (const auto& topic : operations.GetTopics()) {
                     auto path = CanonizePath(NPersQueue::GetFullTopicPath(QueryState->GetDatabase(), topic.path()));

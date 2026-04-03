@@ -6,6 +6,8 @@
 #include <util/generic/ylimits.h>
 #include <util/generic/array_ref.h>
 
+#include <ydb/core/scheme/scheme_tablecell.h>
+
 namespace NKikimr {
 namespace NTable {
 

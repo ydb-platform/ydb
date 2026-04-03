@@ -5,6 +5,7 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
+#include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/string.h>
 
@@ -31,7 +32,8 @@ public:
     virtual void RegisterWithoutIndex(ui64 portionId) = 0;
 
     // if false, value is definitely absent from portion
-    virtual bool CheckValue(ui64 portionId, const TString& value) = 0;
+    virtual bool CheckValue(ui64 portionId, const std::shared_ptr<arrow::Scalar>& value,
+        const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) = 0;
 };
 
 class TDefaultIndexAccessStub : public IIndexAccessStub {
@@ -42,7 +44,8 @@ public:
         AFL_VERIFY(PortionsWithoutIndex.insert(portionId).second);
     }
 
-    bool CheckValue(ui64 portionId, const TString& value) override;
+    bool CheckValue(ui64 portionId, const std::shared_ptr<arrow::Scalar>& value,
+        const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) override;
 
     TDefaultIndexAccessStub(ui32 portionsPerNode)
         : Constructor(std::make_shared<NIndexes::TFixStringBitsStorageConstructor>())

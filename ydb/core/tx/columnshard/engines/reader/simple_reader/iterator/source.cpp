@@ -286,17 +286,12 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 }
 
 TConclusion<bool> TPortionDataSource::DoCheckHierarchicalIndex(
-    const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
+    const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckIndexContext& fetchContext,
     const std::shared_ptr<arrow::Scalar>& value) {
     if (!IndexAccessStub) {
         return true;
     }
-    if (!value || !arrow::is_base_binary_like(value->type->id())) {
-        return true;
-    }
-    const auto& binaryScalar = static_cast<const arrow::BaseBinaryScalar&>(*value);
-    const TString strValue(reinterpret_cast<const char*>(binaryScalar.value->data()), binaryScalar.value->size());
-    return IndexAccessStub->CheckValue(Portion->GetPortionId(), strValue);
+    return IndexAccessStub->CheckValue(Portion->GetPortionId(), value, fetchContext.GetOperation());
 }
 
 void TPortionDataSource::DoAbort() {

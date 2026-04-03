@@ -9,8 +9,7 @@ TAccessor::TAccessor(const TString& tablePath, const NColumnShard::TUnifiedOptio
 }
 
 std::unique_ptr<NCommon::ISourcesConstructor> TAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const {
-    (void)constant;
+    const NReader::TReadDescription& readDescription, const bool isPlain) const {
     AFL_VERIFY(!isPlain);
     auto pathId = GetPathId();
     AFL_VERIFY(!!pathId);

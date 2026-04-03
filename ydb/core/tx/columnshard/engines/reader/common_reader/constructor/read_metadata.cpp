@@ -30,7 +30,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.IndexAccessStub);
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain, readDescription.Constant);
+    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, isPlain);
 
     if (!SourcesConstructor) {
         return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());

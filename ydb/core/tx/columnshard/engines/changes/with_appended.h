@@ -5,7 +5,6 @@
 
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tier_info.h>
-#include <ydb/core/tx/columnshard/engines/index_access_stub.h>
 
 #include <util/generic/hash.h>
 

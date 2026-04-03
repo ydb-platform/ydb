@@ -24,7 +24,8 @@ double TDefaultIndexAccessStub::RegisterPortion(ui64 portionId, const TIndexData
     return result;
 }
 
-bool TDefaultIndexAccessStub::CheckValue(ui64 portionId, const TString& value) {
+bool TDefaultIndexAccessStub::CheckValue(ui64 portionId, const std::shared_ptr<arrow::Scalar>& value,
+    const NKikimr::NArrow::NSSA::TIndexCheckOperation& operation) {
     if (PortionsWithoutIndex.contains(portionId)) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("hier_portion_without_index", portionId);
       return true;
@@ -38,21 +39,20 @@ bool TDefaultIndexAccessStub::CheckValue(ui64 portionId, const TString& value) {
     AFL_VERIFY(PortionId2NGrammSize.contains(portionId));
 
     ui32 nGrammSize = PortionId2NGrammSize[portionId];
-    std::shared_ptr<arrow::Scalar> arrowScalar = std::make_shared<arrow::BinaryScalar>(std::make_shared<arrow::Buffer>((const ui8*)value.data(), value.size()), arrow::binary());
 
     bool result = false;
     switch (nGrammSize) {
         case 3:
-            result = Index3->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, arrowScalar,
-                NArrow::NSSA::TIndexCheckOperation(NIndexes::TSkipIndex::EOperation::Contains, false), TIndexInfo());
+            result = Index3->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, value,
+                operation, TIndexInfo());
             break;
         case 4:
-            result = Index4->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, arrowScalar,
-                NArrow::NSSA::TIndexCheckOperation(NIndexes::TSkipIndex::EOperation::Contains, false), TIndexInfo());
+            result = Index4->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, value,
+                operation, TIndexInfo());
             break;
         case 5:
-            result = Index5->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, arrowScalar,
-                NArrow::NSSA::TIndexCheckOperation(NIndexes::TSkipIndex::EOperation::Contains, false), TIndexInfo());
+            result = Index5->DoCheckValueImpl(*Storages[PortionId2Position[portionId]], std::nullopt, value,
+                operation, TIndexInfo());
             break;
         default:
             AFL_VERIFY(false)("unexpected_ngramm_size", nGrammSize);

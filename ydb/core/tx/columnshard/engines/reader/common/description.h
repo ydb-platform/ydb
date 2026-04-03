@@ -33,7 +33,6 @@ private:
 public:
     // Table
     ui64 TxId = 0;
-    TString Constant;
     std::optional<ui64> LockId;
     std::optional<ui32> LockNodeId;
     std::optional<NKikimrDataEvents::ELockMode> LockMode;

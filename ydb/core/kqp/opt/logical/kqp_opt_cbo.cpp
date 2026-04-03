@@ -142,7 +142,7 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
 void TKqpProviderContext::SetConstants(const TKikimrConfiguration::TPtr& config) {
     CONSTS_MAX_DEPTH = config->OptCBOConstsMaxDepth.Get().GetOrElse(CONSTS_MAX_DEPTH);
     CONSTS_SEL_MULT = config->OptCBOConstsSelMult.Get().GetOrElse(CONSTS_SEL_MULT);
-    CONSTS_SEL_POW = config->OptCBOConstsSelMult.Get().GetOrElse(CONSTS_SEL_POW);
+    CONSTS_SEL_POW = config->OptCBOConstsSelPow.Get().GetOrElse(CONSTS_SEL_POW);
 
     CONSTS_SHUFFLE_LEFT_SIDE_MULT = config->OptCBOConstsShuffleLeftSideMult.Get().GetOrElse(CONSTS_SHUFFLE_LEFT_SIDE_MULT);
     CONSTS_SHUFFLE_LEFT_SIDE_POW = config->OptCBOConstsShuffleLeftSidePow.Get().GetOrElse(CONSTS_SHUFFLE_LEFT_SIDE_POW);

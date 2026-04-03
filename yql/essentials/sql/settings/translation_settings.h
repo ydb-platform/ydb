@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/pg_settings/guc_settings.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -125,8 +126,7 @@ struct TTranslationSettings {
     bool AssumeYdbOnClusterWithSlash;
     TString DynamicClusterProvider;
     TString FileAliasPrefix;
-    // lower case mapping Module -> Functions
-    const THashMap<TString, THashSet<TString>>* UdfFilter = nullptr;
+    const NYql::IUdfMeta* UdfMeta = nullptr;
 
     TVector<ui32> PgParameterTypeOids;
     bool AutoParametrizeEnabled = false;

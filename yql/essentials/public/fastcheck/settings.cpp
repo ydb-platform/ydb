@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -15,22 +16,22 @@ NJson::TJsonValue LoadJsonResource(TStringBuf filename) {
     return NJson::ReadJsonFastTree(text);
 }
 
-TUdfFilter LoadDefaultUdfFilter() {
+std::unique_ptr<IUdfMeta> LoadDefaultUdfMeta() {
     auto json = LoadJsonResource("udfs_basic.json");
-    return ParseUdfFilter(json);
+    return ParseUdfMeta(json);
 }
 
-struct TDefaultUdfFilterLoader {
-    TDefaultUdfFilterLoader()
-        : Data(LoadDefaultUdfFilter())
+struct TDefaultUdfMetaLoader {
+    TDefaultUdfMetaLoader()
+        : Data(LoadDefaultUdfMeta())
     {
     }
 
-    TUdfFilter Data;
+    std::unique_ptr<IUdfMeta> Data;
 };
 
-const TUdfFilter& GetDefaultUdfFilter() {
-    return Singleton<TDefaultUdfFilterLoader>()->Data;
+const IUdfMeta* GetDefaultUdfMeta() {
+    return Singleton<TDefaultUdfMetaLoader>()->Data.get();
 }
 
 } // namespace
@@ -64,10 +65,10 @@ bool BuildSqlTranslationSettings(
     settings.Flags = TranslationFlags();
     settings.LangVer = request.LangVer;
 
-    if (!request.UdfFilter) {
-        settings.UdfFilter = &GetDefaultUdfFilter().Modules;
+    if (!request.UdfMeta) {
+        settings.UdfMeta = GetDefaultUdfMeta();
     } else {
-        settings.UdfFilter = &request.UdfFilter->Modules;
+        settings.UdfMeta = request.UdfMeta;
     }
 
     switch (request.Mode) {

@@ -4459,15 +4459,14 @@ TNodeResult BuildBuiltinFunc(
         }
     }
 
-    if (checkFilter && ctx.Settings.UdfFilter) {
+    if (checkFilter && ctx.Settings.UdfMeta) {
         if (ns == "yson2") {
             ns = "yson";
         } else if (ns == "datetime2") {
             ns = "datetime";
         }
 
-        auto ptr = ctx.Settings.UdfFilter->FindPtr(ns);
-        if (ptr && !ptr->contains(lowerName)) {
+        if (ctx.Settings.UdfMeta->HasModule(ns) && !ctx.Settings.UdfMeta->HasFunction(ns, lowerName)) {
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << originalNameSpace << "::" << name)));
         }
     }

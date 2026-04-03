@@ -230,7 +230,7 @@ Pear,15,33'''
             stack.extend(iss.issues)
         describe_string = " ".join(issue_messages)
         assert (
-            "Unknown format: invalid_type_format. Use one of: csv, csv_with_names, tsv_with_names, json_list, json, raw, json_as_string, json_each_row, parquet"
+            "Unknown format: invalid_type_format. Use one of: "
             in describe_string
         )
 

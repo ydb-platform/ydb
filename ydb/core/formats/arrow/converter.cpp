@@ -190,8 +190,8 @@ static std::shared_ptr<arrow::Array> InplaceConvertColumn(const std::shared_ptr<
             Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 64);
 
             auto newData = column->data()->Copy();
-            newData->type = arrow::timestamp(arrow::TimeUnit::MICRO);
-            return std::make_shared<arrow::TimestampArray>(newData);
+            newData->type = arrow::int64();
+            return std::make_shared<arrow::NumericArray<arrow::Int64Type>>(newData);
         }
         case NScheme::NTypeIds::Date32: {
             Y_ABORT_UNLESS(arrow::bit_width(column->type()->id()) == 32);

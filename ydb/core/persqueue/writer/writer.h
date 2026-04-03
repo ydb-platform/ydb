@@ -184,6 +184,7 @@ struct TPartitionWriterOpts {
     bool CheckState = false;
     bool AutoRegister = false;
     bool UseDeduplication = true;
+    bool TrackProducerId = true;
 
     TString SourceId;
     std::optional<ui32> ExpectedGeneration;
@@ -223,6 +224,7 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
     TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
     TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
+    TPartitionWriterOpts& WithTrackProducerId(bool value) { TrackProducerId = value; return *this; }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

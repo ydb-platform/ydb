@@ -155,7 +155,7 @@ namespace {
                 transaction.AddReceivingShards(receivingShardId);
             }
 
-            AFL_ENSURE(transaction.GetSendingShards().size() == 1);
+            AFL_ENSURE(transaction.GetSendingShards().size() <= 1);
             AFL_ENSURE(transaction.GetReceivingShards().size() == 1);
         }
     }

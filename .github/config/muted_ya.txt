@@ -24,6 +24,7 @@ ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestWriteWithRateLimiterWithUs
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueCommonTest.TestWriteWithRateLimiterWithUserPayloadRateLimit
+ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-async-False-1-1-fq_client0-mvp_external_ydb_endpoint0]

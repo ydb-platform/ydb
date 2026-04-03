@@ -218,7 +218,7 @@ public:
             YQL_ENSURE(usedColumnNames.insert(TString(item->GetName())).second);
         }
 
-        const auto oldRowType = dqPqTopicSource.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        const auto oldRowType = pqTopic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
         if (oldRowType->GetSize() == usedColumnNames.size()) {
             return node;
         }

@@ -76,21 +76,17 @@ public:
             Become(&TThis::StateRequestedDescribe, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
         } else {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), 0);
-            if (tabletId == 0) {
-                ctx.Send(
-                    Event->Sender,
-                    new NMon::TEvHttpInfoRes(
-                        Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Invalid 'tablet_id' value"),
-                        0,
-                        NMon::IEvHttpInfoRes::EContentType::Custom));
-                Die(ctx);
-                return;
+            if (tabletId != 0) {
+                Tablets.emplace_back(tabletId);
+                TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
+                NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
+                PipeClients.emplace_back(PipeClient);
+                Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
             }
-            Tablets.emplace_back(tabletId);
-            TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
-            NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
-            PipeClients.emplace_back(PipeClient);
-            Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+
+            if (PipeClients.empty()) {
+                ReplyAndDie(ctx);
+            }
         }
     }
 

@@ -19,14 +19,18 @@ namespace NKikimr::NPQ {
 using EWriteExternalDeduplicationStatus = TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus;
 using EMessageExternalDeduplicationStatus = TEvPQ::TEvWrite::EMessageExternalDeduplicationStatus;
 
-class TDeduplicationQueueActor: public NActors::TActorBootstrapped<TDeduplicationQueueActor> {
+class TDeduplicationQueueActor: public TBaseTabletActor<TDeduplicationQueueActor>
+                              , public TConstantLogPrefix {
 public:
     TDeduplicationQueueActor(
+        ui64 tabletId,
+        TActorId tabletActorId,
         TActorId partitionActorId,
         TString topicName,
         ui32 partitionId,
         TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions)
-        : PartitionActorId(partitionActorId)
+        : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PERSQUEUE)
+        , PartitionActorId(partitionActorId)
         , TopicName(std::move(topicName))
         , PartitionId(partitionId)
     {
@@ -49,10 +53,8 @@ public:
         Become(&TThis::StateWork);
     }
 
-    TString LogPrefix() const {
-        return TStringBuilder()
-               << "[TDeduplicationQueueActor topic=\"" << TopicName
-               << "\" partition=" << PartitionId << "\"] ";
+    TString BuildLogPrefix() const override {
+        return TStringBuilder() << "[DeduplicationQueue][" << PartitionId << "][" << TopicName << "] ";
     }
 
 private:
@@ -151,7 +153,7 @@ private:
     }
 
     void Handle(TEvPQ::TEvWrite::TPtr& ev) {
-        PQ_LOG_D("Handle TEvWrite: " << LabeledOutput(BypassMode));
+        LOG_D("Handle TEvWrite: " << LabeledOutput(BypassMode));
         if (TryBypass(ev)) {
             return;
         }
@@ -192,7 +194,7 @@ private:
     }
 
     void Handle(TEvPQ::TEvReserveBytes::TPtr& ev) {
-        PQ_LOG_D("Handle TEvReserveBytes: " << LabeledOutput(BypassMode));
+        LOG_D("Handle TEvReserveBytes: " << LabeledOutput(BypassMode));
         if (TryBypass(ev)) {
             return;
         }
@@ -211,7 +213,7 @@ private:
                 parentPartition.PartitionId,
                 tabletInfo.Generation,
                 TConstArrayRef(&messageDeduplicationId, 1));
-            PQ_LOG_D("Send TEvCheckMessageDeduplicationRequest: partition=" << parentPartition.PartitionId << "; tabletId=" << tabletId << "; messageDeduplicationId=" << messageDeduplicationId);
+            LOG_D("Send TEvCheckMessageDeduplicationRequest: partition=" << parentPartition.PartitionId << "; tabletId=" << tabletId << "; messageDeduplicationId=" << messageDeduplicationId);
             auto forward = std::make_unique<TEvPipeCache::TEvForward>(
                 ev.release(),
                 tabletId,
@@ -225,20 +227,20 @@ private:
 
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        PQ_LOG_D("Handle TEvCheckMessageDeduplicationResponse: " << record.ShortUtf8DebugString());
+        LOG_D("Handle TEvCheckMessageDeduplicationResponse: " << record.ShortUtf8DebugString());
         for (const auto& [messageDeduplicationId, result] : record.GetResult()) {
             auto deduplicationInfoIt = DeduplicationInfo.find(messageDeduplicationId);
             if (deduplicationInfoIt == DeduplicationInfo.end()) {
-                PQ_LOG_D("Got unknown messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                LOG_D("Got unknown messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
                 continue;
             }
             auto& deduplicationInfo = deduplicationInfoIt->second;
             if (auto it = deduplicationInfo.RemainsPartitionWithGeneration.find(record.GetPartitionId());
                 it == deduplicationInfo.RemainsPartitionWithGeneration.end()) {
-                PQ_LOG_D("Got unknown partition for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                LOG_D("Got unknown partition for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
                 continue;
             } else if (it->second > record.GetGeneration()) {
-                PQ_LOG_D("Got wrong generation for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                LOG_D("Got wrong generation for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
                 continue;
             } else {
                 deduplicationInfo.RemainsPartitionWithGeneration.erase(it);
@@ -275,9 +277,9 @@ private:
             TWriteRequest* ptr = req.RequestPtr;
             ptr->UnresolvedDeduplicationIds.erase(deduplicateMessageId);
             auto& evWrite = *ptr->Event->Get();
-            Y_VERIFY_S(req.MessageIndex < evWrite.Msgs.size(), "Out of bounds access " << req.MessageIndex << "/" << evWrite.Msgs.size());
+            AFL_ENSURE(req.MessageIndex < evWrite.Msgs.size())("index", req.MessageIndex)("size", evWrite.Msgs.size());
             auto& msg = evWrite.Msgs[req.MessageIndex];
-            Y_VERIFY_S(msg.MessageDeduplicationId == deduplicateMessageId, "Wrong message deduplication id " << msg.MessageDeduplicationId << " != " << deduplicateMessageId);
+            AFL_ENSURE(msg.MessageDeduplicationId == deduplicateMessageId)("msg", msg.MessageDeduplicationId)("info", deduplicateMessageId);
             msg.ExternalDeduplicationInfo = messageExternalDeduplicationInfo;
             if (messageExternalDeduplicationInfo.Status == EMessageExternalDeduplicationStatus::Error) {
                 // propagate error to the whole evWrite
@@ -315,14 +317,14 @@ private:
 
     void SendEvent(TEvPQ::TEvWrite::TPtr ev) {
         bool update = SetChecked(ev->Get()->ExternalDeduplicationStatus);
-        PQ_LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << update);
+        LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << update);
         Forward(ev, PartitionActorId);
     }
 
     void SendEvent(TEvPQ::TEvReserveBytes::TPtr ev) {
         bool prevFromDeduplicatedQueue = std::exchange(ev->Get()->FromDeduplicatedQueue, true);
-        Y_ASSERT(prevFromDeduplicatedQueue == false);
-        PQ_LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << !prevFromDeduplicatedQueue);
+        AFL_ENSURE(prevFromDeduplicatedQueue == false);
+        LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << !prevFromDeduplicatedQueue);
         Forward(ev, PartitionActorId);
     }
 
@@ -357,7 +359,7 @@ private:
             TryFinalizeDeduplicationInfo(it);
         }
         ProcessQueue();
-        Y_ASSERT(Queue.empty());
+        AFL_VERIFY_DEBUG(Queue.empty())("size", Queue.size());
     }
 
     void PassAway() override {
@@ -379,8 +381,8 @@ private:
     }
 
     void SwitchToBypassMode() {
-        PQ_LOG_D("SwitchToBypassMode");
-        Y_VERIFY_S(Queue.empty(), "Queue is not empty");
+        LOG_D("SwitchToBypassMode");
+        AFL_ENSURE(Queue.empty())("size", Queue.size());
         if (!BypassMode) {
             Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }
@@ -395,18 +397,23 @@ private:
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
             default:
-                PQ_LOG_W("Unexpected event type " << ev->GetTypeRewrite());
+                LOG_E("Unexpected " << EventStr("StateWork", ev));
+                AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
         }
     }
 
 };
 
 NActors::IActor* CreateDeduplicationWriteQueueActor(
+    ui64 tabletId,
+    TActorId tabletActorId,
     TActorId partitionActorId,
     TString topicName,
     ui32 partitionId,
     TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions) {
     return new TDeduplicationQueueActor(
+        tabletId,
+        tabletActorId,
         partitionActorId,
         std::move(topicName),
         partitionId,

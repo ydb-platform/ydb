@@ -6,7 +6,9 @@
 
 namespace NKikimr::NPQ {
 
-NActors::IActor* CreateDeduplicationWriteQueueActor(
+    NActors::IActor* CreateDeduplicationWriteQueueActor(
+        ui64 tabletId,
+        NActors::TActorId tabletActorId,
         NActors::TActorId partitionActorId,
         TString topicName,
         ui32 partitionId,

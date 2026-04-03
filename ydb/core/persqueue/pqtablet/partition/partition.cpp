@@ -794,6 +794,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
             }
         }
         DeduplicationQueueActor = ctx.Register(CreateDeduplicationWriteQueueActor(
+            this->TabletId,
+            this->TabletActorId,
             ctx.SelfID,
             TopicName(),
             Partition.OriginalPartitionId,

@@ -15,7 +15,7 @@
 (let $14 '('"v" $12))
 (let $15 (StructType $10 $13 $14))
 (let $16 (PqTopic '"pq" '"local" '"test_topic_input" $8 '('('"system" '_yql_sys_tsp_write_time)) $15))
-(let $17 '('"k" '"t" '"v"))
+(let $17 '('_yql_sys_tsp_write_time '"k" '"t" '"v"))
 (let $18 '('"Endpoint" '"<pq_pq_endpoint>"))
 (let $19 '('"SharedReading" '0))
 (let $20 '('"UseSsl" '"1"))

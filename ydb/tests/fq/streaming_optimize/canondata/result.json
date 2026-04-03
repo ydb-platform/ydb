@@ -3,35 +3,33 @@
         {
             "checksum": "a3b30d7bad51df7885cd62ae18dac922",
             "size": 330,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_hopping_window-GroupByHoppingWindowPolicyBad-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_hopping_window-GroupByHoppingWindowPolicyBad-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt]": [
         {
             "checksum": "eddc783562b3a3d3036f83bdc72bd7a9",
             "size": 268,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[watermarks-bad-watermarks-no-rd-default.txt]": [
         {
             "checksum": "9b7daeefafb7aa75d913480f89990d00",
             "size": 426,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_watermarks-bad-watermarks-no-rd-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_watermarks-bad-watermarks-no-rd-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[watermarks-bad_column-default.txt]": [
         {
-            "checksum": "6309c8755f6a0b0bbece50ddc4c2055c",
-            "size": 611,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_watermarks-bad_column-default.txt_/err_file.out"
+            "uri": "file://test_sql_negative.test_watermarks-bad_column-default.txt_/err_file.out"
         }
     ],
     "test_sql_negative.test[watermarks-bad_pushdown-default.txt]": [
         {
             "checksum": "efe92d856c9108d3a4683e904ea400f8",
             "size": 493,
-            "uri": "https://storage.yandex-team.ru/get-devtools/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_watermarks-bad_pushdown-default.txt_/err_file.out"
+            "uri": "https://{canondata_backend}/1942525/3aa117490dc1213b7a53419dcce6abeb0ce9396b/resource.tar.gz#test_sql_negative.test_watermarks-bad_pushdown-default.txt_/err_file.out"
         }
     ],
     "test_sql_streaming.test[hop-GroupByHop-default.txt]": {

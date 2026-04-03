@@ -15,7 +15,7 @@
 (let $14 (DataType 'Timestamp))
 (let $15 (DataType 'Uint64))
 (let $16 (StructType '('_yql_sys_create_time $14) '('_yql_sys_message_group_id $6) '('_yql_sys_offset $15) '('_yql_sys_partition_id $15) '('_yql_sys_seq_no $15) '('_yql_sys_tsp_write_time $14) $8 $9))
-(let $17 (DqPqTopicSource world $10 $11 $13 (SecureParam '"cluster:default_pq") '"" $16 '""))
+(let $17 (DqPqTopicSource world $10 $11 $13 (SecureParam '"cluster:default_pq") '"" $16))
 (let $18 (DqStage '((DqSource $4 $17)) (lambda '($23) (block '(
   (let $24 '('_yql_sys_seq_no '_yql_sys_partition_id '_yql_sys_create_time '_yql_sys_message_group_id '_yql_sys_tsp_write_time '_yql_sys_offset))
   (let $25 '('('"format" '"json_each_row") '('"metadataColumns" $24) '('"formatSettings" '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX"))) '('"settings" '($12))))

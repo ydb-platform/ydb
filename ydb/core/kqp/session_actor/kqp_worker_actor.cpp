@@ -912,7 +912,7 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 TString text = ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
                     CollectQueryStats(ctx, stats, queryDuration, text,
                         userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);

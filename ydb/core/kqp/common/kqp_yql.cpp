@@ -1,5 +1,7 @@
 #include "kqp_yql.h"
 
+#include <ydb/library/security/util.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
@@ -721,7 +723,7 @@ TString KqpExprToPrettyString(const TExprNode& expr, TExprContext& ctx) {
         ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
         TString exprText = exprStream.Str();
 
-        return exprText;
+        return NKikimr::ProtectQueryForLoggingIfSensitive(exprText);
     } catch (const std::exception& e) {
         return TStringBuilder() << "Failed to render expression to pretty string: " << e.what();
     }

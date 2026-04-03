@@ -44,6 +44,7 @@ PEERDIR(
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/sharding
     ydb/library/aclib
+    ydb/library/security
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes

@@ -7,7 +7,40 @@
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 
+#include <algorithm>
+#include <cctype>
+#include <vector>
+
 namespace NKikimr {
+
+namespace {
+
+static const std::vector<TString> SensitiveMarkers = {"secret", "password"};
+
+bool ContainsCaseInsensitive(const TString& text, const TString& pattern) {
+    return std::search(text.begin(), text.end(), pattern.begin(), pattern.end(),
+        [](char a, char b) { return std::tolower(a) == std::tolower(b); }) != text.end();
+}
+
+} // namespace
+
+bool IsQueryWithSensitiveInfo(const TString& text) {
+    for (const auto& marker : SensitiveMarkers) {
+        if (ContainsCaseInsensitive(text, marker)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TString ProtectQueryForLoggingIfSensitive(const TString& text) {
+    for (const auto& marker : SensitiveMarkers) {
+        if (ContainsCaseInsensitive(text, marker)) {
+            return TStringBuilder() << "Query text is hidden due to a sensitive marker '" << marker << "'";
+        }
+    }
+    return text;
+}
 
 TString MaskTicket(TStringBuf token) {
     TStringBuilder mask;

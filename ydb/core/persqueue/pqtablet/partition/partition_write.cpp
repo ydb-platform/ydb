@@ -1322,8 +1322,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
     std::optional<ui64> deduplicationResult;
     if (p.Msg.ExternalDeduplicationInfo.Status == TEvPQ::TEvWrite::EMessageExternalDeduplicationStatus::Duplicate) {
-        if (const auto po = p.Msg.ExternalDeduplicationInfo.OriginalPartitionAndOffset; po.has_value()) {
-            deduplicationResult = po->second;
+        if (const auto originalMessage = p.Msg.ExternalDeduplicationInfo.OriginalPartitionAndOffset; originalMessage.has_value()) {
+            deduplicationResult = originalMessage->Offset;
         } else {
             Y_VERIFY_DEBUG_S(false, "Duplicate has no source info");
             deduplicationResult = 0;

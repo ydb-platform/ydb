@@ -263,8 +263,12 @@ struct TEvPQ {
         };
 
         struct TMessageExternalDeduplicationInfo {
+            struct TPartitonAndOffset {
+                ui32 Partition;
+                ui64 Offset;
+            };
             EMessageExternalDeduplicationStatus Status = EMessageExternalDeduplicationStatus::Unchecked;
-            std::optional<std::pair<ui32, ui64>> OriginalPartitionAndOffset;
+            std::optional<TPartitonAndOffset> OriginalPartitionAndOffset;
         };
 
         struct TMsg {

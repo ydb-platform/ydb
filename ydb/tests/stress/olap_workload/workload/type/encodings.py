@@ -35,9 +35,9 @@ class WorkloadEncodings(WorkloadBase):
         self.client.query(
             f"""
                 CREATE TABLE `{table_path}` (
-                id Int64 NOT NULL,
-                i64Val Int64,
-                PRIMARY KEY(id)
+                    id Int64 NOT NULL,
+                    i64Val Int64,
+                    PRIMARY KEY(id)
                 )
                 PARTITION BY HASH(id)
                 WITH (

@@ -2185,7 +2185,8 @@ void TestOlapColumnEncodingsPreservedThroughBackup(
             UPSERT INTO `{}` (pk, dict_col, off_col, def_col)
             VALUES
                 (1u, "a", 10u, 100),
-                (2u, "b", 20u, NULL);
+                (2u, "b", 20u, NULL),
+                (3u, NULL, 30u, 300);
         )", table
     ));
 
@@ -4216,6 +4217,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/olap_col_encodings_backup";
+
+        TestOlapColumnEncodingsPreservedThroughBackup(
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "olap_col_encodings_backup" })
+        );
+    }
+
     // TO DO: test view restoration to a different database
 
     void TestTableBackupRestore() {
@@ -4228,18 +4241,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
             false
-        );
-    }
-
-    Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
-        TS3TestEnv testEnv;
-        constexpr const char* table = "/Root/olap_col_encodings_backup";
-
-        TestOlapColumnEncodingsPreservedThroughBackup(
-            table,
-            testEnv.GetQuerySession(),
-            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
-            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "olap_col_encodings_backup" })
         );
     }
 

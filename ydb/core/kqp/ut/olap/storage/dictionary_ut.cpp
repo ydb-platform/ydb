@@ -1285,6 +1285,21 @@ Y_UNIT_TEST_SUITE(KqpOlapDictionary) {
         auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         guard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        TString createTableUnsupportedTable = R"(
+            CREATE TABLE `/Root/UnsupportedTypesTable` (
+                pk Uint64 NOT NULL,
+                jcol Json ENCODING(DICT),
+                jdcol JsonDocument ENCODING(DICT),
+                ycol Yson ENCODING(DICT),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )";
+        auto createUnsupportedResult = session.ExecuteSchemeQuery(createTableUnsupportedTable).GetValueSync();
+        UNIT_ASSERT_C(!createUnsupportedResult.IsSuccess(), TString("CREATE TABLE DICTIONARY with unsupported types must fail"));
+
         TString createTable = R"(
             CREATE TABLE `/Root/UnsupportedTypesTable` (
                 pk Uint64 NOT NULL,

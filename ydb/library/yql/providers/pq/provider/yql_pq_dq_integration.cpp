@@ -108,9 +108,9 @@ public:
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
+            const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
             const auto pos = read->Pos();
 
-            const auto& typeItems = rowType->GetItems();
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
             std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),

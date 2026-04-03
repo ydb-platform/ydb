@@ -55,6 +55,7 @@ LEFT JOIN (
     SELECT
         full_name AS full_name,
         branch AS branch,
+        build_type AS build_type,
         github_issue_url AS github_issue_url,
         github_issue_number AS github_issue_number,
         github_issue_state AS github_issue_state,
@@ -62,9 +63,10 @@ LEFT JOIN (
     FROM (
         SELECT
             g.*,
-            ROW_NUMBER() OVER (PARTITION BY g.full_name, g.branch ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC) AS rn
+            ROW_NUMBER() OVER (PARTITION BY g.full_name, g.branch, g.build_type ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC) AS rn
         FROM `test_results/analytics/github_issue_mapping` AS g
     )
     WHERE rn = 1
 ) AS gim ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
+    AND tm.build_type = gim.build_type

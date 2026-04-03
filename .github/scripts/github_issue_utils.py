@@ -9,13 +9,16 @@ import re
 
 
 def parse_body(body):
-    """Parse GitHub issue body to extract test names and branches
+    """Parse GitHub issue body to extract test names, branches and build_type.
     
     Args:
         body (str): The GitHub issue body text
         
     Returns:
-        tuple: (tests, branches) - lists of test names and branch names
+        tuple: (tests, branches, build_type)
+            tests     - list of test names
+            branches  - list of branch names
+            build_type - string, defaults to 'relwithdebinfo' if tag is absent
     """
     tests = []
     branches = []
@@ -24,6 +27,8 @@ def parse_body(body):
     end_mute_list = "<!--mute_list_end-->"
     start_branch_list = "<!--branch_list_start-->"
     end_branch_list = "<!--branch_list_end-->"
+    start_build_type = "<!--build_type_list_start-->"
+    end_build_type = "<!--build_type_list_end-->"
 
     # Extract tests
     if all(x in body for x in [start_mute_list, end_mute_list]):
@@ -48,7 +53,15 @@ def parse_body(body):
     else:
         branches = ['main']
 
-    return tests, branches
+    # Extract build_type (default: relwithdebinfo for issues created before this tag was added)
+    if all(x in body for x in [start_build_type, end_build_type]):
+        idx1 = body.find(start_build_type)
+        idx2 = body.find(end_build_type)
+        build_type = body[idx1 + len(start_build_type) + 1 : idx2].strip()
+    else:
+        build_type = 'relwithdebinfo'
+
+    return tests, branches, build_type
 
 
 def create_test_issue_mapping(issues_data):
@@ -70,8 +83,8 @@ def create_test_issue_mapping(issues_data):
             continue
             
         try:
-            # Use the parse_body function to extract tests and branches
-            tests, branches = parse_body(body)
+            # Use the parse_body function to extract tests, branches and build_type
+            tests, branches, build_type = parse_body(body)
             
             for test in tests:
                 if test not in test_to_issue:
@@ -82,7 +95,8 @@ def create_test_issue_mapping(issues_data):
                     'issue_number': issue.get('issue_number', 0),
                     'state': issue.get('state', ''),
                     'created_at': issue.get('created_at', 0),
-                    'branches': branches
+                    'branches': branches,
+                    'build_type': build_type,
                 })
         except Exception as e:
             print(f"Warning: Could not parse issue body for issue {url}: {e}")

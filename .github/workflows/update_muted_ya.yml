@@ -16,7 +16,7 @@ env:
   PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
   REVIEWERS: '["ci"]'
-  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
   BUILD_TYPE: relwithdebinfo
 
 jobs:

@@ -24,6 +24,12 @@
 
   {% endnote %}
 
+  {% note tip %}
+
+  If you use a non-standard shell configuration, you can source the generated completion files from any rc file. The files are located at `~/.local/share/ydb/completion.bash.inc` and `~/.local/share/ydb/completion.zsh.inc`, and are kept up to date automatically by `ydb update`.
+
+  {% endnote %}
+
   To update the environment variables, restart the command shell.
 
 - macOS

@@ -4,6 +4,7 @@
 #include "filter.h"
 #include "graph_optimization.h"
 #include "header.h"
+#include "hierarchical_index.h"
 #include "index.h"
 #include "original.h"
 #include "reserve.h"
@@ -575,6 +576,66 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     return true;
 }
 
+TConclusion<bool> TGraph::OptimizeConditionsForHierarchicalIndexes(TGraphNode* condNode) {
+    if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
+        return false;
+    }
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic()) {
+        return false;
+    }
+    if (condNode->GetProcessor()->GetInput().size() != 2) {
+        return false;
+    }
+    if (condNode->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    auto dataNode = GetProducerVerified(calc->GetInput().front().GetColumnId());
+    auto constNode = GetProducerVerified(calc->GetInput().back().GetColumnId());
+    if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
+        return false;
+    }
+    if (!calc->GetKernelLogic()->IsBoolInResult()) {
+        return false;
+    }
+    std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
+    if (!dataAddr) {
+        return false;
+    }
+    auto indexChecker = calc->GetKernelLogic()->GetIndexCheckerOperation();
+    if (!indexChecker) {
+        return false;
+    }
+    if (!HierIndexesConstructed.emplace(condNode->GetIdentifier()).second) {
+        return false;
+    }
+    auto* dest = condNode->GetOutputEdges().begin()->second;
+    const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
+    RemoveEdge(condNode, dest, destResourceId);
+
+    const ui32 resourceIdHierToAnd = BuildNextResourceId();
+    IDataSource::TCheckIndexContext checkHierContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker);
+    auto hierCheckProc = std::make_shared<THierarchicalIndexCheckerProcessor>(
+        constNode->GetProcessor()->GetOutputColumnIdOnce(), checkHierContext, resourceIdHierToAnd);
+    auto hierProcNode = AddNode(hierCheckProc);
+    RegisterProducer(resourceIdHierToAnd, hierProcNode.get());
+    AddEdge(constNode, hierProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+
+    const ui32 resourceIdEqToAnd = BuildNextResourceId();
+    RegisterProducer(resourceIdEqToAnd, condNode);
+    calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+
+    auto andProcessor = std::make_shared<TStreamLogicProcessor>(
+        TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdHierToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+    auto andNode = AddNode(andProcessor);
+    AddEdge(andNode.get(), dest, destResourceId);
+
+    AddEdge(hierProcNode.get(), andNode.get(), resourceIdHierToAnd);
+    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    ResetProducer(destResourceId, andNode.get());
+    return true;
+}
+
 TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
     if (cNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -677,6 +738,17 @@ TConclusionStatus TGraph::Collapse() {
         for (auto&& [_, n] : Nodes) {
             {
                 auto conclusion = OptimizeFilterWithCoalesce(n.get());
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+                if (*conclusion) {
+                    hasChanges = true;
+                    break;
+                }
+            }
+
+            {
+                auto conclusion = OptimizeConditionsForHierarchicalIndexes(n.get());
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }

@@ -268,6 +268,8 @@ private:
         const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
         const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) override;
+    virtual TConclusion<bool> DoCheckHierarchicalIndex(const NArrow::NSSA::TProcessorContext& context,
+        const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) override;
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
@@ -462,6 +464,10 @@ private:
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
         const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         return TConclusionStatus::Fail("not implemented DoCheckIndex for TAggregationDataSource");
+    }
+    virtual TConclusion<bool> DoCheckHierarchicalIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        return TConclusionStatus::Fail("not implemented DoCheckHierarchicalIndex for TAggregationDataSource");
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {

@@ -39,19 +39,12 @@ TUserTableAccessor::TUserTableAccessor(const TString& tableName, const NColumnSh
 }
 
 std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::SelectMetadata(const TSelectMetadataContext& context,
-    const NReader::TReadDescription& readDescription, const bool isPlain, const TString& constant) const {
+    const NReader::TReadDescription& readDescription, const bool isPlain, const TString& /*constant*/) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
     std::vector<IColumnEngine::TSelectedPortionInfo> portions =
         context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
             readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions);
-
-    auto sizeBefore = portions.size();
-    std::erase_if(portions, [&constant, context](const IColumnEngine::TSelectedPortionInfo& item) {
-        return !context.GetIndexAccessStub()->CheckValue(item.GetPortion()->GetPortionId(), constant);
-    });
-    auto sizeAfter = portions.size();
-    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "removed_by_hier")("before", sizeBefore)("after", sizeAfter)("constant", constant);
 
     if (!isPlain) {
         std::deque<NReader::NSimple::TSourceConstructor> sources;

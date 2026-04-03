@@ -3,6 +3,8 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -281,6 +283,20 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
         }
     }
     return filter.And(context.GetResources().GetFilter());
+}
+
+TConclusion<bool> TPortionDataSource::DoCheckHierarchicalIndex(
+    const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
+    const std::shared_ptr<arrow::Scalar>& value) {
+    if (!IndexAccessStub) {
+        return true;
+    }
+    if (!value || !arrow::is_base_binary_like(value->type->id())) {
+        return true;
+    }
+    const auto& binaryScalar = static_cast<const arrow::BaseBinaryScalar&>(*value);
+    const TString strValue(reinterpret_cast<const char*>(binaryScalar.value->data()), binaryScalar.value->size());
+    return IndexAccessStub->CheckValue(Portion->GetPortionId(), strValue);
 }
 
 void TPortionDataSource::DoAbort() {

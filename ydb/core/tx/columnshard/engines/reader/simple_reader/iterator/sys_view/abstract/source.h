@@ -110,6 +110,11 @@ private:
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
+    virtual TConclusion<bool> DoCheckHierarchicalIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        return true;
+    }
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         return NJson::JSON_NULL;
     }

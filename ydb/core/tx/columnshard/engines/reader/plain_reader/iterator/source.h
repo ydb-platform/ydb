@@ -64,6 +64,11 @@ private:
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
+    virtual TConclusion<bool> DoCheckHierarchicalIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        AFL_VERIFY(false);
+        return true;
+    }
     virtual void DoAssembleAccessor(
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);

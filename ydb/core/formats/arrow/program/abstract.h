@@ -266,6 +266,7 @@ enum class EProcessorType {
     AssembleOriginalData,
     CheckIndexData,
     CheckHeaderData,
+    CheckHierarchicalIndexData,
     StreamLogic,
     ReserveMemory
 };

@@ -33,6 +33,7 @@ SRCS(
     stream_logic.cpp
     visitor.cpp
     index.cpp
+    hierarchical_index.cpp
     header.cpp
     execution.cpp
     graph_optimization.cpp

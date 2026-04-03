@@ -291,6 +291,11 @@ private:
         const TProcessorContext& context, const TFetchHeaderContext& fetchContext) = 0;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(const TProcessorContext& context, const TCheckHeaderContext& fetchContext) = 0;
 
+    virtual TConclusion<bool> DoCheckHierarchicalIndex(
+        const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) {
+        return true;
+    }
+
     virtual TConclusion<bool> DoStartFetch(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchers) = 0;
 
@@ -333,6 +338,11 @@ public:
     TConclusion<NArrow::TColumnFilter> CheckIndex(
         const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
         return DoCheckIndex(context, fetchContext, value);
+    }
+
+    TConclusion<bool> CheckHierarchicalIndex(
+        const TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+        return DoCheckHierarchicalIndex(context, fetchContext, value);
     }
 
     [[nodiscard]] TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> StartFetchData(

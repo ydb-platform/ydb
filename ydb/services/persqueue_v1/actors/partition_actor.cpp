@@ -422,6 +422,10 @@ void TPartitionActor::ResendRecentRequests() {
         return;
     }
 
+    AFL_ENSURE(!DirectRead || DirectReadRestoreStage == EDirectReadRestoreStage::None)
+        ("DirectRead", DirectRead)
+        ("DirectReadRestoreStage", static_cast<int>(DirectReadRestoreStage));
+
     const auto& ctx = ActorContext();
     if (RequestInfly) { //got read infly
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
@@ -1332,7 +1336,8 @@ void TPartitionActor::OnDirectReadsRestored() {
     for (auto id: UnpublishedDirectReads) {
         SendPublishDirectRead(id, ActorContext());
     }
-    UnpublishedDirectReads.clear();    ResendRecentRequests();
+    UnpublishedDirectReads.clear();
+    ResendRecentRequests();
 }
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {

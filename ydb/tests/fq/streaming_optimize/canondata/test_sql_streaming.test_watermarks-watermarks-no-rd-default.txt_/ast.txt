@@ -10,7 +10,7 @@
 (let $9 '('"SharedReading" '"0"))
 (let $10 '('('"Consumer" '"test_client") '('"Endpoint" '"<pq_pq_endpoint>") $9 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") '('"UseSsl" '"1") '('"WatermarksEnable" '"1") '('"WatermarksGranularityUs" '"2000000") '('"WatermarksLateArrivalDelayUs" '"7000000") '('"WatermarksLateEventsPolicy" '"adjust") '('"WatermarksIdlePartitions" '"1") '('"WatermarksIdleTimeoutUs" '"3000000")))
 (let $11 (StructType '('_yql_sys_tsp_write_time $6) $7))
-(let $12 (DqPqTopicSource world $8 '('_yql_sys_tsp_write_time '"ts") $10 (SecureParam '"cluster:default_pq") '"" $11 (lambda '($16) (- (Member $16 '_yql_sys_tsp_write_time) (Interval '"7000000"))) '"\x1A0\b\x03\x12\x19\x12\x17_yql_sys_tsp_write_time\x1A\x11\n\x0F\n\x02\b3\x12\t!\xC0\xCFj\x00\x00\x00\x00\x00"))
+(let $12 (DqPqTopicSource world $8 '('"ts") $10 (SecureParam '"cluster:default_pq") '"" $11 (lambda '($16) (- (Member $16 '_yql_sys_tsp_write_time) (Interval '"7000000"))) '"\x1A0\b\x03\x12\x19\x12\x17_yql_sys_tsp_write_time\x1A\x11\n\x0F\n\x02\b3\x12\t!\xC0\xCFj\x00\x00\x00\x00\x00"))
 (let $13 (DqStage '((DqSource $5 $12)) (lambda '($17) (block '(
   (let $18 '('('"data.datetime.formatname" '"POSIX") '('"data.timestamp.formatname" '"POSIX") '('"watermarkgranularity" '"PT2S") '('"watermarkidletimeout" '"PT3S")))
   (let $19 '('('"format" '"json_each_row") '('"metadataColumns" '('_yql_sys_tsp_write_time)) '('"formatSettings" $18) '('"settings" '($9))))

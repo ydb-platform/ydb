@@ -183,7 +183,6 @@ public:
             .DataSink(write.DataSink())
             .Topic(write.Topic())
             .Input(write.Input())
-            .Settings(write.Settings())
             .Done().Ptr();
     }
 
@@ -399,12 +398,14 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
+                TString watermarkExprSql;
                 if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
                     const auto serializedWatermarkExpr = maybeWatermarkSerialized.Cast().Ref().Content();
                     if (!serializedWatermarkExpr.empty()) {
                         NYql::NConnector::NApi::TExpression watermarkExprProto;
                         YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
-                        srcDesc.SetWatermarkExpr(NYql::FormatExpression(watermarkExprProto));
+                        watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                        srcDesc.SetWatermarkExpr(watermarkExprSql);
                     }
                 }
 

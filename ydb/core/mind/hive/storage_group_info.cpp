@@ -41,7 +41,7 @@ void TStorageGroupInfo::UpdateStorageGroup(const TEvControllerSelectGroupsResult
 }
 
 bool TStorageGroupInfo::IsMatchesParameters(const TGroupFilter& filter) const {
-    if (!Active) {
+    if (!IsActive()) {
         return false;
     }
     const auto& groupParameters = filter.GroupParameters;
@@ -125,6 +125,10 @@ bool TStorageGroupInfo::IsBalanceByThroughput() const {
 
 bool TStorageGroupInfo::IsBalanceBySize() const {
     return StoragePool.IsBalanceBySize();
+}
+
+bool TStorageGroupInfo::IsActive() const {
+    return Status == EGroupState::Active;
 }
 
 }

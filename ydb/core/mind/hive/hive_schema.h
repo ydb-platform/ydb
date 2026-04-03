@@ -336,11 +336,11 @@ struct Schema : NIceDb::Schema {
 
     struct Group : Table<23> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct StoragePool : Column<2, NScheme::NTypeIds::String> {};
-        struct Active : Column<3, NScheme::NTypeIds::Bool> { static constexpr bool Default = true; };
+        struct StoragePool : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EGroupState; static constexpr auto Default = EGroupState::Active; };
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, StoragePool, Active>;
+        using TColumns = TableColumns<Id, StoragePool, Status>;
     };
 
     using TTables = SchemaTables<

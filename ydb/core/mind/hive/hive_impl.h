@@ -325,7 +325,7 @@ public:
 protected:
     TActorId BSControllerPipeClient;
     TActorId RootHivePipeClient;
-    TActorId CmsPipe;
+    TActorId ShrinkPoolInitiator;
     TTabletId RootHiveId;
     TTabletId HiveId;
     ui64 HiveGeneration;

@@ -110,6 +110,11 @@ enum class EResourceToBalance {
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
+enum class EGroupState {
+    Inactive,
+    Active
+};
+
 struct ISubActor {
     const TInstant StartTime;
 

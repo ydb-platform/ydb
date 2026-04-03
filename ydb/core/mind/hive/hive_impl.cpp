@@ -3797,7 +3797,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
     BLOG_D("Handle TEvShrinkStoragePool");
     const auto& record = ev->Get()->Record;
     if (AreWeRootHive()) {
-        CmsPipe = ev->Sender;
+        ShrinkPoolInitiator = ev->Sender;
         auto* domain = FindDomain(TSubDomainKey(record.GetSubDomain()));
         if (auto tenantHive = GetPipeToTenantHive(domain)) {
             return NTabletPipe::SendData(SelfId(), *tenantHive, ev->Release().Release());

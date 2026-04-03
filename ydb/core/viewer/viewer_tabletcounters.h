@@ -53,6 +53,16 @@ public:
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Aggregate = FromStringWithDefault<bool>(params.Get("aggregate"), true);
+        if (!params.Has("path") && !params.Has("tablet_id")) {
+            ctx.Send(
+                Event->Sender,
+                new NMon::TEvHttpInfoRes(
+                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'path' or 'tablet_id' is required"),
+                    0,
+                    NMon::IEvHttpInfoRes::EContentType::Custom));
+            Die(ctx);
+            return;
+        }
         if (params.Has("path")) {
             THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
             if (!Event->Get()->UserToken.empty()) {
@@ -64,19 +74,23 @@ public:
             TActorId txproxy = MakeTxProxyID();
             ctx.Send(txproxy, request.Release());
             Become(&TThis::StateRequestedDescribe, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-        } else if (params.Has("tablet_id")) {
+        } else {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), 0);
-            if (tabletId != 0) {
-                Tablets.emplace_back(tabletId);
-                TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
-                NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
-                PipeClients.emplace_back(PipeClient);
-                Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+            if (tabletId == 0) {
+                ctx.Send(
+                    Event->Sender,
+                    new NMon::TEvHttpInfoRes(
+                        Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Invalid 'tablet_id' value"),
+                        0,
+                        NMon::IEvHttpInfoRes::EContentType::Custom));
+                Die(ctx);
+                return;
             }
-
-            if (PipeClients.empty()) {
-                ReplyAndDie(ctx);
-            }
+            Tablets.emplace_back(tabletId);
+            TActorId PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, GetPipeClientConfig()));
+            NTabletPipe::SendData(ctx, PipeClient, new TEvTablet::TEvGetCounters(), tabletId);
+            PipeClients.emplace_back(PipeClient);
+            Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
         }
     }
 

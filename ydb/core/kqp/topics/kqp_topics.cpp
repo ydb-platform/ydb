@@ -683,41 +683,19 @@ void TTopicOperations::SetTrackProducerId(bool trackProducerId)
     TrackProducerId_ = trackProducerId;
 }
 
-void TTopicOperations::MergeSkipConflictCheck(const TMaybe<bool>& rhs)
+void TTopicOperations::MergeSkipConflictCheck(bool rhs)
 {
-    if (!SkipConflictCheck_.Defined()) {
-        SkipConflictCheck_ = rhs;
-        return;
-    }
-
-    if (!rhs.Defined()) {
-        return;
-    }
-
-    SkipConflictCheck_ = *SkipConflictCheck_ && *rhs;
+    SkipConflictCheck_ = SkipConflictCheck_ && rhs;
 }
 
-void TTopicOperations::MergeTrackProducerId(const TMaybe<bool>& rhs)
+void TTopicOperations::MergeTrackProducerId(bool rhs)
 {
-    if (!TrackProducerId_.Defined()) {
-        TrackProducerId_ = rhs;
-        return;
-    }
-
-    if (!rhs.Defined()) {
-        return;
-    }
-
-    TrackProducerId_ = *TrackProducerId_ || *rhs;
+    TrackProducerId_ = TrackProducerId_ || rhs;
 }
 
 bool TTopicOperations::CalcSkipConflictCheck() const
 {
-    if (!TrackProducerId_.Defined() || !SkipConflictCheck_.Defined()) {
-        return false;
-    }
-
-    return !*TrackProducerId_ && *SkipConflictCheck_;
+    return !TrackProducerId_ && SkipConflictCheck_;
 }
 
 }

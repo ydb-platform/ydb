@@ -188,8 +188,8 @@ public:
     void SetTrackProducerId(bool trackProducerId);
 
 private:
-    void MergeSkipConflictCheck(const TMaybe<bool>& rhs);
-    void MergeTrackProducerId(const TMaybe<bool>& rhs);
+    void MergeSkipConflictCheck(bool rhs);
+    void MergeTrackProducerId(bool rhs);
 
     bool CalcSkipConflictCheck() const;
 
@@ -203,8 +203,8 @@ private:
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
-    TMaybe<bool> SkipConflictCheck_;
-    TMaybe<bool> TrackProducerId_;
+    bool SkipConflictCheck_ = true;
+    bool TrackProducerId_ = false;
 };
 
 }

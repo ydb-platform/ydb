@@ -8855,6 +8855,12 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ReduceLeftArg<true, Equals, IsDistinct>(*node, ctx);
     } else if (ETypeAnnotationKind::Optional == rKind) {
         return ReduceRightArg<true, Equals, IsDistinct>(*node, ctx);
+    } else if (ETypeAnnotationKind::Pg == lKind && ETypeAnnotationKind::Null == rKind ||
+               ETypeAnnotationKind::Null == lKind && ETypeAnnotationKind::Pg == rKind) {
+        if constexpr (IsDistinct) {
+            const auto pgArg = ETypeAnnotationKind::Pg == lKind ? node->HeadPtr() : node->TailPtr();
+            return ctx.WrapByCallableIf(Equals, "Not", ctx.NewCallable(node->Pos(), "Exists", {pgArg}));
+        }
     }
 
     return node;

@@ -1348,6 +1348,11 @@ private:
             try {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId);
                 auto PrepareOperationResponse = PrepareOperationFuture.GetValue();
+                if (!PrepareOperationResponse.ErrorMessages.empty()) {
+                    TFmrOperationResult result;
+                    result.Errors = PrepareOperationResponse.ErrorMessages;
+                    return MakeFuture(result);
+                }
                 TString partitionId = PrepareOperationResponse.PartitionId;
                 ui64 tasksNum = PrepareOperationResponse.TasksNum;
 

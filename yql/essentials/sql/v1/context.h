@@ -294,6 +294,11 @@ public:
         TStringBuf feature,
         NYql::TLangVersion version);
 
+    bool EnsureFeatureNotExpired(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
 private:
     IOutputStream& MakeIssue(
         NYql::ESeverity severity,

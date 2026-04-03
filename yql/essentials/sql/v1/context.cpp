@@ -617,6 +617,21 @@ bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVe
         Settings.LangVer, featureVer, Settings.BackportMode);
 }
 
+bool TContext::EnsureFeatureNotExpired(
+    TPosition position,
+    TStringBuf feature,
+    NYql::TLangVersion version)
+{
+    if (!IsAvailableLangVersion(Settings.LangVer, version)) {
+        Error(position)
+            << feature << " is not available after language version "
+            << NYql::FormatLangVersion(version);
+        return false;
+    }
+
+    return true;
+}
+
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
     static const TSet<TStringBuf> DenyForAllArgs = {
         "datatype",

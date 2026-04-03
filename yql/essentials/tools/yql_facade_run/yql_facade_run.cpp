@@ -422,7 +422,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
-            GatewaysPatch = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
+            GatewaysPatch = TFileInput(file).ReadAll();
         });
     }
 
@@ -499,24 +499,17 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
     }
 
-    if (QPlayerContext.CanRead()) {
-        GatewaysConfig = GatewaysConfigFromQContext(QPlayerContext);
-        if (GatewaysPatch) {
-            GatewaysConfig->MergeFrom(*GatewaysPatch);
-        }
-    } else if (!GatewaysConfig) {
+    if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    if (QPlayerContext.CanRead()) {
-        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
-        if (GatewaysPatch) {
-            // Gateways Patch is used for experimental features
-            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
+    {
+        TGatewaySQLFlags flags;
+        if (GatewaysConfig) {
+            flags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
         }
-        sqlFlags.CollectAllTo(SqlFlags);
-    } else if (GatewaysConfig) {
-        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
+        flags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
+        flags.CollectAllTo(SqlFlags);
     }
 
     if (!FsConfig) {
@@ -800,7 +793,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext);
+    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {

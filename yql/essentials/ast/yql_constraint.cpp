@@ -737,7 +737,7 @@ TChoppedConstraintNode::TSetOfSetsType TChoppedConstraintNode::NodeToSets(TExprC
     } catch (...) {
         YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 TChoppedConstraintNode::TChoppedConstraintNode(TChoppedConstraintNode&& constr) = default;

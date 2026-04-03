@@ -1011,6 +1011,10 @@ public:
     }
 
     TString GetClusterServer(const TString& cluster) const final {
+        if (QContext_.CanRead()) {
+            return "replay";
+        }
+
         return Inner_->GetClusterServer(cluster);
     }
 

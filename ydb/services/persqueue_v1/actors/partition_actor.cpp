@@ -83,10 +83,15 @@ TPartitionActor::TPartitionActor(
 
 
 void TPartitionActor::MakeCommit(const TActorContext& ctx) {
+    if (!CommitProcessingIsEnabled) {
+        return;
+    }
+
     ui64 offset = ClientReadOffset;
 
-    if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY)
+    if (CommitsDisabled || NotCommitedToFinishParents.size() != 0 || CommitsInfly.size() >= MAX_COMMITS_INFLY) {
         return;
+    }
 
     //Ranges mode
     if (!NextRanges.Empty() && NextRanges.Min() == ClientCommitOffset) {
@@ -97,11 +102,11 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
         ClientCommitOffset = offset;
         ++CommitCookie;
         CommitsInfly.emplace_back(CommitCookie, TCommitInfo{CommitCookie, offset, ctx.Now()});
-        if (Counters.SLITotal)
+        if (Counters.SLITotal) {
             Counters.SLITotal.Inc();
+        }
 
-        if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
-            SendCommit(CommitCookie, offset, ctx);
+        SendCommit(CommitCookie, offset, ctx);
         return;
     }
 
@@ -109,7 +114,7 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     ui64 readId = ReadIdCommitted;
     auto it = NextCommits.begin();
     if (it != NextCommits.end() && *it == 0) { //commit of readed in prev session data
-        NextCommits.erase(NextCommits.begin());
+        NextCommits.erase(it);
         if (ClientReadOffset <= ClientCommitOffset) {
             ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(Partition.AssignId, 0, 0, CommittedOffset, EndOffset, ReadingFinishedSent));
         } else {
@@ -117,8 +122,8 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
             CommitsInfly.emplace_back(0, TCommitInfo{0, ClientReadOffset, ctx.Now()});
             if (Counters.SLITotal)
                 Counters.SLITotal.Inc();
-            if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
-                SendCommit(0, ClientReadOffset, ctx);
+
+            SendCommit(0, ClientReadOffset, ctx);
         }
         MakeCommit(ctx);
         return;
@@ -126,8 +131,9 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     for (;it != NextCommits.end() && (*it) == readId + 1; ++it) {
         ++readId;
     }
-    if (readId == ReadIdCommitted)
+    if (readId == ReadIdCommitted) {
         return;
+    }
     NextCommits.erase(NextCommits.begin(), it);
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " commit request from " << ReadIdCommitted + 1 << " to " << readId << " in " << Partition);
 
@@ -150,8 +156,7 @@ void TPartitionActor::MakeCommit(const TActorContext& ctx) {
     if (Counters.SLITotal)
         Counters.SLITotal.Inc();
 
-    if (PipeClient) //if not then pipe will be recreated soon and SendCommit will be done
-        SendCommit(readId, offset, ctx);
+    SendCommit(readId, offset, ctx);
 }
 
 TPartitionActor::~TPartitionActor() = default;
@@ -331,6 +336,7 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                                                                   << " schedule pipe restart attempt " << PipeGeneration << " reason: " << reason << ", current pipe: " << PipeClient.ToString());
     PipeClient = TActorId{};
+    CommitProcessingIsEnabled = false;
     if (errorCode != NPersQueue::NErrorCode::OVERLOAD)
         ++PipeGeneration;
 
@@ -430,6 +436,8 @@ void TPartitionActor::ResendRecentRequests() {
             if (c.second.Offset != Max<ui64>())
                 SendCommit(c.first, c.second.Offset, ctx);
         }
+        CommitProcessingIsEnabled = true;
+        MakeCommit(ctx);
         if (WaitForData) { //resend wait-for-data requests
             WaitDataInfly.clear();
             WaitDataInPartition(ctx);
@@ -1211,6 +1219,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
             .DoFirstRetryInstantly = true
         };
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, TabletID, clientConfig));
+        CommitProcessingIsEnabled = true;
         auto request = MakeCreateSessionRequest(true, ++InitCookie);
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " INITING " << Partition);

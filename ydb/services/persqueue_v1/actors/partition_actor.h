@@ -212,6 +212,7 @@ private:
     bool StartReading;
     bool AllPrepareInited;
     bool FirstInit;
+    bool CommitProcessingIsEnabled = false;
     TActorId PipeClient;
     ui32 PipeGeneration;
     ui64 TabletGeneration;

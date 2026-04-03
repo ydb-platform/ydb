@@ -495,6 +495,7 @@
   ```java
   AsyncWriter writer = topicClient.createAsyncWriter(settings);
 
+<<<<<<< HEAD
   // Init in background
   writer.init()
           .thenRun(() -> logger.info("Init finished successfully"))
@@ -503,6 +504,36 @@
               return null;
           });
   ```
+=======
+  - Асинхронный API
+
+    Инициализация настроек писателя:
+
+    ```java
+    String producerAndGroupID = "group-id";
+    WriterSettings settings = WriterSettings.newBuilder()
+          .setTopicPath(topicPath)
+          .setProducerId(producerAndGroupID)
+          .setMessageGroupId(producerAndGroupID)
+          .build();
+    ```
+
+    Создание и инициализация асинхронного писателя:
+
+    ```java
+    AsyncWriter writer = topicClient.createAsyncWriter(settings);
+
+    // Init in background
+    writer.init()
+            .thenRun(() -> logger.info("Init finished successfully"))
+            .exceptionally(ex -> {
+                logger.error("Init failed with ex: ", ex);
+                return null;
+            });
+    ```
+
+    {% endlist %}
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
 
 - C#
 
@@ -616,8 +647,31 @@
   ```java
   writer.send(Message.of("11".getBytes()));
 
+<<<<<<< HEAD
   long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
   try {
+=======
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Синхронный API
+
+    Метод `send` блокирует управление, пока сообщение не будет помещено в очередь отправки.
+    Попадание сообщения в эту очередь означает, что писатель сделает всё возможное для доставки сообщения.
+    Например, если сессия записи по какой-то причине оборвётся, писатель переустановит соединение и попробует отправить это сообщение на новой сессии.
+    Но попадание сообщения в очередь отправки не гарантирует того, что сообщение в итоге будет записано.
+    Например, могут возникать ошибки, приводящие к завершению работы писателя до того, как сообщения из очереди будут отправлены.
+    Если нужно подтверждение успешной записи для каждого сообщения, используйте асинхронного писателя и проверяйте статус, возвращаемый методом `send`.
+
+    ```java
+    writer.send(Message.of("11".getBytes()));
+
+    long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
+    try {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       writer.send(
               Message.newBuilder()
                       .setData("22".getBytes())
@@ -635,6 +689,7 @@
 
 - Java (async)
 
+<<<<<<< HEAD
   Метод `send` в асинхронном клиенте неблокирующий. Помещает сообщение в очередь отправки.
   Метод возвращает `CompletableFuture<WriteAck>`, позволяющую проверить, действительно ли сообщение было записано.
   В случае, если очередь переполнена, будет брошено исключение QueueOverflowException.
@@ -644,6 +699,17 @@
 
   ```java
   try {
+=======
+    Метод `send` в асинхронном клиенте неблокирующий. Помещает сообщение в очередь отправки.
+    Метод возвращает `CompletableFuture<WriteAck>`, позволяющую проверить, действительно ли сообщение было записано.
+    В случае, если очередь переполнена, будет брошено исключение QueueOverflowException.
+    Это способ сигнализировать пользователю о том, что поток записи следует притормозить.
+    В таком случае стоит или пропускать сообщения, или выполнять повторные попытки записи через exponential backoff.
+    Также можно увеличить размер клиентского буфера (`setMaxSendBufferMemorySize`), чтобы обрабатывать больший объем сообщений перед тем, как он заполнится.
+
+    ```java
+    try {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       // Non-blocking. Throws QueueOverflowException if send queue is full
       writer.send(Message.of("33".getBytes()));
   } catch (QueueOverflowException exception) {
@@ -1067,6 +1133,7 @@
   В настройках `SendSettings` метода `send` можно указать транзакцию.
   Тогда сообщение будет записано вместе с коммитом этой транзакцией.
 
+<<<<<<< HEAD
   ```java
   // creating a session in the table service
   Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1081,31 +1148,79 @@
 
   // get message text within the transaction
   Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+=======
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
+
+    В настройках `SendSettings` метода `send` можно указать транзакцию.
+    Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+    ```java
+    // creating a session in the table service
+    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+    if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
+      return; // retry or shutdown
+    }
+    Session session = sessionResult.getValue();
+    // creating a transaction in the table service
+    // this transaction is not yet active and has no id
+    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+    // get message text within the transaction
+    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
           .join();
   if (!dataQueryResult.isSuccess()) {
       logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
       return; // retry or shutdown
+<<<<<<< HEAD
   }
   // now the transaction is active and has an id
 
   ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
   byte[] message;
   if (rsReader.next()) {
+=======
+    }
+    // now the transaction is active and has an id
+
+    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+    byte[] message;
+    if (rsReader.next()) {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       message = rsReader.getColumn(0).getBytes();
   } else {
       return; // retry or shutdown
+<<<<<<< HEAD
   }
 
   writer.send(
+=======
+    }
+
+    writer.send(
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
           Message.of(message),
           SendSettings.newBuilder()
                   .setTransaction(transaction)
                   .build()
+<<<<<<< HEAD
   );
+=======
+    );
+
+    // flush to wait until all messages reach server before commit
+    writer.flush();
+
+    Status commitStatus = transaction.commit().join();
+    analyzeCommitStatus(commitStatus);
+    ```
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
 
   // flush to wait until all messages reach server before commit
   writer.flush();
 
+<<<<<<< HEAD
   Status commitStatus = transaction.commit().join();
   analyzeCommitStatus(commitStatus);
   ```
@@ -1133,22 +1248,58 @@
 
   // get message text within the transaction
   Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+=======
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
+
+    В настройках `SendSettings` метода `send` можно указать транзакцию.
+    Тогда сообщение будет записано вместе с коммитом этой транзакцией.
+
+    ```java
+    // creating a session in the table service
+    Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
+    if (!sessionResult.isSuccess()) {
+      logger.error("Couldn't get a session from the pool: {}", sessionResult);
+      return; // retry or shutdown
+    }
+    Session session = sessionResult.getValue();
+    // creating a transaction in the table service
+    // this transaction is not yet active and has no id
+    TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
+
+    // get message text within the transaction
+    Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
           .join();
   if (!dataQueryResult.isSuccess()) {
       logger.error("Couldn't execute DataQuery: {}", dataQueryResult);
       return; // retry or shutdown
+<<<<<<< HEAD
   }
   // now the transaction is active and has an id
 
   ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
   byte[] message;
   if (rsReader.next()) {
+=======
+    }
+    // now the transaction is active and has an id
+
+    ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
+    byte[] message;
+    if (rsReader.next()) {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       message = rsReader.getColumn(0).getBytes();
   } else {
       return; // retry or shutdown
+<<<<<<< HEAD
   }
 
   try {
+=======
+    }
+
+    try {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       writer.send(Message.newBuilder()
                               .setData(message)
                               .build(),
@@ -1238,15 +1389,36 @@
 
   Инициализация настроек читателя
 
+<<<<<<< HEAD
   ```java
   ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)
+=======
+    ```python
+    reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Синхронный API
+
+    Инициализация настроек читателя
+
+    ```java
+    ReaderSettings settings = ReaderSettings.newBuilder()
+          .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
           .addTopic(TopicReadSettings.newBuilder()
                   .setPath(topicPath)
                   .setReadFrom(Instant.now().minus(Duration.ofHours(24))) // Optional
                   .setMaxLag(Duration.ofMinutes(30)) // Optional
                   .build())
           .build();
+<<<<<<< HEAD
   ```
 
   Создание синхронного читателя
@@ -1257,12 +1429,28 @@
 
   После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
   - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+=======
+    ```
+
+    Создание синхронного читателя
+
+    ```java
+    SyncReader reader = topicClient.createSyncReader(settings);
+    ```
+
+    После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
+    - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
 
     ```java
     reader.init();
     ```
 
+<<<<<<< HEAD
   - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+=======
+    - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
 
     ```java
     try {
@@ -1287,6 +1475,7 @@
                   .setMaxLag(Duration.ofMinutes(30)) // Optional
                   .build())
           .build();
+<<<<<<< HEAD
   ```
 
   Для асинхронного читателя, помимо общих настроек чтения `ReaderSettings`, понадобятся настройки обработчика событий `ReadEventHandlersSettings`, в которых необходимо передать экземпляр наследника `ReadEventHandler`.
@@ -1304,6 +1493,26 @@
 
   ```java
   private class Handler extends AbstractReadEventHandler {
+=======
+    ```
+
+    Для асинхронного читателя, помимо общих настроек чтения `ReaderSettings`, понадобятся настройки обработчика событий `ReadEventHandlersSettings`, в которых необходимо передать экземпляр наследника `ReadEventHandler`.
+    Он будет описывать, как должна происходить обработка различных событий, происходящих во время чтения.
+
+    ```java
+    ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
+          .setEventHandler(new Handler())
+          .build();
+    ```
+
+    Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений; по умолчанию используется внутренний поток SDK.
+
+    Для реализации обработчика событий можно унаследоваться от `AbstractReadEventHandler` и переопределить метод `onMessages`.
+    Метод `onMessages` вызывается каждый раз, когда SDK получает очередной пакет сообщений от сервера. В рамках одного вызова приходит один или несколько сообщений, которые можно подтвердить (`commit`) как по отдельности, так и после обработки всего пакета. Пример реализации:
+
+    ```java
+    private class Handler extends AbstractReadEventHandler {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       @Override
       public void onMessages(DataReceivedEvent event) {
           for (Message message : event.getMessages()) {
@@ -1317,6 +1526,7 @@
               });
           }
       }
+<<<<<<< HEAD
   }
   ```
 
@@ -1326,6 +1536,17 @@
   AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
   // Init in background
   reader.init()
+=======
+    }
+    ```
+
+    Создание и инициализация асинхронного читателя:
+
+    ```java
+    AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
+    // Init in background
+    reader.init()
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
           .thenRun(() -> logger.info("Init finished successfully"))
           .exceptionally(ex -> {
               logger.error("Init failed with ex: ", ex);
@@ -1494,8 +1715,17 @@
 
   Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
 
+<<<<<<< HEAD
   ```java
   while(true) {
+=======
+  - Синхронный API
+
+    Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
+
+    ```java
+    while(true) {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       Message message = reader.receive();
       process(message);
   }
@@ -1579,8 +1809,17 @@
 
   Чтобы прочитать пакет сообщений без подтверждения обработки, используйте следующий код:
 
+<<<<<<< HEAD
   ```java
   private class Handler extends AbstractReadEventHandler {
+=======
+  - Асинхронный API
+
+    Чтобы прочитать пакет сообщений без подтверждения обработки, используйте следующий код:
+
+    ```java
+    private class Handler extends AbstractReadEventHandler {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       @Override
       public void onMessages(DataReceivedEvent event) {
           for (Message message : event.getMessages()) {
@@ -1767,9 +2006,19 @@
 
   В обработчике `onMessage` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
 
+<<<<<<< HEAD
   ```java
   @Override
   public void onMessages(DataReceivedEvent event) {
+=======
+  - Асинхронный API
+
+    В обработчике `onMessages` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
+
+    ```java
+    @Override
+    public void onMessages(DataReceivedEvent event) {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       for (Message message : event.getMessages()) {
           process(message);
       }
@@ -2113,15 +2362,40 @@
 
   В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
 
+<<<<<<< HEAD
   ```java
   Message message = reader.receive(ReceiveSettings.newBuilder()
           .setTransaction(transaction)
           .build());
   ```
+=======
+              session_pool.retry_tx_sync(callee)
+  ```
+
+- Java
+
+  {% list tabs %}
+
+  - Синхронный API
+
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
+
+    В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
+
+    ```java
+    Message message = reader.receive(ReceiveSettings.newBuilder()
+          .setTransaction(transaction)
+          .build());
+    ```
+
+    Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
+    Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
 
   Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
   Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
+<<<<<<< HEAD
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
 - Java (async)
@@ -2134,6 +2408,16 @@
 
   ```java
   @Override
+=======
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
+
+    После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
+    Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
+    Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
+
+    ```java
+    @Override
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
     public void onMessages(DataReceivedEvent event) {
       for (Message message : event.getMessages()) {
           // creating a session in the table service
@@ -2236,9 +2520,20 @@
   Для возможности реагировать на такое событие следует переопределить метод `onStopPartitionSession(StopPartitionSessionEvent event)` в объекте-наследнике `ReadEventHandler` (см [Подключение к топику для чтения сообщений](#start-reader)).
   `event.confirm()` обязательно должен быть вызван, т.к. сервер ожидает этого ответа для продолжения остановки.
 
+<<<<<<< HEAD
   ```java
   @Override
   public void onStopPartitionSession(StopPartitionSessionEvent event) {
+=======
+  - Асинхронный API
+
+    Для возможности реагировать на такое событие следует переопределить метод `onStopPartitionSession(StopPartitionSessionEvent event)` в объекте-наследнике `ReadEventHandler` (см [Подключение к топику для чтения сообщений](#start-reader)).
+    `event.confirm()` обязательно должен быть вызван, т.к. сервер ожидает этого ответа для продолжения остановки.
+
+    ```java
+    @Override
+    public void onStopPartitionSession(StopPartitionSessionEvent event) {
+>>>>>>> d8b4528ed95 (DOCSUP-124725: Переводы Февраля - 4. Организация процесса перевода (1 архив) (2 шт.) (#35400))
       logger.info("Partition session {} stopped. Committed offset: {}", event.getPartitionSessionId(),
               event.getCommittedOffset());
       // This event means that no more messages will be received by server

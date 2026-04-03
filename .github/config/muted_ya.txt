@@ -1,4 +1,3 @@
-ydb/core/blobstorage/ddisk/ut TDDiskActorTest.SyncWithPBViaFakeSource
 ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorEncryptedChunks
 ydb/core/blobstorage/pdisk/ut RDMA.TestChunkReadWithRdmaAllocatorPlainChunks
 ydb/core/blobstorage/pdisk/ut RDMA.TestRcBuf

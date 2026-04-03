@@ -161,32 +161,34 @@ TGatewaySQLFlags SQLFlagsFromYson(const NYT::TNode& node) {
     };
 }
 
-TGatewaySQLFlags SQLFlagsFromGatewaysPatch(TStringBuf patch) {
-    TGatewaysConfig config;
-    YQL_ENSURE(NProtoBuf::TextFormat::ParseFromString(patch, &config));
-
-    // Gateways Patch is used for experimental features
-    return TGatewaySQLFlags::FromTesting(config);
-}
-
 } // namespace
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context) {
-    if (!context.CanRead()) {
-        return {};
-    }
+    YQL_ENSURE(context.CanRead());
 
     TMaybe<NYql::TQItem> loaded =
         context
             .GetReader()
             ->Get({.Component = FacadeComponent, .Label = TranslationLabel})
             .GetValueSync();
-
-    if (!loaded) {
-        return {};
-    }
+    YQL_ENSURE(loaded);
 
     return SQLFlagsFromYson(NYT::NodeFromYsonString(loaded->Value));
+}
+
+THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context) {
+    YQL_ENSURE(context.CanRead());
+
+    TMaybe<NYql::TQItem> loaded =
+        context
+            .GetReader()
+            ->Get({.Component = FacadeComponent, .Label = GatewaysLabel})
+            .GetValueSync();
+    YQL_ENSURE(loaded);
+
+    auto config = MakeHolder<TGatewaysConfig>();
+    YQL_ENSURE(config->ParseFromString(loaded->Value));
+    return config;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -289,11 +291,10 @@ void TProgramFactory::SetUrlListerManager(IUrlListerManagerPtr urlListerManager)
 TProgramPtr TProgramFactory::Create(
     const TFile& file,
     const TString& sessionId,
-    const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    const TQContext& qContext)
 {
     TString sourceCode = TFileInput(file).ReadAll();
-    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext, gatewaysForMerge);
+    return Create(file.GetName(), sourceCode, sessionId, EHiddenMode::Disable, qContext);
 }
 
 TProgramPtr TProgramFactory::Create(
@@ -301,8 +302,7 @@ TProgramPtr TProgramFactory::Create(
     const TString& sourceCode,
     const TString& sessionId,
     EHiddenMode hiddenMode,
-    const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    const TQContext& qContext)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom_ && hiddenMode == EHiddenMode::Disable ? CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ? CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -327,7 +327,7 @@ TProgramPtr TProgramFactory::Create(
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, gatewaysForMerge, RemoteLayersProviders_);
+                        qContext, RemoteLayersProviders_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -361,7 +361,6 @@ TProgram::TProgram(
     IArrowResolver::TPtr arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
@@ -395,7 +394,6 @@ TProgram::TProgram(
     , ArrowResolver_(std::move(arrowResolver))
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
-    , GatewaysForMerge_(std::move(gatewaysForMerge))
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
@@ -474,50 +472,8 @@ TProgram::TProgram(
             UrlListerManager_ = NCommon::WrapUrlListerManagerWithQContext(UrlListerManager_, qContext);
         }
         UdfResolver_ = NCommon::WrapUdfResolverWithQContext(UdfResolver_, QContext_);
-        if (QContext_.CanRead()) {
-            auto item = QContext_.GetReader()->Get({.Component = FacadeComponent, .Label = GatewaysLabel}).GetValueSync();
-            if (item) {
-                YQL_ENSURE(LoadedGatewaysConfig_.ParseFromString(item->Value));
-
-                if (GatewaysForMerge_) {
-                    YQL_ENSURE(NProtoBuf::TextFormat::MergeFromString(*GatewaysForMerge_, &LoadedGatewaysConfig_));
-                }
-
-                THashMap<TString, TString> clusterMapping;
-                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
-
-                THashSet<TString> sqlFlags = TGatewaySQLFlags::FromTesting(LoadedGatewaysConfig_).All();
-
-                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-                    modules->SetClusterMapping(clusterMapping);
-                    modules->SetSqlFlags(sqlFlags);
-                }
-
-                GatewaysConfig_ = &LoadedGatewaysConfig_;
-            }
-        } else if (QContext_.CanWrite() && GatewaysConfig_) {
-            TGatewaysConfig cleaned;
-            if (GatewaysConfig_->HasYt()) {
-                cleaned.MutableYt()->CopyFrom(GatewaysConfig_->GetYt());
-            }
-
-            if (GatewaysConfig_->HasFs()) {
-                cleaned.MutableFs()->CopyFrom(GatewaysConfig_->GetFs());
-            }
-
-            if (GatewaysConfig_->HasYqlCore()) {
-                cleaned.MutableYqlCore()->CopyFrom(GatewaysConfig_->GetYqlCore());
-            }
-
-            if (GatewaysConfig_->HasSqlCore()) {
-                cleaned.MutableSqlCore()->CopyFrom(GatewaysConfig_->GetSqlCore());
-            }
-
-            if (GatewaysConfig_->HasDq()) {
-                cleaned.MutableDq()->CopyFrom(GatewaysConfig_->GetDq());
-            }
-
-            auto data = cleaned.SerializeAsString();
+        if (QContext_.CanWrite() && GatewaysConfig_) {
+            auto data = GatewaysConfig_->SerializeAsString();
             QContext_.GetWriter()->Put({.Component = FacadeComponent, .Label = GatewaysLabel}, data).GetValueSync();
         }
 
@@ -793,27 +749,26 @@ bool HasFullCapture(const IQReaderPtr& reader) {
     return fullCaptureItem.Defined();
 }
 
-void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-                                         NSQLTranslation::TTranslationSettings*& currentSettings)
+void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings)
 {
     if (QContext_.CanWrite()) {
         auto clusterMappingsNode = NYT::TNode::CreateMap();
-        for (const auto& c : currentSettings->ClusterMapping) {
+        for (const auto& c : settings.ClusterMapping) {
             clusterMappingsNode(c.first, c.second);
         }
 
         auto sqlFlagsNode = NYT::TNode::CreateList();
-        for (const auto& f : currentSettings->Flags) {
+        for (const auto& f : settings.Flags) {
             sqlFlagsNode.Add(f);
         }
 
         // clang-format off
         auto dataNode = NYT::TNode()
             ("ClusterMapping", clusterMappingsNode)
-            ("V0Behavior", ui64(currentSettings->V0Behavior))
-            ("V0WarnAsError", currentSettings->V0WarnAsError->Allow())
-            ("DqDefaultAuto", currentSettings->DqDefaultAuto->Allow())
-            ("BlockDefaultAuto", currentSettings->BlockDefaultAuto->Allow())
+            ("V0Behavior", ui64(settings.V0Behavior))
+            ("V0WarnAsError", settings.V0WarnAsError->Allow())
+            ("DqDefaultAuto", settings.DqDefaultAuto->Allow())
+            ("BlockDefaultAuto", settings.BlockDefaultAuto->Allow())
             ("SqlFlags", sqlFlagsNode);
         // clang-format on
 
@@ -826,23 +781,16 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         }
 
         auto dataNode = NYT::NodeFromYsonString(loaded->Value);
-        loadedSettings.ClusterMapping.clear();
+        settings.ClusterMapping.clear();
         for (const auto& c : dataNode["ClusterMapping"].AsMap()) {
-            loadedSettings.ClusterMapping[c.first] = c.second.AsString();
+            settings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        TGatewaySQLFlags flags = SQLFlagsFromYson(dataNode);
-        if (GatewaysForMerge_) {
-            flags.ExtendWith(SQLFlagsFromGatewaysPatch(*GatewaysForMerge_));
-        }
-        loadedSettings.Flags = flags.All();
-
-        loadedSettings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
-        loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
-        loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
-        loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
-        loadedSettings.IsReplay = true;
-        currentSettings = &loadedSettings;
+        settings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
+        settings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
+        settings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
+        settings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        settings.IsReplay = true;
     }
 }
 
@@ -932,16 +880,13 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     SyntaxVersion_ = settings.SyntaxVersion;
     NYql::TWarningRules warningRules;
     HandleSourceCode();
-    NSQLTranslation::TTranslationSettings outerSettings = settings;
-    NSQLTranslation::TTranslationSettings* currentSettings = &outerSettings;
-    NSQLTranslation::TTranslationSettings loadedSettings;
-    loadedSettings.PgParser = settings.PgParser;
+    NSQLTranslation::TTranslationSettings currentSettings = settings;
     if (QContext_) {
-        HandleTranslationSettings(loadedSettings, currentSettings);
+        HandleTranslationSettings(currentSettings);
     }
 
-    SqlFlags_ = currentSettings->Flags;
-    currentSettings->LangVer = LangVer_;
+    SqlFlags_ = currentSettings.Flags;
+    currentSettings.LangVer = LangVer_;
 
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
@@ -955,7 +900,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
-    return FillParseResult(SqlToYql(translators, SourceCode_, *currentSettings, &warningRules), &warningRules);
+    return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }
 
 TProgram::TStatus TProgram::TestPartialTypecheck() {

@@ -772,6 +772,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                             'fail_count': test.get('fail_count'),
                             'pass_count': test.get('pass_count'),
                             'branch': test.get('branch'),
+                            'build_type': test.get('build_type', 'relwithdebinfo'),
                         }
                     )
     
@@ -787,6 +788,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                 prepared_tests_by_suite[chunk_key] = chunk
 
     results = []
+    queue_items = []
     for item in prepared_tests_by_suite:
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
         owner_value = prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1] if '/' in prepared_tests_by_suite[item][0]['owner'] else prepared_tests_by_suite[item][0]['owner']
@@ -794,12 +796,27 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
         if not result:
             break
         else:
+            issue_url = result['issue_url']
             results.append(
                 {
-                    'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {result['issue_url']}",
+                    'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+            try:
+                issue_number = int(issue_url.rstrip('/').split('/')[-1])
+            except (ValueError, IndexError):
+                issue_number = None
+            if issue_number:
+                first_test = prepared_tests_by_suite[item][0]
+                queue_items.append({
+                    'github_issue_number': issue_number,
+                    'github_issue_url': issue_url,
+                    'github_issue_title': title,
+                    'owner_team': owner_value,
+                    'branch': first_test.get('branch', 'main'),
+                    'build_type': first_test.get('build_type', 'relwithdebinfo'),
+                })
 
     # Sort results by owner
     results.sort(key=lambda x: x['owner'])
@@ -880,6 +897,82 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
             
         print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
 
+    return queue_items
+
+
+_DIGEST_QUEUE_SCHEMA = """\
+CREATE TABLE IF NOT EXISTS `{table_path}` (
+    `profile_id`          Utf8      NOT NULL,
+    `github_issue_number` Uint64    NOT NULL,
+    `github_issue_url`    Utf8,
+    `github_issue_title`  Utf8,
+    `owner_team`          Utf8,
+    `branch`              Utf8,
+    `build_type`          Utf8,
+    `enqueued_at`         Timestamp NOT NULL,
+    `sent_at`             Timestamp,
+    PRIMARY KEY (profile_id, github_issue_number)
+)
+WITH (
+    STORE = COLUMN,
+    TTL = Interval("P90D") ON enqueued_at
+)
+"""
+
+
+def enqueue_to_digest_queue(ydb_wrapper, queue_items):
+    """Write newly created issues into digest_queue so send_digest.py can find them."""
+    if not queue_items:
+        return
+
+    try:
+        table_path = ydb_wrapper.get_table_path("digest_queue")
+    except KeyError:
+        logging.warning("digest_queue not found in YDB config — skipping enqueue")
+        return
+
+    ydb_wrapper.create_table(
+        table_path,
+        _DIGEST_QUEUE_SCHEMA.format(table_path=table_path),
+    )
+
+    now_us = int(datetime.datetime.now(tz=datetime.timezone.utc).timestamp() * 1_000_000)
+
+    rows = []
+    for item in queue_items:
+        branch = item['branch']
+        build_type = item['build_type']
+        profile_id = f"{branch}-{build_type}"
+        rows.append({
+            'profile_id':          profile_id,
+            'github_issue_number': item['github_issue_number'],
+            'github_issue_url':    item['github_issue_url'],
+            'github_issue_title':  item['github_issue_title'],
+            'owner_team':          item['owner_team'],
+            'branch':              branch,
+            'build_type':          build_type,
+            'enqueued_at':         now_us,
+            'sent_at':             None,
+        })
+
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column('profile_id',          ydb.PrimitiveType.Utf8)
+        .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
+        .add_column('github_issue_url',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('github_issue_title',  ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('owner_team',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('branch',              ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('build_type',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('enqueued_at',         ydb.PrimitiveType.Timestamp)
+        .add_column('sent_at',             ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+
+    ydb_wrapper.bulk_upsert_batches(
+        table_path, rows, column_types, query_name="enqueue_digest_items"
+    )
+    logging.info(f"Enqueued {len(rows)} issue(s) into digest_queue")
+
 
 def mute_worker(args):
     with YDBWrapper() as ydb_wrapper:
@@ -920,10 +1013,16 @@ def mute_worker(args):
         elif args.mode == 'create_issues':
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
-            
+
             # Reuse already aggregated data for issue creation.
-            create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
-        
+            queue_items = create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
+
+            # Enqueue new issues for the Telegram digest (best-effort: don't fail the run).
+            try:
+                enqueue_to_digest_queue(ydb_wrapper, queue_items or [])
+            except Exception as exc:
+                logging.warning(f"Failed to enqueue issues for digest: {exc}")
+
         logging.info("Mute worker completed successfully")
 
 

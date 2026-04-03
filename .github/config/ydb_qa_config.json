@@ -22,7 +22,9 @@
               "pr_check_failures_by_attempt": "test_results/analytics/pr_check_failures_by_attempt",
               "binary_size": "binary_size",
               "issues": "github_data/issues",
-              "pull_requests": "github_data/pull_requests"
+              "pull_requests": "github_data/pull_requests",
+              "notification_state": "test_results/analytics/notification_state",
+              "digest_sent_issues": "test_results/analytics/digest_sent_issues"
 
           }
       },

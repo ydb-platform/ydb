@@ -50,6 +50,8 @@ PEERDIR(
     ydb/library/persqueue/topic_parser
 )
 
+GENERATE_ENUM_SERIALIZATION(deduplication_write_queue.h)
+
 END()
 
 RECURSE(

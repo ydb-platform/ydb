@@ -129,7 +129,9 @@ private:
     TDeque<TQueueRequest> Queue;
     using TDeduplicationInfoMap = absl::flat_hash_map<TString, TDeduplicationInfo>;
     TDeduplicationInfoMap DeduplicationInfo;
-    bool BypassMode = false;
+
+    using EBypassMode = NPrivate::EBypassMode;
+    EBypassMode BypassMode = EBypassMode::Disabled;
 
 private:
 
@@ -145,7 +147,7 @@ private:
 
     bool TryBypass(auto& ev) {
         TryToSwitchToBypassMode();
-        if (BypassMode) {
+        if (BypassMode == EBypassMode::Enabled) {
             SendEvent(std::move(ev));
             return true;
         }
@@ -157,9 +159,8 @@ private:
         if (TryBypass(ev)) {
             return;
         }
-
         absl::flat_hash_map<TString, TVector<size_t>> messageIndices;
-        {
+        if (BypassMode == EBypassMode::Disabled) {
             TEvPQ::TEvWrite& write = *ev->Get();
             if (write.ExternalDeduplicationStatus == EWriteExternalDeduplicationStatus::Unchecked) {
                 for (size_t i = 0; i < write.Msgs.size(); ++i) {
@@ -169,6 +170,9 @@ private:
                     }
                 }
             }
+        } else {
+            // Skip checking parent partitions,
+            // but still eunqueu to enforce proper order.
         }
         absl::flat_hash_set<TString> unresolvedDeduplicationIds;
         unresolvedDeduplicationIds.reserve(messageIndices.size());
@@ -368,25 +372,31 @@ private:
     }
 
     void TryToSwitchToBypassMode() {
-        if (BypassMode) {
+        TMaybe<EBypassMode> newMode;
+        switch (BypassMode) {
+            case EBypassMode::Disabled:
+                if (TAppData::TimeProvider->Now() < DisableTimestamp) [[likely]] {
+                    return;
+                }
+                newMode = EBypassMode::Pending;
+                [[fallthrough]];
+            case EBypassMode::Pending:
+                if (Queue.empty()) {
+                    newMode = EBypassMode::Enabled;
+                }
+                break;
+            case EBypassMode::Enabled:
+                [[likely]] return;
+        }
+        if (!newMode.Defined()) {
             return;
         }
-        if (!Queue.empty()) {
-            return;
-        }
-        if (TAppData::TimeProvider->Now() < DisableTimestamp) {
-            return;
-        }
-        SwitchToBypassMode();
-    }
-
-    void SwitchToBypassMode() {
-        LOG_D("SwitchToBypassMode");
-        AFL_ENSURE(Queue.empty())("size", Queue.size());
-        if (!BypassMode) {
+        AFL_ENSURE(newMode != BypassMode)("BypassMode", BypassMode)("NewMode", newMode);
+        LOG_D("SwitchToBypassMode " << *newMode);
+        if (newMode == EBypassMode::Enabled) {
             Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }
-        BypassMode = true;
+        BypassMode = *newMode;
     }
 
     STFUNC(StateWork) {

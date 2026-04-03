@@ -48,13 +48,15 @@ struct TTypeWrapper
  * @param callback Template function of signature (TTypeWrapper) -> bool
  * @return Result of execution of callback or false if the type typeId is not supported.
  */
-template <typename TFunc>
+template <bool ForKqp = false, typename TFunc>
 bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
     switch (type) {
-        case NUdf::EDataSlot::Bool:
-            return callback(TTypeWrapper<arrow::BooleanType>());
         case NUdf::EDataSlot::Int8:
             return callback(TTypeWrapper<arrow::Int8Type>());
+        case NUdf::EDataSlot::Bool:
+            if constexpr (ForKqp) {
+                return callback(TTypeWrapper<arrow::BooleanType>());
+            }
         case NUdf::EDataSlot::Uint8:
             return callback(TTypeWrapper<arrow::UInt8Type>());
         case NUdf::EDataSlot::Int16:
@@ -68,30 +70,41 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::Datetime:
         case NUdf::EDataSlot::Uint32:
             return callback(TTypeWrapper<arrow::UInt32Type>());
+        case NUdf::EDataSlot::Interval:
+            if constexpr (ForKqp) {
+                return callback(TTypeWrapper<arrow::DurationType>());
+            }
         case NUdf::EDataSlot::Int64:
         case NUdf::EDataSlot::Datetime64:
         case NUdf::EDataSlot::Timestamp64:
         case NUdf::EDataSlot::Interval64:
             return callback(TTypeWrapper<arrow::Int64Type>());
+        case NUdf::EDataSlot::Timestamp:
+            if constexpr (ForKqp) {
+                return callback(TTypeWrapper<arrow::TimestampType>());
+            }
         case NUdf::EDataSlot::Uint64:
             return callback(TTypeWrapper<arrow::UInt64Type>());
         case NUdf::EDataSlot::Float:
             return callback(TTypeWrapper<arrow::FloatType>());
         case NUdf::EDataSlot::Double:
             return callback(TTypeWrapper<arrow::DoubleType>());
-        case NUdf::EDataSlot::Timestamp:
-            return callback(TTypeWrapper<arrow::TimestampType>());
-        case NUdf::EDataSlot::Interval:
-            return callback(TTypeWrapper<arrow::DurationType>());
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+            return callback(TTypeWrapper<arrow::StringType>());
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::JsonDocument:
-            return callback(TTypeWrapper<arrow::StringType>());
+            if constexpr (ForKqp) {
+                return callback(TTypeWrapper<arrow::StringType>());
+            }
         case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::DyNumber:
             return callback(TTypeWrapper<arrow::BinaryType>());
+        case NUdf::EDataSlot::Uuid:
+            if constexpr (ForKqp) {
+                return callback(TTypeWrapper<arrow::BinaryType>());
+            }
+            return false; //callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
         case NUdf::EDataSlot::Decimal:
             return callback(TTypeWrapper<arrow::Decimal128Type>());
         // TODO convert Tz-types to native arrow date and time types.
@@ -103,6 +116,28 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc&& callback) {
         case NUdf::EDataSlot::TzTimestamp64:
             return false;
     }
+}
+
+bool NeedWrapByExternalOptional(const TType* type) {
+    switch (type->GetKind()) {
+        case TType::EKind::Void:
+        case TType::EKind::Null:
+        case TType::EKind::Variant:
+        case TType::EKind::Optional:
+            return true;
+        case TType::EKind::EmptyList:
+        case TType::EKind::EmptyDict:
+        case TType::EKind::Data:
+        case TType::EKind::Struct:
+        case TType::EKind::Tuple:
+        case TType::EKind::List:
+        case TType::EKind::Dict:
+            return false;
+        default:
+            YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+    }
+
+    return true;
 }
 
 template <typename TArrowType>
@@ -124,20 +159,6 @@ template <> // For darwin build
 NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
     auto array = std::static_pointer_cast<arrow::Int64Array>(column);
     return NUdf::TUnboxedValuePod(static_cast<i64>(array->Value(row)));
-}
-
-template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::TimestampType>(std::shared_ptr<arrow::Array> column, ui32 row) {
-    using TArrayType = typename arrow::TypeTraits<arrow::TimestampType>::ArrayType;
-    auto array = std::static_pointer_cast<TArrayType>(column);
-    return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
-}
-
-template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::DurationType>(std::shared_ptr<arrow::Array> column, ui32 row) {
-    using TArrayType = typename arrow::TypeTraits<arrow::DurationType>::ArrayType;
-    auto array = std::static_pointer_cast<TArrayType>(column);
-    return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
 }
 
 template <>
@@ -178,16 +199,6 @@ template <>
 std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::Decimal128Type>() {
     // TODO use non-fixed precision, derive it from data.
     return arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::TimestampType>() {
-    return arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO);
-}
-
-template <>
-std::shared_ptr<arrow::DataType> CreateEmptyArrowImpl<arrow::DurationType>() {
-    return arrow::duration(arrow::TimeUnit::TimeUnit::MICRO);
 }
 
 std::shared_ptr<arrow::DataType> GetArrowType(const TDataType* dataType) {
@@ -404,9 +415,10 @@ std::shared_ptr<arrow::DataType> GetArrowType(const TType* type) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
         case TType::EKind::Null:
+            return arrow::null();
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
-            break;
+            return arrow::struct_({});
         case TType::EKind::Data: {
             auto dataType = static_cast<const TDataType*>(type);
             return GetArrowType(dataType);
@@ -480,7 +492,7 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case TType::EKind::Optional: {
             auto optionalType = static_cast<const TOptionalType*>(type);
             auto innerOptionalType = optionalType->GetItemType();
-            if (innerOptionalType->GetKind() == TType::EKind::Optional) {
+            if (NeedWrapByExternalOptional(innerOptionalType)) {
                 return false;
             }
             return IsArrowCompatible(innerOptionalType);
@@ -546,7 +558,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
         case TType::EKind::Data: {
             // TODO for TzDate, TzDatetime, TzTimestamp pass timezone to arrow builder?
             auto dataType = static_cast<const TDataType*>(type);
-            bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
+            bool success = SwitchMiniKQLDataTypeToArrowType<true>(*dataType->GetDataSlot().Get(), [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
                 AppendDataValue<TType>(builder, value);
                 return true;

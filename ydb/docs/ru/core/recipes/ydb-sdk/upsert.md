@@ -338,4 +338,23 @@
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+
+  const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+  ]
+
+  const sql = query(driver)
+  await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
+  ```
+
+
 {% endlist %}

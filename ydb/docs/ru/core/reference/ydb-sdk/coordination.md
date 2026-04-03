@@ -77,7 +77,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -97,6 +96,15 @@
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await client.createNode("/path/to/mynode", {});
+  ```
 
 {% endlist %}
 
@@ -159,7 +167,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -184,6 +191,15 @@
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { CoordinationClient } from "@ydbjs/coordination";
+
+  let client = new CoordinationClient(driver);
+  await using session = await client.createSession("/path/to/mynode", {}, signal);
+  ```
+
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -204,10 +220,19 @@
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  В JS SDK для отслеживания таких ситуаций используется сигнал `session.signal`, который прерывается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить за сигналом сессии, чтобы не совершать действий когда сессия была закрыта или просрочена.
+
+  Также в JavaScript SDK есть метод для получения новой сессии при утрате старой, и этот способ является рекомендованным для длительного использования `for await (session of client.openSession()) { session.signal }`.
+
 - Java
 
   Завершите сессию (`close()`), когда ваш сценарий отработал: так вы явно освободите соединение с узлом. Пока сессия не закрыта, SDK при сбоях сети сам повторяет подключение согласно `CoordinationSessionSettings`. Семафор держите только на время решения пользовательской задачи и отпускайте через `SemaphoreLease.release()`, когда ресурс больше не нужен.
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -257,7 +282,6 @@
   В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -282,6 +306,18 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.create({
+    limit: 10,
+    data: new Uint8Array(),
+  });
+  ```
+
 - Java
 
   Семафор создаётся явно методом `createSemaphore` у подключённой сессии. Можно передать пользовательские двоичные данные, хранящиеся вместе с семафором (`byte[] data`); вариант метода без параметра `data` эквивалентен передаче `null`. Если семафор с таким именем уже есть, операция завершится статусом «уже существует».
@@ -292,6 +328,7 @@
       .expectSuccess("create semaphore failed");
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -344,7 +381,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -383,6 +419,17 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  {
+    await using lease = await sem.acquire({ count: 1, data: new Uint8Array() });
+    await doWork(lease.signal);
+  } // lease.release() called automatically
+  ```
+
 - Java
 
   Захват выполняется через `acquireSemaphore` с именем семафора, числом токенов `count`, опциональными данными операции и таймаутом ожидания в очереди [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Метод возвращает `CompletableFuture<Result<SemaphoreLease>>` (см. [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) и [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). Если семафор с указанным именем не существует, операция завершится исключением (см. javadoc метода).
@@ -405,6 +452,7 @@
 
   В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -439,7 +487,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -464,6 +511,18 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.update({
+    limit: 5,
+    data: new Uint8Array(),
+  });
+  ```
+
 - Java
 
   ```java
@@ -472,6 +531,7 @@
       .expectSuccess("update semaphore failed");
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -530,7 +590,6 @@
 - Python
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -557,6 +616,18 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const sem = session.semaphore("connections");
+  await sem.describe({
+    owners: true,
+    waiters: true,
+  });
+  ```
+
 - Java
 
   Метод `describeSemaphore` принимает имя семафора и режим [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
@@ -575,6 +646,7 @@
 
   Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -605,7 +677,6 @@
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
 
   {% list tabs %}
-
   - Native SDK
 
     ```python
@@ -634,6 +705,16 @@
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
+
+  ```javascript
+  await lease.release();
+  ```
+
 - Java
 
   Освобождение — через [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (асинхронно, `CompletableFuture<Status>`).
@@ -642,6 +723,7 @@
   lease.release().join().expectSuccess("release failed");
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Важные особенности

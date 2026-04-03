@@ -101,6 +101,39 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
+- Java
+
+    Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
+
+    ```java
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.SessionRetryContext;
+    
+    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+    
+    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+    }
+    ```
+
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -248,6 +281,45 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
+
+- Java
+
+  ```java
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+  
+  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+      String query = String.format("""
+              CREATE TABLE IF NOT EXISTS `%s` (
+                  id Utf8,
+                  document Utf8,
+                  embedding String,
+                  PRIMARY KEY (id)
+              );""", tableName);
+  
+      retryCtx.supplyResult(session -> QueryReader.readFrom(
+              session.createQuery(query, TxMode.NONE, Params.empty())
+      )).join().getValue();
+  
+      System.out.println("Vector table created: " + tableName);
+  }
+  ```
+
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 
@@ -481,6 +553,37 @@
 
     {% endnote %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, embedding,
+    FROM AS_TABLE($items);`
+  ```
+
 - Java
 
     ```java
@@ -633,6 +736,7 @@
     // record Item(String id, String document, float[] embedding) {}
     ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Python (альтернативный)
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
@@ -774,6 +878,23 @@
         std::cout << items.size() << " items inserted" << std::endl;
     }
     ```
+
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
 
 {% endlist %}
 
@@ -977,6 +1098,12 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
     ```java
@@ -1031,6 +1158,7 @@
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Поиск по вектору {#search-by-vector}
@@ -1274,6 +1402,23 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const limit;
+  const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, ${embedding}) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
+
 - Java
 
     ```java
@@ -1412,6 +1557,7 @@
     // record ResultItem(String id, String document, float score) {}
     ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Python (alternative)
 
     {% cut "asyncio" %}
@@ -1577,6 +1723,21 @@
         return result;
     }
     ```
+
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 {% endlist %}
 
@@ -1861,6 +2022,12 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
     Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса. Методы `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` и тип `Item` / `ResultItem` — как в соответствующих фрагментах этой страницы.
@@ -1943,4 +2110,5 @@
 
     Вывод совпадает с примером на Python.
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}

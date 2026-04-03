@@ -40,6 +40,12 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -49,6 +55,7 @@
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -87,6 +94,12 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -100,6 +113,7 @@
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
@@ -131,6 +145,12 @@
 
 {% endif %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Go
 
   Функциональность на данный момент не поддерживается.
@@ -143,6 +163,7 @@
 
   Функциональность на данный момент не поддерживается.
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Включение TTL для вновь создаваемой таблицы {#enable-for-new-table}
@@ -194,6 +215,12 @@
   )
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -207,6 +234,7 @@
   session.createTable("mytable", description).join().expectSuccess();
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Выключение TTL {#disable}
@@ -243,6 +271,12 @@
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -252,6 +286,7 @@
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Получение настроек TTL {#describe}
@@ -288,11 +323,19 @@
   ttl = desc.ttl_settings
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
   TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
 
+>>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
+{% endlist %}

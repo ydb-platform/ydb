@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-#include <yql/essentials/core/yql_statistics.h>
 
 namespace NKikimr {
 namespace NKqp {

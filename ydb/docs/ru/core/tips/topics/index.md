@@ -1,5 +1,9 @@
 # Топики
 
-Тут про работу с топиками {{ ydb-short-name }}.
+В этом разделе собраны практические советы по работе с топиками {{ ydb-short-name }}: записи и чтению сообщений, обеспечению порядка обработки и использованию Kafka API.
 
-Модель данных: [{#T}](../../concepts/datamodel/topic.md). Kafka API: [{#T}](../../reference/kafka-api/index.md). Потоковая обработка — [{#T}](../../concepts/streaming-query.md).
+См. также:
+
+* [{#T}](../../concepts/datamodel/topic.md) — модель данных топиков
+* [{#T}](../../reference/kafka-api/index.md) — Kafka API
+* [{#T}](../../concepts/streaming-query.md) — потоковая обработка

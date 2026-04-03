@@ -467,7 +467,7 @@ class YdbCliHelper:
             cmd = cls.get_cli_command(remote_cli_path)
             if user:
                 cmd += ['--user', user, '--no-password']
-            cmd += ['workload', 'tpcc', '--path', YdbCluster.get_tables_path(path), 'run', '--no-tui', '--format', 'Json', '--tx-mode', str(tx_mode), '--highres-histogram']
+            cmd += ['workload', 'tpcc', '--path', YdbCluster.get_tables_path(path), 'run', '--no-tui', '--format', 'Json', '--tx-mode', str(tx_mode), '--highres-histogram', '-m', '3000']
             if warmup > 0:
                 cmd += ['--warmup', f'{warmup}s']
             cmd += ['--time', f'{bench_time}s', '--warehouses', str(warehouses)]

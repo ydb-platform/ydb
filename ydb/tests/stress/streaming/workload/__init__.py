@@ -51,7 +51,6 @@ class Workload():
                     SOURCE_TYPE="Ydb",
                     LOCATION="{self.endpoint}",
                     DATABASE_NAME="{self.database}",
-                    SHARED_READING="false",
                     AUTH_METHOD="NONE");
             """
         )

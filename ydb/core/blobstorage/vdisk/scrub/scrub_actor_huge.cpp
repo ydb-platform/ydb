@@ -45,6 +45,9 @@ namespace NKikimr {
             const TLogoBlobID& id = iter.GetCurKey().LogoBlobID();
 
             if (status.KeepData) {
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    EnqueueCheckIntegrity(id, true);
+                }
                 merger.Begin(id);
                 iter.PutToMerger(&merger);
                 const NMatrix::TVectorType needed = merger.GetPartsToRestore();
@@ -57,12 +60,12 @@ namespace NKikimr {
                 DropGarbageBlob(id);
             }
 
+            LogoBlobIDFromLogoBlobID(id, State->MutableBlobId());
+
             iter.Prev();
         } while (TActorCoroImpl::Now() < startTime + TDuration::Seconds(5));
 
-        if (iter.Valid()) {
-            LogoBlobIDFromLogoBlobID(iter.GetCurKey().LogoBlobID(), State->MutableBlobId());
-        } else {
+        if (!iter.Valid()) {
             State->ClearBlobId();
         }
     }

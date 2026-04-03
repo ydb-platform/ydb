@@ -16,6 +16,7 @@ namespace NKikimr::NBlobDepot {
         XX(EvCollectGarbage) \
         XX(EvStatus) \
         XX(EvPatch) \
+        XX(EvCheckIntegrity) \
         // END
 
     class TBlobDepotAgent;
@@ -57,6 +58,7 @@ namespace NKikimr::NBlobDepot {
         bool Error() const { return std::holds_alternative<TError>(Outcome); }
         bool Success() const { return std::holds_alternative<TSuccess>(Outcome); }
         const TResolvedValue *GetResolvedValue() const { return std::get<TSuccess>(Outcome).Value; }
+        TString GetErrorReason() const { return std::get<TError>(Outcome).ErrorReason; }
 
         void Output(IOutputStream& s) const {
             if (auto *success = std::get_if<TSuccess>(&Outcome)) {
@@ -131,7 +133,8 @@ namespace NKikimr::NBlobDepot {
 
             // underlying DS proxy responses
             TEvBlobStorage::TEvGetResult*,
-            TEvBlobStorage::TEvPutResult*
+            TEvBlobStorage::TEvPutResult*,
+            TEvBlobStorage::TEvCheckIntegrityResult*
         >;
 
         static TString ToString(const TResponse& response);
@@ -176,6 +179,14 @@ namespace NKikimr::NBlobDepot {
                         << " ErrorReason# " << value.ErrorReason.Quote() << "}";
                 }
             }, Value);
+        }
+    };
+
+    struct TCheckOutcome {
+        std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> Result;
+
+        TString ToString() const {
+            return TStringBuilder() << "{Result# " << (Result ? Result->ToString() : "") << "}";
         }
     };
 
@@ -235,6 +246,7 @@ namespace NKikimr::NBlobDepot {
 
                 hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
                 hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
+                hFunc(TEvBlobStorage::TEvCheckIntegrityResult, HandleOtherResponse);
 
                 ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
                 fFunc(TEvBlobStorage::EvAssimilate, HandleAssimilate);
@@ -375,6 +387,7 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
+            virtual void OnCheckIntegrity(TCheckOutcome&& /*outcome*/) {}
 
         protected: // reading logic
             struct TReadContext;
@@ -388,10 +401,14 @@ namespace NKikimr::NBlobDepot {
                 std::optional<TEvBlobStorage::TEvGet::TReaderTabletData> ReaderTabletData;
                 TString Key; // the key we are reading -- this is used for retries when we are getting NODATA
             };
+            struct TCheckContext;
 
             bool IssueRead(TReadArg&& arg, TString& error);
             void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
             void HandleResolveResult(const TRequestContext::TPtr& context, TEvBlobDepot::TEvResolveResult& msg);
+
+            void IssueCheckIntegrity(TReadArg&& arg);
+            void HandleCheckIntegrityResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvCheckIntegrityResult& msg);
 
         public:
             struct TDeleter {

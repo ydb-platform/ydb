@@ -11,6 +11,7 @@ SRCS(
     node_warden_mock_state.cpp
     node_warden_mock_state.h
     node_warden_mock_vdisk.h
+    ut_helpers.cpp
 )
 
 PEERDIR(

@@ -163,13 +163,14 @@ namespace NKikimr::NStorage {
         TControlWrapper PredictedDelayMultiplier;
         TControlWrapper PredictedDelayMultiplierHDD;
         TControlWrapper PredictedDelayMultiplierSSD;
-    
+
         TControlWrapper MaxNumOfSlowDisks;
         TControlWrapper MaxNumOfSlowDisksHDD;
         TControlWrapper MaxNumOfSlowDisksSSD;
 
         TControlWrapper LongRequestThresholdMs;
         TControlWrapper LongRequestReportingDelayMs;
+        TControlWrapper EnableDeepScrubbing;
 
     public:
         struct TGroupRecord;
@@ -215,6 +216,7 @@ namespace NKikimr::NStorage {
             , MaxNumOfSlowDisksSSD(DefaultMaxNumOfSlowDisks, 1, 2)
             , LongRequestThresholdMs(50'000, 1, 1'000'000)
             , LongRequestReportingDelayMs(60'000, 1, 1'000'000)
+            , EnableDeepScrubbing(false, false, true)
         {
             Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
             AvailDomainId = 1;

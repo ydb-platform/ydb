@@ -221,14 +221,7 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
-        # Do not str() the whole describe result: v2 meta may embed large unrelated payloads (e.g. SVG).
-        stack = list(describe_result.query.issue[0].issues)
-        issue_messages = []
-        while stack:
-            iss = stack.pop()
-            issue_messages.append(iss.message)
-            stack.extend(iss.issues)
-        describe_string = " ".join(issue_messages)
+        describe_string = "{}".format(describe_result)
         assert (
             "Unknown format: invalid_type_format. Use one of: "
             in describe_string

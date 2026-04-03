@@ -55,7 +55,6 @@ SRCS(
     row_version.cpp
     row_version.h
     runtime_feature_flags.h
-    scheme_object_name.h
     services_assert.cpp
     shared_quota.h
     statestorage.cpp

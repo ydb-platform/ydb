@@ -469,7 +469,7 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
             return;
         }
 
-        desc.FalsePositiveProbability = fpp;
+        desc.FalsePositiveProbability.emplace(fpp);
         return;
     }
 
@@ -497,9 +497,9 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
             return;
         }
 
-        desc.FalsePositiveProbability = fpValue;
+        desc.FalsePositiveProbability.emplace(fpValue);
         return;
-    }  
+    }
 
     if (name == "case_sensitive") {
         bool boolValue = true;

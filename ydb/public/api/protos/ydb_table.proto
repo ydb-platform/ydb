@@ -326,7 +326,7 @@ message LocalBloomFilterIndex {
 }
 
 message LocalBloomNgramFilterIndex {
-    optional uint32 ngram_size = 1;
+    uint32 ngram_size = 1;
     uint32 hashes_count = 2;
     uint32 filter_size_bytes = 3;
     uint32 records_count = 4;

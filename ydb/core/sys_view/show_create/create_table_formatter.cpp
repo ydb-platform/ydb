@@ -732,7 +732,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         const auto& settings = index.local_bloom_ngram_filter_index();
         TStringBuilder with;
         const char* sep = "";
-        if (settings.has_ngram_size()) {
+        if (settings.ngram_size()) {
             with << sep << NIndexParameters::NGrammSize << "=" << settings.ngram_size();
             sep = ", ";
         }

@@ -113,7 +113,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   {% include [auth-anonymous](../../_includes/nodejs/auth-anonymous.md) %}
 

@@ -146,7 +146,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   {% include [auth-access-token](../../_includes/nodejs/auth-access-token.md) %}
 

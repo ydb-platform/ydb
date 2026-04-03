@@ -5066,6 +5066,29 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, "key2value2");
         ReadTopicMessage(outputTopicName, "key2value2", disposition);
     }
+
+    Y_UNIT_TEST_F(TableMode, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+        config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
+
+        constexpr char topic[] = "tableMode";
+        CreateTopic(topic, std::nullopt, /* local */ true);
+        WriteTopicMessage(topic, "data", 0, /* local */ true);
+        Sleep(TDuration::Seconds(1));
+
+        const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)","topic"_a = topic));
+        CheckScriptResult(result1[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
+
+        const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))","topic"_a = topic));
+        CheckScriptResult(result2[0], 1, 1, [&](TResultSetParser& resultSet) {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {

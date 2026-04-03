@@ -36,7 +36,7 @@ public:
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions) {
+    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -46,7 +46,7 @@ public:
         }
         YQL_ENSURE(topicPartitionsCount > 0);
 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+        const size_t tasks = streamingTopicRead ? Min(maxPartitions, topicPartitionsCount) : 1;
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;
@@ -65,12 +65,24 @@ public:
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
-            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions);
+            return PartitionTopicRead(maybePqRead.Cast().Topic(), settings.MaxPartitions, partitions, true);
         }
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto srcSettings = maybeDqSource.Cast().Settings();
-            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
-                return PartitionTopicRead(topicSource.Cast().Topic(), settings.MaxPartitions, partitions);
+            if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
+                TDqPqTopicSource topicSource = maybeTopicSource.Cast();
+                bool streamingTopicRead = true;
+                size_t const settingsCount = topicSource.Settings().Size();
+                for (size_t i = 0; i < settingsCount; ++i) {
+                    TCoNameValueTuple setting = topicSource.Settings().Item(i);
+                    const TStringBuf name = Name(setting);
+                    if (name != StreamingTopicRead) {
+                        continue;
+                    }
+                    streamingTopicRead = FromString<bool>(Value(setting));
+                    break;
+                }
+                return PartitionTopicRead(topicSource.Topic(), settings.MaxPartitions, partitions, streamingTopicRead);
             }
         }
         return 0;
@@ -655,21 +667,30 @@ public:
                 watermarksIdleTimeoutUs = out.Get<ui64>();
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
-                    streamingTopicReadEnabled = *parseResult;
-                    Add(props, StreamingTopicRead, ToString(*parseResult), pos, ctx);
+                    bool withStreamingValue = *parseResult;
+                    if (State_->StreamingTopicsReadByDefault && !withStreamingValue) {
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+                        return nullptr;
+                    }
+                    if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
+                        ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only"));
+                    }
+                    streamingTopicReadEnabled = withStreamingValue;
                 } else {
                     return {};
                 }
             }
         }
+        Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
 
-        if (State_->StreamingTopicsReadByDefault && !streamingTopicReadEnabled) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+        if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode, use WITH (STREAMING = \"TRUE\")"));
             return nullptr;
         }
 
-        if (!State_->StreamingTopicsReadByDefault && streamingTopicReadEnabled) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Streaming topic reading (without checkpoints) use for debugging purposes only"));
+        if (useSharedReading && !streamingTopicReadEnabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported with sharing reading mode"));
+            return nullptr;
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {

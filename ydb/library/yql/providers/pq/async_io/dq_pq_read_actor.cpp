@@ -257,8 +257,8 @@ public:
             SRC_LOG_N("Failed to parse reconnect period: " << period);
         }
 
-        SRC_LOG_I("Start read actor, " << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-            << ", streaming mode: " << SourceParams.GetStreamingMode()
+        SRC_LOG_I("Start read actor, metadatafields: {" << JoinSeq(',', SourceParams.GetMetadataFields())
+            << "}, streaming mode: " << SourceParams.GetStreamingMode()
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -728,15 +728,10 @@ private:
     }
 
     void CheckFinishedByOffsets() {
-        // SRC_LOG_T("SessionId: " << GetSessionId() << "CheckFinishedByOffsets: Clusters.empty() " << Clusters.empty()
-        //  <<  " PartitionsCount != PartitionToOffset.size() " << (PartitionsCount != PartitionToOffset.size()) << );
         if (Clusters.empty()
             || PartitionsCount != PartitionToOffset.size()      // Not all partition connected. 
             || SourceParams.GetStreamingMode() 
             || FinishedByOffsets) {
-                SRC_LOG_T("SessionId: " << GetSessionId() << ", CheckFinishedByOffsets 1 Clusters.empty() " << Clusters.empty() 
-                << " PartitionsCount != PartitionToOffset.size() " << (PartitionsCount != PartitionToOffset.size()) 
-                << " FinishedByOffsets " << FinishedByOffsets );
             return;
         }
         for (const auto& [key, info] : PartitionToOffset) {
@@ -798,7 +793,7 @@ private:
         topicReadSettings.Path(topicPath);
 
         const auto& partitionsToRead = GetPartitionsToRead(clusterState);
-        SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << " PartitionsToRead: " << JoinSeq(", ", partitionsToRead));
+        SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << " PartitionsToRead: {" << JoinSeq(", ", partitionsToRead) << "} StartingMessageTimestamp " << StartingMessageTimestamp);
         for (const auto partitionId : partitionsToRead) {
             topicReadSettings.AppendPartitionIds(partitionId);
         }

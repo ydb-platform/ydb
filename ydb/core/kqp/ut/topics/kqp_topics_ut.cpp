@@ -142,6 +142,10 @@ Y_UNIT_TEST(ReadWriteOperations) {
     TestReadWriteOperations(false, false);
 }
 
+Y_UNIT_TEST(ReadWriteOperations_TrackProducerId) {
+    TestReadWriteOperations(false, true);
+}
+
 Y_UNIT_TEST(ReadWriteOperations_SkipConflictCheck) {
     TestReadWriteOperations(true, false);
 }
@@ -189,6 +193,10 @@ Y_UNIT_TEST(OnlyWriteOperations) {
     TestOnlyWriteOperations(false, false);
 }
 
+Y_UNIT_TEST(OnlyWriteOperations_TrackProducerId) {
+    TestOnlyWriteOperations(false, true);
+}
+
 Y_UNIT_TEST(OnlyWriteOperations_SkipConflictCheck) {
     TestOnlyWriteOperations(true, false);
 }
@@ -233,6 +241,10 @@ void TestReadWriteOperationsOnePartition(bool skipConflictCheck, bool trackProdu
 
 Y_UNIT_TEST(ReadWriteOperations_OnePartition) {
     TestReadWriteOperationsOnePartition(false, false);
+}
+
+Y_UNIT_TEST(ReadWriteOperations_OnePartition_TrackProducerId) {
+    TestReadWriteOperationsOnePartition(false, true);
 }
 
 Y_UNIT_TEST(ReadWriteOperations_OnePartition_SkipConflictCheck) {

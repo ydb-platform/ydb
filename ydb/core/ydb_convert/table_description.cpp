@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/scheme_object_name.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
@@ -130,6 +131,18 @@ bool ValidateRenameIndexRequest(
         return false;
     }
 
+    if (!IsValidSchemeObjectName(rename.source_name())) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid source index name";
+        return false;
+    }
+
+    if (!IsValidSchemeObjectName(rename.destination_name())) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid destination index name";
+        return false;
+    }
+
     return true;
 }
 
@@ -177,6 +190,12 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     if (!desc.name()) {
         code = Ydb::StatusIds::BAD_REQUEST;
         error = "Index must have a name";
+        return false;
+    }
+
+    if (!IsValidSchemeObjectName(desc.name())) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Invalid index name";
         return false;
     }
 
@@ -306,6 +325,10 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     modifyScheme->SetWorkingDir(workingDir);
 
     for(const auto& rename: req->rename_indexes()) {
+        if (!ValidateRenameIndexRequest(rename, code, error)) {
+            return false;
+        }
+
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
         auto& alter = *modifyScheme->MutableMoveIndex();
         alter.SetTablePath(path);
@@ -365,6 +388,18 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     }
 
     for (const auto& drop : req->drop_indexes()) {
+        if (drop.empty()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Index name must not be empty";
+            return false;
+        }
+
+        if (!IsValidSchemeObjectName(drop)) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = "Invalid index name";
+            return false;
+        }
+
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropIndex);
         auto desc = modifyScheme->MutableDropIndex();
         desc->SetIndexName(drop);
@@ -1131,6 +1166,12 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
+        if (!IsValidSchemeObjectName(index.name())) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Invalid index name";
+            return false;
+        }
+
         if (index.index_columns_size() != 1) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Only one index column is supported for local bloom indexes";
@@ -1217,7 +1258,20 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         auto* alterColumnTable = modifyScheme->MutableAlterColumnTable();
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
-        alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
+        const TString& dropIndexName = req->drop_indexes(0);
+        if (dropIndexName.empty()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Index name must not be empty";
+            return false;
+        }
+
+        if (!IsValidSchemeObjectName(dropIndexName)) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Invalid index name";
+            return false;
+        }
+
+        alterColumnTable->MutableAlterSchema()->AddDropIndexes(dropIndexName);
     }
 
     return true;
@@ -1493,6 +1547,14 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
     for (const auto& index : in.indexes()) {
         auto indexDesc = out.MutableIndexDescription()->Add();
+
+        if (index.name().empty()) {
+            return returnError(Ydb::StatusIds::BAD_REQUEST, "Index must have a name");
+        }
+
+        if (!IsValidSchemeObjectName(index.name())) {
+            return returnError(Ydb::StatusIds::BAD_REQUEST, "Invalid index name");
+        }
 
         if (!index.data_columns().empty() && !AppData()->FeatureFlags.GetEnableDataColumnForIndexTable()) {
             return returnError(Ydb::StatusIds::UNSUPPORTED, "Data column feature is not supported yet");

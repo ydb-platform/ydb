@@ -22,6 +22,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
+#include <ydb/core/base/scheme_object_name.h>
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
@@ -3867,17 +3868,7 @@ std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceN
 NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 inline bool IsValidColumnName(const TString& name, bool allowSystemColumnNames = false) {
-    if (!allowSystemColumnNames && name.StartsWith(SYSTEM_COLUMN_PREFIX)) {
-        return false;
-    }
-
-    for (auto c: name) {
-        if (!std::isalnum(c) && c != '_' && c != '-') {
-            return false;
-        }
-    }
-
-    return true;
+    return NKikimr::IsValidSchemeObjectName(name, allowSystemColumnNames);
 }
 
 // namespace NForcedCompaction {

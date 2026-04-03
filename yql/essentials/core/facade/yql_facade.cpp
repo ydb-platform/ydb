@@ -909,9 +909,10 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, issues, [&](TTypeAnnotationContext& newTypeCtx) {
+    auto ret = PartialAnnonateTypes(AstRoot_, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
         return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
-    })
+    },
+                                    /*typeParser=*/{})
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);

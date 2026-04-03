@@ -14,7 +14,41 @@ public:
         for (auto& [module, v] : json.GetMapSafe()) {
             auto& names = Modules_[to_lower(module)];
             for (auto& item : v.GetArraySafe()) {
-                names.insert(to_lower(item.GetMapSafe().at("name").GetStringSafe()));
+                auto& map = item.GetMapSafe();
+                TMeta meta;
+                if (auto ptr = map.FindPtr("isTypeAwareness")) {
+                    meta.IsTypeAwareness = ptr->GetBooleanSafe();
+                }
+
+                if (!meta.IsTypeAwareness) {
+                    meta.CallableType = map.at("callableType").GetStringSafe();
+                    if (auto ptr = map.FindPtr("runConfigType")) {
+                        meta.RunConfigType = ptr->GetStringSafe();
+                    }
+
+                    meta.ArgCount = map.at("argCount").GetIntegerSafe();
+                    if (auto ptr = map.FindPtr("optionalArgCount")) {
+                        meta.OptionalArgCount = ptr->GetIntegerSafe();
+                    }
+
+                    if (auto ptr = map.FindPtr("isStrict")) {
+                        meta.IsStrict = ptr->GetBooleanSafe();
+                    }
+
+                    if (auto ptr = map.FindPtr("supportsBlocks")) {
+                        meta.SupportsBlocks = ptr->GetBooleanSafe();
+                    }
+
+                    if (auto ptr = map.FindPtr("minLangVer")) {
+                        Y_ENSURE(ParseLangVersion(ptr->GetStringSafe(), meta.MinLangVer));
+                    }
+
+                    if (auto ptr = map.FindPtr("maxLangVer")) {
+                        Y_ENSURE(ParseLangVersion(ptr->GetStringSafe(), meta.MaxLangVer));
+                    }
+                }
+
+                names.emplace(to_lower(map.at("name").GetStringSafe()), meta);
             }
         }
     }
@@ -32,8 +66,17 @@ public:
         return ptr->contains(function);
     }
 
+    const TMeta* GetMetadata(TStringBuf module, TStringBuf function) const final {
+        auto ptr = Modules_.FindPtr(module);
+        if (!ptr) {
+            return nullptr;
+        }
+
+        return ptr->FindPtr(function);
+    }
+
 private:
-    THashMap<TString, THashSet<TString>> Modules_;
+    THashMap<TString, THashMap<TString, TMeta>> Modules_;
 };
 
 } // namespace

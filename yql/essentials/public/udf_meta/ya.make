@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
+    yql/essentials/public/langver
 )
 
 END()

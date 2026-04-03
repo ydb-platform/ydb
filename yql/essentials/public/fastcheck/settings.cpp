@@ -30,10 +30,6 @@ struct TDefaultUdfMetaLoader {
     std::unique_ptr<IUdfMeta> Data;
 };
 
-const IUdfMeta* GetDefaultUdfMeta() {
-    return Singleton<TDefaultUdfMetaLoader>()->Data.get();
-}
-
 } // namespace
 
 THashSet<TString> TranslationFlags() {
@@ -191,6 +187,10 @@ bool BuildLexerSettings(
     }
 
     return result.Settings.ApplyTo(settings, issues);
+}
+
+const IUdfMeta* GetDefaultUdfMeta() {
+    return Singleton<TDefaultUdfMetaLoader>()->Data.get();
 }
 
 } // namespace NYql::NFastCheck

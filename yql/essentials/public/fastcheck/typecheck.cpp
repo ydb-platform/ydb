@@ -10,6 +10,7 @@
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/providers/config/yql_config_provider.h>
 
 namespace NYql::NFastCheck {
@@ -43,7 +44,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
@@ -57,7 +58,7 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
@@ -71,15 +72,17 @@ private:
             return res;
         }
 
-        res.Success = DoTypeCheck(astResult->Root, request.LangVer, res.Issues);
+        res.Success = DoTypeCheck(astResult->Root, request.LangVer, request.UdfMeta, res.Issues);
 
         return res;
     }
 
-    bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, TIssues& issues) {
-        return PartialAnnonateTypes(astRoot, langver, issues, [](TTypeAnnotationContext& newTypeCtx) {
-            return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true);
-        });
+    bool DoTypeCheck(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues) {
+        if (!udfMeta) {
+            udfMeta = GetDefaultUdfMeta();
+        }
+
+        return PartialAnnonateTypes(astRoot, langver, udfMeta, issues, [](TTypeAnnotationContext& newTypeCtx) { return CreateConfigProvider(newTypeCtx, nullptr, "", {}, /*forPartialTypeCheck=*/true); }, [](TStringBuf str, TExprContext& ctx) { return NCommon::ParseTypeFromYson(str, ctx); });
     }
 };
 

@@ -6511,6 +6511,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto type = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(type);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (type->GetKind() == ETypeAnnotationKind::Null) {
             output = ctx.Expr.NewCallable(input->Pos(), "Null", {});
             return IGraphTransformer::TStatus::Repeat;

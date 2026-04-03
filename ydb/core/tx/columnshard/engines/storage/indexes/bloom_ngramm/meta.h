@@ -88,8 +88,9 @@ protected:
         std::optional<ui32> filterSizeBytes;
         std::optional<ui32> recordsCount;
         std::optional<ui32> hashesCount;
-        NGrammSize = bFilter.GetNGrammSize();
-        FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+        NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
+        FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                        : NDefaults::FalsePositiveProbability;
 
         {
             auto conclusion = TConstants::ValidateParams(FalsePositiveProbability, NGrammSize);

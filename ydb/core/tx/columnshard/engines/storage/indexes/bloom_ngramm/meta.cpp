@@ -13,6 +13,8 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
 
+#include <climits>
+
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
@@ -301,8 +303,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     TNGrammBuilder builder(HashesCount, CaseSensitive);
 
     if (!UseOldSizing) {
-        static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * 8;
-        static constexpr ui64 MaxChunkCount = MaxBitsSize / 64;
+        static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
+        static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
+        static constexpr ui64 MaxChunkCount = MaxBitsSize / BitsPerUi64;
 
         TVectorInserter maxInserter(MaxBitsSize);
         VisitAllChunksWithBuilder(reader, GetDataExtractor(), NGrammSize, builder, maxInserter);
@@ -318,9 +321,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
 
         const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(FalsePositiveProbability, 1.0 / k)));
-        const ui64 requestedBitsSize = std::max<ui64>(64, static_cast<ui64>(requestedBitsSizeDouble));
+        const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
         const ui32 targetSize = std::min<ui64>(MaxBitsSize, std::bit_ceil(requestedBitsSize));
-        const size_t targetChunkCount = targetSize / 64;
+        const size_t targetChunkCount = targetSize / BitsPerUi64;
 
         const ui64* srcChunks = maxBits.GetChunks();
         std::vector<ui64> folded(targetChunkCount, 0);
@@ -332,7 +335,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         resultBits.Reserve(targetSize);
         for (size_t i = 0; i < targetChunkCount; ++i) {
             ui64 chunk = folded[i];
-            const size_t base = i * 64;
+            const size_t base = i * BitsPerUi64;
             while (chunk) {
                 resultBits.Set(base + CountTrailingZeroBits(chunk));
                 chunk &= chunk - 1;

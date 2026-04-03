@@ -135,8 +135,9 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (bFilter.HasCaseSensitive()) {
         CaseSensitive = bFilter.GetCaseSensitive();
     }
-    NGrammSize = bFilter.GetNGrammSize();
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    NGrammSize = bFilter.HasNGrammSize() ? bFilter.GetNGrammSize() : NDefaults::NGrammSize;
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
     ColumnName = bFilter.GetColumnName();
 
     if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {

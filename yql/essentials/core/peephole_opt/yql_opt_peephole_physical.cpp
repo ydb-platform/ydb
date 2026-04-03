@@ -3237,6 +3237,25 @@ TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprCont
         .Seal().Build();
 }
 
+bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "PromoteExpandLMapOrShuffleByKeys";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
 TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     TExprNode::TListType lists;
@@ -9349,6 +9368,9 @@ struct TPeepHoleRules {
         {"CalcOverWindow", &ExpandCalcOverWindow},
         {"CalcOverSessionWindow", &ExpandCalcOverWindow},
         {"CalcOverWindowGroup", &ExpandCalcOverWindow},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
@@ -9421,9 +9443,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

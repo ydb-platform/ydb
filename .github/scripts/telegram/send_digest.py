@@ -27,8 +27,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-import ydb
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "analytics"))
 from ydb_wrapper import YDBWrapper
 
@@ -153,7 +151,7 @@ def run_digest(
             team_channels=team_channels,
             muted_stats=muted_stats,
             include_plots=include_plots,
-            ydb_config={} if include_plots else None,
+            ydb_config={"use_yesterday": False} if include_plots else None,
             all_team_data=all_team_data,
         )
 

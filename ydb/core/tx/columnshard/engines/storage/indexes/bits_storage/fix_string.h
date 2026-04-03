@@ -31,7 +31,7 @@ public:
 private:
     virtual TString DoSerializeToString(TDynBitMap&& bitsVector) const override;
 
-    virtual std::shared_ptr<IBitsStorageViewer> DoRestore(const TString& data) const override {
+    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const override {
         return std::make_shared<TFixStringBitsStorage>(data);
     }
     static inline const auto Registrator = TFactory::TRegistrator<TFixStringBitsStorageConstructor>(GetClassNameStatic());

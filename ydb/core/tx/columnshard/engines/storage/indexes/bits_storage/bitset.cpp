@@ -14,11 +14,15 @@ TString TBitSetStorageConstructor::DoSerializeToString(TDynBitMap&& bm) const {
     return result;
 }
 
-std::shared_ptr<IBitsStorageViewer> TBitSetStorageConstructor::DoRestore(const TString& data) const {
-    TStringInput input(data);
-    TDynBitMap bitmap;
-    bitmap.Load(&input);
-    return std::make_shared<TBitSetStorage>(std::move(bitmap));
+TConclusion<std::shared_ptr<IBitsStorageViewer>> TBitSetStorageConstructor::DoRestore(const TString& data) const {
+    try {
+        TStringInput input(data);
+        TDynBitMap bitmap;
+        bitmap.Load(&input);
+        return std::make_shared<TBitSetStorage>(std::move(bitmap));
+    } catch(...) {
+        return TConclusionStatus::Fail("cannot deserialize bitset index: " + CurrentExceptionMessage());
+    }
 }
 
 bool TBitSetStorage::DoGet(const ui32 idx) const {

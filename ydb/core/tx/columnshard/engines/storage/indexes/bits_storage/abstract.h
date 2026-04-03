@@ -33,7 +33,7 @@ public:
 class IBitsStorageConstructor {
 private:
     virtual TString DoSerializeToString(TDynBitMap&& bm) const = 0;
-    virtual std::shared_ptr<IBitsStorageViewer> DoRestore(const TString& data) const = 0;
+    virtual TConclusion<std::shared_ptr<IBitsStorageViewer>> DoRestore(const TString& data) const = 0;
 
 public:
     static std::shared_ptr<IBitsStorageConstructor> GetDefault();
@@ -46,11 +46,7 @@ public:
     }
 
     [[nodiscard]] TConclusion<std::shared_ptr<IBitsStorageViewer>> Restore(const TString& data) const {
-        try {
-            return DoRestore(data);
-        } catch (...) {
-            return TConclusionStatus::Fail("cannot read index: " + CurrentExceptionMessage());
-        }
+        return DoRestore(data);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TSkipIndexBitSetStorage& proto);

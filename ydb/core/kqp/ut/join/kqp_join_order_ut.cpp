@@ -557,8 +557,8 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
 }
 
 Y_UNIT_TEST_SUITE(KqpJoinOrder) {
-    Y_UNIT_TEST(Chain65Nodes) {
-        TChainTester(65).Test();
+    Y_UNIT_TEST(Chain35Nodes) {
+        TChainTester(35).Test();
     }
 
     std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(

@@ -5,6 +5,15 @@ namespace NKqp {
 
 namespace {
 
+bool IsValidLimit(const TExpression& expression) {
+    return !!TMaybeNode<TCoUint64>(TCoLambda(expression.Node).Body().Ptr());
+}
+
+bool CanPushLimitToSource(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
+    return input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage &&
+           IsValidLimit(limit->GetLimitCond());
+}
+
 bool CanPushLimitOverInput(const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
     return ((kind == EOperator::Map) && input->IsSingleConsumer());
@@ -61,6 +70,12 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     } else if (CanPushLimitToStage(limit, limitInput)) {
         // Just push limit to stage.
         newOperator->Props.StageId = limitInput->Props.StageId;
+        if (CanPushLimitToSource(limit, limitInput)) {
+            auto read = CastOperator<TOpRead>(limitInput);
+            const auto limitCond = TCoLambda(limit->GetLimitCond().Node).Body().Ptr();
+            newOperator = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda,
+                                                 limitCond, read->Props, read->Pos);
+        }
     }
 
     return newOperator;

@@ -2009,14 +2009,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 PRAGMA YqlSelect = "force";
-                select t1.a from `/Root/t1` as t1 limit 1;
-            )",
-            R"(
-                PRAGMA YqlSelect = "force";
-                select t1.a from `/Root/t1` as t1 where t1.b = 10 limit 1;
-            )",
-            R"(
-                PRAGMA YqlSelect = "force";
                 select t1.a, t2.a from `/Root/t1` as t1 join `/Root/t2` as t2 on t1.a = t2.a where t1.b = 10 limit 1;
             )",
         };
@@ -2032,6 +2024,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto ast = *result.GetStats()->GetAst();
             // Any from Take -> WideTakeBlocks is also ok.
             UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "Take"), 2);
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        // Push limit to CS.
+        queries = {
+            R"(
+                PRAGMA YqlSelect = "force";
+                select t1.a from `/Root/t1` as t1 limit 1;
+            )",
+            R"(
+                PRAGMA YqlSelect = "force";
+                select t1.a from `/Root/t1` as t1 where t1.b = 10 limit 1;
+            )",
+        };
+
+        queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "Take"), 1);
+            // Pushed to cs.
+            UNIT_ASSERT_VALUES_EQUAL(CountNumberOfCallables(ast, "ItemsLimit"), 1);
 
             result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))

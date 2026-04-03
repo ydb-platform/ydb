@@ -418,6 +418,10 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
 }
 
 void TPartitionActor::ResendRecentRequests() {
+    if (!PipeClient) {
+        return;
+    }
+
     const auto& ctx = ActorContext();
     if (RequestInfly) { //got read infly
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition

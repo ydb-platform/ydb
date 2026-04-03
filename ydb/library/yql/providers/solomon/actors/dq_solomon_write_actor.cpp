@@ -190,14 +190,21 @@ public:
 
 private:
     struct TDqSolomonWriteActorMetrics {
-        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters, const TTxId& txId, ui64 taskId, bool enableStreamingQueriesCounters)
+        explicit TDqSolomonWriteActorMetrics(
+            const ::NMonitoring::TDynamicCounterPtr& counters,
+            const TTxId& txId,
+            ui64 taskId,
+            bool enableStreamingQueriesCounters,
+            bool enableCountersPerTask = false)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId)) {
 
             auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
 
             if (enableStreamingQueriesCounters) {
                 subgroup = subgroup->GetSubgroup("tx_id", TxId);
-                subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
+                if (enableCountersPerTask) {
+                    subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
+                }
             }
 
             SendingBufferSize = subgroup->GetCounter("SendingBufferSize");

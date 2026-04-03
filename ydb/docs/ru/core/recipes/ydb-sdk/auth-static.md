@@ -44,40 +44,45 @@
 
 - Java
 
-  ```java
-  public void work(String connectionString, String username, String password) {
-      StaticCredentials authProvider = new StaticCredentials(username, password);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String username, String password) {
+        StaticCredentials authProvider = new StaticCredentials(username, password);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work(String username, String password) {
-      Properties props = new Properties();
-      props.setProperty("username", username);
-      props.setProperty("password", password);
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work(String username, String password) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("username", username);
+        props.setProperty("password", password);
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Логин и пароль могут быть указаны напрямую
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Логин и пароль могут быть указаны напрямую
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC задайте те же JDBC URL, логин и пароль, что и в примере выше (например, `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password` или эквивалент в конфигурации пула).
+
+  {% endlist %}
 
 - Node.js
 
@@ -85,11 +90,36 @@
 
 - Python
 
-  {% include [auth-static](../../_includes/python/auth-static.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+    {% include [auth-static](../../_includes/python/auth-static.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": {
+                "username": os.environ["YDB_USER"],
+                "password": os.environ["YDB_PASSWORD"]
+            }
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

@@ -228,6 +228,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableDqHashCombineByDefault = false;
     bool EnableWatermarks = false;
+    bool EnableDqSourceStreamLookupJoin = false;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;

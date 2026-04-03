@@ -28,6 +28,7 @@ import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/recoveryshard_config.proto";
 import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/resource_broker.proto";
 import "ydb/core/protos/shared_cache.proto";
@@ -2165,6 +2166,11 @@ message TColumnShardConfig {
         string DefaultCompactionPreset = 61 [default = "lc-buckets"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
+
+    optional uint64 ScanMemoryLimit = 63 [default = 3221225472];
+    optional uint64 CompactionStageMemoryLimit = 64 [default = 3221225472];
+    optional uint64 TieringStageMemoryLimit = 65 [default = 1000000000];
+    optional uint64 CleanupPortionsStageMemoryLimit = 66 [default = 1000000000];
 }
 
 // TSchemeShardConfig has been moved to ydb/core/protos/schemeshard_config.proto
@@ -2519,6 +2525,9 @@ message TSystemTabletBackupConfig {
     oneof Backend {
         TFilesystemBackend Filesystem = 1;
     }
+    repeated fixed64 ExcludeTabletIds = 2;
+    optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
+    optional uint64 MaxBackupsLimit = 4 [default = 3];
 }
 
 message TAppConfig {
@@ -2628,6 +2637,7 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+    optional TRecoveryShardConfig RecoveryShardConfig = 117;
 }
 
 message TYdbVersion {

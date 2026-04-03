@@ -385,6 +385,64 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
     Y_UNIT_TEST(TestDiskIsFullRunOverQueryLimit) {
         TestWhenDiskSpaceIsExhausted(1, "delayed_requests");
     }
+
+    //
+    // Verifies that resource pools function correctly after tenant recreation.
+    // Even if the DatabaseId (path) remains the same, a recreated tenant receives
+    // a new internal PathId. The workload service uses DatabaseId as a key for
+    // a cache.
+    //
+    // The workload service must detect this lifecycle change, invalidate any
+    // cached state tied to the same DatabaseId but a different PathId,
+    // and re-resolve metadata to avoid "PathId mismatch" or "Pool not found"
+    // errors in the new database.
+    //
+    Y_UNIT_TEST(TestResourcePoolAfterTenantRecreation) {
+        auto unitKind = "test-recreated-db";
+        auto dbName = "/Root/test-recreated-db";
+        auto tweakFnc = [&](Tests::TServerSettings& serverSettings) -> void {
+            serverSettings.SetDynamicNodeCount(1).AddStoragePool(
+                unitKind,
+                TStringBuilder() << dbName << ":" << unitKind
+            );
+        };
+
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .CreateSampleTenants(false)
+            .EnableResourcePools(true)
+            // turn off to reduce "noise" in a log
+            .EnableStreamingQueries(false)
+            .CreateSamplePool(false)
+            .Create(tweakFnc);
+
+        auto myPoolId = "my_pool";
+        auto defPool = TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dbName);
+        auto myPool = TQueryRunnerSettings().PoolId(myPoolId).Database(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+        ydb->CreateResourcePool(dbName, myPoolId, NResourcePool::TPoolSettings());
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
+
+        Cerr << "------ Droping Tenant" << Endl;
+        ydb->DropDedicatedTenant(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+
+        // The custom pool is still alive, is it a bug or feature?
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
+    }
 }
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceDistributed) {

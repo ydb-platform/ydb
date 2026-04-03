@@ -77,39 +77,44 @@
 
 - Java
 
-  ```java
-  public void work(String connectionString, String saKeyPath) {
-      AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String saKeyPath) {
+        AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      Properties props = new Properties();
-      props.setProperty("saKeyFile", "~/keys/sa_key.json");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("saKeyFile", "~/keys/sa_key.json");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Опцию saKeyFile также можно указать прямо в JDBC URL
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Опцию saKeyFile также можно указать прямо в JDBC URL
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
+            doWork(connection);
+        }
+    }
+    ```
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметр `saKeyFile` (в URL или в свойствах `DataSource`), что и в примере выше.
+
+  {% endlist %}
 
 - Node.js
 
@@ -123,11 +128,36 @@
 
 - Python
 
-  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+    {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb.iam
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.iam.ServiceAccountCredentials.from_file(
+                os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+            )
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

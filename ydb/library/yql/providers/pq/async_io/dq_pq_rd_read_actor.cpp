@@ -24,7 +24,6 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 
@@ -79,7 +78,13 @@ LWTRACE_USING(DQ_PQ_PROVIDER);
 } // namespace
 
 struct TRowDispatcherReadActorMetrics {
-    explicit TRowDispatcherReadActorMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters, const NPq::NProto::TDqPqTopicSource& sourceParams, bool enableStreamingQueriesCounters)
+    explicit TRowDispatcherReadActorMetrics(
+        const TTxId& txId,
+        ui64 taskId,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
+        const NPq::NProto::TDqPqTopicSource& sourceParams,
+        bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask = false)
         : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
         , Counters(counters) {
         if (Counters) {
@@ -93,8 +98,12 @@ struct TRowDispatcherReadActorMetrics {
             for (const auto& sensor : sourceParams.GetTaskSensorLabel()) {
                 SubGroup = SubGroup->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
             }
-            auto source = SubGroup->GetSubgroup("tx_id", TxId);
-            task = source->GetSubgroup("task_id", ToString(taskId));
+            Source = SubGroup->GetSubgroup("tx_id", TxId);
+            if (enableCountersPerTask) {
+                task = Source->GetSubgroup("task_id", ToString(taskId));
+            } else {
+                task = Source;
+            }
         }
         InFlyGetNextBatch = task->GetCounter("InFlyGetNextBatch");
         InFlyAsyncInputData = task->GetCounter("InFlyAsyncInputData");
@@ -111,6 +120,7 @@ struct TRowDispatcherReadActorMetrics {
     TString TxId;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounterPtr SubGroup;
+    ::NMonitoring::TDynamicCounterPtr Source;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyGetNextBatch;
     ::NMonitoring::TDynamicCounters::TCounterPtr InFlyAsyncInputData;
     ::NMonitoring::TDynamicCounters::TCounterPtr ReInit;
@@ -310,7 +320,7 @@ private:
         ui64 QueuedRows = 0;
     };
 
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
     // Set on Children
@@ -347,7 +357,7 @@ public:
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
@@ -534,7 +544,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         const TString& token,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         TDqPqRdReadActor* parent,
         const TString& cluster)
@@ -766,8 +776,10 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     Counters.GetAsyncInputData++;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
-    Metrics.InFlyAsyncInputData->Set(0);
-    InFlyAsyncInputData = false;
+    if (InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Dec();
+        InFlyAsyncInputData = false;
+    }
     buffer.clear();
     watermark = Nothing();
 
@@ -835,6 +847,7 @@ void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
     auto idleTimeoutUs = // TODO remove fallback
         SourceParams.GetWatermarks().HasIdleTimeoutUs() ?
@@ -842,7 +855,8 @@ void TDqPqRdReadActor::InitWatermarkTracker() {
         lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
-            TDuration::MicroSeconds(idleTimeoutUs));
+            TDuration::MicroSeconds(idleTimeoutUs),
+            Metrics.Counters ? Metrics.Source : nullptr);
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
@@ -1279,6 +1293,11 @@ TString TDqPqRdReadActor::GetInternalState() {
         }
         str << "\n";
     }
+    if (Parent->WatermarkTracker) {
+        str << "WatermarksTracker:";
+        Parent->WatermarkTracker->Out(str);
+        str << "\n";
+    }
     return str.Str();
 }
 
@@ -1341,9 +1360,11 @@ void TDqPqRdReadActor::SendNoSession(const NActors::TActorId& recipient, ui64 co
 }
 
 void TDqPqRdReadActor::NotifyCA() {
-    // called on Parent
-    Metrics.InFlyAsyncInputData->Set(1);
-    InFlyAsyncInputData = true;
+    Y_DEBUG_ABORT_UNLESS(Parent == this); // called on Parent
+    if (!InFlyAsyncInputData) {
+        Metrics.InFlyAsyncInputData->Inc();
+        InFlyAsyncInputData = true;
+    }
     Counters.NotifyCA++;
     Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
 }
@@ -1587,7 +1608,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
-    const IPqGateway::TPtr& pqGateway,
+    const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters)
 {
     const TString& tokenName = settings.GetToken().GetName();

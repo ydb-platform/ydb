@@ -21,6 +21,7 @@ PY3TEST()
         TAG(ya:fat)
     ELSE()
         SIZE(MEDIUM)
+        REQUIREMENTS(cpu:4)
     ENDIF()
 
     DEPENDS(

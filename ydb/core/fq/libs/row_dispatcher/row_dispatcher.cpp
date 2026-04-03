@@ -3,6 +3,7 @@
 #include "actors_factory.h"
 #include "coordinator.h"
 #include "leader_election.h"
+#include "local_leader_election.h"
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -343,7 +344,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqStaticGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
@@ -429,7 +430,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
         NActors::TActorId nodesManagerId = {},
@@ -514,7 +515,7 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,
@@ -545,7 +546,10 @@ void TRowDispatcher::Bootstrap() {
 
     const auto& config = Config.GetCoordinator();
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
+    auto leaderElection = !config.GetCoordinationNodePath().empty()
+        ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
+        : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
+    Register(leaderElection.release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -1313,7 +1317,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,

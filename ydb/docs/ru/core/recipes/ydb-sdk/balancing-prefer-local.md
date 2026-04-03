@@ -81,4 +81,90 @@
   }
   ```
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+        credentials=ydb.credentials_from_env_variables(),
+        use_all_nodes=False,  # предпочитать ближайший дата-центр
+    )
+
+    with ydb.Driver(driver_config) as driver:
+        driver.wait(timeout=5)
+        # ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        driver_config = ydb.DriverConfig(
+            endpoint=os.environ["YDB_ENDPOINT"],
+            database=os.environ["YDB_DATABASE"],
+            credentials=ydb.credentials_from_env_variables(),
+            use_all_nodes=False,  # предпочитать ближайший дата-центр
+        )
+        async with ydb.aio.Driver(driver_config) as driver:
+            await driver.wait()
+            # ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        os.environ["YDB_SQLALCHEMY_URL"],
+        connect_args={
+            "driver_config_kwargs": {
+                "use_all_nodes": False,  # предпочитать ближайший дата-центр
+            }
+        },
+    )
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.detectLocalDs())
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    См. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md); при необходимости задайте политику балансировки через нативный транспорт.
+
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` или свойства `DataSource`).
+
+  {% endlist %}
+
 {% endlist %}

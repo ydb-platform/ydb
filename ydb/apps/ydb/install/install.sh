@@ -224,14 +224,13 @@ function print_completion_instructions() {
     local reset="\033[0m"
     local src_zsh='_ydb_comp="${XDG_DATA_HOME:-$HOME/.local/share}/ydb/completion.zsh.inc" && [ -f "$_ydb_comp" ] && source "$_ydb_comp"'
     local src_bash='_ydb_comp="${XDG_DATA_HOME:-$HOME/.local/share}/ydb/completion.bash.inc" && [ -f "$_ydb_comp" ] && source "$_ydb_comp"'
-
     case "${SHELL_NAME}" in
         zsh)
             if completion_already_in_rc "${HOME}/.zshrc" "completion.zsh.inc"; then
                 return
             fi
             echo ""
-            printf "${green}%s${reset}\n" "To enable tab completion for commands and options, run:"
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run:"
             echo ""
             echo "  echo '${src_zsh}' >> ~/.zshrc"
             echo ""
@@ -241,7 +240,7 @@ function print_completion_instructions() {
                 return
             fi
             echo ""
-            printf "${green}%s${reset}\n" "To enable tab completion for commands and options, run:"
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run:"
             echo ""
             echo "  echo '${src_bash}' >> ~/.bashrc"
             echo ""
@@ -260,7 +259,7 @@ function print_completion_instructions() {
                 return
             fi
             echo ""
-            printf "${green}%s${reset}\n" "To enable tab completion for commands and options, run one of these:"
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run one of these:"
             echo ""
             if [ "${show_bash}" = "true" ]; then
                 echo "  bash:"
@@ -278,7 +277,9 @@ function print_completion_instructions() {
 }
 
 generate_completion_files
-print_completion_instructions
+if [ -f "${COMPLETION_DIR}/completion.bash.inc" ] || [ -f "${COMPLETION_DIR}/completion.zsh.inc" ]; then
+    print_completion_instructions
+fi
 
 case "${SHELL_NAME}" in
     bash | zsh)

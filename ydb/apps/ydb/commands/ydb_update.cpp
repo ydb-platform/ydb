@@ -16,6 +16,7 @@
 
 namespace NYdb::NConsoleClient {
 
+#ifndef _win32_
 namespace {
 
 TString GetCompletionDir() {
@@ -32,7 +33,7 @@ bool CompletionFilesExist() {
         || TFsPath(TStringBuilder() << dir << "/completion.zsh.inc").Exists();
 }
 
-void GenerateCompletionFiles(const TString& execPath) {
+bool GenerateCompletionFiles(const TString& execPath) {
     TString dir = GetCompletionDir();
     TFsPath dirPath(dir);
     try {
@@ -41,16 +42,19 @@ void GenerateCompletionFiles(const TString& execPath) {
         }
     } catch (const yexception& e) {
         Cerr << "Warning: could not create completion directory: " << e.what() << Endl;
-        return;
+        return false;
     }
 
+    bool anyGenerated = false;
+
     {
-        TShellCommand cmd(TStringBuilder() << execPath << " config completion bash");
+        TShellCommand cmd(TStringBuilder() << "'" << execPath << "' config completion bash");
         cmd.Run().Wait();
         if (cmd.GetExitCode() == 0) {
             try {
                 TFileOutput out(TStringBuilder() << dir << "/completion.bash.inc");
                 out << cmd.GetOutput();
+                anyGenerated = true;
             } catch (const yexception& e) {
                 Cerr << "Warning: could not write bash completion file: " << e.what() << Endl;
             }
@@ -60,7 +64,7 @@ void GenerateCompletionFiles(const TString& execPath) {
     }
 
     {
-        TShellCommand cmd(TStringBuilder() << execPath << " config completion zsh");
+        TShellCommand cmd(TStringBuilder() << "'" << execPath << "' config completion zsh");
         cmd.Run().Wait();
         if (cmd.GetExitCode() == 0) {
             try {
@@ -73,6 +77,7 @@ void GenerateCompletionFiles(const TString& execPath) {
                     << cmd.GetOutput()
                     << "\n"
                     << "compdef _ydb ydb\n";
+                anyGenerated = true;
             } catch (const yexception& e) {
                 Cerr << "Warning: could not write zsh completion file: " << e.what() << Endl;
             }
@@ -80,6 +85,8 @@ void GenerateCompletionFiles(const TString& execPath) {
             Cerr << "Warning: failed to generate zsh completion script" << Endl;
         }
     }
+
+    return anyGenerated;
 }
 
 void PrintCompletionInstructions() {
@@ -120,6 +127,7 @@ void PrintCompletionInstructions() {
 }
 
 } // anonymous namespace
+#endif
 
 TCommandUpdate::TCommandUpdate()
     : TClientCommand("update", {}, "Update current YDB CLI binary if there is a newer version available")
@@ -144,8 +152,8 @@ int TCommandUpdate::Run(TConfig& config) {
 #ifndef _win32_
     if (result == EXIT_SUCCESS) {
         bool isFirstTime = !CompletionFilesExist();
-        GenerateCompletionFiles(execPath);
-        if (isFirstTime) {
+        bool generated = GenerateCompletionFiles(execPath);
+        if (isFirstTime && generated) {
             PrintCompletionInstructions();
         }
     }

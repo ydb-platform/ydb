@@ -14,11 +14,13 @@
   curl -sSL {{ ydb-cli-install-url }} | bash
   ```
 
-  The script will install the {{ ydb-short-name }} CLI and add the executable file path to the `PATH` environment variable.
+  The script will install the {{ ydb-short-name }} CLI and add the executable file path to the `PATH` environment variable. It will also generate shell completion files and print instructions on how to enable tab completion for commands and options.
 
   {% note info %}
 
   The script will update the `PATH` variable only if you run it in the bash or zsh command shell. If you run the script in a different shell, add the path to the CLI to the `PATH` variable yourself.
+
+  Shell completion for bash requires the `bash-completion` package to be installed.
 
   {% endnote %}
 
@@ -32,7 +34,7 @@
   curl -sSL {{ ydb-cli-install-url }} | bash
   ```
 
-  The script will install the {{ ydb-short-name }} CLI and add the executable file path to the `PATH` environment variable.
+  The script will install the {{ ydb-short-name }} CLI and add the executable file path to the `PATH` environment variable. It will also generate shell completion files and print instructions on how to enable tab completion for commands and options.
 
   To update the environment variables, restart the command shell.
 

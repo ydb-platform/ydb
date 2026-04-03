@@ -787,7 +787,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions;
         for (const auto& parentPartitionId : PartitionConfig->GetParentPartitionIds()) {
             const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = NPQ::GetPartitionConfigFromAllPartitions(Config, parentPartitionId);
-            Y_VERIFY_S(configPtr != 0, "Unable to get partition #" << parentPartitionId << " config");
+            AFL_ENSURE(configPtr != nullptr)("parentPartitionId", parentPartitionId);
             if (configPtr) {
                 // TODO: check creation time of parent partitions
                 parentPartitions.push_back(*configPtr);

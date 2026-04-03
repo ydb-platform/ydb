@@ -8,8 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 using namespace NYdb;
 

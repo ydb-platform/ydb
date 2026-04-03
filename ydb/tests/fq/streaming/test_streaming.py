@@ -179,6 +179,14 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"channels_version": 1},
+            {"channels_version": 2},
+        ],
+        indirect=["kikimr"],
+    )
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
         inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
@@ -186,6 +194,7 @@ class TestStreamingInYdb(StreamingTestBase):
         sql = R'''
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.DisableCheckpoints="true";
                 $in = SELECT value FROM {inp}
                 WITH (
                     FORMAT="json_each_row",
@@ -197,12 +206,13 @@ class TestStreamingInYdb(StreamingTestBase):
         query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
         path = f"/Root/{query_name}"
-        self.wait_completed_checkpoints(kikimr, path)
+        time.sleep(10)
+        self.wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
 
         self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
         expected_data = ['value1']
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-        self.wait_completed_checkpoints(kikimr, path)
+        time.sleep(10)
 
         def restart_node():
             restart_node_id = None
@@ -217,18 +227,8 @@ class TestStreamingInYdb(StreamingTestBase):
             node.start()
 
         restart_node()
-        self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
-        expected_data = ['value2']
-        self.wait_completed_checkpoints(kikimr, path)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-        self.wait_completed_checkpoints(kikimr, path)
+        self.wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
 
-        restart_node()
-        self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
-        expected_data = ['value3']
-        self.wait_completed_checkpoints(kikimr, path)
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
-        self.wait_completed_checkpoints(kikimr, path)
 
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):

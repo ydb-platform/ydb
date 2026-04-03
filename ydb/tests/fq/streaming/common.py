@@ -117,6 +117,18 @@ class StreamingTestBase(TestYdsBase):
             {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
         return result if result is not None else 0
 
+    def wait_actor_count(self, kikimr, activity, expected_count):
+        deadline = time.time() + 60
+        while True:
+            count = 0
+            for node_id in kikimr.cluster.nodes:
+                count = count + self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count == expected_count:
+                return
+
+            assert time.time() < deadline, f"Waiting actor {activity} count failed, current count {count}"
+            time.sleep(1)
+
     def get_streaming_query_metric(self, kikimr: Kikimr, path: str, metric_name: str, expect_counters_exist: bool = False) -> int:
         sum = 0
         found = False

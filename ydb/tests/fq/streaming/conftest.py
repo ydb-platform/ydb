@@ -13,6 +13,8 @@ def kikimr(request):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", False)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
+    channels_version = param.get("channels_version", 1)
+
 
     def get_ydb_config():
         extra_feature_flags = {
@@ -35,7 +37,7 @@ def kikimr(request):
             },
             table_service_config={
                 "enable_watermarks": enable_watermarks,
-                "dq_channel_version": 1,
+                "dq_channel_version": channels_version,
             },
             default_clusteradmin="root@builtin",
             use_in_memory_pdisks=False,

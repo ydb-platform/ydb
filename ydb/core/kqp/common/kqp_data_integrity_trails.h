@@ -11,13 +11,14 @@
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/security/util.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
 
 inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
     if (!hashed) {
-        LogKeyValue("QueryText", EscapeC(queryText), ss);
+        LogKeyValue("QueryText", EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText)), ss);
         return;
     }
 

@@ -10,6 +10,7 @@
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr {
@@ -202,11 +203,11 @@ inline void LogTli(const TTliLogParams& params, const NActors::TActorContext& ct
 
     // Use appropriate field names based on breaker vs victim
     if (isBreaker) {
-        LogKeyValue("BreakerQueryText", EscapeC(params.QueryText), ss);
-        LogKeyValue("BreakerQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        LogKeyValue("BreakerQueryText", EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(params.QueryText)), ss);
+        LogKeyValue("BreakerQueryTexts", EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(params.QueryTexts)), ss, true);
     } else {
-        LogKeyValue("VictimQueryText", EscapeC(params.VictimQueryText), ss);
-        LogKeyValue("VictimQueryTexts", EscapeC(params.QueryTexts), ss, true);
+        LogKeyValue("VictimQueryText", EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(params.VictimQueryText)), ss);
+        LogKeyValue("VictimQueryTexts", EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(params.QueryTexts)), ss, true);
     }
 
     LOG_INFO_S(ctx, NKikimrServices::TLI, ss.Str());

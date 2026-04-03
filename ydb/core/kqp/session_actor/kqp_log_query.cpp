@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/session_actor/kqp_query_state.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/security/util.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -15,11 +16,13 @@ constexpr size_t SQL_TEXT_MAX_SIZE = 4000;
 #define _KQP_REQ_LOG(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_REQUEST, "[REQ_JSON] " << stream)
 
 void WriteJsonChunks(TStringBuf poolId, TString reqId, TStringBuf sessionId, TStringBuf userSID,
-                     TStringBuf eventName, TStringBuf requestText, 
+                     TStringBuf eventName, TStringBuf requestText,
                      const NYql::TIssues& issues) 
 {
     const size_t total = requestText.empty() ? 1 :
         (requestText.size() + SQL_TEXT_MAX_SIZE - 1) / SQL_TEXT_MAX_SIZE;
+
+    TString protectedRequestText = NKikimr::ProtectQueryForLoggingIfSensitive(TString(requestText));
 
     for (size_t i = 0; i < total; ++i) {
         TStringStream ss;
@@ -36,8 +39,8 @@ void WriteJsonChunks(TStringBuf poolId, TString reqId, TStringBuf sessionId, TSt
         json.WriteKey("request").BeginObject();
         json.WriteKey("event").WriteString(eventName);
         
-        if (!requestText.empty()) {
-            json.WriteKey("data").WriteString(requestText.SubStr(i * SQL_TEXT_MAX_SIZE, SQL_TEXT_MAX_SIZE));
+        if (!protectedRequestText.empty()) {
+            json.WriteKey("data").WriteString(TStringBuf(protectedRequestText).SubStr(i * SQL_TEXT_MAX_SIZE, SQL_TEXT_MAX_SIZE));
         }
 
         if (!issues.Empty()) {

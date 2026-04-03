@@ -65,6 +65,46 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestMultiTabletInterleaved({.ForcePDiskFallback = true});
     }
 
+    Y_UNIT_TEST(MultiTabletInterleavedWritesWithDDiskRestart_Uring) {
+        TestMultiTabletInterleavedWritesWithDDiskRestart({});
+    }
+
+    Y_UNIT_TEST(MultiTabletInterleavedWritesWithDDiskRestart_PDiskFallback) {
+        TestMultiTabletInterleavedWritesWithDDiskRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(MultipleRestarts_Uring) {
+        TestMultipleRestarts({});
+    }
+
+    Y_UNIT_TEST(MultipleRestarts_PDiskFallback) {
+        TestMultipleRestarts({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(OverwriteAfterRestart_Uring) {
+        TestOverwriteAfterRestart({});
+    }
+
+    Y_UNIT_TEST(OverwriteAfterRestart_PDiskFallback) {
+        TestOverwriteAfterRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(EmptyRestart_Uring) {
+        TestEmptyRestart({});
+    }
+
+    Y_UNIT_TEST(EmptyRestart_PDiskFallback) {
+        TestEmptyRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(RestartAfterCutLog_Uring) {
+        TestRestartAfterCutLog({});
+    }
+
+    Y_UNIT_TEST(RestartAfterCutLog_PDiskFallback) {
+        TestRestartAfterCutLog({.ForcePDiskFallback = true});
+    }
+
     Y_UNIT_TEST(ReadWithoutConnect_Uring) {
         TestReadWithoutConnect({});
     }

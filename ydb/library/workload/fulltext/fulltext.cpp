@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include "markov_model_builder.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload_import.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_workload.h>
@@ -32,6 +33,7 @@ namespace NYdb::NConsoleClient {
             }
         }
         AddCommand(std::make_unique<TWorkloadCommandClean>(*Params));
+        AddCommand(std::make_unique<TMarkovModelBuilder>());
     }
 
     void TCommandFulltext::Config(TConfig& config) {

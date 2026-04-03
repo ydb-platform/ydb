@@ -74,6 +74,19 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , OlapFilterLambda(olapFilterLambda) {
 }
 
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
+                 TPositionHandle pos)
+    : IOperator(EOperator::Source, pos, props)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda)
+    , Limit(limit) {
+}
+
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
     return OutputIUs;
 }
@@ -165,6 +178,14 @@ void TMapElement::SetExpression(TExpression expr) {
  */
 TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered)
     : IUnaryOperator(EOperator::Map, pos, input)
+    , MapElements(mapElements)
+    , Project(project)
+    , Ordered(ordered) {
+}
+
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+               bool ordered)
+    : IUnaryOperator(EOperator::Map, pos, props, input)
     , MapElements(mapElements)
     , Project(project)
     , Ordered(ordered) {
@@ -445,9 +466,15 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
     , FilterExpr(filterExpr) {
 }
 
+TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr)
+    : IUnaryOperator(EOperator::Filter, pos, props, input)
+    , FilterExpr(filterExpr) {
+}
+
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
 
-void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                          const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
     FilterExpr = FilterExpr.ApplyRenames(renameMap);
@@ -587,12 +614,24 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
  * OpLimit operator methods
  */
 
-TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond)
-    : IUnaryOperator(EOperator::Limit, pos, input), LimitCond(limitCond) {}
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, input)
+    , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
 
-TVector<TInfoUnit> TOpLimit::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, props, input)
+    , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
 
-void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap, TExprContext &ctx, const THashSet<TInfoUnit, TInfoUnit::THashFunction> &stopList) {
+TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
+    return GetInput()->GetOutputIUs();
+}
+
+void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
     LimitCond.ApplyRenames(renameMap);
@@ -600,7 +639,10 @@ void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFu
 
 TString TOpLimit::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
-    return TStringBuilder() << "Limit: " << LimitCond.ToString(); 
+    TStringBuilder builder;
+    builder << "Limit: " << LimitCond.ToString() << " ";
+    builder << "Phase: " << ToStringPhase(LimitPhase);
+    return builder;
 }
 
 TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
@@ -677,7 +719,7 @@ TString TOpSort::ToString(TExprContext& ctx) {
  */
 
 TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggTraitsList, const TVector<TInfoUnit>& keyColumns,
-                           const EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos)
+                           const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos)
     : IUnaryOperator(EOperator::Aggregate, pos, input)
     , AggregationTraitsList(aggTraitsList)
     , KeyColumns(keyColumns)
@@ -745,11 +787,7 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
         }
     }
     strBuilder << "]] ";
-    if (AggregationPhase == EAggregationPhase::Intermediate) {
-        strBuilder << "Initial";
-    } else {
-        strBuilder << "Final";
-    }
+    strBuilder << ToStringPhase(AggregationPhase);
     return strBuilder;
 }
 
@@ -943,6 +981,15 @@ void TOpIterator::BuildDfsList(TIntrusivePtr<IOperator> current, TIntrusivePtr<I
         DfsList.push_back(TOpIterator::TIteratorItem(current, parent, childIdx, subplanIU));
     }
     visited.insert(current.get());
+}
+
+TString ToStringPhase(EOpPhase phase) {
+    switch (phase) {
+#define X(name) case EOpPhase::name: return #name;
+        PHASE_ENUM(X)
+#undef X
+    }
+    Y_ENSURE(false, "Unknown phase.");
 }
 
 } // namespace NKqp

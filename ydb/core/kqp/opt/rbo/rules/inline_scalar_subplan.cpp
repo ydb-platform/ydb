@@ -113,7 +113,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
 
         auto unionAll = MakeIntrusive<TOpUnionAll>(rename, map, subplan->Pos, true);
 
-        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx));
+        auto limit = MakeIntrusive<TOpLimit>(unionAll, subplan->Pos, MakeConstant("Uint64", "1", subplan->Pos, &ctx.ExprCtx), EOpPhase::NotDefined);
     
         TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
         auto cross = MakeIntrusive<TOpJoin>(child, limit, subplan->Pos, "Cross", joinKeys);

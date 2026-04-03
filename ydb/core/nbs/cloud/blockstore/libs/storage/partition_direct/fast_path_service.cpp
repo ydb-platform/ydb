@@ -5,9 +5,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
 #include <ydb/core/base/counters.h>
+
+#include <utility>
 
 using namespace NKikimr;
 using namespace NThreading;
@@ -17,7 +20,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
-constexpr ui32 DefaultPBufferReplyTimeoutMicroseconds = 50000;
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
     NMonitoring::TDynamicCounterPtr counters,
@@ -41,7 +43,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const NProto::TStorageServiceConfig& storageConfig)
+    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
@@ -52,8 +54,9 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             partitionDirectService,
             i,
             directBlockGroups,
-            storageConfig.GetSyncRequestsBatchSize(),
-            TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()));
+            storageConfig->GetSyncRequestsBatchSize(),
+            storageConfig->GetWriteHandoffDelay(),
+            storageConfig->GetTraceSamplePeriod());
     }
 
     return regions;
@@ -70,34 +73,33 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const NProto::TStorageServiceConfig& storageConfig,
+    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
     : ActorSystem(actorSystem)
     , DiskId(diskId)
+    , Scheduler(std::move(scheduler))
+    , Timer(std::move(timer))
     , Regions(CreateRegions(
           this,
           blockCount,
           blockSize,
           std::move(directBlockGroups),
           storageConfig))
-    , TraceSamplePeriod(
-          TDuration::MilliSeconds(storageConfig.GetTraceSamplePeriod()))
+    , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
-          storageConfig.GetDDiskPoolName(),
+          storageConfig->GetDDiskPoolName(),
           tabletId))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig.GetStripeSize()
-                                 ? storageConfig.GetStripeSize()
-                                 : DefaultStripeSize}))
-    , WriteMode(GetWriteModeFromProto(storageConfig.GetWriteMode()))
+          .BlocksPerStripe = storageConfig->GetStripeSize()}))
+    , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
     , PBufferReplyTimeoutMicroseconds(
-          storageConfig.GetPBufferReplyTimeoutMicroseconds()
-              ? storageConfig.GetPBufferReplyTimeoutMicroseconds()
-              : DefaultPBufferReplyTimeoutMicroseconds)
+          storageConfig->GetPBufferReplyTimeoutMicroseconds())
 {
     Y_UNUSED(ActorSystem);
 }
@@ -225,6 +227,17 @@ NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
         name.data(),
         NWilson::EFlags::AUTO_END,
         ActorSystem);
+}
+
+void TFastPathService::ScheduleAfterDelay(
+    TExecutorPtr executor,
+    TDuration delay,
+    TCallback callback)
+{
+    Scheduler->Schedule(
+        executor.get(),
+        Timer->Now() + delay,
+        std::move(callback));
 }
 
 ui64 TFastPathService::GenerateSequenceNumber()

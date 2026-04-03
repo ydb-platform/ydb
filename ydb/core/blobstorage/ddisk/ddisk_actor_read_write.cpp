@@ -60,12 +60,12 @@ namespace NKikimr::NDDisk {
             const TRope& data = ev->Get()->GetPayload(*instr.PayloadId);
             auto dataIter = data.Begin();
             if (dataIter.ContiguousSize() != data.size() ||
-                    reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % BlockSize != 0) {
+                    reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize != 0) {
                 TStringStream ss;
-                ss << "payload must be contiguous and aligned to " << BlockSize << " bytes"
+                ss << "payload must be contiguous and aligned to " << DiskFormat->SectorSize << " bytes"
                     << ", contiguousSize# " << dataIter.ContiguousSize()
                     << " dataSize# " << data.size()
-                    << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % BlockSize == 0);
+                    << " aligned# " << (reinterpret_cast<uintptr_t>(dataIter.ContiguousData()) % DiskFormat->SectorSize == 0);
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
                     ss.Str()));

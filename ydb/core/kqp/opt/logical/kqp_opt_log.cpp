@@ -227,7 +227,7 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        TExprBase output = NKikimr::NKqp::DqRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
         DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

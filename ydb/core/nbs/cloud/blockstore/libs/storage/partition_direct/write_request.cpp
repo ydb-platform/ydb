@@ -10,13 +10,12 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-EWriteMode GetWriteModeFromProto(
-    NProto::TStorageServiceConfig::TWriteMode writeMode)
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
 {
     switch (writeMode) {
-        case NProto::TStorageServiceConfig::PBufferReplication:
+        case NProto::EWriteMode::PBufferReplication:
             return EWriteMode::PBufferReplication;
-        case NProto::TStorageServiceConfig::DirectPBuffersFilling:
+        case NProto::EWriteMode::DirectPBuffersFilling:
             return EWriteMode::DirectPBuffersFilling;
         default:
             break;
@@ -24,14 +23,13 @@ EWriteMode GetWriteModeFromProto(
     Y_ABORT_UNLESS(false);
 }
 
-NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
-    EWriteMode writeMode)
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
 {
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
-            return NProto::TStorageServiceConfig::PBufferReplication;
+            return NProto::EWriteMode::PBufferReplication;
         case EWriteMode::DirectPBuffersFilling:
-            return NProto::TStorageServiceConfig::DirectPBuffersFilling;
+            return NProto::EWriteMode::DirectPBuffersFilling;
     }
 }
 
@@ -39,14 +37,19 @@ NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
 
 TWriteRequestExecutor::TWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    TExecutorPtr executor,
+    IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
-    NWilson::TTraceId traceId)
+    NWilson::TTraceId traceId,
+    TDuration writeHandoffDelay)
     : ActorSystem(actorSystem)
+    , Executor(std::move(executor))
+    , PartitionDirectService(partitionDirectService)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkRange(vChunkRange)
@@ -54,6 +57,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
+    , WriteHandoffDelay(writeHandoffDelay)
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -84,6 +88,16 @@ void TWriteRequestExecutor::Run(
             SendWriteRequest(ELocation::PBuffer2);
             return;
     }
+
+    PartitionDirectService->ScheduleAfterDelay(
+        Executor,
+        WriteHandoffDelay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->SendWriteRequestsToHandoffPBuffers();
+            }
+        });
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>
@@ -210,6 +224,31 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
             self->OnWriteResponse(location, f.GetValue(), std::move(span));
         });
+}
+
+void TWriteRequestExecutor::SendWriteRequestsToHandoffPBuffers()
+{
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteRequestExecutor. Send write request to HOPBuffer0 since we "
+            "have %lu completed writes",
+            CompletedWrites.Count());
+
+        SendWriteRequest(ELocation::HOPBuffer0);
+    }
+
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "TWriteRequestExecutor. Send write request to HOPBuffer1 since we "
+            "have %lu completed writes",
+            CompletedWrites.Count());
+
+        SendWriteRequest(ELocation::HOPBuffer1);
+    }
 }
 
 void TWriteRequestExecutor::OnWriteResponse(

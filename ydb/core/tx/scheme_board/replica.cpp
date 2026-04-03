@@ -935,7 +935,7 @@ private:
             }
 
             if (curPathId < pathId) {
-                log("Update description by newest path form tenant schemeshard");
+                log("Update description by newest path from tenant schemeshard");
                 SoftDeleteDescription(desc->GetPathId());
                 Descriptions.DeleteIndex(path);
                 RelinkSubscribers(desc, path);

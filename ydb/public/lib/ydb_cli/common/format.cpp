@@ -1,6 +1,7 @@
 #include "format.h"
 
 #include <util/string/vector.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <library/cpp/json/json_prettifier.h>
 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
@@ -65,6 +66,18 @@ namespace {
         { EMessagingFormat::Csv, "CSV format with header row containing metadata field names." },
         { EMessagingFormat::Tsv, "TSV format with header row containing metadata field names." },
     };
+    template <typename TEnum>
+    NLastGetopt::NComp::ICompleterPtr MakeChoiceCompleter(
+            const TVector<TEnum>& values,
+            const THashMap<TEnum, TString>& descriptions) {
+        TVector<NLastGetopt::NComp::TChoice> choices;
+        for (const auto& value : values) {
+            auto it = descriptions.find(value);
+            TString desc = (it != descriptions.end()) ? it->second : "";
+            choices.emplace_back(ToString(value), std::move(desc));
+        }
+        return NLastGetopt::NComp::Choice(std::move(choices));
+    }
 } // anonymous namespace
 
 void TCommandWithResponseHeaders::PrintResponseHeader(const TStatus& status) {
@@ -127,7 +140,8 @@ void TCommandWithInput::AddInputFormats(TClientCommand::TConfig& config,
         description << Endl << "Use -hh option to see all options relevant to input format.";
     }
     config.Opts->AddLongOption("input-format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&InputFormat);
+        .RequiredArgument("STRING").StoreResult(&InputFormat)
+        .Completer(MakeChoiceCompleter(allowedFormats, inputFormatDescriptions));
 }
 
 void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
@@ -149,7 +163,8 @@ void TCommandWithInput::AddInputFramingFormats(TClientCommand::TConfig &config,
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     auto& inputFraming = config.Opts->AddLongOption("input-framing", description.Str())
-            .RequiredArgument("STRING").StoreResult(&InputFramingFormat);
+            .RequiredArgument("STRING").StoreResult(&InputFramingFormat)
+            .Completer(MakeChoiceCompleter(allowedFormats, InputFramingDescriptions));
     if (config.HelpCommandVerbosiltyLevel <= 1) {
         inputFraming.Hidden();
     }
@@ -174,8 +189,8 @@ void TCommandWithInput::AddInputBinaryStringEncodingFormats(TClientCommand::TCon
     }
     description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("input-binary-strings", description.Str())
-
-        .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat);
+        .RequiredArgument("STRING").StoreResult(&InputBinaryStringEncodingFormat)
+        .Completer(MakeChoiceCompleter(allowedFormats, BinaryStringEncodingFormatDescriptions));
 }
 
 void TCommandWithInput::AddLegacyInputFormats(TClientCommand::TConfig& config, const TString& legacyName,
@@ -261,7 +276,8 @@ void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
         description << " (default: " << colors.CyanColor() << defaultFormat << colors.OldColor() << ")";
     }
     config.Opts->AddLongOption("format", description.Str())
-        .RequiredArgument("STRING").StoreResult(&OutputFormat);
+        .RequiredArgument("STRING").StoreResult(&OutputFormat)
+        .Completer(MakeChoiceCompleter(allowedFormats, FormatDescriptions));
     AllowedFormats = allowedFormats;
 }
 
@@ -348,8 +364,9 @@ void TCommandWithMessagingFormat::AddMessagingFormats(TClientCommand::TConfig& c
             << "\n    " << findResult->second;
     }
     config.Opts->AddLongOption("format", description.Str())
-        .DefaultValue( "single-message" )
-        .RequiredArgument("STRING").StoreResult(&MessagingFormat);
+        .DefaultValue("single-message")
+        .RequiredArgument("STRING").StoreResult(&MessagingFormat)
+        .Completer(MakeChoiceCompleter(allowedFormats, MessagingFormatDescriptions));
     AllowedMessagingFormats = allowedFormats;
 }
 

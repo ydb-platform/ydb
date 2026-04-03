@@ -202,7 +202,7 @@ class TestPqRowDispatcher(TestYdsBase):
             PRAGMA config.flags("TimeOrderRecoverDelay", "-10");
             PRAGMA config.flags("TimeOrderRecoverAhead", "10");
             INSERT INTO {YDS_CONNECTION}.`{self.output_topic}`
-            SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow())))) FROM {YDS_CONNECTION}.`{self.input_topic}`
                 WITH (format=json_each_row, SCHEMA (time Int32 NOT NULL))
                 MATCH_RECOGNIZE(
                     ORDER BY CAST(time as Timestamp)
@@ -220,7 +220,18 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 118}',
         ]
         self.write_stream(data)
-        assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
+
+        # This scenario is intended to verify that row dispatcher works with MATCH_RECOGNIZE + metadata fields.
+        # Row emission timing may vary; poll output topic until at least one row appears.
+        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        deadline = time.time() + 20
+        out = []
+        while time.time() < deadline:
+            out = self.read_stream(1, topic_path=self.output_topic)
+            if out:
+                break
+            time.sleep(1)
+        assert len(out) == 1
         stop_yds_query(client, query_id)
 
     @yq_v1
@@ -742,6 +753,7 @@ class TestPqRowDispatcher(TestYdsBase):
             streaming_disposition=StreamingDisposition.from_last_checkpoint(),
         )
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
+        kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         data = ['{"time": 203}', '{"time": 204}']
         self.write_stream(data)

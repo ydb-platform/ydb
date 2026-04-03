@@ -26,6 +26,13 @@ class ReservoirCellSelector
 {
 
 public:
+  ReservoirCellSelector() = default;
+
+  ReservoirCellSelector(const ReservoirCellSelector &)            = delete;
+  ReservoirCellSelector(ReservoirCellSelector &&)                 = delete;
+  ReservoirCellSelector &operator=(const ReservoirCellSelector &) = delete;
+  ReservoirCellSelector &operator=(ReservoirCellSelector &&)      = delete;
+
   virtual ~ReservoirCellSelector() = default;
 
   /** Determine the index of the {@code cells} to record the measurement to. */

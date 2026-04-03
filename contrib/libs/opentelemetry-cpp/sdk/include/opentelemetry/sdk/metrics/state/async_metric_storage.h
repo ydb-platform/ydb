@@ -34,7 +34,7 @@ namespace metrics
 class AsyncMetricStorage : public MetricStorage, public AsyncWritableMetricStorage
 {
 public:
-  AsyncMetricStorage(InstrumentDescriptor instrument_descriptor,
+  AsyncMetricStorage(const InstrumentDescriptor &instrument_descriptor,
                      const AggregationType aggregation_type,
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
                      ExemplarFilterType exempler_filter_type,

@@ -651,4 +651,24 @@
 
   {% endlist %}
 
+- JavaScript
+
+  Повторные попытки и переподключения сделаны внутри sdk, отдельно ничего пользователю настраивать не нужно.
+
+  Сам ретраер доступен в отдельном пакете `@ydbjs/retry`.
+
+  ```javascript
+  import { retry } from '@ydbjs/retry'
+
+  let attempts = 0
+  const result = retry({ retry: isError, budget: 3 }, async () => {
+    if (attempts >= 2) {
+      return 'success'
+    }
+
+    attempts++
+    throw new Error('test error')
+  })
+  ```
+
 {% endlist %}

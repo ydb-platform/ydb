@@ -2102,11 +2102,10 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         }
         if (IsOptimizerToFlowOverCollectAllowed(*optCtx.Types)) {
             const auto head = node->HeadPtr();
-            const auto input = head->HeadPtr();
             if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
-                input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+                head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
                 YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
-                return input;
+                return head->HeadPtr();
             }
         }
         return node;

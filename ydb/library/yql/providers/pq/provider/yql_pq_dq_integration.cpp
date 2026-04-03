@@ -36,19 +36,19 @@ using namespace std::literals::string_view_literals;
 namespace {
 
 /// PqReadTopic may use Void as a placeholder when WATERMARK is omitted (see yql_pq_datasource.cpp).
-TMaybe<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
+TMaybeNode<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
     if (topic.Ref().ChildrenSize() <= TPqReadTopic::idx_Watermark) {
-        return Nothing();
+        return {};
     }
-    const TExprNode::TPtr watermarkPtr = topic.Ref().ChildPtr(TPqReadTopic::idx_Watermark);
-    if (!watermarkPtr) {
-        return Nothing();
+    const TExprNode::TPtr watermark = topic.Ref().ChildPtr(TPqReadTopic::idx_Watermark);
+    if (!watermark) {
+        return {};
     }
-    if (TCoVoid::Match(watermarkPtr.Get())) {
-        return Nothing();
+    if (TCoVoid::Match(watermark.Get())) {
+        return {};
     }
-    YQL_ENSURE(TCoLambda::Match(watermarkPtr.Get()));
-    return TCoLambda(watermarkPtr);
+    YQL_ENSURE(TCoLambda::Match(watermark.Get()));
+    return TMaybeNode<TCoLambda>(watermark);
 }
 
 class TPqDqIntegration : public TDqIntegrationBase {
@@ -110,18 +110,14 @@ public:
 
             const auto pos = read->Pos();
 
-            // DqPqTopicSource.Columns = final output row (may shrink after e.g. ExtractMembers).
-            // UserSchemaColumns setting / UserSchemaColumns arg = fixed topic/userschema order for csv parsing; unchanged by projection.
-            // Non-empty csv UserSchemaColumns is validated in HandleReadTopic (yql_pq_datasource_type_ann.cpp), same as S3.
-
-            // Same member order/names as PqReadTopic row type (RowSpec + metadata, PqReadTopic.Columns projection).
             const auto& typeItems = rowType->GetItems();
             TExprNode::TListType colNames;
             colNames.reserve(typeItems.size());
-            for (const TItemExprType* item : typeItems) {
-                colNames.push_back(ctx.NewAtom(pos, item->GetName()));
-            }
-            TExprNode::TPtr columnNames = ctx.NewList(pos, std::move(colNames));
+            std::transform(typeItems.cbegin(), typeItems.cend(), std::back_inserter(colNames),
+                [&](const TItemExprType* item) {
+                    return ctx.NewAtom(pos, item->GetName());
+                });
+            auto columnNames = ctx.NewList(pos, std::move(colNames));
 
             auto settings = BuildTopicReadSettings(pqReadTopic, ctx, wrSettings);
             if (!settings) {
@@ -130,7 +126,7 @@ public:
 
             TMaybeNode<TCoAtom> watermarkSerialized;
             if (const auto maybeWatermarkLambda = TryPqReadTopicWatermarkLambda(pqReadTopic)) {
-                const auto& watermark = maybeWatermarkLambda.GetRef();
+                const auto watermark = maybeWatermarkLambda.Cast();
 
                 TStringBuilder err;
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
@@ -578,7 +574,7 @@ public:
         TMaybe<ui64> watermarksIdleTimeoutUs;
         TMaybe<ui64> watermarksLateArrivalDelayUs;
         if (!useSharedReading && maybeWatermarkLambda) {
-            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermarkLambda.GetRef());
+            watermarksLateArrivalDelayUs = ExtractWatermarkDelay(maybeWatermarkLambda.Cast());
             if (!watermarksLateArrivalDelayUs) {
                 ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Unrecognized watermark expression, flexible watermark expressions are only implemented in shared reading mode, please use WATERMARK = SystemMetadata('write_time') - Interval('PT5S')"));
                 return {};

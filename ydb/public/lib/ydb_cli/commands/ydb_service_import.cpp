@@ -3,6 +3,8 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/exclude_item.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
+#include <library/cpp/getopt/small/completer.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
@@ -101,8 +103,16 @@ void TCommandImportBase::Config(TConfig& config) {
 
             first = false;
         }
+        TVector<NLastGetopt::NComp::TChoice> modeChoices;
+        for (auto mode : GetEnumAllValues<NImport::EIndexPopulationMode>()) {
+            if (mode == NImport::EIndexPopulationMode::Unknown) {
+                continue;
+            }
+            modeChoices.emplace_back(ToString(mode));
+        }
         config.Opts->AddLongOption("index-population-mode", help)
-            .RequiredArgument("STRING").StoreResult(&IndexPopulationMode).DefaultValue(IndexPopulationMode);
+            .RequiredArgument("STRING").StoreResult(&IndexPopulationMode).DefaultValue(IndexPopulationMode)
+            .Completer(NLastGetopt::NComp::Choice(std::move(modeChoices)));
     }
 
     config.Opts->AddLongOption("no-acl", "Prevent importing of ACL and owner")
@@ -303,7 +313,8 @@ void TCommandImportFromS3::Config(TConfig& config) {
             << colors.BoldColor() << "http" << colors.OldColor()
             << " or "
             << colors.BoldColor() << "https" << colors.OldColor())
-        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme);
+        .RequiredArgument("SCHEME").StoreResult(&AwsScheme).DefaultValue(AwsScheme)
+        .ChoicesWithCompletion({{"http", "HTTP"}, {"https", "HTTPS"}});
 
     config.Opts->AddLongOption("bucket", "S3 bucket")
         .Required().RequiredArgument("BUCKET").StoreResult(&AwsBucket);
@@ -471,6 +482,8 @@ TCommandImportFromNfs::TCommandImportFromNfs()
         "and table data files from an identical path on every YDB host.\n"
         "Files are sourced from a directory mounted across all YDB hosts.")
 {
+    CompletionDescription = "Create import from a shared NFS directory";
+
     TItemNfs::DefineFields({
         {"Source", {{"source", "src", "s"}, "Path to the exported object in file system (relative to fs-path)", true}},
         {"Destination", {{"destination", "dst", "d"}, "Database path to a table to import to", true}},
@@ -555,7 +568,8 @@ void TCommandImportFileBase::Config(TConfig& config) {
         .RequiredArgument("DURATION").StoreMappedResult(&OperationTimeout, &ParseDurationMilliseconds).DefaultValue(TDuration::Seconds(5 * 60));
 
     config.Opts->AddLongOption('p', "path", "Database path to table")
-        .Required().RequiredArgument("STRING").StoreResult(&Path);
+        .Required().RequiredArgument("STRING").StoreResult(&Path)
+        .SchemePathCompletionForTables();
     config.Opts->AddLongOption('i', "input-file").AppendTo(&FilePaths).Hidden();
 
     const TImportFileSettings defaults;

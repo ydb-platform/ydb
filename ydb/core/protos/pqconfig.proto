@@ -756,6 +756,10 @@ message TStatusResponse {
         optional uint64 CommitedLagMs = 11;
         optional string CommittedMetadata = 12;
         optional bool UseForReading = 13;
+
+        optional uint64 MLPLockedMessageCount = 14;
+        optional uint64 MLPDelayedMessageCount = 15;
+        optional uint64 MLPMessageCount = 16;
     }
 
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/executor_pool.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
@@ -42,7 +43,7 @@ class TPartitionActor
 
 private:
     TExecutorPool ExecutorPool{32};
-    NYdb::NBS::NProto::TStorageServiceConfig StorageConfig;
+    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
 
     TString DiskId;

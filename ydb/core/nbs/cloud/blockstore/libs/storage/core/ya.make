@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    config.cpp
     request_info.cpp
     volume_label.cpp
     volume_model.cpp
@@ -19,3 +20,5 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(ut)

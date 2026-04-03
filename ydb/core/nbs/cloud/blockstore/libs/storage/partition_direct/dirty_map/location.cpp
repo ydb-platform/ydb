@@ -299,13 +299,14 @@ bool TLocationMask::OnlyPBuffer() const
 
 std::optional<ELocation> TLocationMask::GetLocation(size_t tryNumber) const
 {
-    size_t skip = 0;
+    size_t locationIndex = 0;
     for (auto location: AllLocations) {
         if (Get(location)) {
-            if (skip == tryNumber) {
+            if (locationIndex == tryNumber) {
                 return location;
             }
-            ++skip;
+
+            locationIndex++;
         }
     }
     return std::nullopt;

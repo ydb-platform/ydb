@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
 
 namespace NYdb {
@@ -198,6 +199,15 @@ void TCommandListOperations::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<kind>", KindChoices());
+
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (!handler.Hidden) {
+            kindChoices.emplace_back(kind);
+        }
+    }
+    config.Opts->GetOpts().GetFreeArgSpec(0)
+        .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 }
 
 void TCommandListOperations::Parse(TConfig& config) {

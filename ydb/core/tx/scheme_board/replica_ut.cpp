@@ -779,7 +779,7 @@ void TReplicaCombinationTest::UpdatesCombinationsMigratedPath() {
                  << " DomainId: " << std::get<0>(winId)
                  << " IsDeletion: " << std::get<1>(winId)
                  << " PathId: " << std::get<2>(winId)
-                 << " Verions: " << std::get<3>(winId)
+                 << " Versions: " << std::get<3>(winId)
                  << Endl;
             Cerr << "=========== WIN =="
                  << ev->Get()->GetRecord().GetPath()

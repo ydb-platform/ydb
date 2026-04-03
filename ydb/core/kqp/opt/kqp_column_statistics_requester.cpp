@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {

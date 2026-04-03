@@ -20,8 +20,21 @@ using namespace NYql;
 
 enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
 
-/* Represents aggregation phases. */
-enum EAggregationPhase : ui32 { Intermediate, Final };
+// clang-format off
+#define PHASE_ENUM(X) \
+    X(NotDefined)     \
+    X(Intermediate)   \
+    X(Final)
+
+enum class EOpPhase {
+#define X(name) name,
+    PHASE_ENUM(X)
+#undef X
+};
+// clang-format on
+
+// There are already defined ToString for integers.
+TString ToStringPhase(EOpPhase phase);
 
 // clang-format off
 enum EPrintPlanOptions: ui32 {
@@ -67,6 +80,12 @@ public:
     IOperator(EOperator kind, TPositionHandle pos)
         : Kind(kind)
         , Pos(pos) {
+    }
+
+    IOperator(EOperator kind, TPositionHandle pos, const TPhysicalOpProps& props)
+        : Kind(kind)
+        , Pos(pos)
+        , Props(props) {
     }
 
     virtual ~IOperator() = default;
@@ -120,7 +139,7 @@ public:
 
     virtual TString ToString(TExprContext& ctx) = 0;
 
-    bool IsSingleConsumer() {
+    bool IsSingleConsumer() const {
         return Parents.size() <= 1;
     }
 
@@ -128,9 +147,13 @@ public:
         return Type;
     }
 
+    EOperator GetKind() const {
+        return Kind;
+    }
+
     const EOperator Kind;
-    TPhysicalOpProps Props;
     TPositionHandle Pos;
+    TPhysicalOpProps Props;
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
@@ -153,6 +176,10 @@ public:
     }
     IUnaryOperator(EOperator kind, TPositionHandle pos, TIntrusivePtr<IOperator> input)
         : IOperator(kind, pos) {
+        Children.push_back(input);
+    }
+    IUnaryOperator(EOperator kind, TPositionHandle pos, const TPhysicalOpProps& props, TIntrusivePtr<IOperator> input)
+        : IOperator(kind, pos, props) {
         Children.push_back(input);
     }
     TIntrusivePtr<IOperator>& GetInput() {
@@ -214,6 +241,9 @@ public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
+    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
+            TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -232,6 +262,7 @@ public:
     NYql::EStorageType StorageType;
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
+    TExprNode::TPtr Limit;
 };
 
 class TMapElement {
@@ -256,6 +287,9 @@ private:
 class TOpMap: public IUnaryOperator {
 public:
     TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool project, bool ordered = false);
+    TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements, bool project,
+           bool ordered = false);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<TInfoUnit> GetSubplanIUs(TPlanProps& props) override;
@@ -331,7 +365,7 @@ struct TOpAggregationTraits {
 class TOpAggregate: public IUnaryOperator {
 public:
     TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggregationTraits>& aggFunctions, const TVector<TInfoUnit>& keyColumns,
-                 const EAggregationPhase aggPhase, bool distinctAll, TPositionHandle pos);
+                 const EOpPhase aggPhase, bool distinctAll, TPositionHandle pos);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
 
@@ -344,13 +378,14 @@ public:
 
     TVector<TOpAggregationTraits> AggregationTraitsList;
     TVector<TInfoUnit> KeyColumns;
-    EAggregationPhase AggregationPhase;
+    EOpPhase AggregationPhase;
     bool DistinctAll;
 };
 
 class TOpFilter: public IUnaryOperator {
 public:
     TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& filterExpr);
+    TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& filterExpr);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
@@ -364,6 +399,7 @@ public:
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
+    TExpression GetFilterExpression() const { return FilterExpr; }
 
     TExpression FilterExpr;
 };
@@ -402,14 +438,25 @@ public:
 
 class TOpLimit: public IUnaryOperator {
 public:
-    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
 
+    EOpPhase GetLimitPhase() const {
+        return LimitPhase;
+    }
+
+    TExpression GetLimitCond() const { return LimitCond; }
+
+    // Make private.
     TExpression LimitCond;
+private:
+    EOpPhase LimitPhase;
 };
 
 class TOpSort: public IUnaryOperator {

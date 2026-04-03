@@ -1898,7 +1898,7 @@ public:
         }
 
         auto executerActor = CreateKqpSchemeExecuter(
-            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            tx, QueryState->GetType(), QueryState->QueryData, SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,

@@ -445,7 +445,12 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiCreateSecret createSecret) {
         TSecretSettings settings;
         settings.Name = TString(createSecret.Secret());
-        settings.Value = TString(createSecret.Value());
+        if (auto value = TString(createSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(createSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
         settings.InheritPermissions = FromString<bool>(TString(createSecret.InheritPermissions()));
         return settings;
     }
@@ -453,7 +458,12 @@ namespace {
     TSecretSettings ParseSecretSettings(TKiAlterSecret alterSecret) {
         TSecretSettings settings;
         settings.Name = TString(alterSecret.Secret());
-        settings.Value = TString(alterSecret.Value());
+        if (auto value = TString(alterSecret.Value())) {
+            settings.Value = std::move(value);
+        }
+        if (auto paramName = TString(alterSecret.ValueParamName())) {
+            settings.ValueParamName = std::move(paramName);
+        }
         return settings;
     }
 

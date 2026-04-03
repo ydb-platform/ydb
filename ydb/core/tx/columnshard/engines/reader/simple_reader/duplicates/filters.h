@@ -1,11 +1,11 @@
 #pragma once
 
-#include "context.h"
+#include "events.h"
 
 #include <ydb/core/formats/arrow/reader/batch_iterator.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
-    
+
 class TFilterAccumulator: TMoveOnly {
 public:
     enum class EFetchingStage {
@@ -39,7 +39,7 @@ private:
     };
 
     THashMap<ui64, TFilterInfo> Filters;
-    THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
+    THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
     YDB_READONLY(ui64, RowsAdded, 0);
     YDB_READONLY(ui64, RowsSkipped, 0);
 
@@ -52,10 +52,31 @@ public:
     void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor);
     void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const;
     bool IsBufferExhausted() const;
-    bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
     void AddSource(const ui64 portionId, ui64 rowsCount);
+    TString DebugString() const;
+    ui64 CountSources() const;
+
+    THashMap<ui64, NArrow::TColumnFilter>&& ExtractReadyFilters();
+};
+
+class TFiltersStore {
+private:
+    const bool IsReverse;
+    THashMap<ui64, std::shared_ptr<TFilterAccumulator>> WaitingPortions;
+    THashMap<ui64, NArrow::TColumnFilter> ReadyFilters;
+    std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+
+private:
+     NArrow::TColumnFilter MakeOrderedFilter(NArrow::TColumnFilter&& filter);
+
+public:
+    TFiltersStore(const bool reverse, const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>& counters);
+    bool NotifyReadyFilter(std::shared_ptr<TFilterAccumulator>& constructor);
+    void AddReadyFilter(const ui64 portionId, NArrow::TColumnFilter&& filter);
     void AddWaitingPortion(const ui64 portionId, std::shared_ptr<TFilterAccumulator>& constructor);
     void Abort(const TString& error);
+    
+    ~TFiltersStore();
 };
 
 }

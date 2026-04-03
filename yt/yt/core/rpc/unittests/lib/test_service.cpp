@@ -291,16 +291,20 @@ public:
             promise.Set();
         }));
 
-        WaitFor(promise.ToFuture())
+        promise
+            .ToFuture()
+            .BlockingGet()
             .ThrowOnError();
 
         EXPECT_THROW({
-            WaitFor(response->GetAttachmentsStream()->Write(TSharedMutableRef::Allocate(100)))
+            response->GetAttachmentsStream()->Write(TSharedMutableRef::Allocate(100))
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 
         EXPECT_THROW({
-            WaitFor(request->GetAttachmentsStream()->Read())
+            request->GetAttachmentsStream()->Read()
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 

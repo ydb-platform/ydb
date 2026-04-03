@@ -320,8 +320,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
-                return true;
             case EType::GlobalJson:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
                 return false;

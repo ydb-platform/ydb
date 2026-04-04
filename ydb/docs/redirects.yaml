@@ -422,16 +422,6 @@ common:
   - from: /integrations/liquibase.md
     to: /integrations/migration/liquibase.md
 
-# Redirects for problems section (tips, troubleshooting, faq merged into problems/)
-  - from: /tips/index.md
-    to: /problems/index.md
-  - from: /tips/
-    to: /problems/index.md
-  - from: /faq/index.md
-    to: /problems/index.md
-  - from: /faq/
-    to: /problems/index.md
-
 # Redirects for troubleshooting
 
   - from: /dev/troubleshooting/index.md

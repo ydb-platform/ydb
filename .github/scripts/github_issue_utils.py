@@ -6,36 +6,47 @@ Used by both the muted test analytics and issue management scripts.
 """
 
 import re
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 
-def parse_body(body):
-    """Parse GitHub issue body to extract test names, branches and build_type.
-    
+DEFAULT_BUILD_TYPE = 'relwithdebinfo'
+
+
+@dataclass
+class ParsedIssueBody:
+    tests: List[str] = field(default_factory=list)
+    branches: List[str] = field(default_factory=lambda: ['main'])
+    build_type: str = DEFAULT_BUILD_TYPE
+    owner_override: Optional[str] = None
+
+
+def _extract_between_markers(body: str, start_marker: str, end_marker: str) -> Optional[str]:
+    """Return text between two HTML comment markers, or None if markers are absent."""
+    if start_marker not in body or end_marker not in body:
+        return None
+    idx1 = body.find(start_marker)
+    idx2 = body.find(end_marker)
+    return body[idx1 + len(start_marker) + 1 : idx2]
+
+
+def parse_body(body: str) -> ParsedIssueBody:
+    """Parse GitHub issue body to extract test names, branches, build_type and owner_override.
+
     Args:
-        body (str): The GitHub issue body text
-        
-    Returns:
-        tuple: (tests, branches, build_type)
-            tests     - list of test names
-            branches  - list of branch names
-            build_type - string, defaults to 'relwithdebinfo' if tag is absent
-    """
-    tests = []
-    branches = []
-    prepared_body = ''
-    start_mute_list = "<!--mute_list_start-->"
-    end_mute_list = "<!--mute_list_end-->"
-    start_branch_list = "<!--branch_list_start-->"
-    end_branch_list = "<!--branch_list_end-->"
-    start_build_type = "<!--build_type_list_start-->"
-    end_build_type = "<!--build_type_list_end-->"
+        body: The GitHub issue body text
 
-    # Extract tests
-    if all(x in body for x in [start_mute_list, end_mute_list]):
-        idx1 = body.find(start_mute_list)
-        idx2 = body.find(end_mute_list)
-        lines = body[idx1 + len(start_mute_list) + 1 : idx2].split('\n')
+    Returns:
+        ParsedIssueBody with extracted fields (all have sensible defaults).
+    """
+    result = ParsedIssueBody()
+
+    # --- tests ---
+    mute_block = _extract_between_markers(body, "<!--mute_list_start-->", "<!--mute_list_end-->")
+    if mute_block is not None:
+        lines = mute_block.split('\n')
     else:
+        prepared_body = ''
         if body.startswith('Mute:'):
             prepared_body = body.split('Mute:', 1)[1].strip()
         elif body.startswith('Mute'):
@@ -43,50 +54,57 @@ def parse_body(body):
         elif body.startswith('ydb'):
             prepared_body = body
         lines = prepared_body.split('**Add line to')[0].split('\n')
-    tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
+    result.tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
 
-    # Extract branches
-    if all(x in body for x in [start_branch_list, end_branch_list]):
-        idx1 = body.find(start_branch_list)
-        idx2 = body.find(end_branch_list)
-        branches = [branch.strip() for branch in body[idx1 + len(start_branch_list) + 1 : idx2].split('\n') if branch.strip()]
-    else:
-        branches = ['main']
+    # --- branches ---
+    branch_block = _extract_between_markers(body, "<!--branch_list_start-->", "<!--branch_list_end-->")
+    if branch_block is not None:
+        result.branches = [b.strip() for b in branch_block.split('\n') if b.strip()]
 
-    # Extract build_type (default: relwithdebinfo for issues created before this tag was added)
-    if all(x in body for x in [start_build_type, end_build_type]):
-        idx1 = body.find(start_build_type)
-        idx2 = body.find(end_build_type)
-        build_type = body[idx1 + len(start_build_type) + 1 : idx2].strip()
-    else:
-        build_type = 'relwithdebinfo'
+    # --- build_type ---
+    bt_block = _extract_between_markers(body, "<!--build_type_list_start-->", "<!--build_type_list_end-->")
+    if bt_block is not None:
+        val = bt_block.strip()
+        if val:
+            result.build_type = val
 
-    return tests, branches, build_type
+    # --- owner_override (new, optional) ---
+    oo_block = _extract_between_markers(body, "<!--owner_override_start-->", "<!--owner_override_end-->")
+    if oo_block is not None:
+        val = oo_block.strip()
+        if val:
+            result.owner_override = val
+
+    return result
+
+
+def make_profile_id(branch: str, build_type: str) -> str:
+    """Canonical profile_id used by digest_queue and notification config."""
+    return f"{branch}-{build_type}"
 
 
 def create_test_issue_mapping(issues_data):
     """Create a mapping from test names to GitHub issue information
-    
+
     Args:
         issues_data (list): List of issue dictionaries with 'body', 'url', 'title', 'issue_number' fields
-        
+
     Returns:
         dict: Mapping from test name to list of issue information
     """
     test_to_issue = {}
-    
+
     for issue in issues_data:
         body = issue.get('body', '')
         url = issue.get('url', '')
-        
+
         if not body or not url:
             continue
-            
+
         try:
-            # Use the parse_body function to extract tests, branches and build_type
-            tests, branches, build_type = parse_body(body)
-            
-            for test in tests:
+            parsed = parse_body(body)
+
+            for test in parsed.tests:
                 if test not in test_to_issue:
                     test_to_issue[test] = []
                 test_to_issue[test].append({
@@ -95,11 +113,12 @@ def create_test_issue_mapping(issues_data):
                     'issue_number': issue.get('issue_number', 0),
                     'state': issue.get('state', ''),
                     'created_at': issue.get('created_at', 0),
-                    'branches': branches,
-                    'build_type': build_type,
+                    'branches': parsed.branches,
+                    'build_type': parsed.build_type,
+                    'owner_override': parsed.owner_override,
                 })
         except Exception as e:
             print(f"Warning: Could not parse issue body for issue {url}: {e}")
             continue
-    
+
     return test_to_issue

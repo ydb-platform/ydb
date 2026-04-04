@@ -13,7 +13,7 @@ from ydb_wrapper import YDBWrapper
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import create_test_issue_mapping
+from github_issue_utils import create_test_issue_mapping, DEFAULT_BUILD_TYPE
 
 
 
@@ -87,7 +87,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
-                    'build_type': latest_issue.get('build_type', 'relwithdebinfo'),
+                    'build_type': latest_issue.get('build_type', DEFAULT_BUILD_TYPE),
                     'github_issue_url': latest_issue['url'],
                     'github_issue_title': latest_issue['title'],
                     'github_issue_number': latest_issue['issue_number'],

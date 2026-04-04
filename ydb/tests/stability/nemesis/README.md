@@ -88,6 +88,17 @@
 
 Тело сценария всегда на **агенте**; оркестратор только планирует **какой** тип, **на каком** хосте и **какой** payload.
 
+### Принцип локального исполнения
+
+Все runner'ы выполняют fault injection **локально** на хосте агента через `subprocess` (systemctl, kill, iptables, ip route и т.д.). **SSH к удалённым хостам не используется** — оркестратор отвечает за выбор целевого хоста и диспетчеризацию команды на нужного агента.
+
+| Категория runner'а | Планировщик | Что делает агент |
+|--------------------|-------------|------------------|
+| Одиночный хост (kill node/slot, stop/start, suspend, rolling update) | `DefaultRandomHostPlanner` / `PinnedFirstHostPlanner` / `SerialStaggeredInjectPlanner` | Убивает / останавливает / сигналит **локальный** процесс kikimr |
+| Datacenter (stop nodes, iptables, route unreach) | `DataCenterFanoutPlanner` — рассылает inject на **все** хосты в выбранном DC | Каждый агент останавливает / блокирует **свои** локальные сервисы |
+| Bridge pile (stop nodes, iptables, route unreach) | `BridgePileFanoutPlanner` — рассылает inject на **все** хосты в выбранном pile | Каждый агент останавливает / блокирует **свои** локальные сервисы |
+| Cluster API (tablet kill, hive, disk break) | `DefaultRandomHostPlanner` | Вызывает gRPC / HTTP API кластера (не SSH) |
+
 ### Регистрация типа
 
 1. Добавьте класс актора, наследник **`MonitoredAgentActor`** (как `NetworkNemesis` / `KillNodeNemesis`): реализуйте **`inject_fault`** и **`extract_fault`**, при необходимости читайте `payload` из dispatch.

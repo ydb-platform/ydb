@@ -1,216 +1,200 @@
 # -*- coding: utf-8 -*-
 # Adapted from ydb/tests/tools/nemesis/library/datacenter.py
+#
+# All runners execute **locally** on the agent host.  The orchestrator's
+# ``DataCenterFanoutPlanner`` dispatches inject/extract to every host in the
+# selected datacenter; each agent runs the fault against its own local
+# kikimr / kikimr-multi@ services or local iptables / ip-route.
 
 from __future__ import annotations
 
-import abc
-import asyncio
-import collections
 import socket
+import subprocess
 import time
 
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import MonitoredAgentActor
 
 
-class ClusterAbstractDataCenterNemesis(MonitoredAgentActor, abc.ABC):
+# ---------------------------------------------------------------------------
+# Local helpers
+# ---------------------------------------------------------------------------
+
+
+def _kikimr_slot_id(node):
+    """``None`` = single ``kikimr`` service; else ``kikimr-multi@`` instance id."""
+    return getattr(node, "_KikimrExternalNode__slot_id", None)
+
+
+def _resolve_local_host():
+    """Return (fqdn, hostname) for the current machine."""
+    fqdn = socket.getfqdn()
+    hostname = socket.gethostname()
+    return fqdn, hostname
+
+
+def _is_local_host(host, fqdn, hostname):
+    return host in (fqdn, hostname) or host.split(".")[0] == hostname.split(".")[0]
+
+
+def _local_stop_kikimr(node):
+    """``systemctl stop`` for the local kikimr / kikimr-multi@ service."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr stop", shell=True, check=True)
+    else:
+        subprocess.run(
+            ["sudo", "systemctl", "stop", "kikimr-multi@{}".format(slot_id)],
+            check=True,
+        )
+
+
+def _local_start_kikimr(node):
+    """``systemctl start`` for the local kikimr / kikimr-multi@ service."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr start", shell=True, check=True)
+        return
+    slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot_id)
+    slot_cfg = slot_dir + "/slot_cfg"
+    env_txt = slot_dir + "/env.txt"
+    cfg = """\
+tenant=/Root/db1
+grpc={grpc}
+mbus={mbus}
+ic={ic}
+mon={mon}""".format(
+        mbus=node.mbus_port,
+        grpc=node.grpc_port,
+        mon=node.mon_port,
+        ic=node.ic_port,
+    )
+    subprocess.run(["sudo", "mkdir", "-p", slot_dir], check=True)
+    subprocess.run(["sudo", "touch", env_txt], check=True)
+    p = subprocess.Popen(
+        ["sudo", "tee", slot_cfg],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    _out, _err = p.communicate(cfg.encode("utf-8"))
+    if p.returncode != 0:
+        raise subprocess.CalledProcessError(p.returncode, "sudo tee slot_cfg", None)
+    subprocess.run(
+        ["sudo", "systemctl", "start", "kikimr-multi@{}".format(slot_id)],
+        check=True,
+    )
+
+
+def _resolve_hostname_to_ipv6(hostname):
+    """Resolve hostname to IPv6 address."""
+    try:
+        result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
+        if result:
+            return result[0][4][0]
+    except socket.gaierror:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Runners
+# ---------------------------------------------------------------------------
+
+
+class ClusterDataCenterStopNodesNemesis(MonitoredAgentActor):
+    """Stop local kikimr node and slots.
+
+    The orchestrator's ``DataCenterFanoutPlanner`` dispatches this to every
+    host in the selected datacenter.  Each agent stops its own local services.
+    """
+
     def __init__(self, duration=60):
         super().__init__(scope='datacenter')
         self._duration = duration
-        self._current_dc = None
-        self._current_nodes = None
-        self._dc_cycle_iterator = None
-        self._disabled = False
-
-    def _create_dc_cycle(self):
-        while True:
-            for dc in self._data_centers:
-                yield dc
-
-    def _validate_datacenters(self, cluster):
-        dc_to_nodes = collections.defaultdict(list)
-        for node in cluster.nodes.values():
-            if node.datacenter is not None:
-                dc_to_nodes[node.datacenter].append(node)
-
-        data_centers = list(dc_to_nodes.keys())
-        return dc_to_nodes, data_centers
-
-    def _ensure_dc_state(self):
-        if self._dc_cycle_iterator is not None:
-            return
-        cluster = require_external_cluster()
-        self._dc_to_nodes, self._data_centers = self._validate_datacenters(cluster)
-        if len(self._data_centers) < 2:
-            self._logger.warning("No datacenters found in cluster or only one datacenter found - nemesis will be disabled")
-            self._disabled = True
-            return
-
-        self._disabled = False
-        self._dc_cycle_iterator = self._create_dc_cycle()
+        self._stopped_nodes = []
+        self._stopped_slots = []
 
     def inject_fault(self, payload=None):
-        del payload
-        self._ensure_dc_state()
-        if self._disabled:
-            self._logger.info("DataCenterNemesis is disabled due to insufficient datacenters")
-            return
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
 
-        if self.extract_fault():
+        # Find local nodes and slots
+        local_nodes = [n for n in cluster.nodes.values() if _is_local_host(n.host, fqdn, hostname)]
+        local_slots = [s for s in cluster.slots.values() if _is_local_host(s.host, fqdn, hostname)]
+
+        if not local_nodes and not local_slots:
+            self._logger.warning("No local nodes/slots found for datacenter stop")
             return
 
         self.start_inject_fault()
-        self._current_dc = next(self._dc_cycle_iterator)
-        self._current_nodes = self._dc_to_nodes.get(self._current_dc, [])
-        self._logger.info("Selected dc %s with %d nodes for %s", self._current_dc, len(self._current_nodes), self.__class__.__name__)
 
-        self._logger.info("=== INJECTING SPECIFIC FAULT ===")
-        self._logger.info("Injecting specific fault for %s on dc %s", self.__class__.__name__, self._current_dc)
-        try:
-            self._inject_specific_fault()
-            self._logger.info("=== SPECIFIC FAULT INJECTED ===")
-        except Exception as e:
-            self._logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
-            return
-        self._logger.info("=== WAITING FOR %d SECONDS ===", self._duration)
+        # Stop slots first
+        for slot in local_slots:
+            try:
+                self._logger.info("Stopping local slot ic_port=%d", slot.ic_port)
+                _local_stop_kikimr(slot)
+                self._stopped_slots.append(slot)
+            except Exception as e:
+                self._logger.error("Failed to stop slot ic_port=%d: %s", slot.ic_port, e)
+
+        # Stop nodes
+        for node in local_nodes:
+            try:
+                self._logger.info("Stopping local node node_id=%d", node.node_id)
+                _local_stop_kikimr(node)
+                self._stopped_nodes.append(node)
+            except Exception as e:
+                self._logger.error("Failed to stop node node_id=%d: %s", node.node_id, e)
+
+        self._logger.info("Stopped %d nodes and %d slots locally",
+                          len(self._stopped_nodes), len(self._stopped_slots))
+
         time.sleep(self._duration)
-        self._logger.info("=== EXTRACTING SPECIFIC FAULT ===")
-        try:
-            self._extract_specific_fault()
-            self._logger.info("=== SPECIFIC FAULT EXTRACTED ===")
-        except Exception as e:
-            self._logger.error("Failed to extract specific fault for %s: %s", self.__class__.__name__, e)
-            return
 
+        # Extract (start everything back)
+        self._start_all()
         self.on_success_inject_fault()
 
-    @abc.abstractmethod
-    def _inject_specific_fault(self):
-        pass
+    def _start_all(self):
+        # Start nodes first
+        for node in self._stopped_nodes:
+            try:
+                self._logger.info("Starting local node node_id=%d", node.node_id)
+                _local_start_kikimr(node)
+            except Exception as e:
+                self._logger.error("Failed to start node node_id=%d: %s", node.node_id, e)
+
+        # Start slots
+        for slot in self._stopped_slots:
+            try:
+                self._logger.info("Starting local slot ic_port=%d", slot.ic_port)
+                _local_start_kikimr(slot)
+            except Exception as e:
+                self._logger.error("Failed to start slot ic_port=%d: %s", slot.ic_port, e)
+
+        self._stopped_nodes = []
+        self._stopped_slots = []
 
     def extract_fault(self, payload=None):
         del payload
-        if self._current_dc is not None:
-            try:
-                self._extract_specific_fault()
-            except Exception as e:
-                self._logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
-            finally:
-                self._current_dc = None
-                self._current_nodes = None
-
-            self.on_success_extract_fault()
-            return True
-
-        return False
-
-    @abc.abstractmethod
-    def _extract_specific_fault(self):
-        pass
+        if self._stopped_nodes or self._stopped_slots:
+            self._start_all()
+        self.on_success_extract_fault()
 
 
-class ClusterDataCenterStopNodesNemesis(ClusterAbstractDataCenterNemesis):
+class ClusterDataCenterRouteUnreachableNemesis(MonitoredAgentActor):
+    """Block YDB ports on the local host using ip6tables.
+
+    The orchestrator's ``DataCenterFanoutPlanner`` dispatches this to every
+    host in the selected datacenter.  Each agent blocks its own local ports
+    and schedules automatic recovery.
+    """
+
     def __init__(self, duration=60):
-        super().__init__(duration=duration)
-
-    def _inject_specific_fault(self):
-        async def _async_stop_nodes():
-            try:
-                cluster = require_external_cluster()
-                stop_tasks = []
-                stopped_slots = []
-                for slot in cluster.slots.values():
-                    if slot.datacenter == self._current_dc:
-                        self._logger.info("Stopping slot %d on host %s", slot.ic_port, slot.host)
-                        task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl stop kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                        stop_tasks.append(task)
-                        stopped_slots.append(slot)
-
-                slot_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                slot_success_count = 0
-                for slot, result in zip(stopped_slots, slot_results):
-                    if isinstance(result, Exception):
-                        self._logger.error("Exception stopping slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                        # Skip slot failure
-                        continue
-                    self._logger.info("Successfully stopped slot %d on host %s", slot.ic_port, slot.host)
-                    slot_success_count += 1
-
-                self._logger.info("Stopped %d/%d dynamic slots in dc %s", slot_success_count, len(stop_tasks), self._current_dc)
-
-                stop_tasks = []
-                for node in self._current_nodes:
-                    self._logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl stop kikimr", raise_on_error=True))
-                    stop_tasks.append(task)
-
-                node_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                node_success_count = 0
-                for i, result in enumerate(node_results):
-                    node = self._current_nodes[i]
-                    if isinstance(result, Exception):
-                        self._logger.error("Exception stopping storage node_id %d on host %s: %s", node.node_id, node.host, result)
-                        raise result
-                    self._logger.info("Successfully stopped node %d on host %s", node.node_id, node.host)
-                    node_success_count += 1
-
-                self._logger.info("Stopped %d/%d storage nodes in dc %s", node_success_count, len(stop_tasks), self._current_dc)
-
-            except Exception as e:
-                self._logger.error("Failed to stop nodes: %s", str(e))
-                raise
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_stop_nodes())
-
-    def _extract_specific_fault(self):
-        async def _async_start_nodes():
-            start_tasks = []
-            for node in self._current_nodes:
-                self._logger.info("Starting storage node %d on host %s", node.node_id, node.host)
-                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
-                start_tasks.append(task)
-
-            node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            node_success_count = 0
-            for i, result in enumerate(node_results):
-                node = self._current_nodes[i]
-                if isinstance(result, Exception):
-                    self._logger.error("Exception starting node: %s", result)
-                    continue
-                self._logger.info("Successfully started node %d on host %s", node.node_id, node.host)
-                node_success_count += 1
-
-            self._logger.info("Started %d/%d storage nodes in dc %s", node_success_count, len(start_tasks), self._current_dc)
-
-            cluster = require_external_cluster()
-            start_tasks = []
-            started_slots = []
-            for slot in cluster.slots.values():
-                if slot.datacenter == self._current_dc:
-                    self._logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
-                    task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                    start_tasks.append(task)
-                    started_slots.append(slot)
-
-            slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            slot_success_count = 0
-            for slot, result in zip(started_slots, slot_results):
-                if isinstance(result, Exception):
-                    self._logger.error("Exception starting slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                    continue
-                self._logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
-                slot_success_count += 1
-
-            self._logger.info("Started %d/%d dynamic slots in dc %s", slot_success_count, len(start_tasks), self._current_dc)
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_start_nodes())
-
-
-class ClusterDataCenterRouteUnreachableNemesis(ClusterAbstractDataCenterNemesis):
-    def __init__(self, duration=60):
-        super().__init__(duration=duration)
+        super().__init__(scope='datacenter')
+        self._duration = duration
 
         self._block_ports_cmd = (
             "sudo /sbin/ip6tables -w -A YDB_FW -p tcp -m multiport "
@@ -220,95 +204,89 @@ class ClusterDataCenterRouteUnreachableNemesis(ClusterAbstractDataCenterNemesis)
             "sudo /sbin/ip6tables -w -F YDB_FW"
         )
 
-    def _inject_specific_fault(self):
-        async def _async_block_ports():
-            try:
-                # Block ports and schedule recovery in one pass
-                block_tasks = []
-
-                for node in self._current_nodes:
-                    self._logger.info("Processing host %s for current dc %s", node.host, self._current_dc)
-
-                    # Block ports and schedule automatic recovery in one command
-                    block_and_recover_cmd = f"nohup bash -c '{self._block_ports_cmd} && sleep {self._duration} && sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
-                    block_task = asyncio.create_task(asyncio.to_thread(node.ssh_command, block_and_recover_cmd, raise_on_error=True))
-                    block_tasks.append(block_task)
-
-                # Wait for all blocking and recovery scheduling operations to complete
-                await asyncio.gather(*block_tasks, return_exceptions=True)
-
-                self._logger.info("Blocked YDB ports on dc %s and scheduled automatic recovery", self._current_dc)
-
-            except Exception as e:
-                self._logger.error("Failed to block YDB ports: %s", str(e))
-                raise
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_block_ports())
-
-    def _extract_specific_fault(self):
-        """YDB ports are automatically restored via sleep command scheduled during injection."""
-        self._logger.info("Skipping manual port restoration - automatic recovery via sleep command is scheduled")
-        # Ports are automatically restored via sleep command scheduled during _inject_specific_fault
-        # This prevents SSH connectivity issues during manual restoration
-
-
-class ClusterDataCenterIptablesBlockPortsNemesis(ClusterAbstractDataCenterNemesis):
-    def __init__(self, duration=60):
-        super().__init__(duration=duration)
-
-        self._block_cmd_template = (
-            'sudo /usr/bin/ip -6 ro replace unreach {} || sudo /usr/bin/ip -6 ro add unreach {}'
-        )
-
-        self._restore_cmd_template = (
-            'sudo /usr/bin/ip -6 ro del unreach {}'
-        )
-
-    def _resolve_hostname_to_ip(self, hostname):
-        """Resolve hostname to IP address."""
+    def inject_fault(self, payload=None):
+        del payload
+        self.start_inject_fault()
         try:
-            result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
-            if result:
-                return result[0][4][0]
-        except socket.gaierror:
-            pass
+            # Block ports and schedule automatic recovery
+            cmd = (
+                f"nohup bash -c '{self._block_ports_cmd} && "
+                f"sleep {self._duration} && "
+                f"sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
+            )
+            self._logger.info("Blocking local YDB ports with auto-recovery in %ds", self._duration)
+            subprocess.run(cmd, shell=True, check=True)
+            self.on_success_inject_fault()
+        except Exception as e:
+            self._logger.error("Failed to block YDB ports: %s", e)
 
-        return None
+    def extract_fault(self, payload=None):
+        del payload
+        # Ports are automatically restored via the background sleep command
+        self._logger.info("Skipping manual port restoration — automatic recovery is scheduled")
+        self.on_success_extract_fault()
 
-    def _inject_specific_fault(self):
-        async def _async_block_routes():
+
+class ClusterDataCenterIptablesBlockPortsNemesis(MonitoredAgentActor):
+    """Block network routes to other datacenter nodes from the local host.
+
+    The orchestrator's ``DataCenterFanoutPlanner`` dispatches this to every
+    host in the selected datacenter.  Each agent adds ``ip -6 ro add unreach``
+    rules for IPs of nodes in **other** datacenters and schedules automatic
+    recovery.
+    """
+
+    def __init__(self, duration=60):
+        super().__init__(scope='datacenter')
+        self._duration = duration
+
+    def inject_fault(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
+
+        # Determine which datacenter this host belongs to
+        local_dc = None
+        for node in cluster.nodes.values():
+            if _is_local_host(node.host, fqdn, hostname) and node.datacenter is not None:
+                local_dc = node.datacenter
+                break
+
+        if local_dc is None:
+            self._logger.warning("Cannot determine local datacenter — skipping")
+            return
+
+        # Collect IPs of nodes in OTHER datacenters
+        other_ips = set()
+        for node in cluster.nodes.values():
+            if node.datacenter is not None and node.datacenter != local_dc:
+                ip = _resolve_hostname_to_ipv6(node.host)
+                if ip:
+                    other_ips.add(ip)
+                else:
+                    self._logger.warning("Failed to resolve %s to IPv6", node.host)
+
+        if not other_ips:
+            self._logger.warning("No other-DC IPs to block")
+            return
+
+        self.start_inject_fault()
+        for ip in other_ips:
             try:
-                other_nodes = []
-                for dc, nodes in self._dc_to_nodes.items():
-                    if dc != self._current_dc:
-                        other_nodes.extend(nodes)
-
-                # Block routes and schedule recovery in one pass
-                unreach_tasks = []
-
-                for other_node in other_nodes:
-                    self._logger.info("Processing host %s for current dc %s", other_node.host, self._current_dc)
-                    for node in self._current_nodes:
-                        ip = self._resolve_hostname_to_ip(node.host)
-                        if ip is None:
-                            self._logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise Exception("Failed to resolve hostname to IP address")
-
-                        block_and_recover_cmd = f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && sleep {self._duration} && sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
-                        block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_and_recover_cmd, raise_on_error=True))
-                        unreach_tasks.append(block_task)
-                await asyncio.gather(*unreach_tasks, return_exceptions=True)
-
-                self._logger.info("Blocked routes to dc %s and scheduled automatic recovery", self._current_dc)
-
+                cmd = (
+                    f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && "
+                    f"sleep {self._duration} && "
+                    f"sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
+                )
+                self._logger.info("Blocking route to %s with auto-recovery in %ds", ip, self._duration)
+                subprocess.run(cmd, shell=True, check=True)
             except Exception as e:
-                self._logger.error("Failed to block routes to current dc %s: %s", self._current_dc, str(e))
-                raise
+                self._logger.error("Failed to block route to %s: %s", ip, e)
 
-        with asyncio.Runner() as runner:
-            runner.run(_async_block_routes())
+        self.on_success_inject_fault()
 
-    def _extract_specific_fault(self):
-        """Network routes are automatically restored via 'at' command scheduled during injection."""
-        self._logger.info("Skipping manual route restoration - automatic recovery via 'at' command is scheduled")
+    def extract_fault(self, payload=None):
+        del payload
+        # Routes are automatically restored via the background sleep commands
+        self._logger.info("Skipping manual route restoration — automatic recovery is scheduled")
+        self.on_success_extract_fault()

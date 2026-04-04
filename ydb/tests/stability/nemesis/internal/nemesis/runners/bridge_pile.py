@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
 # Adapted from ydb/tests/tools/nemesis/library/bridge_pile.py
+#
+# All runners execute **locally** on the agent host.  The orchestrator's
+# ``BridgePileFanoutPlanner`` dispatches inject/extract to every host in the
+# selected bridge pile; each agent runs the fault against its own local
+# kikimr / kikimr-multi@ services or local iptables / ip-route.
+#
+# Bridge state management (failover / rejoin) is done via the bridge gRPC API
+# which is a cluster-wide API call — it is performed by the first agent that
+# receives the inject (the one that completes first).
 
 from __future__ import annotations
 
-import abc
-import asyncio
 import collections
-import random
 import socket
+import subprocess
 import time
+from typing import Any
 
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.tests.library.clients.kikimr_bridge_client import bridge_client_factory
@@ -34,467 +42,438 @@ def get_pile_state_name(state):
     return PILE_STATE_NAMES.get(state, f"UNKNOWN({state})")
 
 
-class ClusterAbstractBridgePileNemesis(MonitoredAgentActor, abc.ABC):
-    """
-    Bridge-aware nemesis that performs master bridge pile switching scenarios.
-    This implements the specific scenario requested for switching off master.
+# ---------------------------------------------------------------------------
+# Local helpers
+# ---------------------------------------------------------------------------
+
+
+def _kikimr_slot_id(node: Any) -> str | None:
+    """``None`` = single ``kikimr`` service; else ``kikimr-multi@`` instance id."""
+    return getattr(node, "_KikimrExternalNode__slot_id", None)
+
+
+def _resolve_local_host():
+    """Return (fqdn, hostname) for the current machine."""
+    fqdn = socket.getfqdn()
+    hostname = socket.gethostname()
+    return fqdn, hostname
+
+
+def _is_local_host(host, fqdn, hostname):
+    return host in (fqdn, hostname) or host.split(".")[0] == hostname.split(".")[0]
+
+
+def _local_stop_kikimr(node: Any) -> None:
+    """``systemctl stop`` for the local kikimr / kikimr-multi@ service."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr stop", shell=True, check=True)
+    else:
+        subprocess.run(
+            ["sudo", "systemctl", "stop", "kikimr-multi@{}".format(slot_id)],
+            check=True,
+        )
+
+
+def _local_start_kikimr(node: Any) -> None:
+    """``systemctl start`` for the local kikimr / kikimr-multi@ service."""
+    slot_id = _kikimr_slot_id(node)
+    if slot_id is None:
+        subprocess.run("sudo service kikimr start", shell=True, check=True)
+        return
+    slot_dir = "/Berkanavt/kikimr_{slot}".format(slot=slot_id)
+    slot_cfg = slot_dir + "/slot_cfg"
+    env_txt = slot_dir + "/env.txt"
+    cfg = """\
+tenant=/Root/db1
+grpc={grpc}
+mbus={mbus}
+ic={ic}
+mon={mon}""".format(
+        mbus=node.mbus_port,
+        grpc=node.grpc_port,
+        mon=node.mon_port,
+        ic=node.ic_port,
+    )
+    subprocess.run(["sudo", "mkdir", "-p", slot_dir], check=True)
+    subprocess.run(["sudo", "touch", env_txt], check=True)
+    p = subprocess.Popen(
+        ["sudo", "tee", slot_cfg],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    _out, _err = p.communicate(cfg.encode("utf-8"))
+    if p.returncode != 0:
+        raise subprocess.CalledProcessError(p.returncode, "sudo tee slot_cfg", None)
+    subprocess.run(
+        ["sudo", "systemctl", "start", "kikimr-multi@{}".format(slot_id)],
+        check=True,
+    )
+
+
+def _resolve_hostname_to_ipv6(hostname):
+    """Resolve hostname to IPv6 address."""
+    try:
+        result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
+        if result:
+            return result[0][4][0]
+    except socket.gaierror:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Bridge state helpers (cluster-wide gRPC API — not SSH)
+# ---------------------------------------------------------------------------
+
+
+def _build_bridge_topology(cluster):
+    """Return (pile_to_nodes, pile_ids, pile_id_to_name)."""
+    pile_to_nodes = collections.defaultdict(list)
+    pile_id_to_name = {}
+    for node_id, node in cluster.nodes.items():
+        if node.bridge_pile_id is not None and node.bridge_pile_name is not None:
+            pile_to_nodes[node.bridge_pile_id].append(node)
+            pile_id_to_name[node.bridge_pile_id] = node.bridge_pile_name
+    pile_ids = list(pile_to_nodes.keys())
+    return pile_to_nodes, pile_ids, pile_id_to_name
+
+
+def _create_bridge_clients(cluster, pile_to_nodes, pile_ids):
+    """Create bridge gRPC clients for each pile (connects to first node in pile)."""
+    clients = {}
+    for pile_id in pile_ids:
+        node = pile_to_nodes[pile_id][0]
+        clients[pile_id] = bridge_client_factory(
+            node.host, node.port, cluster=cluster, retry_count=3, timeout=5
+        )
+        clients[pile_id].set_auth_token('root@builtin')
+    return clients
+
+
+def _get_pile_state(pile_name, bridge_client):
+    pile_states = bridge_client.per_pile_state
+    if pile_states is None:
+        return None
+    for pile in pile_states:
+        if pile.pile_name == pile_name:
+            return pile.state
+    return None
+
+
+def _do_failover(pile_id, pile_id_to_name, pile_ids, bridge_clients, logger):
+    """Perform bridge failover for the given pile (cluster-wide gRPC API)."""
+    another_pile_id = None
+    for pid in pile_ids:
+        if pid != pile_id:
+            another_pile_id = pid
+            break
+    if another_pile_id is None:
+        logger.error("Could not find another pile for bridge operations")
+        return
+
+    pile_name = pile_id_to_name[pile_id]
+    current_state = _get_pile_state(pile_name, bridge_clients[another_pile_id])
+    if current_state is not None and current_state not in VALID_FAILOVER_STATES:
+        logger.warning("Pile %s in state %s, not valid for failover",
+                       pile_name, get_pile_state_name(current_state))
+        return
+
+    logger.info("OPERATION: failover (pile_id=%d, pile_name=%s)", pile_id, pile_name)
+    result = bridge_clients[another_pile_id].failover(pile_name)
+    if not result:
+        logger.error("Failed to failover pile %d", pile_id)
+
+
+def _do_rejoin(pile_id, pile_id_to_name, pile_ids, bridge_clients, logger):
+    """Perform bridge rejoin for the given pile (cluster-wide gRPC API)."""
+    another_pile_id = None
+    for pid in pile_ids:
+        if pid != pile_id:
+            another_pile_id = pid
+            break
+    if another_pile_id is None:
+        logger.error("Could not find another pile for bridge restoration")
+        return
+
+    pile_name = pile_id_to_name[pile_id]
+    current_state = _get_pile_state(pile_name, bridge_clients[another_pile_id])
+    if current_state is not None and current_state not in VALID_REJOIN_STATES:
+        logger.warning("Pile %s in state %s, not valid for rejoin (may already be joined)",
+                       pile_name, get_pile_state_name(current_state))
+        return
+
+    logger.info("OPERATION: rejoin (pile_id=%d, pile_name=%s)", pile_id, pile_name)
+    result = bridge_clients[another_pile_id].rejoin(pile_name)
+    if not result:
+        logger.error("Failed to rejoin pile %d", pile_id)
+
+
+# ---------------------------------------------------------------------------
+# Runners
+# ---------------------------------------------------------------------------
+
+
+class ClusterBridgePileStopNodesNemesis(MonitoredAgentActor):
+    """Stop local kikimr node and slots, then manage bridge state.
+
+    The orchestrator's ``BridgePileFanoutPlanner`` dispatches this to every
+    host in the selected bridge pile.  Each agent stops its own local services.
+    Bridge failover/rejoin is done via cluster-wide gRPC API.
     """
 
     def __init__(self, duration=60):
         super().__init__(scope='bridge_pile')
         self._duration = duration
-        self._current_pile_id = None
-        self._current_nodes = None
-        self._bridge_ready = False
-        self._bridge_clients = None
-        self._bridge_pile_cycle = None
-        self._bridge_init_done = False
-
-    def _validate_bridge_piles(self, cluster):
-        bridge_pile_to_nodes = collections.defaultdict(list)
-        pile_id_to_name = {}
-        self._logger.info("Validating bridge piles for %d nodes", len(cluster.nodes))
-
-        for node_id, node in cluster.nodes.items():
-            self._logger.info("Node %d: host=%s, bridge_pile_name=%s, bridge_pile_id=%s",
-                              node_id, node.host, node.bridge_pile_name, node.bridge_pile_id)
-            if node.bridge_pile_id is not None and node.bridge_pile_name is not None:
-                bridge_pile_to_nodes[node.bridge_pile_id].append(node)
-                pile_id_to_name[node.bridge_pile_id] = node.bridge_pile_name
-
-        bridge_piles = list(bridge_pile_to_nodes.keys())
-        self._logger.info("Found bridge piles: %s", bridge_piles)
-        self._logger.info("Bridge pile to nodes mapping: %s",
-                          {pile_id: [node.host for node in nodes] for pile_id, nodes in bridge_pile_to_nodes.items()})
-        self._logger.info("Pile ID to name mapping: %s", pile_id_to_name)
-        return bridge_pile_to_nodes, bridge_piles, pile_id_to_name
-
-    def _create_bridge_pile_cycle(self):
-        while True:
-            selected_pile = random.choice(self._bridge_piles)
-            self._logger.info("Randomly selected pile %d from available piles %s", selected_pile, self._bridge_piles)
-            yield selected_pile
-
-    def _create_bridge_clients(self):
-        bridge_clients = {}
-        for pile in self._bridge_piles:
-            node = self._bridge_pile_to_nodes[pile][0]
-            bridge_clients[pile] = bridge_client_factory(
-                node.host, node.port, cluster=require_external_cluster(), retry_count=3, timeout=5
-            )
-            bridge_clients[pile].set_auth_token('root@builtin')
-        return bridge_clients
-
-    def _ensure_bridge_state(self):
-        if self._bridge_init_done:
-            return
-        self._bridge_init_done = True
-        cluster = require_external_cluster()
-        self._bridge_pile_to_nodes, self._bridge_piles, self._pile_id_to_name = self._validate_bridge_piles(cluster)
-        if len(self._bridge_piles) < 2:
-            self._logger.error("Bridge piles: %s", self._bridge_piles)
-            self._logger.error("No bridge piles found in cluster or only one bridge pile found")
-            self._bridge_ready = False
-            return
-        self._bridge_ready = True
-        self._bridge_pile_cycle = self._create_bridge_pile_cycle()
-        self._bridge_clients = self._create_bridge_clients()
+        self._stopped_nodes = []
+        self._stopped_slots = []
 
     def inject_fault(self, payload=None):
-        del payload
-        self._ensure_bridge_state()
-        if not self._bridge_ready:
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
+
+        # Find local nodes and slots
+        local_nodes = [n for n in cluster.nodes.values() if _is_local_host(n.host, fqdn, hostname)]
+        local_slots = [s for s in cluster.slots.values() if _is_local_host(s.host, fqdn, hostname)]
+
+        if not local_nodes and not local_slots:
+            self._logger.warning("No local nodes/slots found for bridge pile stop")
             return
-        if self.extract_fault():
-            return
+
+        # Determine local pile_id
+        local_pile_id = None
+        for node in local_nodes:
+            if node.bridge_pile_id is not None:
+                local_pile_id = node.bridge_pile_id
+                break
 
         self.start_inject_fault()
-        self._current_pile_id = next(self._bridge_pile_cycle)
-        self._current_nodes = self._bridge_pile_to_nodes.get(self._current_pile_id, [])
-        self._logger.info("Selected pile %s with %d nodes for %s", self._current_pile_id, len(self._current_nodes), self.__class__.__name__)
 
-        self._logger.info("=== INJECTING SPECIFIC FAULT ===")
-        self._logger.info("Injecting specific fault for %s on pile %s", self.__class__.__name__, self._current_pile_id)
-        try:
-            self._inject_specific_fault()
-            self._logger.info("=== SPECIFIC FAULT INJECTED ===")
-        except Exception as e:
-            self._logger.error("Failed to inject specific fault for %s: %s", self.__class__.__name__, e)
-            self.extract_fault()
-            raise e
+        # Stop slots first
+        for slot in local_slots:
+            try:
+                self._logger.info("Stopping local slot ic_port=%d", slot.ic_port)
+                _local_stop_kikimr(slot)
+                self._stopped_slots.append(slot)
+            except Exception as e:
+                self._logger.error("Failed to stop slot ic_port=%d: %s", slot.ic_port, e)
 
-        self._logger.info("=== MANAGING BRIDGE STATE ===")
-        try:
-            self._manage_bridge_state()
-        except Exception as e:
-            self._logger.error("Failed to manage bridge state for %s: %s", self.__class__.__name__, e)
-            self.extract_fault()
-            raise e
+        # Stop nodes
+        for node in local_nodes:
+            try:
+                self._logger.info("Stopping local node node_id=%d", node.node_id)
+                _local_stop_kikimr(node)
+                self._stopped_nodes.append(node)
+            except Exception as e:
+                self._logger.error("Failed to stop node node_id=%d: %s", node.node_id, e)
 
-        self._logger.info("=== WAITING FOR %d SECONDS ===", self._duration)
+        self._logger.info("Stopped %d nodes and %d slots locally",
+                          len(self._stopped_nodes), len(self._stopped_slots))
+
+        # Bridge failover (cluster-wide gRPC API)
+        if local_pile_id is not None:
+            try:
+                pile_to_nodes, pile_ids, pile_id_to_name = _build_bridge_topology(cluster)
+                bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+                _do_failover(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
+            except Exception as e:
+                self._logger.error("Bridge failover failed: %s", e)
+
         time.sleep(self._duration)
 
-        self._logger.info("=== EXTRACTING SPECIFIC FAULT ===")
-        try:
-            self._extract_specific_fault()
-            self._logger.info("=== SPECIFIC FAULT EXTRACTED ===")
-        except Exception as e:
-            self._logger.error("Failed to extract specific fault for %s: %s", self.__class__.__name__, e)
-            return
+        # Extract (start everything back)
+        self._start_all()
 
-        self._logger.info("=== RESTORING BRIDGE STATE ===")
-        try:
-            self._restore_bridge_state()
-            self._logger.info("=== BRIDGE STATE RESTORED ===")
-        except Exception as e:
-            self._logger.error("Failed to restore bridge state: %s", e)
-            return
+        # Bridge rejoin
+        if local_pile_id is not None:
+            try:
+                pile_to_nodes, pile_ids, pile_id_to_name = _build_bridge_topology(cluster)
+                bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+                _do_rejoin(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
+            except Exception as e:
+                self._logger.error("Bridge rejoin failed: %s", e)
 
         self.on_success_inject_fault()
 
-    @abc.abstractmethod
-    def _inject_specific_fault(self):
-        """Subclass-specific fault injection - to be overridden by subclasses."""
-        pass
+    def _start_all(self):
+        # Start nodes first
+        for node in self._stopped_nodes:
+            try:
+                self._logger.info("Starting local node node_id=%d", node.node_id)
+                _local_start_kikimr(node)
+            except Exception as e:
+                self._logger.error("Failed to start node node_id=%d: %s", node.node_id, e)
 
-    def _get_pile_state(self, pile_name, bridge_client):
-        pile_states = bridge_client.per_pile_state
-        if pile_states is None:
-            return None
-        for pile in pile_states:
-            if pile.pile_name == pile_name:
-                return pile.state
-        return None
+        # Start slots
+        for slot in self._stopped_slots:
+            try:
+                self._logger.info("Starting local slot ic_port=%d", slot.ic_port)
+                _local_start_kikimr(slot)
+            except Exception as e:
+                self._logger.error("Failed to start slot ic_port=%d: %s", slot.ic_port, e)
 
-    def _validate_pile_state_for_failover(self, pile_name, bridge_client):
-        current_state = self._get_pile_state(pile_name, bridge_client)
-        if current_state is None:
-            self._logger.warning("Could not determine state for pile %s, proceeding anyway", pile_name)
-            return True
-
-        state_name = get_pile_state_name(current_state)
-        if current_state in VALID_FAILOVER_STATES:
-            self._logger.info("Pile %s is in state %s, valid for failover", pile_name, state_name)
-            return True
-        else:
-            self._logger.warning("Pile %s is in state %s, NOT valid for failover (expected one of: %s)",
-                                 pile_name, state_name,
-                                 [get_pile_state_name(s) for s in VALID_FAILOVER_STATES])
-            return False
-
-    def _validate_pile_state_for_rejoin(self, pile_name, bridge_client):
-        current_state = self._get_pile_state(pile_name, bridge_client)
-        if current_state is None:
-            self._logger.warning("Could not determine state for pile %s, proceeding anyway", pile_name)
-            return True
-
-        state_name = get_pile_state_name(current_state)
-        if current_state in VALID_REJOIN_STATES:
-            self._logger.info("Pile %s is in state %s, valid for rejoin", pile_name, state_name)
-            return True
-        else:
-            self._logger.warning("Pile %s is in state %s, NOT valid for rejoin (expected one of: %s)",
-                                 pile_name, state_name,
-                                 [get_pile_state_name(s) for s in VALID_REJOIN_STATES])
-            return False
-
-    def _manage_bridge_state(self):
-        """Handle bridge state changes common to all bridge pile nemesis."""
-        self._logger.info("Current pile being affected: %d", self._current_pile_id)
-
-        another_pile_id = None
-        for pile_id in self._bridge_piles:
-            if pile_id != self._current_pile_id:
-                another_pile_id = pile_id
-                break
-
-        if another_pile_id is None:
-            self._logger.error("Could not find another pile for bridge operations")
-            raise Exception("Could not find another pile for bridge operations")
-
-        pile_states = self._bridge_clients[another_pile_id].per_pile_state
-        self._logger.info("Current bridge state: %s",
-                          [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
-
-        # Convert pile ID to pile name for bridge operations
-        pile_name = self._pile_id_to_name[self._current_pile_id]
-
-        if not self._validate_pile_state_for_failover(pile_name, self._bridge_clients[another_pile_id]):
-            self._logger.warning("Skipping failover for pile %s due to invalid state", pile_name)
-            return
-
-        self._logger.info("OPERATION: failover (pile_id=%d, pile_name=%s)", self._current_pile_id, pile_name)
-        result = self._bridge_clients[another_pile_id].failover(pile_name)
-
-        if not result:
-            self._logger.error("Failed to failover pile %d", self._current_pile_id)
-            raise Exception("Failed to failover pile")
-
-        self._logger.info("Bridge state managed successfully")
+        self._stopped_nodes = []
+        self._stopped_slots = []
 
     def extract_fault(self, payload=None):
         del payload
-        if self._current_pile_id is not None:
-            try:
-                self._extract_specific_fault()
-            except Exception as e:
-                self._logger.error("Exception during extraction for %s: %s", self.__class__.__name__, e)
-
-            try:
-                self._restore_bridge_state()
-            except Exception as e:
-                self._logger.error("Failed to restore bridge state: %s", e)
-
-            self._current_pile_id = None
-            self._current_nodes = None
-
-            self.on_success_extract_fault()
-            return True
-
-        return False
-
-    @abc.abstractmethod
-    def _extract_specific_fault(self):
-        """Subclass-specific fault extraction - to be overridden by subclasses."""
-        pass
-
-    def _restore_bridge_state(self):
-        """Handle bridge state restoration common to all bridge pile nemesis."""
-        self._logger.info("Restoring state for pile: %d", self._current_pile_id)
-
-        another_pile_id = None
-        for pile_id in self._bridge_piles:
-            if pile_id != self._current_pile_id:
-                another_pile_id = pile_id
-                break
-
-        if another_pile_id is None:
-            self._logger.error("Could not find another pile for bridge restoration operations")
-            raise Exception("Could not find another pile for bridge restoration operations")
-
-        pile_states = self._bridge_clients[another_pile_id].per_pile_state
-        self._logger.info("Current bridge state: %s",
-                          [(p.pile_name, get_pile_state_name(p.state)) for p in pile_states] if pile_states else "unknown")
-
-        # Convert pile ID to pile name for bridge operations
-        pile_name = self._pile_id_to_name[self._current_pile_id]
-
-        if not self._validate_pile_state_for_rejoin(pile_name, self._bridge_clients[another_pile_id]):
-            self._logger.warning("Skipping rejoin for pile %s due to invalid state (pile may already be joined)",
-                                 pile_name)
-            return
-
-        self._logger.info("OPERATION: rejoin for pile %d (pile_name=%s)", self._current_pile_id, pile_name)
-        result = self._bridge_clients[another_pile_id].rejoin(pile_name)
-        if not result:
-            self._logger.error("Failed to rejoin pile %d", self._current_pile_id)
-            raise Exception("Failed to rejoin pile")
-
-        self._logger.info("Bridge state restored successfully")
+        if self._stopped_nodes or self._stopped_slots:
+            self._start_all()
+        self.on_success_extract_fault()
 
 
-class ClusterBridgePileStopNodesNemesis(ClusterAbstractBridgePileNemesis):
+class ClusterBridgePileIptablesBlockPortsNemesis(MonitoredAgentActor):
+    """Block YDB ports on the local host using ip6tables, then manage bridge state.
+
+    The orchestrator's ``BridgePileFanoutPlanner`` dispatches this to every
+    host in the selected bridge pile.  Each agent blocks its own local ports
+    and schedules automatic recovery.
+    """
+
     def __init__(self, duration=60):
-        super().__init__(duration=duration)
-
-    def _inject_specific_fault(self):
-        """Stop nodes and slots in the current pile."""
-        async def _async_stop_nodes():
-            try:
-                cluster = require_external_cluster()
-                stop_tasks = []
-                slots_to_stop = []
-                for slot in cluster.slots.values():
-                    if slot.bridge_pile_id == self._current_pile_id:
-                        self._logger.info("Stopping slot %d on host %s", slot.ic_port, slot.host)
-                        task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl stop kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                        stop_tasks.append(task)
-                        slots_to_stop.append(slot)
-
-                slot_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                slot_success_count = 0
-                for slot, result in zip(slots_to_stop, slot_results):
-                    if isinstance(result, Exception):
-                        self._logger.error("Exception stopping slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                        # Skip slot failure
-                        continue
-                    self._logger.info("Successfully stopped slot %d on host %s", slot.ic_port, slot.host)
-                    slot_success_count += 1
-
-                self._logger.info("Stopped %d/%d dynamic slots in pile %d", slot_success_count, len(stop_tasks), self._current_pile_id)
-
-                stop_tasks = []
-                for node in self._current_nodes:
-                    self._logger.info("Stopping storage node %d on host %s", node.node_id, node.host)
-                    task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl stop kikimr", raise_on_error=True))
-                    stop_tasks.append(task)
-
-                node_results = await asyncio.gather(*stop_tasks, return_exceptions=True)
-                node_success_count = 0
-                for i, result in enumerate(node_results):
-                    if isinstance(result, Exception):
-                        self._logger.error("Exception stopping node_id %d on host %s: %s", self._current_nodes[i].node_id, self._current_nodes[i].host, result)
-                        raise result
-                    self._logger.info("Successfully stopped node %d on host %s", self._current_nodes[i].node_id, self._current_nodes[i].host)
-                    node_success_count += 1
-
-                self._logger.info("Stopped %d/%d storage nodes in pile %d", node_success_count, len(stop_tasks), self._current_pile_id)
-
-            except Exception as e:
-                self._logger.error("Failed to stop nodes: %s", str(e))
-                raise e
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_stop_nodes())
-
-    def _extract_specific_fault(self):
-        """Start nodes and slots in the current pile."""
-        async def _async_start_nodes():
-            start_tasks = []
-            for node in self._current_nodes:
-                self._logger.info("Starting storage node %d on host %s", node.node_id, node.host)
-                task = asyncio.create_task(asyncio.to_thread(node.ssh_command, "sudo systemctl start kikimr", raise_on_error=True))
-                start_tasks.append(task)
-
-            node_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            node_success_count = 0
-            for i, result in enumerate(node_results):
-                if isinstance(result, Exception):
-                    self._logger.error("Exception starting node: %s", result)
-                    continue
-                self._logger.info("Successfully started node %d on host %s", self._current_nodes[i].node_id, self._current_nodes[i].host)
-                node_success_count += 1
-
-            self._logger.info("Started %d/%d storage nodes in pile %d", node_success_count, len(start_tasks), self._current_pile_id)
-
-            start_tasks = []
-            slots_to_start = []
-            cluster = require_external_cluster()
-            for slot in cluster.slots.values():
-                if slot.bridge_pile_id == self._current_pile_id:
-                    self._logger.info("Starting slot %d on host %s", slot.ic_port, slot.host)
-                    task = asyncio.create_task(asyncio.to_thread(slot.ssh_command, "sudo systemctl start kikimr-multi@%d" % slot.ic_port, raise_on_error=True))
-                    start_tasks.append(task)
-                    slots_to_start.append(slot)
-
-            slot_results = await asyncio.gather(*start_tasks, return_exceptions=True)
-            slot_success_count = 0
-            for slot, result in zip(slots_to_start, slot_results):
-                if isinstance(result, Exception):
-                    self._logger.error("Exception starting slot %d on host %s: %s", slot.ic_port, slot.host, result)
-                    continue
-                self._logger.info("Successfully started slot %d on host %s", slot.ic_port, slot.host)
-                slot_success_count += 1
-
-            self._logger.info("Started %d/%d dynamic slots in pile %d", slot_success_count, len(start_tasks), self._current_pile_id)
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_start_nodes())
-
-
-class ClusterBridgePileIptablesBlockPortsNemesis(ClusterAbstractBridgePileNemesis):
-    def __init__(self, duration=60):
-        super().__init__(duration=duration)
+        super().__init__(scope='bridge_pile')
+        self._duration = duration
 
         self._block_ports_cmd = (
             "sudo /sbin/ip6tables -w -A YDB_FW -p tcp -m multiport "
             "--ports 2135,2136,8765,19001,31000:32000 -j REJECT"
         )
-        self._restore_ports_cmd = (
-            "sudo /sbin/ip6tables -w -F YDB_FW"
-        )
 
-    def _inject_specific_fault(self):
-        """Block YDB ports using iptables on nodes in the current pile."""
-        async def _async_block_ports():
-            try:
-                # Block ports and schedule recovery in one pass
-                block_tasks = []
+    def inject_fault(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
 
-                for node in self._current_nodes:
-                    self._logger.info("Processing host %s for current pile %d", node.host, self._current_pile_id)
+        # Determine local pile_id
+        local_pile_id = None
+        for node in cluster.nodes.values():
+            if _is_local_host(node.host, fqdn, hostname) and node.bridge_pile_id is not None:
+                local_pile_id = node.bridge_pile_id
+                break
 
-                    # Block ports and schedule automatic recovery in one command
-                    block_and_recover_cmd = f"nohup bash -c '{self._block_ports_cmd} && sleep {self._duration} && sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
-                    block_task = asyncio.create_task(asyncio.to_thread(node.ssh_command, block_and_recover_cmd, raise_on_error=True))
-                    block_tasks.append(block_task)
+        self.start_inject_fault()
 
-                # Wait for all blocking and recovery scheduling operations to complete
-                await asyncio.gather(*block_tasks, return_exceptions=True)
-
-                self._logger.info("Blocked YDB ports on pile %d and scheduled automatic recovery", self._current_pile_id)
-            except Exception as e:
-                self._logger.error("Failed to block YDB ports: %s", str(e))
-                raise e
-
-        with asyncio.Runner() as runner:
-            runner.run(_async_block_ports())
-
-    def _extract_specific_fault(self):
-        """YDB ports are automatically restored via sleep command scheduled during injection."""
-        self._logger.info("Skipping manual port restoration - automatic recovery via sleep command is scheduled")
-        # Ports are automatically restored via sleep command scheduled during _inject_specific_fault
-        # This prevents SSH connectivity issues during manual restoration
-
-
-class ClusterBridgePileRouteUnreachableNemesis(ClusterAbstractBridgePileNemesis):
-    def __init__(self, duration=60):
-        super().__init__(duration=duration)
-
-        self._block_cmd_template = (
-            'sudo /usr/bin/ip -6 ro replace unreach {} || sudo /usr/bin/ip -6 ro add unreach {}'
-        )
-
-        self._restore_cmd_template = (
-            'sudo /usr/bin/ip -6 ro del unreach {}'
-        )
-
-    def _resolve_hostname_to_ip(self, hostname):
-        """Resolve hostname to IP address."""
+        # Block ports and schedule automatic recovery
         try:
-            result = socket.getaddrinfo(hostname, None, socket.AF_INET6)
-            if result:
-                return result[0][4][0]
-        except socket.gaierror:
-            pass
+            cmd = (
+                f"nohup bash -c '{self._block_ports_cmd} && "
+                f"sleep {self._duration} && "
+                f"sudo /sbin/ip6tables -w -F YDB_FW' > /dev/null 2>&1 &"
+            )
+            self._logger.info("Blocking local YDB ports with auto-recovery in %ds", self._duration)
+            subprocess.run(cmd, shell=True, check=True)
+        except Exception as e:
+            self._logger.error("Failed to block YDB ports: %s", e)
+            return
 
-        return None
-
-    def _inject_specific_fault(self):
-        """Block network routes from other piles to the current pile using ip route."""
-        async def _async_block_routes():
+        # Bridge failover (cluster-wide gRPC API)
+        if local_pile_id is not None:
             try:
-                other_nodes = []
-                for pile_id, nodes in self._bridge_pile_to_nodes.items():
-                    if pile_id != self._current_pile_id:
-                        other_nodes.extend(nodes)
-
-                # Block routes and schedule recovery in one pass
-                unreach_tasks = []
-
-                for other_node in other_nodes:
-                    self._logger.info("Processing host %s for current pile %d", other_node.host, self._current_pile_id)
-                    for node in self._current_nodes:
-                        ip = self._resolve_hostname_to_ip(node.host)
-                        if ip is None:
-                            self._logger.error("Failed to resolve hostname %s to IP address", node.host)
-                            raise Exception("Failed to resolve hostname to IP address")
-
-                        block_and_recover_cmd = f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && sleep {self._duration} && sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
-                        block_task = asyncio.create_task(asyncio.to_thread(other_node.ssh_command, block_and_recover_cmd, raise_on_error=True))
-                        unreach_tasks.append(block_task)
-
-                await asyncio.gather(*unreach_tasks, return_exceptions=True)
-
-                self._logger.info("Blocked routes to pile %d and scheduled automatic recovery", self._current_pile_id)
-
+                pile_to_nodes, pile_ids, pile_id_to_name = _build_bridge_topology(cluster)
+                bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+                _do_failover(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
             except Exception as e:
-                self._logger.error("Failed to block routes: %s", str(e))
-                raise e
+                self._logger.error("Bridge failover failed: %s", e)
 
-        with asyncio.Runner() as runner:
-            runner.run(_async_block_routes())
+        time.sleep(self._duration)
 
-    def _extract_specific_fault(self):
-        """Network routes are automatically restored via 'at' command scheduled during injection."""
-        self._logger.info("Skipping manual route restoration - automatic recovery via 'at' command is scheduled")
+        # Bridge rejoin after ports are restored
+        if local_pile_id is not None:
+            try:
+                pile_to_nodes, pile_ids, pile_id_to_name = _build_bridge_topology(cluster)
+                bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+                _do_rejoin(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
+            except Exception as e:
+                self._logger.error("Bridge rejoin failed: %s", e)
+
+        self.on_success_inject_fault()
+
+    def extract_fault(self, payload=None):
+        del payload
+        # Ports are automatically restored via the background sleep command
+        self._logger.info("Skipping manual port restoration — automatic recovery is scheduled")
+        self.on_success_extract_fault()
+
+
+class ClusterBridgePileRouteUnreachableNemesis(MonitoredAgentActor):
+    """Block network routes to other pile nodes from the local host.
+
+    The orchestrator's ``BridgePileFanoutPlanner`` dispatches this to every
+    host in the selected bridge pile.  Each agent adds ``ip -6 ro add unreach``
+    rules for IPs of nodes in **other** piles and schedules automatic recovery.
+    """
+
+    def __init__(self, duration=60):
+        super().__init__(scope='bridge_pile')
+        self._duration = duration
+
+    def inject_fault(self, payload=None):
+        payload = payload if isinstance(payload, dict) else {}
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
+
+        # Determine local pile_id
+        local_pile_id = None
+        for node in cluster.nodes.values():
+            if _is_local_host(node.host, fqdn, hostname) and node.bridge_pile_id is not None:
+                local_pile_id = node.bridge_pile_id
+                break
+
+        if local_pile_id is None:
+            self._logger.warning("Cannot determine local bridge pile — skipping")
+            return
+
+        # Collect IPs of nodes in OTHER piles
+        pile_to_nodes, pile_ids, pile_id_to_name = _build_bridge_topology(cluster)
+        other_ips = set()
+        for pid, nodes in pile_to_nodes.items():
+            if pid != local_pile_id:
+                for node in nodes:
+                    ip = _resolve_hostname_to_ipv6(node.host)
+                    if ip:
+                        other_ips.add(ip)
+                    else:
+                        self._logger.warning("Failed to resolve %s to IPv6", node.host)
+
+        if not other_ips:
+            self._logger.warning("No other-pile IPs to block")
+            return
+
+        self.start_inject_fault()
+        for ip in other_ips:
+            try:
+                cmd = (
+                    f"nohup bash -c 'sudo /usr/bin/ip -6 ro add unreach {ip} && "
+                    f"sleep {self._duration} && "
+                    f"sudo /usr/bin/ip -6 ro del unreach {ip}' > /dev/null 2>&1 &"
+                )
+                self._logger.info("Blocking route to %s with auto-recovery in %ds", ip, self._duration)
+                subprocess.run(cmd, shell=True, check=True)
+            except Exception as e:
+                self._logger.error("Failed to block route to %s: %s", ip, e)
+
+        # Bridge failover (cluster-wide gRPC API)
+        try:
+            bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+            _do_failover(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
+        except Exception as e:
+            self._logger.error("Bridge failover failed: %s", e)
+
+        time.sleep(self._duration)
+
+        # Bridge rejoin after routes are restored
+        try:
+            bridge_clients = _create_bridge_clients(cluster, pile_to_nodes, pile_ids)
+            _do_rejoin(local_pile_id, pile_id_to_name, pile_ids, bridge_clients, self._logger)
+        except Exception as e:
+            self._logger.error("Bridge rejoin failed: %s", e)
+
+        self.on_success_inject_fault()
+
+    def extract_fault(self, payload=None):
+        del payload
+        # Routes are automatically restored via the background sleep commands
+        self._logger.info("Skipping manual route restoration — automatic recovery is scheduled")
+        self.on_success_extract_fault()

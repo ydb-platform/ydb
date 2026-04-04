@@ -45,9 +45,6 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     NetworkNemesis,
     TimeSkewNemesis,
 )
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.kill_node_planner import (
-    KillNodeNemesisPlanner,
-)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.network_planner import (
     NetworkNemesisPlanner,
     TimeSkewNemesisPlanner,
@@ -57,6 +54,10 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.pinned_first_host
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_planner import (
     SerialStaggeredInjectPlanner,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.topology_fanout_planner import (
+    BridgePileFanoutPlanner,
+    DataCenterFanoutPlanner,
 )
 
 # ---------------------------------------------------------------------------
@@ -86,6 +87,14 @@ def _serial_staggered_node_planner_factory(nemesis_type_key: str) -> SerialStagg
 
 def _serial_staggered_slot_planner_factory(nemesis_type_key: str) -> SerialStaggeredInjectPlanner:
     return SerialStaggeredInjectPlanner(nemesis_type_key, target_kind="slot")
+
+
+def _dc_fanout_planner_factory(nemesis_type_key: str) -> DataCenterFanoutPlanner:
+    return DataCenterFanoutPlanner(nemesis_type_key)
+
+
+def _bridge_pile_fanout_planner_factory(nemesis_type_key: str) -> BridgePileFanoutPlanner:
+    return BridgePileFanoutPlanner(nemesis_type_key)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +138,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "runner": KillNodeNemesis(),
         "schedule": 200,
         "ui_group": "NodeNemesis",
-        "planner_cls": KillNodeNemesisPlanner,
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -249,7 +257,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "runner": cls(),
                 "schedule": sched,
                 "ui_group": _DATACENTER_UI_GROUP,
-                "planner_factory": _pinned_planner_factory,
+                "planner_factory": _dc_fanout_planner_factory,
             }
 
     if yaml_has_bridge_piles_section(path):
@@ -268,7 +276,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
                 "runner": cls(),
                 "schedule": sched,
                 "ui_group": _BRIDGE_UI_GROUP,
-                "planner_factory": _pinned_planner_factory,
+                "planner_factory": _bridge_pile_fanout_planner_factory,
             }
 
     return extra

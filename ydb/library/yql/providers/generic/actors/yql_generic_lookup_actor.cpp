@@ -228,7 +228,7 @@ namespace NYql::NDq {
 
         void Handle(TEvListSplitsPart::TPtr ev) {
             auto response = std::move(ev->Get()->Response);
-            Y_ENSURE(response.splits_size() == 1);
+            Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 
@@ -449,10 +449,11 @@ namespace NYql::NDq {
                 return;
             }
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
+            Y_ENSURE(!resp.arrow_ipc_streaming().empty());
             const auto& data = deser->Deserialize(resp.arrow_ipc_streaming());
-            Y_ENSURE(data.ok());
+            Y_ENSURE(data.ok(), data.status().ToString());
             const auto& value = data.ValueOrDie();
-            Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size());
+            Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
             std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
             for (size_t i = 0; i != columns.size(); ++i) {
                 Y_ENSURE(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));

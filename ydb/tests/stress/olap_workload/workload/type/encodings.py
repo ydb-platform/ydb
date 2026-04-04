@@ -60,7 +60,7 @@ class WorkloadEncodings(WorkloadBase):
                 query += f"({i}, {v}),"
                 i += 1
 
-            query += f"({i}, NULL),"
+            query += f"({i}, NULL);"
             i += 1
             self.client.query(query, False)
 
@@ -74,7 +74,7 @@ class WorkloadEncodings(WorkloadBase):
                 False,
             )
 
-            distinctNoOptimization = self.client.query(
+            distinct_no_optimization = self.client.query(
                 f"""
                     PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "false";
                     SELECT SOME(i64Val) AS res FROM `{table_path}` GROUP BY i64Val;
@@ -82,7 +82,7 @@ class WorkloadEncodings(WorkloadBase):
                 False,
             )
 
-            distinctWithOptimization = self.client.query(
+            distinct_with_optimization = self.client.query(
                 f"""
                     PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                     SELECT SOME(i64Val) AS res FROM `{table_path}` GROUP BY i64Val;
@@ -100,8 +100,8 @@ class WorkloadEncodings(WorkloadBase):
             if total_rows != total_rows_actual:
                 raise Exception(f"Actual total rows {total_rows_actual} differs from expected {total_rows}")
 
-            actual_no_optimization = self.collect_distinct_records(distinctNoOptimization)
-            actual_optimization = self.collect_distinct_records(distinctWithOptimization)
+            actual_no_optimization = self.collect_distinct_records(distinct_no_optimization)
+            actual_optimization = self.collect_distinct_records(distinct_with_optimization)
 
             if expected_values != actual_no_optimization:
                 raise Exception(f"Actual dictionary without optimization differs from expected: {actual_no_optimization}")

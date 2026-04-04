@@ -1,5 +1,4 @@
 import pytest
-import logging
 
 from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -106,7 +105,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
 
         queries.append([
             self.QueryType.MODIFY_DATA,
-            'DELETE FROM `{table}` WHERE timestamp = Timestamp("2024-06-01T12:00:00.000001Z") AND uid = "uid_upsert";'.format(table=self.table_name),
+            'DELETE FROM `{table}` WHERE timestamp = Timestamp("2024-06-01T12:00:01.000000Z") AND uid = "uid_upsert";'.format(table=self.table_name),
         ])
 
         return queries

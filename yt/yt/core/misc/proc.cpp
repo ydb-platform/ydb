@@ -392,7 +392,7 @@ std::string GetCurrentProcessName()
 #ifdef __linux__
     return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
 #else
-    THROW_ERROR_EXCEPTION("Current process name is not available for this platform");
+    return "(unknown)";
 #endif
 }
 

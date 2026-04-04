@@ -17,6 +17,7 @@ SRCS(
     aggregations_ut.cpp
     clickbench_ut.cpp
     dictionary_ut.cpp
+    kv_column_bulk_amp_ut.cpp
     locks_ut.cpp
     optimizer_ut.cpp
     peephole_ut.cpp
@@ -28,9 +29,11 @@ PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
+    ydb/core/testlib
     ydb/core/tx/columnshard/hooks/testing
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard
+    ydb/library/workload/kv
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common

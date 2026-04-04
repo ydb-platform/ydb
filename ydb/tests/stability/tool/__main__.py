@@ -183,7 +183,18 @@ DICT_OF_PROCESSES = {
                 echo "Stopped"
             fi"""
     },
+    'workload_kv_column_amp': {
+        'status': """
+            if ps aux | grep -E "/Berkanavt/nemesis/bin/ydb_cli.*workload.*kv.*run.*bulk_upsert.*col_kv_amp|/tmp/workload_kv_column_amp_wrapper.sh" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi"""
+    },
 }
+
+# Column KV table path for space-amplification workload (Uint64 key, String value, bulk upsert).
+STABILITY_KV_COLUMN_AMP_PATH = 'col_kv_amp'
 
 
 # Создаем кастомный класс ArgumentParser для улучшения сообщений об ошибках
@@ -225,6 +236,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
                 "start_workload_log": "Start log workloads with both row and column storage",
                 "start_workload_log_column": "Start log workload with column storage",
                 "start_workload_log_row": "Start log workload with row storage",
+                "start_workload_kv_column_amp": "Start column KV bulk_upsert (~1KiB random values; tune threads/rows/load via flags)",
                 "start_workload_topic": "Start topic workload",
                 "start_statistics_workload": "Start statistics workload",
                 "stop_workloads": "Stop all workloads",
@@ -504,6 +516,7 @@ class StabilityCluster:
             "/Berkanavt/nemesis/bin/olap_workload",
             "/Berkanavt/nemesis/bin/oltp_workload",
             "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*run",
+            "/Berkanavt/nemesis/bin/ydb_cli.*workload.*kv.*run",
             "/Berkanavt/nemesis/bin/ydb_cli.*workload.*topic.*"
         ]:
             node.ssh_command(
@@ -1054,10 +1067,11 @@ handle_timeout() {{
     # Убиваем Python процессы, связанные с oltp_workload
     pkill -9 -f "oltp_workload" || true
 
-  elif [[ "{base_command}" == *"ydb_cli"* ]] && [[ "{command}" =~ workload\\ (log|topic) ]]; then
-    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing workload log specific cleanup"
-    # Убиваем процессы ydb_cli workload log
+  elif [[ "{base_command}" == *"ydb_cli"* ]] && [[ "{command}" =~ workload\\ (log|topic|kv) ]]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing ydb_cli workload cleanup"
+    # Убиваем процессы ydb_cli workload log / kv
     pkill -9 -f "ydb_cli.*workload.*log" || true
+    pkill -9 -f "ydb_cli.*workload.*kv" || true
 
   elif [[ "{base_command}" == *"simple_queue"* ]]; then
     echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing simple_queue specific cleanup"
@@ -1293,6 +1307,48 @@ Common usage scenarios:
         type=str,
         help="SSH username for connecting to cluster nodes (defaults to current user)",
     )
+    # Used by start_workload_kv_column_amp; must be on the first parser pass so values are not
+    # mistaken for positional ACTION tokens (e.g. --kv_amp_max_key 1e9 action_name).
+    parser.add_argument(
+        "--kv-amp-max-key",
+        "--kv_amp_max_key",
+        type=int,
+        default=1_000_000,
+        help="For start_workload_kv_column_amp: exclusive upper bound for random Uint64 PK (default: 1000000)",
+        metavar="N",
+    )
+    parser.add_argument(
+        "--kv-amp-load-mb-per-sec",
+        "--kv_amp_load_mb_per_sec",
+        type=int,
+        default=100,
+        help="For start_workload_kv_column_amp: target logical MiB/s, converted to ydb_cli --rate (0 = unlimited)",
+        metavar="MB",
+    )
+    parser.add_argument(
+        "--kv-amp-value-bytes",
+        "--kv_amp_value_bytes",
+        type=int,
+        default=1024,
+        help="For start_workload_kv_column_amp: random String payload size per row in bytes (default: 1024)",
+        metavar="B",
+    )
+    parser.add_argument(
+        "--kv-amp-threads",
+        "--kv_amp_threads",
+        type=int,
+        default=10,
+        help="For start_workload_kv_column_amp: ydb_cli --threads (parallel workers per node, default: 10)",
+        metavar="N",
+    )
+    parser.add_argument(
+        "--kv-amp-rows",
+        "--kv_amp_rows",
+        type=int,
+        default=50_000,
+        help="For start_workload_kv_column_amp: rows per BulkUpsert request (--rows, default: 50000)",
+        metavar="N",
+    )
 
     # Define all available actions
     actions_help = {
@@ -1323,6 +1379,7 @@ Common usage scenarios:
         "start_workload_log": "Start log workloads with both row and column storage",
         "start_workload_log_column": "Start log workload with column storage",
         "start_workload_log_row": "Start log workload with row storage",
+        "start_workload_kv_column_amp": "Start column KV bulk_upsert (~1KiB random values; tune threads/rows/load via flags)",
         "start_workload_topic": "Start topic workload",
         "start_statistics_workload": "Start statistics workload",
         "stop_workloads": "Stop all workloads",
@@ -1358,6 +1415,7 @@ Common usage scenarios:
             "start_kafka_workload",
             "start_ctas_workload",
             "start_workload_log", "start_workload_log_column", "start_workload_log_row",
+            "start_workload_kv_column_amp",
             "start_workload_topic",
             "start_statistics_workload",
         ]
@@ -1404,15 +1462,16 @@ Common usage scenarios:
         workload_choices = list(DICT_OF_PROCESSES.keys())
         workload_help = "Available workloads:\n"
         for wl in workload_choices:
-            if "log_" in wl:
+            if "log_" in wl or wl == "workload_kv_column_amp":
                 workload_help += f"  {wl}\n"
 
+        clean_choices = [wl for wl in workload_choices if "log_" in wl or wl == "workload_kv_column_amp"]
         parser.add_argument(
             "--name",
             type=str,
             required=True,
             help=f"Name of the workload to clean\n{workload_help}",
-            choices=workload_choices,
+            choices=clean_choices,
             metavar="WORKLOAD_NAME",
         )
 
@@ -1513,6 +1572,17 @@ def main():
                             ],
                             raise_on_error=True
                         )
+                elif workload_name == 'workload_kv_column_amp':
+                    first_node = stability_cluster.kikimr_cluster.nodes[1]
+                    first_node.ssh_command([
+                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
+                        '--database', '/Root/db1',
+                        'workload', 'kv', 'clean',
+                        '--path', STABILITY_KV_COLUMN_AMP_PATH,
+                    ],
+                        raise_on_error=True
+                    )
                 else:
                     print(f"Not supported workload clean command for {workload_name}")
             else:
@@ -1565,6 +1635,66 @@ def main():
                         ),
                         f'/tmp/workload_log_{store_type}_select.out.log'
                     )
+            stability_cluster.get_state()
+        if action == "start_workload_kv_column_amp":
+            max_key = args.kv_amp_max_key
+            if max_key < 1:
+                raise SystemExit('start_workload_kv_column_amp: --kv-amp-max-key must be >= 1')
+            load_mb = args.kv_amp_load_mb_per_sec
+            value_bytes = args.kv_amp_value_bytes
+            kv_threads = args.kv_amp_threads
+            kv_rows = args.kv_amp_rows
+            if load_mb < 0 or value_bytes < 1:
+                raise SystemExit('start_workload_kv_column_amp: invalid --kv-amp-load-mb-per-sec or --kv-amp-value-bytes')
+            if kv_threads < 1:
+                raise SystemExit('start_workload_kv_column_amp: --kv-amp-threads must be >= 1')
+            if kv_rows < 1:
+                raise SystemExit('start_workload_kv_column_amp: --kv-amp-rows must be >= 1')
+            # Same row-size model as kv bulk_upsert init: --int-cols 1 --cols 2 (one Uint64 + one String).
+            int_cols = 1
+            str_cols = 2 - int_cols
+            row_bytes = int_cols * 8 + str_cols * value_bytes
+            bytes_per_bulk = row_bytes * kv_rows
+            rate_arg = ''
+            if load_mb > 0:
+                if bytes_per_bulk < 1:
+                    raise SystemExit('start_workload_kv_column_amp: invalid bulk size for rate computation')
+                target_bps = load_mb * 1024 * 1024
+                rate = max(1, (target_bps + bytes_per_bulk - 1) // bytes_per_bulk)
+                rate_arg = f' --rate {rate}'
+            first_node = stability_cluster.kikimr_cluster.nodes[1]
+            first_node.ssh_command([
+                '/Berkanavt/nemesis/bin/ydb_cli',
+                '--endpoint', f'grpc://localhost:{first_node.grpc_port}',
+                '--database', '/Root/db1',
+                'workload', 'kv', 'init',
+                '--store', 'column',
+                '--min-partitions', '100',
+                '--partition-size', '10',
+                '--auto-partition', '0',
+                '--path', STABILITY_KV_COLUMN_AMP_PATH,
+                '--int-cols', '1',
+                '--key-cols', '1',
+                '--cols', '2',
+                '--init-upserts', '0',
+            ],
+                raise_on_error=False
+            )
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command(['rm', '-f', '/tmp/workload_kv_column_amp.out.log'], raise_on_error=False)
+                stability_cluster._clean_and_start_workload(
+                    node,
+                    'workload_kv_column_amp',
+                    (
+                        f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} '
+                        f'--database /Root/db1 workload kv run bulk_upsert '
+                        f'--path {STABILITY_KV_COLUMN_AMP_PATH} '
+                        f'--max-first-key {max_key} '
+                        f'--int-cols 1 --key-cols 1 --cols 2 '
+                        f'--rows {kv_rows} --threads {kv_threads} --seconds 86400 '
+                        f'--len {value_bytes}{rate_arg}'
+                    ),
+                )
             stability_cluster.get_state()
         if action == "start_workload_topic":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):

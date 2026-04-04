@@ -18,6 +18,46 @@ namespace NYdbWorkload {
 
 using TRow = TKvWorkloadGenerator::TRow;
 
+namespace {
+
+TString MakeRandomStringBytes(size_t len) {
+    TString s = TString::Uninitialized(len);
+    char* p = s.Detach();
+    for (size_t i = 0; i < len; ++i) {
+        p[i] = static_cast<char>(RandomNumber<ui32>(256));
+    }
+    return s;
+}
+
+// Builds the NYdb::TValue payload for TTableClient::BulkUpsert(tablePath, TValue&& rows):
+// a List of Struct, one struct per row; field names are physical column names ("c0", "c1", ...),
+// types must match the table schema (Uint64 / String / ...).
+NYdb::TValue BuildKvTableBulkUpsertRowsValue(
+    const TVector<TRow>& rows,
+    size_t columnsCnt,
+    size_t intColumnsCnt)
+{
+    NYdb::TValueBuilder valueBuilder;
+    valueBuilder.BeginList();
+    for (const TRow& row : rows) {
+        auto& listItem = valueBuilder.AddListItem();
+        listItem.BeginStruct();
+        for (size_t col = 0; col < columnsCnt; ++col) {
+            const TString name = TStringBuilder() << "c" << col;
+            if (col < intColumnsCnt) {
+                listItem.AddMember(name).Uint64(row.Ints[col]);
+            } else {
+                listItem.AddMember(name).String(row.Strings[col - intColumnsCnt]);
+            }
+        }
+        listItem.EndStruct();
+    }
+    valueBuilder.EndList();
+    return valueBuilder.Build();
+}
+
+} // namespace
+
 // Note: there is no mechanism to update row values for now so all keys should be different
 struct TRowsVerifyer {
     TRowsVerifyer(size_t capacity = 10000)
@@ -75,7 +115,7 @@ void AddResultSet(const NYdb::TResultSet& resultSet, TVector<TRow>& rows) {
 
         for (size_t col = 0; col < parser.ColumnsCount(); col++) {
             auto& valueParser = parser.ColumnParser(col);
-            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional; 
+            bool optional = valueParser.GetKind() == NYdb::TTypeParser::ETypeKind::Optional;
             if (optional) {
                 valueParser.OpenOptional();
             }
@@ -203,6 +243,8 @@ TQueryInfoList TKvWorkloadGenerator::GetWorkload(int type) {
             return ReadRows(GenerateRandomRows());
         case EType::Mixed:
             return Mixed();
+        case EType::BulkUpsertRandom:
+            return BulkUpsert(GenerateBulkUpsertRows());
         default:
             return TQueryInfoList();
     }
@@ -216,6 +258,7 @@ TVector<IWorkloadQueryGenerator::TWorkloadType> TKvWorkloadGenerator::GetSupport
     result.emplace_back(static_cast<int>(EType::SelectRandom), "select", "Select rows matching primary key(s)");
     result.emplace_back(static_cast<int>(EType::ReadRowsRandom), "read-rows", "ReadRows rows matching primary key(s)");
     result.emplace_back(static_cast<int>(EType::Mixed), "mixed", "Writes and SELECT/ReadsRows rows randomly, verifies them");
+    result.emplace_back(static_cast<int>(EType::BulkUpsertRandom), "bulk_upsert", "BulkUpsert random rows (column-friendly payload)");
     return result;
 }
 
@@ -277,6 +320,19 @@ TQueryInfoList TKvWorkloadGenerator::WriteRows(TString operation, TVector<TRow>&
 
 TQueryInfoList TKvWorkloadGenerator::Upsert(TVector<TRow>&& rows) {
     return WriteRows("UPSERT", std::move(rows));
+}
+
+TQueryInfoList TKvWorkloadGenerator::BulkUpsert(TVector<TRow>&& rows) {
+    const TString tablePath = Params.DbPath + "/" + Params.TableName;
+    const size_t columnsCnt = Params.ColumnsCnt;
+    const size_t intColumnsCnt = Params.IntColumnsCnt;
+    auto bulkUpsertOperation = [tablePath, rows = std::move(rows), columnsCnt, intColumnsCnt](NYdb::NTable::TTableClient& tableClient) {
+        return tableClient.BulkUpsert(tablePath, BuildKvTableBulkUpsertRowsValue(rows, columnsCnt, intColumnsCnt))
+            .GetValueSync();
+    };
+    TQueryInfo queryInfo;
+    queryInfo.TableOperation = std::move(bulkUpsertOperation);
+    return TQueryInfoList(1, std::move(queryInfo));
 }
 
 TQueryInfoList TKvWorkloadGenerator::Insert(TVector<TRow>&& rows) {
@@ -506,6 +562,32 @@ TVector<TRow> TKvWorkloadGenerator::GenerateRandomRows(bool randomValues) {
     return result;
 }
 
+TVector<TRow> TKvWorkloadGenerator::GenerateBulkUpsertRows() {
+    TVector<TRow> result(Params.RowsCnt);
+
+    for (size_t row = 0; row < Params.RowsCnt; ++row) {
+        result[row].Ints.resize(Params.IntColumnsCnt);
+        result[row].Strings.resize(Params.ColumnsCnt - Params.IntColumnsCnt);
+
+        for (size_t col = 0; col < Params.ColumnsCnt; ++col) {
+            if (col < Params.IntColumnsCnt) {
+                const ui64 val = col < Params.KeyColumnsCnt ? RandomNumber<ui64>(Params.MaxFirstKey) : RandomNumber<ui64>();
+                result[row].Ints[col] = val;
+            } else {
+                TString val;
+                if (col < Params.KeyColumnsCnt) {
+                    val = TString(std::format("{:x}", RandomNumber<ui64>(Params.MaxFirstKey)));
+                } else {
+                    val = MakeRandomStringBytes(Params.StringLen);
+                }
+                result[row].Strings[col - Params.IntColumnsCnt] = std::move(val);
+            }
+        }
+    }
+
+    return result;
+}
+
 void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     opts.AddLongOption('p', "path", "Path where benchmark tables are located")
         .Optional()
@@ -565,6 +647,15 @@ void TKvWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandTy
             opts.AddLongOption("cols", "Number of columns to upsert")
                 .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
             opts.AddLongOption("rows", "Number of rows to upsert")
+                .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
+            break;
+        case TKvWorkloadGenerator::EType::BulkUpsertRandom:
+            opts.AddLongOption("len", "Value payload size in bytes (high-entropy random String column)")
+                .DefaultValue((ui64)1024)
+                .StoreResult(&StringLen);
+            opts.AddLongOption("cols", "Number of columns per row")
+                .DefaultValue((ui64)KvWorkloadConstants::COLUMNS_CNT).StoreResult(&ColumnsCnt);
+            opts.AddLongOption("rows", "Number of rows per bulk request")
                 .DefaultValue((ui64)NYdbWorkload::KvWorkloadConstants::ROWS_CNT).StoreResult(&RowsCnt);
             break;
         case TKvWorkloadGenerator::EType::InsertRandom:

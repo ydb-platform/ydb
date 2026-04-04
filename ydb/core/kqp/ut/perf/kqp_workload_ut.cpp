@@ -19,6 +19,13 @@ using namespace NYdb::NTable;
 constexpr size_t REPEATS = NSan::PlainOrUnderSanitizer(3, 1);
 
 void ExecuteQuery(TTableClient& db, TSession& session, NYdbWorkload::TQueryInfo& queryInfo) {
+    if (queryInfo.TableOperation) {
+        auto status = queryInfo.TableOperation(db);
+        UNIT_ASSERT_C(status.IsSuccess() || status.GetStatus() == NYdb::EStatus::PRECONDITION_FAILED
+            || status.GetStatus() == NYdb::EStatus::ABORTED, status.GetIssues().ToString()
+                << " status: " << int(status.GetStatus()));
+        return;
+    }
     if (queryInfo.UseReadRows) {
         auto selectResult = db.ReadRows(queryInfo.TablePath, std::move(*queryInfo.KeyToRead))
             .GetValueSync();

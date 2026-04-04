@@ -116,11 +116,11 @@ jobs:
         if: steps.period.outputs.run == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+          TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           ARGS="--period-update ${{ steps.period.outputs.value }}"
           ARGS="$ARGS --bot-token $TELEGRAM_BOT_TOKEN"
-          ARGS="$ARGS --team-channels \"$TEAM_CHANNELS\""
+          ARGS="$ARGS --team-channels \"$TG_TEAM_CHANNELS\""
           ARGS="$ARGS --delay 2"
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             ARGS="$ARGS --dry-run"

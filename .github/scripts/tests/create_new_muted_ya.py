@@ -101,25 +101,13 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=1):
-    # Get today's date.
-    today = datetime.date.today()
-    start_date = today - datetime.timedelta(days=days_window-1)
-    end_date = today
-    
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, ydb_wrapper=None):
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
-    logging.info(f"Date range: {start_date} to {end_date}")
     
-    try:
-        with YDBWrapper() as ydb_wrapper:
-            # Check credentials
-            if not ydb_wrapper.check_credentials():
-                return []
-            
-            # Get table path from config
-            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
-            
-            query_string = f'''
+    def _run(w):
+        tests_monitor_table = w.get_table_path("tests_monitor")
+        
+        query_string = f'''
     SELECT 
         test_name, 
         suite_folder, 
@@ -138,34 +126,35 @@ def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=1):
         days_in_state,
         is_test_chunk
     FROM `{tests_monitor_table}`
-    WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
+    WHERE date_window >= CurrentUtcDate() - {days_window}*Interval("P1D")
         AND branch = '{branch}' 
         AND build_type = '{build_type}'
     '''
-            
-            logging.info(f"SQL Query:\n{query_string}")
-            
-            logging.info("Successfully connected to YDB")
-            
-            logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
-            
-            # Filter out suite-level entries (aggregates, not individual tests)
-            # Similar to generate-summary.py which skips results with suite=True
-            # Suite tests have test_name like "unittest", "py3test", "gtest"
-            suite_test_names = {'unittest', 'py3test', 'gtest'}
-            filtered_results = [
-                result for result in results
-                if result.get('test_name') and result.get('test_name') not in suite_test_names
-            ]
-            
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}, after filtering suite tests: {len(filtered_results)}")
-            return filtered_results
         
+        logging.info(f"SQL Query:\n{query_string}")
+        
+        results = w.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
+        
+        suite_test_names = {'unittest', 'py3test', 'gtest'}
+        filtered_results = [
+            result for result in results
+            if result.get('test_name') and result.get('test_name') not in suite_test_names
+        ]
+        
+        logging.info(f"Query completed. Total rows: {len(results)}, after filtering: {len(filtered_results)}")
+        return filtered_results
+
+    try:
+        if ydb_wrapper:
+            return _run(ydb_wrapper)
+        with YDBWrapper() as w:
+            if not w.check_credentials():
+                return []
+            return _run(w)
+
     except Exception as e:
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
-        logging.error(f"Date range: {start_date} to {end_date}")
         raise
 
 
@@ -993,10 +982,7 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-        logging.info("Executing single query for 7 days window...")
-        
-        # Single query for maximum window (7 days).
-        all_data = execute_query(args.branch, days_window=7)
+        all_data = execute_query(args.branch, days_window=7, ydb_wrapper=ydb_wrapper)
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.

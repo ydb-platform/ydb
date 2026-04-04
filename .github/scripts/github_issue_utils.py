@@ -18,7 +18,6 @@ class ParsedIssueBody:
     tests: List[str] = field(default_factory=list)
     branches: List[str] = field(default_factory=lambda: ['main'])
     build_type: str = DEFAULT_BUILD_TYPE
-    owner_override: Optional[str] = None
 
 
 def _extract_between_markers(body: str, start_marker: str, end_marker: str) -> Optional[str]:
@@ -31,7 +30,7 @@ def _extract_between_markers(body: str, start_marker: str, end_marker: str) -> O
 
 
 def parse_body(body: str) -> ParsedIssueBody:
-    """Parse GitHub issue body to extract test names, branches, build_type and owner_override.
+    """Parse GitHub issue body to extract test names, branches and build_type.
 
     Args:
         body: The GitHub issue body text
@@ -67,13 +66,6 @@ def parse_body(body: str) -> ParsedIssueBody:
         val = bt_block.strip()
         if val:
             result.build_type = val
-
-    # --- owner_override (new, optional) ---
-    oo_block = _extract_between_markers(body, "<!--owner_override_start-->", "<!--owner_override_end-->")
-    if oo_block is not None:
-        val = oo_block.strip()
-        if val:
-            result.owner_override = val
 
     return result
 
@@ -115,7 +107,6 @@ def create_test_issue_mapping(issues_data):
                     'created_at': issue.get('created_at', 0),
                     'branches': parsed.branches,
                     'build_type': parsed.build_type,
-                    'owner_override': parsed.owner_override,
                 })
         except Exception as e:
             print(f"Warning: Could not parse issue body for issue {url}: {e}")

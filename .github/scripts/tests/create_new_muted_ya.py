@@ -1047,7 +1047,7 @@ if __name__ == "__main__":
         '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
-    create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()
 

@@ -478,7 +478,12 @@ class WriterAsyncIOReconnector:
                 tasks = [send_loop, receive_loop]
                 done, _ = await asyncio.wait([send_loop, receive_loop], return_when=asyncio.FIRST_COMPLETED)
                 done.pop().result()  # need for raise exception - reason of stop task
-            except issues.Error as err:
+            except (asyncio.CancelledError, issues.Error) as err:
+                if isinstance(err, asyncio.CancelledError):
+                    if self._closed:
+                        return
+                    err = issues.ConnectionLost("gRPC stream cancelled")
+
                 err_info = check_retriable_error(err, retry_settings, attempt)
                 if not err_info.is_retriable or self._tx is not None:  # no retries in tx writer
                     logger.debug("writer reconnector %s stop connection loop due to %s", self._id, err)
@@ -492,7 +497,7 @@ class WriterAsyncIOReconnector:
                 )
                 await asyncio.sleep(err_info.sleep_timeout_seconds)
 
-            except (asyncio.CancelledError, Exception) as err:
+            except Exception as err:
                 self._stop(err)
                 return
             finally:

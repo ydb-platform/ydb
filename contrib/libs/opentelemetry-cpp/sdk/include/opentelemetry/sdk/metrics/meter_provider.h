@@ -58,6 +58,11 @@ public:
    */
   explicit MeterProvider(std::unique_ptr<MeterContext> context) noexcept;
 
+  MeterProvider(const MeterProvider &)            = delete;
+  MeterProvider(MeterProvider &&)                 = delete;
+  MeterProvider &operator=(const MeterProvider &) = delete;
+  MeterProvider &operator=(MeterProvider &&)      = delete;
+
   /*
     Make sure GetMeter() helpers from the API are seen in overload resolution.
   */
@@ -104,6 +109,8 @@ public:
 
   /**
    * Attaches a View to list of configured Views for this Meter provider.
+   * @param instrument_selector The instrument selector for this view.
+   * @param meter_selector The meter selector for this view.
    * @param view The Views for this meter provider. This
    * must not be a nullptr.
    *

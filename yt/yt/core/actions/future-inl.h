@@ -1108,12 +1108,6 @@ bool TFutureBase<T>::IsSet() const
 }
 
 template <class T>
-const TErrorOr<T>& TFutureBase<T>::Get() const
-{
-    return BlockingGet();
-}
-
-template <class T>
 const TErrorOr<T>& TFutureBase<T>::BlockingGet() const
 {
     YT_ASSERT(Impl_);
@@ -1140,18 +1134,6 @@ bool TFutureBase<T>::BlockingWait(TInstant deadline) const
 {
     YT_ASSERT(Impl_);
     return Impl_->BlockingWait(deadline);
-}
-
-template <class T>
-bool TFutureBase<T>::Wait(TDuration timeout) const
-{
-    return BlockingWait(timeout);
-}
-
-template <class T>
-bool TFutureBase<T>::Wait(TInstant deadline) const
-{
-    return BlockingWait(deadline);
 }
 
 template <class T>
@@ -1450,12 +1432,6 @@ inline TFuture<void>::TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<void>> im
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TErrorOr<T> TUniqueFutureBase<T>::Get() const
-{
-    return BlockingGet();
-}
-
-template <class T>
 TErrorOr<T> TUniqueFutureBase<T>::BlockingGet() const
 {
     YT_ASSERT(this->Impl_);
@@ -1641,12 +1617,6 @@ inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
     OnCanceled(BIND_NO_PROPAGATE([anotherCancelable = another.AsCancelable()] (const TError& error) {
         anotherCancelable.Cancel(error);
     }));
-}
-
-template <class T>
-const TErrorOr<T>& TPromiseBase<T>::Get() const
-{
-    return BlockingGet();
 }
 
 template <class T>
@@ -2247,7 +2217,7 @@ public:
             TFutureCallbackCookie cookie;
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(future.BlockingGet());
+                OnFutureSet(future.GetOrCrash());
             } else {
                 cookie = future.Subscribe(BIND_NO_PROPAGATE(&TAnyFutureCombiner::OnFutureSet, MakeStrong(this)));
             }
@@ -2336,7 +2306,7 @@ public:
         for (int index = 0; index < std::ssize(this->Futures_); ++index) {
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
-                OnFutureSet(index, future.BlockingGet());
+                OnFutureSet(index, future.GetOrCrash());
             } else {
                 future.Subscribe(BIND_NO_PROPAGATE(&TAllFutureCombiner::OnFutureSet, MakeStrong(this), index));
             }
@@ -2434,7 +2404,7 @@ public:
             const auto& future = this->Futures_[index];
             if (future.IsSet()) {
                 cookie = NullFutureCallbackCookie;
-                OnFutureSet(index, future.BlockingGet());
+                OnFutureSet(index, future.GetOrCrash());
             } else {
                 cookie = future.Subscribe(
                     BIND_NO_PROPAGATE(&TAnyNFutureCombiner::OnFutureSet, MakeStrong(this), index));
@@ -2751,7 +2721,7 @@ private:
                 break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.BlockingGet()));
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.GetOrCrash()));
             if (!suggestedIndex) {
                 break;
             }
@@ -2868,10 +2838,10 @@ private:
                     BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
                         // NB: Sync invoker protects from unbounded recursion.
                         .Via(GetSyncInvoker()));
-                        break;
+                break;
             }
 
-            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.BlockingGet());
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.GetOrCrash());
             if (!suggestedIndex) {
                 break;
             }

@@ -4134,12 +4134,14 @@ TNodeResult BuildBuiltinFunc(
                 return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"))));
             }
 
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
 
             switch (ctx.GetColumnReferenceState()) {
                 case EColumnRefState::MatchRecognizeMeasures:
@@ -4169,12 +4171,15 @@ TNodeResult BuildBuiltinFunc(
 
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, aggrCallback->second.CanonicalSqlName, aggrCallback->second.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
+
             TNodeResult result = (*aggrCallback).second.Callback(pos, args, aggMode, false, /*isYqlSelect=*/isYqlSelect);
             if (!result && result.error() == ESQLError::UnsupportedYqlSelect) {
                 return UnsupportedYqlSelect(
@@ -4206,12 +4211,14 @@ TNodeResult BuildBuiltinFunc(
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
             const auto& funcInfo = builtinCallback->second;
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
             if (!ctx.EnsureBackwardCompatibleFeatureAvailable(pos, funcInfo.CanonicalSqlName, funcInfo.MinLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
             if (!ctx.EnsureFeatureNotExpired(pos, funcInfo.CanonicalSqlName, funcInfo.MaxLangVer)) {
                 return std::unexpected(ESQLError::Basic);
             }
+#endif
             return Wrap(funcInfo.Callback(pos, args));
         } else if (normalizedName == "udf") {
             if (mustUseNamed && *mustUseNamed) {
@@ -4452,15 +4459,14 @@ TNodeResult BuildBuiltinFunc(
         }
     }
 
-    if (checkFilter && ctx.Settings.UdfFilter) {
+    if (checkFilter && ctx.Settings.UdfMeta) {
         if (ns == "yson2") {
             ns = "yson";
         } else if (ns == "datetime2") {
             ns = "datetime";
         }
 
-        auto ptr = ctx.Settings.UdfFilter->FindPtr(ns);
-        if (ptr && !ptr->contains(lowerName)) {
+        if (ctx.Settings.UdfMeta->HasModule(ns) && !ctx.Settings.UdfMeta->HasFunction(ns, lowerName)) {
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: " << originalNameSpace << "::" << name)));
         }
     }
@@ -4486,22 +4492,34 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     std::map<TString, TFuncInfo> map;
     for (const auto& [key, info] : builtinFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
+            map[TString(info.CanonicalSqlName)] = {
+                .Kind = TString(info.Kind),
+                .MinLangVer = info.MinLangVer,
+                .MaxLangVer = info.MaxLangVer,
+            };
         }
     }
 
     for (const auto& [key, info] : aggrFuncs) {
         if (!info.CanonicalSqlName.empty()) {
-            map.emplace(info.CanonicalSqlName, TFuncInfo{TString(info.Kind), info.MinLangVer, info.MaxLangVer});
+            map[TString(info.CanonicalSqlName)] = {
+                .Kind = TString(info.Kind),
+                .MinLangVer = info.MinLangVer,
+                .MaxLangVer = info.MaxLangVer,
+            };
         }
     }
 
     for (const auto& [key, info] : coreFuncs) {
-        map.emplace(info.Name, TFuncInfo{"Normal"});
+        map[TString(info.Name)] = {
+            .Kind = "Normal",
+        };
     }
 
     for (const auto& [key, name] : simplePgFuncs) {
-        map.emplace(TString("SimplePg::") + key, TFuncInfo{"Normal"});
+        map[TString("SimplePg::") + key] = {
+            .Kind = "Normal",
+        };
     }
 
     for (const auto& [name, info] : map) {

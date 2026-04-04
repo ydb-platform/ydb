@@ -10,8 +10,8 @@ def run_purebench_test(cmdline):
     # Mask elapsed time and duration, since both can change in
     # different environments.
     stdout = result.stdout
-    stdout = re.sub(r'(Elapsed: )(\d+[.]\d+)', r'\1<DURATION>', stdout)
-    stdout = re.sub(r'(Bench score: )(\d+[.]\d+|nan)', r'\1<SCORE>', stdout)
+    stdout = re.sub(r'(Elapsed: )(\d+([.]\d+)?)', r'\1<DURATION>', stdout)
+    stdout = re.sub(r'(Bench score: )(\d+([.]\d+)?|nan)', r'\1<SCORE>', stdout)
     # Dump the masked stdout.
     outfile = yatest.common.output_path('out')
     with open(outfile, "w") as dump:
@@ -60,3 +60,55 @@ def test_purebench_langver(langVer):
     if langVer:
         cmdline.extend(['--langver', langVer])
     return run_purebench_test(cmdline)
+
+
+@pytest.mark.parametrize(
+    "useBlocks",
+    [
+        pytest.param('disable', id="no-blocks"),
+        pytest.param('auto', id="auto-blocks"),
+        pytest.param('force', id="use-blocks"),
+    ],
+)
+def test_purebench_inc(useBlocks):
+    return run_purebench_test(
+        [
+            PUREBENCH,
+            '--ndebug',
+            '--print-expr',
+            '--repeats',
+            '1',
+            '-w',
+            '0',
+            '--blocks-engine',
+            useBlocks,
+            '-t',
+            'SELECT index + 1 FROM Input',
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "useBlocks",
+    [
+        pytest.param('disable', id="no-blocks"),
+        pytest.param('auto', id="auto-blocks"),
+        pytest.param('force', id="use-blocks"),
+    ],
+)
+def test_purebench_inc_for_42(useBlocks):
+    return run_purebench_test(
+        [
+            PUREBENCH,
+            '--ndebug',
+            '--print-expr',
+            '--repeats',
+            '1',
+            '-w',
+            '0',
+            '--blocks-engine',
+            useBlocks,
+            '-t',
+            'SELECT index + 1 FROM Input WHERE index = 42',
+        ]
+    )

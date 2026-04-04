@@ -6,7 +6,6 @@ import re
 import ydb
 import logging
 import sys
-from pathlib import Path
 from collections import defaultdict
 
 # Add the parent directory to the path to import update_mute_issues

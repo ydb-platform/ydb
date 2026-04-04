@@ -114,6 +114,22 @@ def _extract_area_from_info(info_raw) -> str:
     return info.get("area") or ""
 
 
+def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
+    """Prefix match: area/cs/compression -> area/cs (longest mapping key wins).
+
+    Mirrors the SQL logic: ``WHERE a.area = om.area OR StartsWith(a.area, om.area || '/')``
+    with ``ORDER BY LENGTH(om.area) DESC``.
+    """
+    best_team = ""
+    best_len = -1
+    for mapping_area, team in area_to_owner.items():
+        if area_label == mapping_area or area_label.startswith(mapping_area + '/'):
+            if len(mapping_area) > best_len:
+                best_team = team
+                best_len = len(mapping_area)
+    return best_team
+
+
 def resolve_owner_override(body: str, info_raw, area_to_owner: dict) -> str:
     """Determine owner_override for an issue.
 
@@ -123,7 +139,7 @@ def resolve_owner_override(body: str, info_raw, area_to_owner: dict) -> str:
     if not area_label:
         return None
 
-    resolved_team = area_to_owner.get(area_label, "")
+    resolved_team = _resolve_area_to_team(area_label, area_to_owner)
     if not resolved_team:
         return None
 

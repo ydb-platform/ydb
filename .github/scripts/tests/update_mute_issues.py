@@ -416,6 +416,9 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             body = content['body']
             parsed = parse_body(body)
 
+            status = 'N/A'
+            status_updated = '1970-01-01T00:00:01Z'
+            owner = 'N/A'
             field_values = issue.get('fieldValues', {}).get('nodes', [])
             for field_value in field_values:
                 field_name = field_value.get('field', {}).get('name', '').lower()

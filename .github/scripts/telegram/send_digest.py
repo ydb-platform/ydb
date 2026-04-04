@@ -65,7 +65,10 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
             github_issue_number,
             github_issue_url,
             github_issue_title,
-            owner_team
+            owner_team,
+            branch,
+            build_type,
+            enqueued_at
         FROM `{table_path}`
         WHERE profile_id = '{profile_id}'
           AND sent_at IS NULL
@@ -76,7 +79,11 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
 
 
 def _mark_sent(w: YDBWrapper, profile_id: str, unsent_rows: list, sent_at: datetime) -> None:
-    """Mark rows as sent via UPSERT (re-writes the full row with sent_at populated)."""
+    """Mark rows as sent via UPSERT (re-writes the full row with sent_at populated).
+
+    All original columns are preserved — bulk_upsert replaces the whole row
+    so we must provide every column to avoid nulling out data.
+    """
     if not unsent_rows:
         return
 
@@ -90,6 +97,9 @@ def _mark_sent(w: YDBWrapper, profile_id: str, unsent_rows: list, sent_at: datet
             'github_issue_url':    r.get("github_issue_url") or "",
             'github_issue_title':  r.get("github_issue_title") or "",
             'owner_team':          r.get("owner_team") or "",
+            'branch':              r.get("branch") or "",
+            'build_type':          r.get("build_type") or "",
+            'enqueued_at':         r.get("enqueued_at"),
             'sent_at':             sent_at,
         })
 
@@ -100,6 +110,9 @@ def _mark_sent(w: YDBWrapper, profile_id: str, unsent_rows: list, sent_at: datet
         .add_column('github_issue_url',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column('github_issue_title',  ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column('owner_team',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('branch',              ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('build_type',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('enqueued_at',         ydb.PrimitiveType.Timestamp)
         .add_column('sent_at',             ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     )
 

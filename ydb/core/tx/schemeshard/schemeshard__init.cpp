@@ -5806,7 +5806,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        bool anyCreated = false;
+        bool anyChanged = false;
 
         for (const TPathId& tablePathId : Self->ColumnTables.GetAllPathIds()) {
             const TColumnTableInfo& tableInfo = *Self->ColumnTables.at(tablePathId);
@@ -5815,11 +5815,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 continue;
             }
             if (tablesUnderOperation.contains(tablePathId)) {
-                continue;
-            }
-
-            const auto& tableDesc = tableInfo.Description;
-            if (tableDesc.GetSchema().IndexesSize() == 0) {
                 continue;
             }
 
@@ -5832,7 +5827,47 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 continue;
             }
 
+            const auto& tableDesc = tableInfo.Description;
             const auto& schema = tableDesc.GetSchema();
+
+            // Collect index names present in the column table schema
+            THashSet<TString> schemaIndexNames;
+            for (const auto& indexProto : schema.GetIndexes()) {
+                schemaIndexNames.insert(indexProto.GetName());
+            }
+
+            // Remove orphaned scheme objects: index children that no longer exist in schema
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                auto childIt = Self->PathsById.find(childPathId);
+                if (childIt == Self->PathsById.end()
+                    || !childIt->second->IsTableIndex()
+                    || childIt->second->Dropped())
+                {
+                    continue;
+                }
+                if (schemaIndexNames.contains(childName)) {
+                    continue;
+                }
+
+                // This scheme object has no matching index in schema — drop it
+                childIt->second->SetDropped(TStepId(1), TTxId(1));
+                Self->PersistDropStep(db, childPathId, TStepId(1), {});
+                Self->PersistRemoveTableIndex(db, childPathId);
+
+                auto domainInfo = Self->ResolveDomainInfo(childPathId);
+                domainInfo->DecPathsInside(Self);
+
+                ++tablePath->DirAlterVersion;
+                Self->PersistPathDirAlterVersion(db, tablePath);
+
+                anyChanged = true;
+            }
+
+            // Create missing scheme objects for indexes in schema
+            if (schema.IndexesSize() == 0) {
+                continue;
+            }
+
             auto columnIdToName = NOlap::BuildColumnIdToNameMap(schema);
 
             for (const auto& indexProto : schema.GetIndexes()) {
@@ -5893,11 +5928,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ++tablePath->DirAlterVersion;
                 Self->PersistPathDirAlterVersion(db, tablePath);
 
-                anyCreated = true;
+                anyChanged = true;
             }
         }
 
-        if (anyCreated) {
+        if (anyChanged) {
             Self->PersistUpdateNextPathId(db);
         }
     }

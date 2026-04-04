@@ -161,8 +161,12 @@ private:
                     if (index.local_bloom_filter_index().has_false_positive_probability()) {
                         bloom->SetFalsePositiveProbability(index.local_bloom_filter_index().false_positive_probability());
                     }
-                    for (const auto& colName : index.index_columns()) {
-                        auto it = colNameToId.find(colName);
+                    if (index.index_columns().size() != 1) {
+                        issues.AddIssue(NYql::TIssue("Bloom filter index supports exactly one column"));
+                        return false;
+                    }
+                    {
+                        auto it = colNameToId.find(index.index_columns(0));
                         if (it != colNameToId.end()) {
                             bloom->AddColumnIds(it->second);
                         }

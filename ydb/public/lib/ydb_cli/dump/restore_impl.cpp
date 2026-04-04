@@ -146,14 +146,7 @@ TTopicDescription TopicDescriptionFromProto(Ydb::Topic::DescribeTopicResult&& pr
 }
 
 TTableDescription TableDescriptionWithoutIndexesFromProto(Ydb::Table::CreateTableRequest proto) {
-    auto* indexes = proto.mutable_indexes();
-    for (auto it = indexes->begin(); it != indexes->end(); ) {
-        if (it->has_global_index() || it->has_global_async_index() || it->has_global_unique_index() || it->has_global_vector_kmeans_tree_index() || it->has_global_fulltext_plain_index() || it->has_global_fulltext_relevance_index() || it->has_global_json_index()) {
-            it = indexes->erase(it);
-        } else {
-            ++it;
-        }
-    }
+    proto.clear_indexes();
     return TableDescriptionFromProto(proto);
 }
 
@@ -816,9 +809,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
 
     if (settings.WithContent_) {
         ExistingEntries.emplace(dbPath, ESchemeEntryType::SubDomain);
-        TRestoreSettings restoreSettings;
-        restoreSettings.ReplaceSysACL(true);
-        auto restoreResult = RestoreFolder(fsPath, dbPath, restoreSettings);
+        auto restoreResult = RestoreFolder(fsPath, dbPath, {});
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }

@@ -24,9 +24,6 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
             },
         )
 
-    def _table_path(self, table_name):
-        return f"{self.database_path}/{table_name}".replace("//", "/")
-
     def _create_table(self):
         query = f"""
             CREATE TABLE `{self.table_name}` (
@@ -68,7 +65,7 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
 
         queries.append([
             self.QueryType.SELECT_CNT,
-            f"SELECT COUNT(*) AS cnt FROM `{self.table_name}` WHERE uid = \"uid_0\";",
+            f"SELECT COUNT(*) AS cnt FROM `{self.table_name}` WHERE uid = \"uid_0_0\";",
         ])
 
         queries.append([
@@ -112,13 +109,13 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
 
     def _do_queries(self, queries):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            for type, query in queries:
+            for query_type, query in queries:
                 result_sets = session_pool.execute_with_retries(query)
-                if type == self.QueryType.SELECT_CNT:
+                if query_type == self.QueryType.SELECT_CNT:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
                     for row in result_sets[0].rows:
                         assert row["cnt"] is not None
-                elif type == self.QueryType.SELECT_ROWS:
+                elif query_type == self.QueryType.SELECT_ROWS:
                     assert len(result_sets[0].rows) > 0, "Query returned no rows"
 
     def skip_if_unsupported(self):

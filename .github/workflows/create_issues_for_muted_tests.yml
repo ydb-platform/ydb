@@ -51,7 +51,6 @@ jobs:
       - name: Set environment variables for branches
         if: steps.label_check.outputs.has_label != 'false'
         run: |
-          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref || 'main' }}" >> $GITHUB_ENV
           echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref || 'main' }}" >> $GITHUB_ENV
 
       - name: Checkout repository
@@ -119,21 +118,4 @@ jobs:
         if: steps.label_check.outputs.has_label != 'false'
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Export GitHub issues
-        if: steps.label_check.outputs.has_label != 'false'
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/export_issues_to_ydb.py
-
-      - name: Upload GitHub issue mapping table
-        if: steps.label_check.outputs.has_label != 'false'
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: python3 .github/scripts/analytics/github_issue_mapping.py
-
-      - name: Upload MUTED test monitor data mart with GitHub issue links
-        if: steps.label_check.outputs.has_label != 'false'
-        continue-on-error: true
-        run: python3 .github/scripts/analytics/data_mart_executor.py --query_path .github/scripts/analytics/data_mart_queries/test_muted_monitor_mart_with_issue.sql --table_path test_results/analytics/test_muted_monitor_mart --store_type column --partition_keys date_window branch build_type owner_team suite_folder --primary_keys date_window owner_team branch build_type suite_folder full_name --ttl_min 43200 --ttl_key date_window --cleanup_window_key date_window --cleanup_window_interval '0 * Interval("P1D")'
+      # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)

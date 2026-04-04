@@ -24,6 +24,9 @@ from update_mute_issues import (
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import DEFAULT_BUILD_TYPE, make_profile_id
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -99,7 +102,7 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=1):
     # Get today's date.
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=days_window-1)
@@ -772,7 +775,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                             'fail_count': test.get('fail_count'),
                             'pass_count': test.get('pass_count'),
                             'branch': test.get('branch'),
-                            'build_type': test.get('build_type', 'relwithdebinfo'),
+                            'build_type': test.get('build_type', DEFAULT_BUILD_TYPE),
                         }
                     )
     
@@ -815,7 +818,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                     'github_issue_title': title,
                     'owner_team': owner_value,
                     'branch': first_test.get('branch', 'main'),
-                    'build_type': first_test.get('build_type', 'relwithdebinfo'),
+                    'build_type': first_test.get('build_type', DEFAULT_BUILD_TYPE),
                 })
 
     # Sort results by owner
@@ -941,7 +944,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
     for item in queue_items:
         branch = item['branch']
         build_type = item['build_type']
-        profile_id = f"{branch}-{build_type}"
+        profile_id = make_profile_id(branch, build_type)
         rows.append({
             'profile_id':          profile_id,
             'github_issue_number': item['github_issue_number'],

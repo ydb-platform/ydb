@@ -6,7 +6,7 @@ from urllib.parse import quote_plus
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import parse_body
+from github_issue_utils import parse_body, DEFAULT_BUILD_TYPE
 
 
 ORG_NAME = 'ydb-platform'
@@ -346,7 +346,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
 def generate_github_issue_title_and_body(test_data):
     owner = test_data[0]['owner']
     branch = test_data[0]['branch']
-    build_type = test_data[0].get('build_type', 'relwithdebinfo')
+    build_type = test_data[0].get('build_type', DEFAULT_BUILD_TYPE)
     test_full_names = [f"{d['full_name']}" for d in test_data]
     test_mute_strings = [f"{d['mute_string']}" for d in test_data]
     summary = [
@@ -414,7 +414,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
         content = issue['content']
         if content:
             body = content['body']
-            tests, branches, build_type = parse_body(body)
+            parsed = parse_body(body)
 
             field_values = issue.get('fieldValues', {}).get('nodes', [])
             for field_value in field_values:
@@ -434,7 +434,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             print(f"Status: {status}")
             print(f"Status updated: {status_updated}")
             print(f"Owner: {owner}")
-            print(f"Branch: {(',').join(branches) if branches else 'main'}")
+            print(f"Branch: {(',').join(parsed.branches) if parsed.branches else 'main'}")
             print("Tests:")
 
             all_issues_with_contet[content['id']] = {}
@@ -446,9 +446,9 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['status'] = status
             all_issues_with_contet[content['id']]['owner'] = owner
             all_issues_with_contet[content['id']]['tests'] = []
-            all_issues_with_contet[content['id']]['branches'] = branches
+            all_issues_with_contet[content['id']]['branches'] = parsed.branches
 
-            for test in tests:
+            for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
                 print(f"- {test}")
             print('\n')

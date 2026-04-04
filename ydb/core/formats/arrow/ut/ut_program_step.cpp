@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
             builder.Add(TCalculationProcessor::Build(
                 TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4),
                 std::make_shared<TSimpleFunction>(EOperation::Less),
-                std::make_shared<TLogicLessOrGreater>(false, op)).DetachResult());
+                std::make_shared<TCompareKernel>(false, op)).DetachResult());
             builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(4)));
             builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1 })));
             auto chain = builder.Finish().DetachResult();

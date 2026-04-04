@@ -13,7 +13,6 @@
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
 
-#include <valarray>
 namespace NKikimr::NArrow::NAccessor {
 
 void IChunkedArray::TReader::AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const {

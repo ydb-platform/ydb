@@ -77,7 +77,7 @@ jobs:
         id: create_issues
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }}
+        run: .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} --branch=${{ env.BASE_BRANCH }}
 
       - name: Add issues to PR
         if: steps.label_check.outputs.has_label != 'false'

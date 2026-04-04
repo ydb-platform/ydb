@@ -163,10 +163,10 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_url` Utf8,
         `github_issue_title` Utf8,
         `github_issue_number` Uint64 NOT NULL,
-        `github_issue_state` Utf8 NOT NULL,
+        `github_issue_state` Utf8,
         `github_issue_created_at` Timestamp,
         `owner_override` Utf8,
-        PRIMARY KEY (full_name, branch, build_type, github_issue_number, github_issue_state)
+        PRIMARY KEY (full_name, branch, build_type, github_issue_number)
     )
     PARTITION BY HASH(full_name)
     WITH (
@@ -213,8 +213,8 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('build_type', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_url', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_title', ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    column_types.add_column('github_issue_number', ydb.OptionalType(ydb.PrimitiveType.Uint64))
-    column_types.add_column('github_issue_state', ydb.PrimitiveType.Utf8)
+    column_types.add_column('github_issue_number', ydb.PrimitiveType.Uint64)
+    column_types.add_column('github_issue_state', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     column_types.add_column('owner_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
 

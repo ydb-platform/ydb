@@ -1,7 +1,6 @@
 {
   "profiles": [
     {
-      "id": "main-relwithdebinfo",
       "branch": "main",
       "build_type": "relwithdebinfo",
       "schedule_utc_hours": [8, 14, 20],

@@ -4,7 +4,7 @@ Send batched Telegram digests for new muted-test GitHub issues.
 
 How it works
 ------------
-Issues are placed into `digest_queue` at the moment they are created
+Issues are placed into ``digest_queue`` at the moment they are created
 (by create_new_muted_ya.py).  This script reads unsent rows
 (sent_at IS NULL), sends per-team Telegram messages, then marks rows
 as sent by writing sent_at = NOW().
@@ -23,9 +23,14 @@ Usage:
 import argparse
 import json
 import os
+import re
 import sys
+import ydb
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from github_issue_utils import make_profile_id
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "analytics"))
 from ydb_wrapper import YDBWrapper
@@ -38,11 +43,21 @@ from parse_and_send_team_issues import (
 )
 
 
+_SAFE_PROFILE_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
+
+
+def _validate_profile_id(profile_id: str) -> str:
+    if not _SAFE_PROFILE_RE.match(profile_id):
+        raise ValueError(f"Invalid profile_id: {profile_id!r}")
+    return profile_id
+
+
 # ── YDB helpers ───────────────────────────────────────────────────────────────
 
 
 def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
     """Return all digest_queue rows for this profile where sent_at IS NULL."""
+    _validate_profile_id(profile_id)
     table_path = w.get_table_path("digest_queue")
     return w.execute_scan_query(
         f"""
@@ -60,24 +75,35 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
     )
 
 
-def _mark_sent(w: YDBWrapper, profile_id: str, issue_numbers: list, sent_at: datetime) -> None:
-    """Set sent_at on the given rows."""
-    if not issue_numbers:
+def _mark_sent(w: YDBWrapper, profile_id: str, unsent_rows: list, sent_at: datetime) -> None:
+    """Mark rows as sent via UPSERT (re-writes the full row with sent_at populated)."""
+    if not unsent_rows:
         return
 
     table_path = w.get_table_path("digest_queue")
-    sent_at_us = int(sent_at.timestamp() * 1_000_000)
-    in_list = ", ".join(f"{n}ul" for n in issue_numbers)
 
-    w.execute_dml(
-        f"""
-        UPDATE `{table_path}`
-        SET sent_at = CAST({sent_at_us}ul AS Timestamp)
-        WHERE profile_id = '{profile_id}'
-          AND github_issue_number IN ({in_list})
-        """,
-        query_name="digest_mark_sent",
+    rows = []
+    for r in unsent_rows:
+        rows.append({
+            'profile_id':          profile_id,
+            'github_issue_number': int(r["github_issue_number"]),
+            'github_issue_url':    r.get("github_issue_url") or "",
+            'github_issue_title':  r.get("github_issue_title") or "",
+            'owner_team':          r.get("owner_team") or "",
+            'sent_at':             sent_at,
+        })
+
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column('profile_id',          ydb.PrimitiveType.Utf8)
+        .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
+        .add_column('github_issue_url',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('github_issue_title',  ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('owner_team',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('sent_at',             ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     )
+
+    w.bulk_upsert(table_path, rows, column_types)
 
 
 # ── Digest logic ──────────────────────────────────────────────────────────────
@@ -103,21 +129,18 @@ def run_digest(
     dry_run: bool = False,
 ) -> bool:
     """Process one notification profile. Returns True on success."""
-    profile_id  = profile["id"]
-    branch      = profile["branch"]
-    build_type  = profile["build_type"]
+    profile_id  = make_profile_id(profile["branch"], profile["build_type"])
     include_plots = profile.get("include_plots", False)
 
     print(f"\n{'=' * 60}")
     print(f"Profile : {profile_id}")
-    print(f"Branch  : {branch}   build_type: {build_type}")
+    print(f"Branch  : {profile['branch']}   build_type: {profile['build_type']}")
     print(f"{'=' * 60}")
 
     with YDBWrapper(use_local_config=False) as w:
         if not w.check_credentials():
             return False
 
-        # Step 1: fetch what needs to be sent
         unsent = _fetch_unsent(w, profile_id)
         print(f"Unsent issues in queue: {len(unsent)}")
 
@@ -134,7 +157,6 @@ def run_digest(
                 print(f"  {team}: {len(issues)} issue(s)")
             return True
 
-        # Step 2: fetch muted stats (best-effort)
         muted_stats   = None
         all_team_data = None
         try:
@@ -144,7 +166,6 @@ def run_digest(
         except Exception as exc:
             print(f"Warning: could not fetch muted stats: {exc}")
 
-        # Step 3: send
         send_team_messages(
             teams=teams,
             bot_token=bot_token,
@@ -155,10 +176,9 @@ def run_digest(
             all_team_data=all_team_data,
         )
 
-        # Step 4: mark as sent
-        sent_numbers = [int(r["github_issue_number"]) for r in unsent]
-        _mark_sent(w, profile_id, sent_numbers, datetime.now(tz=timezone.utc))
-        print(f"Marked {len(sent_numbers)} issue(s) as sent.")
+        now = datetime.now(tz=timezone.utc)
+        _mark_sent(w, profile_id, unsent, now)
+        print(f"Marked {len(unsent)} issue(s) as sent.")
         return True
 
 
@@ -211,7 +231,7 @@ def main() -> None:
     active = [
         p
         for p in profiles
-        if (not args.profile or p["id"] == args.profile)
+        if (not args.profile or make_profile_id(p["branch"], p["build_type"]) == args.profile)
         and (args.force or current_hour_utc in p.get("schedule_utc_hours", []))
     ]
 
@@ -219,7 +239,7 @@ def main() -> None:
         print(f"No profiles active for UTC hour {current_hour_utc} — nothing to do")
         sys.exit(0)
 
-    print(f"Active profiles: {[p['id'] for p in active]}")
+    print(f"Active profiles: {[make_profile_id(p['branch'], p['build_type']) for p in active]}")
 
     failed = False
     for profile in active:

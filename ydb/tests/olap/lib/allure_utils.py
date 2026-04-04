@@ -830,6 +830,13 @@ def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRun
     return table_html
 
 
+def time_interval_str(start, end):
+    return (
+        f"{datetime.fromtimestamp(start).strftime('%a %d %b %y %H:%M:%S')} - "
+        f"{datetime.fromtimestamp(end).strftime('%H:%M:%S')}"
+    )
+
+
 def allure_test_description(
     suite: str,
     test: str,
@@ -879,9 +886,7 @@ def allure_test_description(
                 f"schema=/{db}/{YdbCluster.get_tables_path()}&tenantPage=query"
                 f"&diagnosticsTab=nodes&name=/{db}'>{service_url}</a>"
             ),
-            'time': (
-                f"{datetime.fromtimestamp(start_time).strftime('%a %d %b %y %H:%M:%S')} - "
-                f"{datetime.fromtimestamp(end_time).strftime('%H:%M:%S')}"),
+            'time': time_interval_str(start_time, end_time),
         }
     )
     table_strings = '\n'.join([f'<tr><td>{_pretty_str(k)}</td><td>{v}</td></tr>' for k, v in test_info.items()])

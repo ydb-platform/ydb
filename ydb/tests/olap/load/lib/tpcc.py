@@ -1,7 +1,9 @@
 from __future__ import annotations
 from os import getenv
+from time import time
 from .conftest import LoadSuiteBase
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
+from ydb.tests.olap.lib.allure_utils import time_interval_str
 from ydb.tests.olap.lib.utils import get_external_param, external_param_is_true
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -88,11 +90,16 @@ class TpccSuiteBase(LoadSuiteBase):
             threads=self.threads,
             tx_mode=self.tx_mode
         )[self.get_users()[0]]
-        self.process_query_result(result, 'test', True)
         stats = result.get_stats('test')
+        mesure_start_time = stats.get('summary', {}).get('measure_start_ts', result.start_time)
+        allure_table_strings = {
+            'time_warmup': time_interval_str(result.start_time, mesure_start_time),
+            'time_measure': time_interval_str(mesure_start_time, time())
+        }
+        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings)
         if result.success and 'tpcc_json' in stats:
             run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
-            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type)
+            ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)
 
 
 class TestTpccW3000T0Serializable(TpccSuiteBase):

@@ -465,7 +465,7 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool, allure_table_strings: dict[str, any] = None):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None
@@ -533,7 +533,8 @@ class LoadSuiteBase:
             workload_result=result, workload_params=None,
             addition_blocks=[
                 cls.__get_key_measurements_block(result, query_name)
-            ]
+            ],
+            addition_table_strings=allure_table_strings
         )
         stats = result.get_stats(query_name)
         for p in ['Mean']:

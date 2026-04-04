@@ -105,7 +105,7 @@ void THelperSchemaless::SendDataViaActorSystem(TString testTable, ui64 pathIdBeg
 
 std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
     std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.emplace_back(arrow::field("timestamp", arrow::int64(), false));
+    fields.emplace_back(arrow::field("timestamp", arrow::uint64(), false));
     fields.emplace_back(arrow::field("resource_id", arrow::utf8()));
     fields.emplace_back(arrow::field("uid", arrow::utf8(), false));
     fields.emplace_back(arrow::field("level", arrow::int32()));
@@ -121,7 +121,7 @@ std::shared_ptr<arrow::Schema> THelper::GetArrowSchema() const {
 std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount, const ui64 tsStepUs) const {
     std::shared_ptr<arrow::Schema> schema = GetArrowSchema();
 
-    arrow::Int64Builder b1(arrow::int64(), arrow::default_memory_pool());
+    arrow::UInt64Builder b1(arrow::uint64(), arrow::default_memory_pool());
     arrow::StringBuilder b2;
     arrow::StringBuilder b3;
     arrow::Int32Builder b4;
@@ -159,7 +159,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
         Y_ABORT_UNLESS(b7.Append(i * 1000).ok());
     }
 
-    std::shared_ptr<arrow::Int64Array> a1;
+    std::shared_ptr<arrow::UInt64Array> a1;
     std::shared_ptr<arrow::StringArray> a2;
     std::shared_ptr<arrow::StringArray> a3;
     std::shared_ptr<arrow::Int32Array> a4;

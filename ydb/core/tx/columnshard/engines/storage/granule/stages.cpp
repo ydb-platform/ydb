@@ -9,12 +9,14 @@ namespace NKikimr::NOlap::NLoading {
 bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
-    if (!db.LoadPortions(Self->GetPathId(),
+    if (!db.LoadPortions(
             [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
                 AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
                 portions.emplace_back(portion->Build());
-            })) {
+                return true;
+            },
+        Self->GetPathId())) {
         return false;
     }
     for (auto&& i : portions) {
@@ -43,9 +45,11 @@ bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     return db.LoadIndexes(
-        Self->GetPathId(), [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
+        [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
             Context->Add(std::move(loadContext));
-        });
+        }, 
+        Self->GetPathId()
+    );
 }
 
 bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

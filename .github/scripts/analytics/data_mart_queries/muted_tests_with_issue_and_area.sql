@@ -31,7 +31,8 @@ SELECT
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
-    gim.github_issue_created_at AS github_issue_created_at
+    gim.github_issue_created_at AS github_issue_created_at,
+    gim.owner_override AS owner_override
 FROM (
     SELECT
         t.*,
@@ -59,7 +60,8 @@ LEFT JOIN (
         github_issue_url AS github_issue_url,
         github_issue_number AS github_issue_number,
         github_issue_state AS github_issue_state,
-        github_issue_created_at AS github_issue_created_at
+        github_issue_created_at AS github_issue_created_at,
+        owner_override AS owner_override
     FROM (
         SELECT
             g.*,

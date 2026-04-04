@@ -39,7 +39,8 @@ SELECT
     gim.github_issue_url as github_issue_url,
     gim.github_issue_number as github_issue_number,
     gim.github_issue_state as github_issue_state,
-    gim.github_issue_created_at as github_issue_created_at
+    gim.github_issue_created_at as github_issue_created_at,
+    gim.owner_override as owner_override
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name

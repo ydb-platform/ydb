@@ -62,6 +62,7 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_number` Uint64 NOT NULL,
         `github_issue_state` Utf8 NOT NULL,
         `github_issue_created_at` Timestamp,
+        `owner_override` Utf8,
         PRIMARY KEY (full_name, branch, build_type, github_issue_number, github_issue_state)
     )
     PARTITION BY HASH(full_name)
@@ -95,6 +96,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                     'github_issue_number': latest_issue['issue_number'],
                     'github_issue_state': latest_issue['state'],
                     'github_issue_created_at': latest_issue.get('created_at'),
+                    'owner_override': latest_issue.get('owner_override'),
                 })
     
     return table_data
@@ -113,6 +115,7 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_number', ydb.OptionalType(ydb.PrimitiveType.Uint64))
     column_types.add_column('github_issue_state', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    column_types.add_column('owner_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     
     ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")

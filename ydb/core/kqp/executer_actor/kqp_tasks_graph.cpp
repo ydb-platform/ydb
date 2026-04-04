@@ -2964,9 +2964,9 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
         }
     }
 
-    MaxTasksGraph.Shrink();
-
-    MaxTasksGraph.Print();
+    if (ShrinkTasks) {
+        MaxTasksGraph.Shrink();
+    }
 
     size_t sourceScanPartitionsCount = 0;
 
@@ -3074,7 +3074,8 @@ TKqpTasksGraph::TKqpTasksGraph(
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+    bool shrinkTasks)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
@@ -3082,6 +3083,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     , BufferActorId(bufferActorId)
     , UserToken(std::move(userToken))
     , MaxTasksGraph(5000)
+    , ShrinkTasks(shrinkTasks)
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;

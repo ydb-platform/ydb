@@ -388,7 +388,8 @@ public:
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        bool shrinkTasks
     );
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
@@ -480,6 +481,7 @@ private:
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TMaxTasksGraph MaxTasksGraph;
+    const bool ShrinkTasks;
 };
 
 } // namespace NKikimr::NKqp

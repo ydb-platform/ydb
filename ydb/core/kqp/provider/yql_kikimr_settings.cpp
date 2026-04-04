@@ -154,6 +154,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
+    REGISTER_SETTING(*this, UseKqpTasksGraphV2);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -303,4 +304,8 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
+bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
+    return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+} // namespace NYql

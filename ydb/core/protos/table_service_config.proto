@@ -496,4 +496,6 @@ message TTableServiceConfig {
     optional bool UseBlockHashJoin = 124 [default = false, (InvalidateCompileCache) = true];
 
     optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
+
+    optional bool UseKqpTasksGraphV2 = 126 [default = false, (InvalidateCompileCache) = true];
 };

@@ -109,6 +109,7 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
+    NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -212,6 +213,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseKqpTasksGraphV2() const;
 };
 
-}
+} // namespace NYql

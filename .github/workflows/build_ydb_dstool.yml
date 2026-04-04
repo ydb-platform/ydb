@@ -79,7 +79,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ inputs.commit_sha }}
 
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.commit_sha }}
       - name: Get YDB DSTool version from ydb/apps/dstool/version.txt

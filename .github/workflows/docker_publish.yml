@@ -35,7 +35,7 @@ jobs:
     runs-on: [self-hosted, auto-provisioned]
     steps:
       - name: Checkout .github
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.dockerfile_branch || 'main' }}
           path: main
@@ -43,7 +43,7 @@ jobs:
             .github
 
       - name: Checkout repository for build ydbd
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ydbd_git_ref || 'main' }}
           path: ydbd
@@ -56,13 +56,13 @@ jobs:
           echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: Checkout repository for build CLI
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.cli_git_ref || 'main' }}
           path: cli
 
       - name: Checkout repository for build local_ydb binary
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ inputs.local_ydb_git_ref || 'main' }}
           path: local_ydb

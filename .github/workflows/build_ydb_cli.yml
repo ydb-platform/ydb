@@ -54,7 +54,7 @@ jobs:
       release-commit-sha: ${{ steps.push-branch.outputs.release-commit-sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: ${{ inputs.commit_sha }}
@@ -196,7 +196,7 @@ jobs:
         shell: ${{ matrix.shell }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ needs.prepare-release.outputs.branch-name }}
     - name: Print debug information
@@ -233,7 +233,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare-release.outputs.branch-name }}
       - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
@@ -309,7 +309,7 @@ jobs:
     if: success()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
@@ -412,7 +412,7 @@ jobs:
     if: failure() && needs.prepare-release.result == 'success'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0

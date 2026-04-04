@@ -26,7 +26,7 @@ jobs:
       matrix_branches: ${{ steps.set-matrix.outputs.branches }}
     steps:
       - name: Checkout branches config
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           path: config-repo
@@ -58,7 +58,7 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
 
@@ -91,7 +91,7 @@ jobs:
 
       # Всегда checkout main для получения актуальных скриптов
       - name: Checkout main branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.YDBOT_TOKEN }}
           ref: main

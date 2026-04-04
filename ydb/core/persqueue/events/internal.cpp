@@ -34,12 +34,12 @@ namespace NKikimr::NPQ {
         }
     }
 
-    std::shared_ptr<TVector<TBatch>> TRequestedBlob::GetBatches() const {
+    std::shared_ptr<const TVector<TBatch>> TRequestedBlob::GetBatches() const {
         if (Batches) {
             return Batches;
         }
 
-        Batches = std::make_shared<TVector<TBatch>>(GetUnpackedBatches(Key, RawValue));
+        Batches = std::make_shared<const TVector<TBatch>>(GetUnpackedBatches(Key, RawValue));
         RawValue.clear();
         return Batches;
     }

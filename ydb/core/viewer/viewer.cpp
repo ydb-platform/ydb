@@ -48,6 +48,9 @@ public:
     {
         CurrentMonitoringPort = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort();
         CurrentWorkerName = TStringBuilder() << FQDNHostName() << ":" << CurrentMonitoringPort;
+        Proto2JsonConfig
+            .SetFormatOutput(false)
+            .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -251,12 +254,12 @@ public:
         return result;
     }
 
-    void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) override {
-        forceRetryPossible = false;
-        if (response.GroupsGetDisintegratedByExpectedStatusSize()) {
-            bscError = TStringBuilder() << "Calling this operation could cause " << GetGroupList(response.GetGroupsGetDisintegratedByExpectedStatus()) << " to go into a dead state";
-        } else if (response.GroupsGetDisintegratedSize()) {
-            bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to go into a dead state";
+    void BSCError2JSON(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, NJson::TJsonValue& json, bool forced) override {
+        bool forceRetryPossible = false;
+        TString bscError;
+        if (response.GroupsGetDisintegratedSize()) {
+            bscError = TStringBuilder() << "Running this operation will cause " << GetGroupList(response.GetGroupsGetDisintegrated()) << " to become unavailable";
+            forceRetryPossible = CheckAccessAdministration(request);
         } else if (response.GroupsGetDegradedSize()) {
             bscError = TStringBuilder() << "Calling this operation will cause " << GetGroupList(response.GetGroupsGetDegraded()) << " to go into a degraded state";
             forceRetryPossible = true;
@@ -266,6 +269,11 @@ public:
             for (auto& failParam: lastStatus.GetFailParam()) {
                 if (failParam.HasGroupId()) {
                     groups.emplace_back(failParam.GetGroupId());
+                } else if (failParam.HasGroupMapperError()) {
+                    const auto& gme = failParam.GetGroupMapperError();
+                    NJson::TJsonValue gmeJson;
+                    NProtobufJson::Proto2Json(gme, gmeJson, Proto2JsonConfig);
+                    json["groupMapperError"] = std::move(gmeJson);
                 }
             }
             if (lastStatus.GetFailReason() == NKikimrBlobStorage::TConfigResponse::TStatus::kMayGetDegraded) {
@@ -277,6 +285,10 @@ public:
         }
         if (bscError.empty()) {
             bscError = response.GetErrorDescription();
+        }
+        json["error"] = bscError;
+        if (forceRetryPossible && !forced) {
+            json["forceRetryPossible"] = true;
         }
     }
 
@@ -375,6 +387,7 @@ private:
     TString AllowOrigin;
     ui32 CurrentMonitoringPort;
     TString CurrentWorkerName;
+    NProtobufJson::TProto2JsonConfig Proto2JsonConfig;
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {

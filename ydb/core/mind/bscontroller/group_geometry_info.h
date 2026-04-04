@@ -8,7 +8,9 @@
 
 namespace NKikimr::NBsController {
 
-    struct TExFitGroupError : yexception {};
+    struct TExFitGroupError : yexception {
+        std::optional<TGroupMapperError> GroupMapperError;
+    };
 
     class TGroupGeometryInfo {
         const TBlobStorageGroupType Type;
@@ -84,13 +86,16 @@ namespace NKikimr::NBsController {
         void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition& constrainsts,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
                 i64 requiredSpace) const {
-            TString error;
+            TGroupMapperError error;
             for (const bool requireOperational : {true, false}) {
                 if (mapper.AllocateGroup(groupId.GetRawId(), group, constrainsts, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
                     return;
                 }
-            }
-            throw TExFitGroupError() << "failed to allocate group: " << error;
+            };
+            TExFitGroupError errorException;
+            errorException << "failed to allocate group: " << error.ErrorMessage;
+            errorException.GroupMapperError = std::move(error);
+            throw errorException;
         }
 
         // returns pair of previous VDisk and PDisk id's

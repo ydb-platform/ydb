@@ -62,6 +62,9 @@ public:
 private:
     TResult Collect(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
 
+    TResult CollectEqualOperands(const NYql::NJsonPath::TJsonPathItem& leftItem,
+        const NYql::NJsonPath::TJsonPathItem& rightItem, ECollectMode collectMode);
+
     TResult ContextObject();
 
     TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
@@ -81,7 +84,7 @@ private:
     TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item);
     TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item);
     TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
     TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item);
 
     TResult Methods(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);

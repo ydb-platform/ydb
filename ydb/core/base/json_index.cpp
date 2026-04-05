@@ -50,6 +50,18 @@ void AppendKey(TString& prefix, TStringBuf key) {
     prefix += key;
 }
 
+bool IsLiteralType(EJsonPathItemType type) {
+    switch (type) {
+        case EJsonPathItemType::StringLiteral:
+        case EJsonPathItemType::NumberLiteral:
+        case EJsonPathItemType::BooleanLiteral:
+        case EJsonPathItemType::NullLiteral:
+            return true;
+        default:
+            return false;
+    }
+}
+
 }  // namespace
 
 TResult::TResult()
@@ -162,7 +174,7 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item, ECollectMode collect
         case EJsonPathItemType::BinaryGreaterEqual:
             return BinaryGreaterEqual(item);
         case EJsonPathItemType::BinaryEqual:
-            return BinaryEqual(item);
+            return BinaryEqual(item, collectMode);
         case EJsonPathItemType::BinaryNotEqual:
             return BinaryNotEqual(item);
         case EJsonPathItemType::AbsMethod:
@@ -307,6 +319,24 @@ TResult TQueryCollector::UnaryNot(const TJsonPathItem& item) {
     return TResult(TIssue("Not implemented"));
 }
 
+TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, ECollectMode collectMode) {
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    const bool leftIsLiteral = IsLiteralType(leftItem.Type);
+    const bool rightIsLiteral = IsLiteralType(rightItem.Type);
+
+    if (!leftIsLiteral && rightIsLiteral) {
+        return CollectEqualOperands(leftItem, rightItem, collectMode);
+    }
+
+    if (leftIsLiteral && !rightIsLiteral) {
+        return CollectEqualOperands(rightItem, leftItem, collectMode);
+    }
+
+    return TResult(TIssue("Comparison requires exactly one path and one literal operand"));
+}
+
 TResult TQueryCollector::BinaryLess(const TJsonPathItem& item) {
     // TODO: Implement
     Y_UNUSED(item);
@@ -326,12 +356,6 @@ TResult TQueryCollector::BinaryGreater(const TJsonPathItem& item) {
 }
 
 TResult TQueryCollector::BinaryGreaterEqual(const TJsonPathItem& item) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
-}
-
-TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item) {
     // TODO: Implement
     Y_UNUSED(item);
     return TResult(TIssue("Not implemented"));
@@ -369,7 +393,11 @@ TResult TQueryCollector::Predicates(const TJsonPathItem& item, ECollectMode coll
 
     // JSON_EXISTS returns true for any non-empty result, including a single
     // boolean false from the predicate with the context object
-    if (CallableType == ECallableType::JsonExists && collectMode == ECollectMode::None) {
+    auto jsonExistsWithContext = CallableType == ECallableType::JsonExists && collectMode == ECollectMode::None;
+    // IsUnknown predicate does not guarantee that the path exists (($.k.v == 0) is unknown != "1k1v|0")
+    auto isUnknownPredicate = item.Type == EJsonPathItemType::IsUnknownPredicate;
+
+    if (jsonExistsWithContext || isUnknownPredicate) {
         result.GetTokens().clear();
         result.GetTokens().emplace_back();
     }
@@ -377,6 +405,27 @@ TResult TQueryCollector::Predicates(const TJsonPathItem& item, ECollectMode coll
     result.Finish();
     return result;
 }
+
+TResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftItem, const TJsonPathItem& rightItem, ECollectMode collectMode) {
+    auto pathResult = Collect(leftItem, collectMode);
+    if (pathResult.IsError()) {
+        return pathResult;
+    }
+
+    auto literalResult = Collect(rightItem, ECollectMode::Context);
+    if (literalResult.IsError()) {
+        return literalResult;
+    }
+
+    auto& pathTokens = pathResult.GetTokens();
+    auto& literalTokens = literalResult.GetTokens();
+    if (!pathResult.IsFinished() && pathTokens.size() == 1 && literalTokens.size() == 1) {
+        pathTokens.front() += literalTokens.front();
+    }
+
+    pathResult.Finish();
+    return pathResult;
+};
 
 TResult TQueryCollector::Variable(const TJsonPathItem&) {
     return TResult(TIssue("Variables are not supported at the moment"));

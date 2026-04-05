@@ -273,6 +273,132 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("$.a.size() + $.b.floor()", {"\1a", "\1b"});
     }
 
+    Y_UNIT_TEST(CollectPath_EqualityOperator) {
+        const TString compError = "Comparison requires exactly one path and one literal operand";
+        const TString varError  = "Variables are not supported at the moment";
+
+        auto strSuffix = [](const TStringBuf s) -> TString {
+            return TString("\0\3", 2) + s;
+        };
+
+        auto numSuffix = [](double v) -> TString {
+            TString s;
+            s.push_back('\0');
+            s.push_back('\4');
+            s.append(reinterpret_cast<const char*>(&v), sizeof(double));
+            return s;
+        };
+
+        const TString boolTrueSuffix  = TString("\0\1", 2);
+        const TString boolFalseSuffix = TString("\0\0", 2);
+        const TString nullSuffix      = TString("\0\2", 2);
+
+        // Path == literal, all literal types
+        ValidateQueries("$.key == \"hello\"", {"\3key" + strSuffix("hello")});
+        ValidateQueries("$.key == \"\"", {"\3key" + strSuffix("")});
+        ValidateQueries("$.key == 42", {"\3key" + numSuffix(42)});
+        ValidateQueries("$.key == 0", {"\3key" + numSuffix(0)});
+        ValidateQueries("$.key == 3.14", {"\3key" + numSuffix(3.14)});
+        ValidateQueries("$.key == true", {"\3key" + boolTrueSuffix});
+        ValidateQueries("$.key == false", {"\3key" + boolFalseSuffix});
+        ValidateQueries("$.key == null", {"\3key" + nullSuffix});
+
+        // Reversed order: literal == path (identical result)
+        ValidateQueries("\"hello\" == $.key", {"\3key" + strSuffix("hello")});
+        ValidateQueries("42 == $.key", {"\3key" + numSuffix(42)});
+        ValidateQueries("true == $.key", {"\3key" + boolTrueSuffix});
+        ValidateQueries("null == $.key", {"\3key" + nullSuffix});
+
+        // Context object as path (empty prefix)
+        ValidateQueries("$ == \"hello\"", {strSuffix("hello")});
+        ValidateQueries("$ == 42", {numSuffix(42)});
+        ValidateQueries("$ == true", {boolTrueSuffix});
+        ValidateQueries("$ == null", {nullSuffix});
+        ValidateQueries("\"hello\" == $", {strSuffix("hello")});
+
+        // Deeper paths
+        ValidateQueries("$.a.b == \"x\"", {"\1a\1b" + strSuffix("x")});
+        ValidateQueries("$.a.b.c == null", {"\1a\1b\1c" + nullSuffix});
+        ValidateQueries("\"x\" == $.a.b.c", {"\1a\1b\1c" + strSuffix("x")});
+        ValidateQueries("$.aba.\"caba\" == true", {"\3aba\4caba" + boolTrueSuffix});
+        ValidateQueries("$.a.b.c.d == 0", {"\1a\1b\1c\1d" + numSuffix(0)});
+        ValidateQueries("$.\"\".\"\" == 0", {TString("\0\0", 2) + numSuffix(0)});
+
+        // Array subscript
+        ValidateQueries("$.key[0] == \"x\"", {"\3key" + strSuffix("x")});
+        ValidateQueries("$.key[last] == true", {"\3key" + boolTrueSuffix});
+        ValidateQueries("$.key[1, 2, 3] == null", {"\3key" + nullSuffix});
+        ValidateQueries("$.key[0 to last] == 42", {"\3key" + numSuffix(42)});
+        ValidateQueries("$.key[0].sub == \"x\"", {"\3key\3sub" + strSuffix("x")});
+        ValidateQueries("$.a.b[0].c == \"x\"", {"\1a\1b\1c" + strSuffix("x")});
+        ValidateQueries("$.key[*] == \"x\"", {"\3key" + strSuffix("x")});
+
+        // Wildcard member access finishes the path
+        ValidateQueries("$.* == \"x\"", {""});
+        ValidateQueries("$.a.* == \"x\"", {"\1a"});
+        ValidateQueries("$.a.b.* == \"x\"", {"\1a\1b"});
+        ValidateQueries("\"x\" == $.*", {""});
+        ValidateQueries("\"x\" == $.a.*", {"\1a"});
+
+        // Methods finish the path
+        ValidateQueries("$.key.size() == 3", {"\3key"});
+        ValidateQueries("$.key.abs() == 1", {"\3key"});
+        ValidateQueries("$.key.type() == \"number\"", {"\3key"});
+        ValidateQueries("$.a.b.floor() == 0", {"\1a\1b"});
+        ValidateQueries("$.key.keyvalue().name == \"x\"", {"\3key"});
+
+        // Unary arithmetic on path finishes the path
+        ValidateQueries("-$.key == 1", {"\3key"});
+        ValidateQueries("+$.key == 1", {"\3key"});
+        ValidateQueries("-$.a.b == null", {"\1a\1b"});
+
+        // Predicates finish the path - the inner path token is returned (except IsUnknownPredicate)
+        ValidateQueries("exists($.key) == true", {"\3key"}, TCallableType::JsonValue);
+        ValidateQueries("($.key starts with \"a\") == true", {"\3key"}, TCallableType::JsonValue);
+        ValidateQueries("($.key like_regex \"a.*\") == true", {"\3key"}, TCallableType::JsonValue);
+        ValidateQueries("($.a.b starts with \"x\") == false", {"\1a\1b"}, TCallableType::JsonValue);
+        ValidateQueries("($.key == 10) is unknown", {""}, TCallableType::JsonValue);
+
+        ValidateQueries("exists($.key) == true", {""});
+        ValidateQueries("($.key starts with \"a\") == true", {""});
+        ValidateQueries("($.key like_regex \"a.*\") == true", {""});
+        ValidateQueries("($.a.b starts with \"x\") == false", {""});
+        ValidateQueries("($.key == 10) is unknown", {""});
+
+        // Both operands are paths
+        ValidateError("$.a == $.b", compError);
+        ValidateError("$.key == $", compError);
+        ValidateError("$ == $", compError);
+        ValidateError("$.a.b == $.c.d", compError);
+
+        // Literals only
+        ValidateError("\"x\" == \"y\"", compError);
+        ValidateError("1 == 2", compError);
+        ValidateError("true == false", compError);
+        ValidateError("null == null", compError);
+        ValidateError("1 == \"x\"", compError);
+
+        // Without context object
+        ValidateError("1 == 1", compError);
+
+        // Variables
+        ValidateError("$var == \"x\"", varError);
+        ValidateError("\"x\" == $var", varError);
+        ValidateError("$var == $var", compError);
+        ValidateError("$ == $var", compError);
+
+        // Arithmetic produces multiple tokens
+        ValidateQueries("($.a + $.b) == \"x\"", {"\1a", "\1b"});
+        ValidateQueries("\"x\" == ($.a + $.b)", {"\1a", "\1b"});
+        ValidateQueries("$.key + 1 == \"x\"", {"\3key"});
+        ValidateQueries("1 + $.key == \"x\"", {"\3key"});
+
+        // Parenthesized path - no effect
+        ValidateQueries("($.a.b) == \"x\"", {"\1a\1b" + strSuffix("x")});
+        ValidateQueries("\"x\" == ($.a.b)", {"\1a\1b" + strSuffix("x")});
+        ValidateQueries("(((((($).a).b))) == (\"x\"))", {"\1a\1b" + strSuffix("x")});
+    }
+
     Y_UNIT_TEST(CollectPath_BinaryArithmeticWildcard) {
         // Wildcard on left, path on right - both collected
         ValidateQueries("$.a.* + $.b", {"\1a", "\1b"});
@@ -287,6 +413,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("$.* + $.*", {"", ""});
         ValidateQueries("$.a.* + $.*", {"\1a", ""});
         ValidateQueries("$.* + $.a.*", {"", "\1a"});
+        ValidateQueries("$.a.b.*.c + $.a.b.*.d", {"\1a\1b", "\1a\1b"});
     }
 
     Y_UNIT_TEST(CollectPath_BinaryArithmeticErrors) {

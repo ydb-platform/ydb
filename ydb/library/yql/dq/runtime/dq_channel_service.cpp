@@ -733,6 +733,17 @@ bool TInputDescriptor::EarlyFinish() {
 void TInputDescriptor::Terminate() {
 }
 
+void TInputDescriptor::AbortChannel(const TString& message) {
+    if (!Aborted.exchange(true)) {
+        ActorSystem->Send(Info.OutputActorId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(
+            TStringBuilder() << "Channel: " << Info.ChannelId
+            << ", SrcStageId: " << Info.SrcStageId << ", DstStageId: " << Info.DstStageId
+            << ", " << message
+        ).Release());
+        Terminate();
+    }
+}
+
 ui32 TInputDescriptor::GetQueueSize() {
     std::lock_guard lock(QueueMutex);
     return  Queue.size();
@@ -817,6 +828,10 @@ void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
 }
 
 TNodeState::~TNodeState() {
+    {
+        std::lock_guard lock(Mutex);
+        FailInputs(NActors::TActorId{}, 0);
+    }
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
     *OutputBufferInflightBytes -= InflightBytes;
@@ -927,7 +942,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     if (!Subscribed.exchange(true)) {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
-#if !defined(NDEBUG)
+#if defined(FAILURE_INJECTION)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
     } else {
@@ -939,7 +954,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
         }
 #endif
         ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, ev.Release(), flags, item->SeqNo));
-#if !defined(NDEBUG)
+#if defined(FAILURE_INJECTION)
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
@@ -955,7 +970,7 @@ void TNodeState::FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMa
     for (auto& [info, descriptor] : InputDescriptors) {
         if (descriptor->PeerGenMajor) {
             if (descriptor->PeerActorId != peerActorId || descriptor->PeerGenMajor != peerGenMajor) {
-                descriptor->Terminate();
+                descriptor->AbortChannel("Fail by Input");
                 failedBuffers.push_back(info);
             }
         }
@@ -1060,8 +1075,10 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         if (Reconciliation.load() == 0) {
             // ignore errors in recovery
             LOG_W("DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId << ", Sender=" << ev->Sender);
+            Log(TStringBuilder() << "DATA UNDELIVERED, UNKNOWN ActorId to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId << ", Sender=" << ev->Sender);
         }
         std::lock_guard lock(Mutex);
+        PeerActorId = NActors::TActorId{};
         StartReconciliation(true);
         return;
     }
@@ -1069,6 +1086,7 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     switch (ev->Get()->SourceType) {
         case TEvDqCompute::TEvChannelDataV2::EventType: {
             LOG_W("DATA UNDELIVERED, OTHER to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
+            Log(TStringBuilder() << "DATA UNDELIVERED, OTHER to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
             std::lock_guard lock(Mutex);
             StartReconciliation(false);
             break;
@@ -1084,29 +1102,35 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     }
 }
 
-void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor) {
+void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo) {
     std::lock_guard lock(Mutex);
     if (!Connected) {
         PeerActorId = sender;
         PeerGenMajor.store(genMajor);
-        PeerGenMinor.store(0);
+        PeerGenMinor.store(genMinor);
+        ConfirmedSeqNo = seqNo;
         Connected = true;
-        ConfirmedSeqNo = 0;
         LOG_D("NODE CONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
     } else if (PeerActorId != sender || PeerGenMajor.load() != genMajor) {
         PeerActorId = sender;
         PeerGenMajor.store(genMajor);
-        PeerGenMinor.store(0);
+        PeerGenMinor.store(genMinor);
+        ConfirmedSeqNo = seqNo;
         FailInputs(PeerActorId, PeerGenMajor.load());
-        ConfirmedSeqNo = 0;
         LOG_W("NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
+        Log(TStringBuilder() << "NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor.load() << ", " << NodeActorId << " to " << PeerActorId);
     }
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    ConnectSession(ev->Sender, record.GetGenMajor());
+
+    LOG_W("DISCOVERY RECEIVED with Gen=" << record.GetGenMajor() << '.' << record.GetGenMinor() << ", SeqNo=" << record.GetSeqNo()
+        << " PeerGen=" << PeerGenMajor.load() << '.' << PeerGenMinor.load() << ", ConfirmedSeqNo=" << ConfirmedSeqNo
+        << ", NodeActorId=" << NodeActorId << ", PeerActorId=" << PeerActorId);
+
+    ConnectSession(ev->Sender, record.GetGenMajor(), record.GetGenMinor(), record.GetSeqNo());
 
     auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
@@ -1126,7 +1150,23 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    ConnectSession(ev->Sender, record.GetGenMajor());
+
+    if (PeerActorId != ev->Sender || PeerGenMajor.load() != record.GetGenMajor()) {
+        auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
+
+        evAck->Record.SetGenMajor(record.GetGenMajor());
+        evAck->Record.SetGenMinor(record.GetGenMinor());
+        evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::FAIL);
+        evAck->Record.SetSeqNo(ConfirmedSeqNo);
+
+        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+        if (!Subscribed.exchange(true)) {
+            flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
+        }
+
+        ActorSystem->Send(new NActors::IEventHandle(PeerActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
+        return;
+    }
 
     PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
 
@@ -1134,21 +1174,30 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     if (seqNo <= ConfirmedSeqNo) {
         LOG_W("DATA IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
+        Log(TStringBuilder() << "DATA IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
         return;
     }
 
     switch (seqNo - ConfirmedSeqNo) {
         case 1: {
+            ResendAsked = false;
             break;
         }
         case 2: {
             // allow 1 out of order message
             LOG_W("DATA OUT OF ORDER, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
+            Log(TStringBuilder() << "DATA OUT OF ORDER, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
             OutOfOrderMessage = ev.Release();
             return;
         }
         default: {
-            LOG_W("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
+            if (!ResendAsked) {
+                LOG_W("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
+                Log(TStringBuilder() << "DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
+                ResendAsked = true;
+            } else {
+                LOG_D("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << "(+1), " << NodeActorId << " from " << PeerActorId);
+            }
             auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
             evAck->Record.SetGenMajor(PeerGenMajor.load());
@@ -1295,7 +1344,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
-#if !defined(NDEBUG)
+#if defined(FAILURE_INJECTION)
     if (auto failCount = FailureReconciliation.load(); failCount > 0) {
         FailureReconciliation.store(failCount - 1);
         StartReconciliation(true);
@@ -1307,6 +1356,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
     if (record.GetGenMajor() != GenMajor) {
         LOG_W("ACK IGNORED GenMajor=" << GenMajor << ", ack.GenMajor=" << record.GetGenMajor() << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
+        Log(TStringBuilder() << "ACK IGNORED GenMajor=" << GenMajor << ", ack.GenMajor=" << record.GetGenMajor() << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -1316,16 +1366,25 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     {
         std::lock_guard lock(Mutex);
 
-        if (!Connected && PeerActorId == NActors::TActorId{}) {
+        auto seqNo = record.GetSeqNo();
+        auto status = record.GetStatus();
+
+        if (status == NYql::NDqProto::TEvChannelAckV2::FAIL) {
+            LOG_W("FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+            Log(TStringBuilder() << "FAILED, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+            StartReconciliation(true);
+            return;
+        }
+
+        if (PeerActorId == NActors::TActorId{}) {
             PeerActorId = ev->Sender;
             LOG_D("NODE PEER SET BY ACK, " << NodeActorId << " to " << PeerActorId);
         }
 
-        auto status = record.GetStatus();
-        auto seqNo = record.GetSeqNo();
 
         if (seqNo > SeqNo) {
-            LOG_W("LARGE SEQ_NO, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
+            LOG_W("LARGE SEQ_NO, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", status=" << (int)status << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
+            Log(TStringBuilder() << "LARGE SEQ_NO, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", NodeActorId=" << NodeActorId << " from peer " << ev->Sender);
             StartReconciliation(true);
             return;
         }
@@ -1347,6 +1406,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (Queue.empty()) {
             if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
                 LOG_W("CAN'T RESEND, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+                Log(TStringBuilder() << "CAN'T RESEND, SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
                 StartReconciliation(true);
                 return;
             }
@@ -1357,6 +1417,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 // allow outdates/old acks
                 if (seqNo > item->SeqNo) {
                     LOG_W("SEQ_NO DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+                    Log(TStringBuilder() << "SEQ_NO DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
                     StartReconciliation(true);
                     return;
                 }
@@ -1365,6 +1426,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                     // if we're reconcilating, ignore next RESENDs
                     if (record.GetGenMinor() == GenMinor) {
                         LOG_W("RESEND DATA, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
+                        Log(TStringBuilder() << "RESEND DATA, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
                         StartReconciliation(false);
                     }
                     return;
@@ -1394,6 +1456,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             ReconciliationDelay = TDuration::Zero();
+            LOG_W("RECONCILED, SeqNo=" << SeqNo << ", Queue.size()=" << Queue.size() << ", deltaBytes=" << deltaBytes << ", InflightBytes=" << InflightBytes << ", " << NodeActorId << " from peer " << PeerActorId);
             if (!Queue.empty()) {
                 LOG_D("DATA REPEAT, SeqNo=" << Queue.front()->SeqNo << '/' << Queue.back()->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
                 for (auto item : Queue) {
@@ -1412,7 +1475,12 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     if (record.GetGenMajor() != GenMajor) {
-        LOG_W("UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
+        if (!UpdateIgnored.exchange(true)) {
+            LOG_W("UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
+            Log(TStringBuilder() << "UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
+        } else {
+            LOG_D("UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
+        }
         return;
     }
 
@@ -1422,7 +1490,12 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
     auto earlyFinished = record.GetEarlyFinished();
     auto popBytes = record.GetPopBytes();
     if (!earlyFinished && popBytes == 0) {
-        LOG_W("UPDATE IGNORED EarlyFinished=False, PopBytes=0, " << NodeActorId << " from peer " << ev->Sender);
+        if (!UpdateIgnored.exchange(true)) {
+            LOG_W("UPDATE IGNORED EarlyFinished=False, PopBytes=0, " << NodeActorId << " from peer " << ev->Sender);
+            Log(TStringBuilder() << "UPDATE IGNORED EarlyFinished=False, PopBytes=0, " << NodeActorId << " from peer " << ev->Sender);
+        } else {
+            LOG_D("UPDATE IGNORED EarlyFinished=False, PopBytes=0, " << NodeActorId << " from peer " << ev->Sender);
+        }
         return;
     }
 
@@ -1432,9 +1505,16 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto descriptor = GetOrCreateOutputDescriptor(info, false, popBytes == 0);
     if (!descriptor) {
-        LOG_W("UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        // if (!UpdateIgnored.exchange(true)) {
+        //     LOG_W("UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        //     Log(TStringBuilder() << "UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        // } else {
+            LOG_D("UPDATE IGNORED EarlyFinished=" << earlyFinished << ", PopBytes=" << popBytes << ", " << NodeActorId << " from peer " << ev->Sender);
+        // }
         return;
     }
+
+    UpdateIgnored.store(false);
 
     if (!descriptor->IsTerminatedOrAborted() && descriptor->CheckGenMajor(GenMajor, "Inconsistent GenMajor in HandleUpdate")) {
         descriptor->HandleUpdate(earlyFinished, popBytes, this, descriptor);
@@ -1577,8 +1657,10 @@ void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
 
         if (ReconciliationDelay >= MaxReconciliationDelay && !ReReconciliation) {
             ReReconciliation = true;
+            PeerActorId = NActors::TActorId{};
             GenMajor++;
             GenMinor = 1;
+            SeqNo = 0;
         }
         UpdateReconciliationDelay();
         DoReconciliation();
@@ -1628,35 +1710,54 @@ void TNodeState::DoReconciliation() {
     if (ReconciliationCount > 1) {
         LOG_W("NODE RECONCILIATION x" << ReconciliationCount << ", to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
             << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
+        Log(TStringBuilder() << "NODE RECONCILIATION x" << ReconciliationCount << ", to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
+            << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
     } else {
-        LOG_I("NODE RECONCILIATION, to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
+        LOG_W("NODE RECONCILIATION, to NodeId=" << NodeId << ", NodeActorId=" << NodeActorId
             << ", Queue" << (Queue.empty() ? " IS EMPTY" : ".front().SeqNo=" + ToString(Queue.front()->SeqNo))
             << ", Gen=" << GenMajor << '.' << GenMinor << ", Next Delay=" << ReconciliationDelay);
     }
 
     ui32 delta = 0;
+
+    std::deque<std::shared_ptr<TOutputItem>> RebuildedQueue;
+
+    auto seqNo = SeqNo;
+
     while (!Queue.empty()) {
-        if (Queue.front()->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {
-            break;
+
+        auto& item = Queue.front();
+
+        if (item->Data.Leading) {
+            item->Descriptor->GenMajor.store(GenMajor);
+            LOG_W("CHANGE GenMajor to " << GenMajor << " for OutputDescriptor "
+                << "Channel: " << item->Descriptor->Info.ChannelId
+                << ", SrcStageId: " << item->Descriptor->Info.SrcStageId
+                << ", DstStageId: " << item->Descriptor->Info.DstStageId);
         }
-        delta += Queue.front()->Data.Bytes;
+
+        if (Queue.front()->Descriptor->CheckGenMajor(GenMajor, "Abort by Reconciliation")) {
+            item->SeqNo = ++SeqNo;
+            RebuildedQueue.push_back(std::move(item));
+        } else {
+            delta += Queue.front()->Data.Bytes;
+        }
+
         Queue.pop_front();
     }
+    Queue.swap(RebuildedQueue);
+
     InflightBytes -= delta;
 
-    if (PeerActorId == NActors::TActorId{}) {
-        SendDiscovery(MakeChannelServiceActorID(NodeId));
-    } else if (Queue.empty()) {
-        SendDiscovery(PeerActorId);
-    } else {
-        SendMessage(Queue.front());
-    }
+    SendDiscovery(PeerActorId ? PeerActorId : MakeChannelServiceActorID(NodeId), seqNo);
 }
 
-void TNodeState::SendDiscovery(NActors::TActorId actorId) {
+void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
     auto evDiscovery = MakeHolder<TEvDqCompute::TEvChannelDiscoveryV2>();
 
     evDiscovery->Record.SetGenMajor(GenMajor);
+    evDiscovery->Record.SetGenMinor(GenMinor);
+    evDiscovery->Record.SetSeqNo(seqNo);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1665,6 +1766,15 @@ void TNodeState::SendDiscovery(NActors::TActorId actorId) {
 
     ActorSystem->Send(new NActors::IEventHandle(actorId, NodeActorId, evDiscovery.Release(), flags));
 }
+
+void TNodeState::Log(const TString& s) {
+    std::lock_guard lock(LogMutex);
+    Logs.push_back(s);
+    if (Logs.size() > 10) {
+        Logs.pop_front();
+    }
+}
+
 
 TString TNodeState::GetDebugInfo() {
     std::lock_guard lock(Mutex);
@@ -1694,7 +1804,6 @@ TString TNodeState::GetDebugInfo() {
 void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
     auto& record = ev->Get()->Record;
-    ConnectSession(ev->Sender, record.GetGenMajor());
 
     PeerGenMinor.store(std::max<ui64>(record.GetGenMinor(), PeerGenMinor.load()));
 
@@ -1969,7 +2078,7 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     if (node) {
         ui32 nodeId;
         if (TryFromString(node, nodeId)) {
-#if !defined(NDEBUG)
+#if defined(FAILURE_INJECTION)
             auto failure = cgiParams.Get("fail");
             if (failure) {
                 if (auto it = ChannelService->NodeStates.find(nodeId); it != ChannelService->NodeStates.end()) {
@@ -1979,14 +2088,22 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         it->second->FailureDoubleSend++;
                     } else if (failure == "recon") {
                         it->second->FailureReconciliation++;
+                    } else if (failure == "die") {
+                        Send(it->second->NodeActorId, new NActors::TEvents::TEvPoison());
+                        ChannelService->NodeStates.erase(it);
                     }
                 }
             } else
 #endif
-            {
+            if (ChannelService->NodeId != nodeId) {
                 TStringStream response;
                 response << "HTTP/1.1 307 Temporary Redirect\r\n";
-                response << "Location: /node/" << nodeId << "/actors/kqp_channels" << "\r\n";
+                response << "Location: /node/" << nodeId << "/actors/kqp_channels";
+                auto node = cgiParams.Get("state");
+                if (node) {
+                    response << "?state=" << node;
+                }
+                response << "\r\n";
                 response << "Connection: Keep-Alive\r\n";
                 response << "\r\n";
                 Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(response.Str(), 0, NActors::NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -1998,278 +2115,327 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     TStringStream str;
     HTML(str) {
         PRE() {
-            str << "Channel Service NodeId: " << ChannelService->NodeId << Endl;
+            str << "Channel Service NodeId: " << ChannelService->NodeId << " ";
+            HREF("kqp_node")  {
+                str << "KqpNodeService";
+            }
+            str << Endl;
 
-            str << Endl << "Local Buffers:";
-
-            TABLE_SORTABLE_CLASS("table table-condensed") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
-                        TABLEH() {str << "OutputActorId";}
-                        TABLEH() {str << "InputActorId";}
-                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
-                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
-                        TABLEH() {str << "Fill (Agg)";}
-                        TABLEH_ATTRS({{"title", "OutputBound"}}) {str << "O";}
-                        TABLEH_ATTRS({{"title", "InputBound"}}) {str << "I";}
-                        TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
-                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
-                        TABLEH() {str << "PushBytes";}
-                        TABLEH() {str << "PopBytes";}
-                        TABLEH() {str << "OutputNotificationTime";}
-                        TABLEH() {str << "InputNotificationTime";}
-                        TABLEH() {str << "InflightBytes";}
-                        TABLEH() {str << "QueueSize";}
-                        TABLEH() {str << "SpilledBytes";}
-                        TABLEH() {str << "LoadingQueueSize";}
-                        TABLEH() {str << "HeadBlobId";}
-                        TABLEH() {str << "TailBlobId";}
-                    }
-                }
-                TABLEBODY() {
-                    auto registry = ChannelService->LocalBufferRegistry;
-                    std::lock_guard lock(registry->Mutex);
-                    for (auto& [info, weakBuffer] : registry->LocalBuffers) {
-                        auto sharedBuffer = weakBuffer.lock();
-                        if (sharedBuffer) {
-                            TABLER() {
-                                TABLED() {str << sharedBuffer->Info.ChannelId;}
-                                TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.OutputActorId)}}))  {
-                                        str << sharedBuffer->Info.OutputActorId;
-                                    }
-                                }
-                                TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.InputActorId)}}))  {
-                                        str << sharedBuffer->Info.InputActorId;
-                                    }
-                                }
-                                TABLED() {str << sharedBuffer->Info.SrcStageId;}
-                                TABLED() {str << sharedBuffer->Info.DstStageId;}
-                                TABLED() {
-                                    str << FillLevelToString(sharedBuffer->FillLevel);
-                                    if (sharedBuffer->Aggregator) {
-                                        str << " (" << FillLevelToString(sharedBuffer->Aggregator->GetFillLevel()) << ")";
-                                    }
-                                }
-                                TABLED() {str << sharedBuffer->OutputBound.load();}
-                                TABLED() {str << sharedBuffer->InputBound.load();}
-                                TABLED() {str << sharedBuffer->Finished.load();}
-                                TABLED() {str << sharedBuffer->EarlyFinished.load();}
-                                TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
-                                TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
-                                TABLED() {str << sharedBuffer->LastOutputNotificationTime;}
-                                TABLED() {str << sharedBuffer->LastInputNotificationTime;}
-                                TABLED() {str << sharedBuffer->InflightBytes.load();}
-                                TABLED() {str << sharedBuffer->Queue.size();}
-                                TABLED() {str << sharedBuffer->SpilledBytes.load();}
-                                TABLED() {str << sharedBuffer->LoadingQueue.size();}
-                                TABLED() {str << sharedBuffer->HeadBlobId;}
-                                TABLED() {str << sharedBuffer->TailBlobId;}
-                            }
-                        }
+            std::shared_ptr<TNodeState> nodeState;
+            auto node = cgiParams.Get("state");
+            if (node) {
+                ui32 nodeId;
+                if (TryFromString(node, nodeId)) {
+                    if (auto it = ChannelService->NodeStates.find(nodeId); it != ChannelService->NodeStates.end()) {
+                        nodeState = it->second;
                     }
                 }
             }
 
-            str << Endl << "Node " << ChannelService->NodeId << " Sessions:";
-
-            TABLE_SORTABLE_CLASS ("table table-condensed") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() {str << "PeerNodeId";}
-#if !defined(NDEBUG)
-                        TABLEH_ATTRS({{"title", "FailureLossSend"}}) {str << "F-";}
-                        TABLEH_ATTRS({{"title", "FailureDoubleSend"}}) {str << "Fx";}
-                        TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FR";}
-#endif
-                        TABLEH_ATTRS({{"title", "GenMajor"}}) {str << "GM";}
-                        TABLEH_ATTRS({{"title", "GenMinor"}}) {str << "gm";}
-                        TABLEH() {str << "SeqNo";}
-                        TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "front()";}
-                        TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
-                        TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
-                        TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
-                        TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PM";}
-                        TABLEH_ATTRS({{"title", "PeerGenMinor"}}) {str << "pm";}
-                        TABLEH_ATTRS({{"title", "ConfirmedSeqNo"}}) {str << "C/SeqNo";}
-                        TABLEH() {str << "PeerActorId";}
-                        TABLEH() {str << "NodeActorId";}
+            if (nodeState) {
+                str << Endl << "Node State for Peer ";
+                if (nodeState->PeerActorId) {
+                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeState->NodeId)}, {"fail", ""}, {"state", ToString(ChannelService->NodeId)}})) {
+                        str << nodeState->PeerActorId;
                     }
                 }
-                TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        std::lock_guard lock(state->Mutex);
+                str << " ";
+                HREF("kqp_channels") {
+                    str << "KqpChannels";
+                }
+                str << Endl << Endl;
+                std::lock_guard lock(nodeState->LogMutex);
+                for (const auto& s : nodeState->Logs) {
+                    str << s << Endl;
+                }
+            } else {
+                str << Endl << "Local Buffers:";
+
+                TABLE_SORTABLE_CLASS("table table-condensed") {
+                    TABLEHEAD() {
                         TABLER() {
-                            TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", ""}})) {
-                                    str << nodeId;
-                                }
-                            }
-#if !defined(NDEBUG)
-                            TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "loss"}})) {
-                                    str << state->FailureLossSend.load();
-                                }
-                            }
-                            TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "double"}})) {
-                                    str << state->FailureDoubleSend.load();
-                                }
-                            }
-                            TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "recon"}})) {
-                                    str << state->FailureDoubleSend.load();
-                                }
-                            }
-#endif
-                            TABLED() {str << state->GenMajor;}
-                            TABLED() {str << state->GenMinor;}
-                            TABLED() {str << state->SeqNo;}
-                            TABLED() {
-                                if (!state->Queue.empty()) {
-                                    str << state->Queue.front()->SeqNo;
-                                }
-                            }
-                            TABLED() {str << state->InflightBytes;}
-                            TABLED() {str << state->WaitersQueue.size();}
-                            TABLED() {str << state->WaiterMessages.load();}
-                            TABLED() {str << state->PeerGenMajor.load();}
-                            TABLED() {str << state->PeerGenMinor.load();}
-                            TABLED() {str << state->ConfirmedSeqNo;}
-                            TABLED() {str << state->PeerActorId;}
-                            TABLED() {str << state->NodeActorId;}
+                            TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
+                            TABLEH() {str << "OutputActorId";}
+                            TABLEH() {str << "InputActorId";}
+                            TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                            TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
+                            TABLEH() {str << "Fill (Agg)";}
+                            TABLEH_ATTRS({{"title", "OutputBound"}}) {str << "O";}
+                            TABLEH_ATTRS({{"title", "InputBound"}}) {str << "I";}
+                            TABLEH_ATTRS({{"title", "IsFinished"}}) {str << "F";}
+                            TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                            TABLEH() {str << "PushBytes";}
+                            TABLEH() {str << "PopBytes";}
+                            TABLEH() {str << "OutputNotificationTime";}
+                            TABLEH() {str << "InputNotificationTime";}
+                            TABLEH() {str << "InflightBytes";}
+                            TABLEH() {str << "QueueSize";}
+                            TABLEH() {str << "SpilledBytes";}
+                            TABLEH() {str << "LoadingQueueSize";}
+                            TABLEH() {str << "HeadBlobId";}
+                            TABLEH() {str << "TailBlobId";}
                         }
                     }
-                }
-            }
-
-            str << Endl << "Output Descriptors:";
-
-            TABLE_SORTABLE_CLASS ("table table-condensed") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
-                        TABLEH() {str << "PeerNodeId";}
-                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
-                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
-                        TABLEH() {str << "Fill (Agg)";}
-                        TABLEH_ATTRS({{"title", "PushBytes w/o Spilling"}}) {str << "PushBytes*";}
-                        TABLEH() {str << "PopBytes";}
-                        TABLEH_ATTRS({{"title", "RemotePopBytes"}}) {str << "RemotePop";}
-                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
-                        TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
-                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
-                        TABLEH_ATTRS({{"title", "Terminated"}}) {str << "T";}
-                        TABLEH_ATTRS({{"title", "Aborted"}}) {str << "A";}
-                        TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
-                        TABLEH() {str << "MaxInflightBytes";}
-                        TABLEH() {str << "MinInflightBytes";}
-                        TABLEH() {str << "InflightBytes";}
-                        TABLEH() {str << "WaitQueueBytes";}
-                        TABLEH() {str << "SpilledBytes";}
-                        TABLEH() {str << "LoadingQueueSize";}
-                        TABLEH() {str << "HeadBlobId";}
-                        TABLEH() {str << "TailBlobId";}
-                        TABLEH() {str << "OutputActorId";}
-                        TABLEH() {str << "InputActorId";}
-                    }
-                }
-                TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        for (auto& [info, descriptor] : state->OutputDescriptors) {
-                            auto pushBytes = descriptor->PushBytes.load();
-                            auto popBytes = descriptor->RemotePopBytes.load();
-                            TABLER() {
-                                TABLED() {str << info.ChannelId;}
-                                TABLED() {str << nodeId;}
-                                TABLED() {str << descriptor->Info.SrcStageId;}
-                                TABLED() {str << descriptor->Info.DstStageId;}
-                                TABLED() {
-                                    str << FillLevelToString(descriptor->FillLevel);
-                                    if (descriptor->Aggregator) {
-                                        str << " (" << FillLevelToString(descriptor->Aggregator->GetFillLevel()) << ")";
+                    TABLEBODY() {
+                        auto registry = ChannelService->LocalBufferRegistry;
+                        std::lock_guard lock(registry->Mutex);
+                        for (auto& [info, weakBuffer] : registry->LocalBuffers) {
+                            auto sharedBuffer = weakBuffer.lock();
+                            if (sharedBuffer) {
+                                TABLER() {
+                                    TABLED() {str << sharedBuffer->Info.ChannelId;}
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.OutputActorId)}}))  {
+                                            str << sharedBuffer->Info.OutputActorId;
+                                        }
                                     }
-                                }
-                                TABLED() {str << pushBytes;}
-                                TABLED() {str << descriptor->PopStats.Bytes.load();}
-                                TABLED() {str << popBytes;}
-                                TABLED() {str << descriptor->FinishPushed.load();}
-                                TABLED() {str << descriptor->Finished.load();}
-                                TABLED() {str << descriptor->EarlyFinished.load();}
-                                TABLED() {str << descriptor->Terminated.load();}
-                                TABLED() {str << descriptor->Aborted.load();}
-                                TABLED() {str << descriptor->IsBound;}
-                                TABLED() {str << descriptor->MaxInflightBytes;}
-                                TABLED() {str << descriptor->MinInflightBytes;}
-                                TABLED() {str << (pushBytes - popBytes);}
-                                TABLED() {str << descriptor->WaitQueueBytes.load();}
-                                TABLED() {str << descriptor->SpilledBytes.load();}
-                                TABLED() {str << descriptor->LoadingQueue.size();}
-                                TABLED() {str << descriptor->HeadBlobId;}
-                                TABLED() {str << descriptor->TailBlobId;}
-                                TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
-                                        str << info.OutputActorId;
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(sharedBuffer->Info.InputActorId)}}))  {
+                                            str << sharedBuffer->Info.InputActorId;
+                                        }
                                     }
-                                }
-                                TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
-                                        str << info.InputActorId;
+                                    TABLED() {str << sharedBuffer->Info.SrcStageId;}
+                                    TABLED() {str << sharedBuffer->Info.DstStageId;}
+                                    TABLED() {
+                                        str << FillLevelToString(sharedBuffer->FillLevel);
+                                        if (sharedBuffer->Aggregator) {
+                                            str << " (" << FillLevelToString(sharedBuffer->Aggregator->GetFillLevel()) << ")";
+                                        }
                                     }
+                                    TABLED() {str << sharedBuffer->OutputBound.load();}
+                                    TABLED() {str << sharedBuffer->InputBound.load();}
+                                    TABLED() {str << sharedBuffer->Finished.load();}
+                                    TABLED() {str << sharedBuffer->EarlyFinished.load();}
+                                    TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
+                                    TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
+                                    TABLED() {str << sharedBuffer->LastOutputNotificationTime;}
+                                    TABLED() {str << sharedBuffer->LastInputNotificationTime;}
+                                    TABLED() {str << sharedBuffer->InflightBytes.load();}
+                                    TABLED() {str << sharedBuffer->Queue.size();}
+                                    TABLED() {str << sharedBuffer->SpilledBytes.load();}
+                                    TABLED() {str << sharedBuffer->LoadingQueue.size();}
+                                    TABLED() {str << sharedBuffer->HeadBlobId;}
+                                    TABLED() {str << sharedBuffer->TailBlobId;}
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            str << Endl << "Input Descriptors:";
+                str << Endl << "Node " << ChannelService->NodeId << " Sessions:";
 
-            TABLE_SORTABLE_CLASS ("table table-condensed") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
-                        TABLEH() {str << "PeerNodeId";}
-                        TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
-                        TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
-                        TABLEH() {str << "PushBytes";}
-                        TABLEH() {str << "QueueSize";}
-                        TABLEH() {str << "QueueBytes";}
-                        TABLEH() {str << "PopBytes";}
-                        TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
-                        TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
-                        TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
-                        TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
-                        TABLEH() {str << "OutputActorId";}
-                        TABLEH() {str << "InputActorId";}
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() {str << "PeerNodeId";}
+    #if defined(FAILURE_INJECTION)
+                            TABLEH_ATTRS({{"title", "FailureLossSend"}}) {str << "F-";}
+                            TABLEH_ATTRS({{"title", "FailureDoubleSend"}}) {str << "Fx";}
+                            TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FR";}
+                            TABLEH_ATTRS({{"title", "FailureReconciliation"}}) {str << "FD";}
+    #endif
+                            TABLEH_ATTRS({{"title", "GenMajor"}}) {str << "GM";}
+                            TABLEH_ATTRS({{"title", "GenMinor"}}) {str << "gm";}
+                            TABLEH() {str << "SeqNo";}
+                            TABLEH_ATTRS({{"title", "Queue.front()->SeqNo"}}) {str << "front()";}
+                            TABLEH_ATTRS({{"title", "InflightBytes"}}) {str << "InflightB";}
+                            TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
+                            TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
+                            TABLEH_ATTRS({{"title", "PeerGenMajor"}}) {str << "PM";}
+                            TABLEH_ATTRS({{"title", "PeerGenMinor"}}) {str << "pm";}
+                            TABLEH_ATTRS({{"title", "ConfirmedSeqNo"}}) {str << "C/SeqNo";}
+                            TABLEH() {str << "PeerActorId";}
+                            TABLEH() {str << "NodeActorId";}
+                        }
                     }
-                }
-                TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
-                        for (auto& [info, descriptor] : state->InputDescriptors) {
+                    TABLEBODY() {
+                        for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                            std::lock_guard lock(state->Mutex);
                             TABLER() {
-                                TABLED() {str << info.ChannelId;}
-                                TABLED() {str << nodeId;}
-                                TABLED() {str << descriptor->Info.SrcStageId;}
-                                TABLED() {str << descriptor->Info.DstStageId;}
-                                TABLED() {str << descriptor->PushStats.Bytes.load();}
-                                TABLED() {str << descriptor->QueueSize.load();}
-                                TABLED() {str << descriptor->QueueBytes.load();}
-                                TABLED() {str << descriptor->PopStats.Bytes.load();}
-                                TABLED() {str << descriptor->FinishPushed.load();}
-                                TABLED() {str << descriptor->EarlyFinished.load();}
-                                TABLED() {str << descriptor->Finished.load();}
-                                TABLED() {str << descriptor->IsBound;}
                                 TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
-                                        str << info.OutputActorId;
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", ""}, {"state", ""}})) {
+                                        str << nodeId;
+                                    }
+                                }
+    #if defined(FAILURE_INJECTION)
+                                TABLED() {
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "loss"}, {"state", ""}})) {
+                                        str << state->FailureLossSend.load();
                                     }
                                 }
                                 TABLED() {
-                                    HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
-                                        str << info.InputActorId;
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "double"}, {"state", ""}})) {
+                                        str << state->FailureDoubleSend.load();
+                                    }
+                                }
+                                TABLED() {
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "recon"}, {"state", ""}})) {
+                                        str << state->FailureDoubleSend.load();
+                                    }
+                                }
+                                TABLED() {
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "die"}, {"state", ""}})) {
+                                        str << state->FailureDoubleSend.load();
+                                    }
+                                }
+    #endif
+                                TABLED() {str << state->GenMajor;}
+                                TABLED() {str << state->GenMinor;}
+                                TABLED() {str << state->SeqNo;}
+                                TABLED() {
+                                    if (!state->Queue.empty()) {
+                                        str << state->Queue.front()->SeqNo;
+                                    }
+                                }
+                                TABLED() {str << state->InflightBytes;}
+                                TABLED() {str << state->WaitersQueue.size();}
+                                TABLED() {str << state->WaiterMessages.load();}
+                                TABLED() {str << state->PeerGenMajor.load();}
+                                TABLED() {str << state->PeerGenMinor.load();}
+                                TABLED() {str << state->ConfirmedSeqNo;}
+                                TABLED() {
+                                    if (state->PeerActorId) {
+                                        HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", ""}, {"state", ""}})) {
+                                            str << state->PeerActorId;
+                                        }
+                                    }
+                                }
+                                TABLED() {
+                                    HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"state", ToString(nodeId)}, {"fail", ""}, {"node", ""}})) {
+                                        str << state->NodeActorId;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Output Descriptors:";
+
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
+                            TABLEH() {str << "PeerNodeId";}
+                            TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                            TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
+                            TABLEH() {str << "Fill (Agg)";}
+                            TABLEH_ATTRS({{"title", "PushBytes w/o Spilling"}}) {str << "PushBytes*";}
+                            TABLEH() {str << "PopBytes";}
+                            TABLEH_ATTRS({{"title", "RemotePopBytes"}}) {str << "RemotePop";}
+                            TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
+                            TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
+                            TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                            TABLEH_ATTRS({{"title", "Terminated"}}) {str << "T";}
+                            TABLEH_ATTRS({{"title", "Aborted"}}) {str << "A";}
+                            TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
+                            TABLEH() {str << "MaxInflightBytes";}
+                            TABLEH() {str << "MinInflightBytes";}
+                            TABLEH() {str << "InflightBytes";}
+                            TABLEH() {str << "WaitQueueBytes";}
+                            TABLEH() {str << "SpilledBytes";}
+                            TABLEH() {str << "LoadingQueueSize";}
+                            TABLEH() {str << "HeadBlobId";}
+                            TABLEH() {str << "TailBlobId";}
+                            TABLEH() {str << "OutputActorId";}
+                            TABLEH() {str << "InputActorId";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                            for (auto& [info, descriptor] : state->OutputDescriptors) {
+                                auto pushBytes = descriptor->PushBytes.load();
+                                auto popBytes = descriptor->RemotePopBytes.load();
+                                TABLER() {
+                                    TABLED() {str << info.ChannelId;}
+                                    TABLED() {str << nodeId;}
+                                    TABLED() {str << descriptor->Info.SrcStageId;}
+                                    TABLED() {str << descriptor->Info.DstStageId;}
+                                    TABLED() {
+                                        str << FillLevelToString(descriptor->FillLevel);
+                                        if (descriptor->Aggregator) {
+                                            str << " (" << FillLevelToString(descriptor->Aggregator->GetFillLevel()) << ")";
+                                        }
+                                    }
+                                    TABLED() {str << pushBytes;}
+                                    TABLED() {str << descriptor->PopStats.Bytes.load();}
+                                    TABLED() {str << popBytes;}
+                                    TABLED() {str << descriptor->FinishPushed.load();}
+                                    TABLED() {str << descriptor->Finished.load();}
+                                    TABLED() {str << descriptor->EarlyFinished.load();}
+                                    TABLED() {str << descriptor->Terminated.load();}
+                                    TABLED() {str << descriptor->Aborted.load();}
+                                    TABLED() {str << descriptor->IsBound;}
+                                    TABLED() {str << descriptor->MaxInflightBytes;}
+                                    TABLED() {str << descriptor->MinInflightBytes;}
+                                    TABLED() {str << (pushBytes - popBytes);}
+                                    TABLED() {str << descriptor->WaitQueueBytes.load();}
+                                    TABLED() {str << descriptor->SpilledBytes.load();}
+                                    TABLED() {str << descriptor->LoadingQueue.size();}
+                                    TABLED() {str << descriptor->HeadBlobId;}
+                                    TABLED() {str << descriptor->TailBlobId;}
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
+                                            str << info.OutputActorId;
+                                        }
+                                    }
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
+                                            str << info.InputActorId;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                str << Endl << "Input Descriptors:";
+
+                TABLE_SORTABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH_ATTRS({{"title", "ChannelId"}}) {str << "Id";}
+                            TABLEH() {str << "PeerNodeId";}
+                            TABLEH_ATTRS({{"title", "SrcStageId"}}) {str << "Src";}
+                            TABLEH_ATTRS({{"title", "DstStageId"}}) {str << "Dst";}
+                            TABLEH() {str << "PushBytes";}
+                            TABLEH() {str << "QueueSize";}
+                            TABLEH() {str << "QueueBytes";}
+                            TABLEH() {str << "PopBytes";}
+                            TABLEH_ATTRS({{"title", "FinishPushed"}}) {str << "Fp";}
+                            TABLEH_ATTRS({{"title", "EarlyFinished"}}) {str << "EF";}
+                            TABLEH_ATTRS({{"title", "Finished"}}) {str << "F";}
+                            TABLEH_ATTRS({{"title", "Bound"}}) {str << "B";}
+                            TABLEH() {str << "OutputActorId";}
+                            TABLEH() {str << "InputActorId";}
+                        }
+                    }
+                    TABLEBODY() {
+                        for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                            for (auto& [info, descriptor] : state->InputDescriptors) {
+                                TABLER() {
+                                    TABLED() {str << info.ChannelId;}
+                                    TABLED() {str << nodeId;}
+                                    TABLED() {str << descriptor->Info.SrcStageId;}
+                                    TABLED() {str << descriptor->Info.DstStageId;}
+                                    TABLED() {str << descriptor->PushStats.Bytes.load();}
+                                    TABLED() {str << descriptor->QueueSize.load();}
+                                    TABLED() {str << descriptor->QueueBytes.load();}
+                                    TABLED() {str << descriptor->PopStats.Bytes.load();}
+                                    TABLED() {str << descriptor->FinishPushed.load();}
+                                    TABLED() {str << descriptor->EarlyFinished.load();}
+                                    TABLED() {str << descriptor->Finished.load();}
+                                    TABLED() {str << descriptor->IsBound;}
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.OutputActorId)}}))  {
+                                            str << info.OutputActorId;
+                                        }
+                                    }
+                                    TABLED() {
+                                        HREF(NActors::NMon::BuildActorsLink("kqp_node", ev->Get()->Request.GetParams(), {{"ca", ToString(info.InputActorId)}}))  {
+                                            str << info.InputActorId;
+                                        }
                                     }
                                 }
                             }

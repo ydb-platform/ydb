@@ -64,14 +64,14 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
             TArrayRef(keys, 1),
             TArrayRef(aggs, 1),
             streamResultType
-        )),
+        ), {}),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
     ));
     */
 
     auto pgmReturn = pb.Collect(pb.NarrowMap(
         pb.DqHashCombine(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
             params.WideCombinerMemLimit,
             [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
             [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },

@@ -1,6 +1,5 @@
 #include "accessor.h"
 
-#include <arrow/compute/api_aggregate.h>
 #include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>

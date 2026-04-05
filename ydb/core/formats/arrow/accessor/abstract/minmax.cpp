@@ -1,15 +1,16 @@
 #include "minmax_with_arrow_next.h"
-#include <arrow/array/array_base.h>
-#include <arrow/chunked_array.h>
-#include <arrow/c/bridge.h> //order matters
-#include <contrib/libs/apache/arrow_next/cpp/src/arrow/c/bridge.h>
-#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
-#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h> // Для MakeArrayFromScalar
+
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
 
-namespace NKikimr::NArrow::NAccessor {
+#include <arrow/array/array_base.h>
+#include <arrow/c/bridge.h>   //order matters
+#include <arrow/chunked_array.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h>   // Для MakeArrayFromScalar
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/c/bridge.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
 
+namespace NKikimr::NArrow::NAccessor {
 
 NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::Array> arr) {
     struct ArrowArray c_array;
@@ -21,12 +22,9 @@ NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<a
 
     auto import_result = arrow20::ImportArray(&c_array, &c_schema).ValueOrDie();
 
-
     auto scalar20 = arrow20::compute::MinMax(import_result).ValueOrDie().scalar();
 
-
     auto new_array = arrow20::MakeArrayFromScalar(*scalar20, 1).ValueOrDie();
-
 
     auto export_status20 = arrow20::ExportArray(*new_array, &c_array, &c_schema);
     AFL_VERIFY(export_status.ok());
@@ -35,19 +33,18 @@ NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<a
 
     // --- ШАГ 3: Извлекаем скаляр из массива (старая версия) ---
     return *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
-
 }
 NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
-    for(auto& chunk: arr->chunks()) {
+    for (auto& chunk : arr->chunks()) {
         res.UniteWith(ComputeMinMaxWithArrowNext(chunk));
     }
     return res;
 }
 using TSizeType = ui32;
-constexpr char NullTMinMaxFlag = '0'; 
+constexpr char NullTMinMaxFlag = '0';
 
-TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType> &fieldType) {
+TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType>& fieldType) {
     if (data[0] == NullTMinMaxFlag) {
         return MakeNull(fieldType);
     }
@@ -63,22 +60,20 @@ TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<a
         AFL_VERIFY(offset <= data.size() && size <= data.size() - offset)(
                                                   "details", Sprintf("out of bounds read, data.size(): %i, current_offset: %i, read size: %i",
                                                                  data.size(), offset, size));
-        auto res =
-            NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(TStringBuf{ data.data() + offset, data.data() + offset + size }, fieldType)
-                .DetachResult();
+        auto res = NArrow::NScalar::TSerializer::DeserializeFromStringWithPayload(
+            TStringBuf{ data.data() + offset, data.data() + offset + size }, fieldType)
+                       .DetachResult();
         offset += size;
         return res;
     };
     fields.push_back(readNext());
     fields.push_back(readNext());
-        return 
-            *arrow::StructScalar::Make(fields, 
-            {"min", "max"}).ValueOrDie();
+    return *arrow::StructScalar::Make(fields, { "min", "max" }).ValueOrDie();
 }
 
 std::string TMinMax::ToBinaryString() const {
     if (IsNull()) {
-        return std::string{NullTMinMaxFlag};
+        return std::string{ NullTMinMaxFlag };
     }
     std::string res;
     res.push_back(NullTMinMaxFlag + 1);
@@ -94,7 +89,6 @@ std::string TMinMax::ToBinaryString() const {
     writeNext(minSerialized);
     writeNext(maxSerialized);
     return res;
-
 }
 
 NJson::TJsonValue TMinMax::Json() const {
@@ -103,4 +97,4 @@ NJson::TJsonValue TMinMax::Json() const {
     json.InsertValue("max", Max()->ToString());
     return json;
 }
-}
+}   // namespace NKikimr::NArrow::NAccessor

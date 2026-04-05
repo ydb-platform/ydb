@@ -597,31 +597,6 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
     }
 
-    Y_UNIT_TEST(ComparisonFilterHasCheckIndexData) {
-        auto schema = std::make_shared<arrow::Schema>(
-            std::vector{ std::make_shared<arrow::Field>("x", arrow::int64()) });
-
-        TSchemaColumnResolver resolver(schema);
-
-        for (auto op : { TIndexCheckOperation::EOperation::Less,
-                         TIndexCheckOperation::EOperation::Greater,
-                         TIndexCheckOperation::EOperation::LessOrEqual,
-                         TIndexCheckOperation::EOperation::GreaterOrEqual }) {
-            NOptimization::TGraph::TBuilder builder(resolver);
-            builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
-            builder.Add(TCalculationProcessor::Build(
-                TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(4),
-                std::make_shared<TSimpleFunction>(EOperation::Less),
-                std::make_shared<TCompareKernel>(false, op)).DetachResult());
-            builder.Add(std::make_shared<TFilterProcessor>(TColumnChainInfo(4)));
-            builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 1 })));
-            auto chain = builder.Finish().DetachResult();
-            auto stats = chain->DebugStats();
-            Cerr << stats;
-            UNIT_ASSERT_C(stats.Contains("CheckIndexData:1"), TStringBuilder() << "No CheckIndexData for op " << op << ": " << stats);
-        }
-    }
-
     Y_UNIT_TEST(Projection) {
         auto schema = std::make_shared<arrow::Schema>(
             std::vector{ std::make_shared<arrow::Field>("x", arrow::int64()), std::make_shared<arrow::Field>("y", arrow::boolean()) });

@@ -49,6 +49,7 @@ message TTxStats {
     repeated uint64 BreakerQuerySpanIds = 9; // QuerySpanIds of queries that wrote to this shard and broke other locks
     repeated uint64 DeferredBreakerQuerySpanIds = 10; // QuerySpanIds of breakers found via deferred lock validation at commit
     repeated uint32 DeferredBreakerNodeIds = 11; // Node IDs matching DeferredBreakerQuerySpanIds
+    optional uint64 DeferredVictimQuerySpanId = 12; // Victim's QuerySpanId set by the shard for STATUS_LOCKS_BROKEN paths that don't populate TxLocks
 
     // TODO:
     // optional uint64 CommitLatencyUsec = 3;

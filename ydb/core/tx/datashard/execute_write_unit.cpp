@@ -52,6 +52,15 @@ public:
         }
     }
 
+    void FillDeferredVictimQuerySpanId(ui64 lockTxId, ui64 querySpanId, NKikimrQueryStats::TTxStats* txStats) {
+        auto victimSpanId = lockTxId
+            ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing();
+        ui64 value = victimSpanId ? *victimSpanId : querySpanId;
+        if (value) {
+            txStats->SetDeferredVictimQuerySpanId(value);
+        }
+    }
+
     // Filter out self-breaks from locksBrokenByTx, log breaker TLI events, and update TxStats.
     // Returns the count of locks broken by OTHER transactions (excluding self-breaks).
     size_t HandleBreakerLocks(
@@ -250,9 +259,11 @@ public:
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               lockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(lockTxId) : Nothing(),
                                               querySpanId ? TMaybe<ui64>(querySpanId) : Nothing());
+            auto* txStats = writeOp.GetWriteResult()->Record.MutableTxStats();
             if (lockTxId) {
-                FillDeferredBreakerInfo(lockTxId, writeOp.GetWriteResult()->Record.MutableTxStats());
+                FillDeferredBreakerInfo(lockTxId, txStats);
             }
+            FillDeferredVictimQuerySpanId(lockTxId, querySpanId, txStats);
         } else {
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
             writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
@@ -473,11 +484,13 @@ public:
                 auto abortLock = [&]() {
                     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
-                    writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
+                    auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
+                    txStats->SetLocksBrokenAsVictim(1);
                     NDataIntegrity::LogVictimDetected(ctx, tabletId, "Write transaction was a victim of broken locks",
                                                       DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
                                                       guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
-                    FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                    FillDeferredBreakerInfo(guardLocks.LockTxId, txStats);
+                    FillDeferredVictimQuerySpanId(guardLocks.LockTxId, guardLocks.QuerySpanId, txStats);
                     return EExecutionStatus::Executed;
                 };
 
@@ -735,13 +748,15 @@ public:
 
             LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Write conflict with concurrent transaction.");
-            writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
+            auto* txStats = writeOp->GetWriteResult()->Record.MutableTxStats();
+            txStats->SetLocksBrokenAsVictim(1);
             NDataIntegrity::LogVictimDetected(ctx, DataShard.TabletID(), "Write transaction was a victim of broken locks",
                                               guardLocks.LockTxId ? DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId) : Nothing(),
                                               guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
             if (guardLocks.LockTxId) {
-                FillDeferredBreakerInfo(guardLocks.LockTxId, writeOp->GetWriteResult()->Record.MutableTxStats());
+                FillDeferredBreakerInfo(guardLocks.LockTxId, txStats);
             }
+            FillDeferredVictimQuerySpanId(guardLocks.LockTxId, guardLocks.QuerySpanId, txStats);
 
             ResetChanges(userDb, txc);
 

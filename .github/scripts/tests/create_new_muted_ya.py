@@ -660,7 +660,7 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True):
+def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -675,7 +675,10 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     if close_issues:
         closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
-    monitor_by_name = {t['full_name']: t for t in all_tests if t.get('full_name')}
+    monitor_by_name = {}
+    for t in sorted(all_tests, key=lambda x: x.get('date_window') or 0):
+        if t.get('full_name'):
+            monitor_by_name[t['full_name']] = t
 
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
@@ -717,7 +720,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                 'summary': 'added manually, no monitor data',
                 'fail_count': 0,
                 'pass_count': 0,
-                'branch': 'main',
+                'branch': branch,
                 'build_type': DEFAULT_BUILD_TYPE,
             }
             logging.info(f"test {full_name} not in monitor, using fallback data")
@@ -962,7 +965,7 @@ def mute_worker(args):
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
 
-            queue_items = create_mute_issues(all_data, file_path, close_issues=args.close_issues)
+            queue_items = create_mute_issues(all_data, file_path, close_issues=args.close_issues, branch=args.branch)
 
             try:
                 enqueue_to_digest_queue(ydb_wrapper, queue_items or [])

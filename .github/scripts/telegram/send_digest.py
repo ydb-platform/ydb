@@ -55,24 +55,63 @@ def _validate_profile_id(profile_id: str) -> str:
 # ── YDB helpers ───────────────────────────────────────────────────────────────
 
 
-def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
-    """Return all digest_queue rows for this profile where sent_at IS NULL."""
+def _fetch_closed_unsent(w: YDBWrapper, profile_id: str) -> list:
+    """Return unsent queue rows whose issues have been closed (should be silently marked sent)."""
     _validate_profile_id(profile_id)
-    table_path = w.get_table_path("digest_queue")
+    queue_path = w.get_table_path("digest_queue")
+    issues_path = w.get_table_path("issues")
     return w.execute_scan_query(
         f"""
         SELECT
-            github_issue_number,
-            github_issue_url,
-            github_issue_title,
-            owner_team,
-            branch,
-            build_type,
-            enqueued_at
-        FROM `{table_path}`
-        WHERE profile_id = '{profile_id}'
-          AND sent_at IS NULL
-        ORDER BY owner_team, github_issue_number
+            q.github_issue_number AS github_issue_number,
+            q.github_issue_url AS github_issue_url,
+            q.github_issue_title AS github_issue_title,
+            q.owner_team AS owner_team,
+            q.branch AS branch,
+            q.build_type AS build_type,
+            q.enqueued_at AS enqueued_at
+        FROM `{queue_path}` AS q
+        INNER JOIN `{issues_path}` AS i
+            ON q.github_issue_number = i.issue_number
+        WHERE q.profile_id = '{profile_id}'
+          AND q.sent_at IS NULL
+          AND i.state = 'CLOSED'
+        """,
+        query_name="digest_fetch_closed_unsent",
+    )
+
+
+def _mark_closed_as_sent(w: YDBWrapper, profile_id: str) -> None:
+    """Silently mark closed issues as sent so they never appear in digest."""
+    closed = _fetch_closed_unsent(w, profile_id)
+    if closed:
+        now = datetime.now(tz=timezone.utc)
+        _mark_sent(w, profile_id, closed, now)
+        print(f"Marked {len(closed)} closed issue(s) as sent (skipped from digest)")
+
+
+def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
+    """Return unsent digest_queue rows, excluding issues that have been closed since enqueue."""
+    _validate_profile_id(profile_id)
+    queue_path = w.get_table_path("digest_queue")
+    issues_path = w.get_table_path("issues")
+    return w.execute_scan_query(
+        f"""
+        SELECT
+            q.github_issue_number AS github_issue_number,
+            q.github_issue_url AS github_issue_url,
+            q.github_issue_title AS github_issue_title,
+            q.owner_team AS owner_team,
+            q.branch AS branch,
+            q.build_type AS build_type,
+            q.enqueued_at AS enqueued_at
+        FROM `{queue_path}` AS q
+        LEFT JOIN `{issues_path}` AS i
+            ON q.github_issue_number = i.issue_number
+        WHERE q.profile_id = '{profile_id}'
+          AND q.sent_at IS NULL
+          AND (i.state IS NULL OR i.state != 'CLOSED')
+        ORDER BY q.owner_team, q.github_issue_number
         """,
         query_name="digest_fetch_unsent",
     )
@@ -153,6 +192,8 @@ def run_digest(
     with YDBWrapper(use_local_config=False) as w:
         if not w.check_credentials():
             return False
+
+        _mark_closed_as_sent(w, profile_id)
 
         unsent = _fetch_unsent(w, profile_id)
         print(f"Unsent issues in queue: {len(unsent)}")

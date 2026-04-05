@@ -1002,17 +1002,6 @@ def mute_worker(args):
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
 
-            queue_items = create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
-
-            try:
-                enqueue_to_digest_queue(ydb_wrapper, queue_items or [])
-            except Exception as exc:
-                logging.warning(f"Failed to enqueue issues for digest: {exc}")
-
-        elif args.mode == 'sync_issues':
-            file_path = args.file_path
-            logging.info(f"Syncing issues with muted_ya: {file_path}")
-
             queue_items = create_mute_issues(all_data, file_path, close_issues=args.close_issues)
 
             try:
@@ -1035,23 +1024,13 @@ if __name__ == "__main__":
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
-        help='create issues for newly muted flaky tests (from aggregated mute candidates)',
+        help='sync issues with muted_ya file: create missing, close orphaned, enqueue to digest',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
+        '--file_path', default=muted_ya_path, required=False, help='Path to muted_ya.txt'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
-
-    sync_issues_parser = subparsers.add_parser(
-        'sync_issues',
-        help='reconcile issues with current muted_ya.txt: close orphaned, create missing',
-    )
-    sync_issues_parser.add_argument(
-        '--file_path', default=muted_ya_path, required=False, help='Path to current muted_ya.txt'
-    )
-    sync_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
-    sync_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
 
     args = parser.parse_args()
 

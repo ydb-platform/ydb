@@ -74,6 +74,10 @@ struct hash<NYql::NDq::TChannelInfo> {
 
 }
 
+// if !defined(NDEBUG)
+#define FAILURE_INJECTION
+// #endif
+
 namespace NYql::NDq {
 
 class TOutputSerializer {
@@ -414,6 +418,7 @@ public:
         , FinishPushed(false)
         , Finished(false)
         , EarlyFinished(false)
+        , Aborted(false)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
     {
@@ -430,6 +435,7 @@ public:
     bool IsEarlyFinished();
     bool EarlyFinish();
     void Terminate();
+    void AbortChannel(const TString& message);
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -448,6 +454,7 @@ public:
     std::atomic<bool> FinishPushed;
     std::atomic<bool> Finished;
     std::atomic<bool> EarlyFinished;
+    std::atomic<bool> Aborted;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
@@ -561,11 +568,12 @@ public:
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void CleanupUnbound();
     void FailInputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters(ui64 deltaBytes);
-    void ConnectSession(NActors::TActorId& sender, ui64 genMajor);
+    void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor, ui64 seqNo);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
 
@@ -574,7 +582,7 @@ public:
     bool UpdateReconciliationDelay();
     void ScheduleReconciliation();
     void DoReconciliation();
-    void SendDiscovery(NActors::TActorId actorId);
+    void SendDiscovery(NActors::TActorId actorId, ui64 seqNo);
 
     void Log(const TString& s);
 
@@ -1067,6 +1075,9 @@ public:
             hFunc(TEvDqCompute::TEvChannelUpdateV2, Handle);
             hFunc(TEvPrivate::TEvSendWaiters, Handle);
             hFunc(TEvPrivate::TEvReconciliation, Handle);
+#if defined(FAILURE_INJECTION)
+            hFunc(NActors::TEvents::TEvPoison, HandlePoison);
+#endif
         }
     }
 
@@ -1101,6 +1112,12 @@ public:
     void Handle(TEvPrivate::TEvReconciliation::TPtr& ev) {
         NodeState->HandleReconciliation(ev);
     }
+
+#if defined(FAILURE_INJECTION)
+    void HandlePoison(NActors::TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
+#endif
 
     std::shared_ptr<TNodeState> NodeState;
 };

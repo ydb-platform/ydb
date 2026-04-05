@@ -29,6 +29,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: telegram-notifications
+  cancel-in-progress: false
+
 defaults:
   run:
     shell: bash
@@ -118,11 +122,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
           TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
-          ARGS="--period-update ${{ steps.period.outputs.value }}"
-          ARGS="$ARGS --bot-token $TELEGRAM_BOT_TOKEN"
-          ARGS="$ARGS --team-channels \"$TG_TEAM_CHANNELS\""
-          ARGS="$ARGS --delay 2"
+          args=(
+            --period-update "${{ steps.period.outputs.value }}"
+            --bot-token "$TELEGRAM_BOT_TOKEN"
+            --team-channels "$TG_TEAM_CHANNELS"
+            --delay 2
+          )
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            ARGS="$ARGS --dry-run"
+            args+=(--dry-run)
           fi
-          python3 .github/scripts/telegram/parse_and_send_team_issues.py $ARGS
+          python3 .github/scripts/telegram/parse_and_send_team_issues.py "${args[@]}"

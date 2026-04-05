@@ -132,6 +132,10 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
+    void PrefetchRow(TSingleTuple row) const {
+        Table_.PrefetchForRow(row.PackedData);
+    }
+
     static constexpr ui32 kProbeBatchSize = 16;
 
     /// Batched probe with prefetching: looks up kProbeBatchSize rows at once.

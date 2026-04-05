@@ -294,20 +294,35 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
-        if (FetchedPack_.has_value()) {
-            size_t rowWidth = FetchedPack_->PackedTuples.size() / FetchedPack_->NTuples;
-            const ui8* data = FetchedPack_->PackedTuples.data() + ResumeIndex_ * rowWidth;
+        auto probePackBatched = [&](ui32 startIdx) -> bool {
+            static constexpr ui32 kBatch = TTable::kProbeBatchSize;
+            const size_t rowWidth = FetchedPack_->PackedTuples.size() / FetchedPack_->NTuples;
+            const ui8* baseData = FetchedPack_->PackedTuples.data();
             const ui8* overflow = FetchedPack_->Overflow.data();
-            ui32 idx = ResumeIndex_;
-            for (; idx < static_cast<ui32>(FetchedPack_->NTuples); ++idx, data += rowWidth) {
-                TSingleTuple probeTuple{data, overflow};
-                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                });
-                if (isFull()) {
-                    ResumeIndex_ = idx + 1;
-                    return EFetchResult::One;
+            const ui32 nTuples = static_cast<ui32>(FetchedPack_->NTuples);
+
+            for (ui32 batchStart = startIdx; batchStart < nTuples; batchStart += kBatch) {
+                const ui32 batchEnd = std::min(batchStart + kBatch, nTuples);
+                for (ui32 i = batchStart; i < batchEnd; ++i) {
+                    Table_.PrefetchRow(TSingleTuple{baseData + static_cast<size_t>(i) * rowWidth, overflow});
                 }
+                for (ui32 i = batchStart; i < batchEnd; ++i) {
+                    TSingleTuple probeTuple{baseData + static_cast<size_t>(i) * rowWidth, overflow};
+                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
+                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                    });
+                }
+                if (isFull()) {
+                    ResumeIndex_ = batchEnd;
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (FetchedPack_.has_value()) {
+            if (probePackBatched(ResumeIndex_)) {
+                return EFetchResult::One;
             }
             FetchedPack_ = std::nullopt;
             ResumeIndex_ = 0;
@@ -320,19 +335,8 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
                 ResumeIndex_ = 0;
-                size_t rowWidth = FetchedPack_->PackedTuples.size() / FetchedPack_->NTuples;
-                const ui8* data = FetchedPack_->PackedTuples.data();
-                const ui8* overflow = FetchedPack_->Overflow.data();
-                ui32 idx = 0;
-                for (; idx < static_cast<ui32>(FetchedPack_->NTuples); ++idx, data += rowWidth) {
-                    TSingleTuple probeTuple{data, overflow};
-                    Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                        consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
-                    });
-                    if (isFull()) {
-                        ResumeIndex_ = idx + 1;
-                        return EFetchResult::One;
-                    }
+                if (probePackBatched(0)) {
+                    return EFetchResult::One;
                 }
                 FetchedPack_ = std::nullopt;
             }
@@ -777,23 +781,45 @@ class THybridHashJoin {
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                size_t rowWidth = state.FetchedPack->PackedTuples.size() / state.FetchedPack->NTuples;
-                const ui8* data = state.FetchedPack->PackedTuples.data() + state.ResumeIndex * rowWidth;
+                const size_t rowWidth = state.FetchedPack->PackedTuples.size() / state.FetchedPack->NTuples;
+                const ui8* baseData = state.FetchedPack->PackedTuples.data();
                 const ui8* overflow = state.FetchedPack->Overflow.data();
-                ui32 idx = state.ResumeIndex;
-                for (; idx < static_cast<ui32>(state.FetchedPack->NTuples); ++idx, data += rowWidth) {
-                    TSingleTuple tuple{data, overflow};
-                    int bucketIndex = Settings.BucketIndex(tuple);
-                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
-                    if (thisBucketSpilled) {
-                        state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                    } else {
-                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
-                        MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                const ui32 nTuples = static_cast<ui32>(state.FetchedPack->NTuples);
+
+                for (ui32 batchStart = state.ResumeIndex; batchStart < nTuples; batchStart += kBatchSize) {
+                    const ui32 batchEnd = std::min(batchStart + kBatchSize, nTuples);
+                    const ui32 batchCount = batchEnd - batchStart;
+
+                    struct RowInfo {
+                        TSingleTuple tuple;
+                        int bucketIndex;
+                        bool spilled;
+                    };
+                    std::array<RowInfo, kBatchSize> batch{};
+
+                    for (ui32 i = 0; i < batchCount; ++i) {
+                        const ui8* rowData = baseData + static_cast<size_t>(batchStart + i) * rowWidth;
+                        TSingleTuple tuple{rowData, overflow};
+                        int bucketIndex = Settings.BucketIndex(tuple);
+                        bool spilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                        batch[i] = {tuple, bucketIndex, spilled};
+                        if (!spilled) {
+                            TTable* table = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                            MKQL_ENSURE(table, "sanity check");
+                            table->PrefetchRow(tuple);
+                        }
+                    }
+
+                    for (ui32 i = 0; i < batchCount; ++i) {
+                        if (batch[i].spilled) {
+                            state.Spiller.AddRow({.Val = batch[i].tuple, .Side = ESide::Probe, .BucketIndex = batch[i].bucketIndex});
+                        } else {
+                            TTable* table = std::get_if<TTable>(&state.Spiller.GetState().Buckets[batch[i].bucketIndex]);
+                            lookupToTable(*table, batch[i].tuple);
+                        }
                     }
                     if (isFull()) {
-                        state.ResumeIndex = idx + 1;
+                        state.ResumeIndex = batchEnd;
                         return EFetchResult::One;
                     }
                 }

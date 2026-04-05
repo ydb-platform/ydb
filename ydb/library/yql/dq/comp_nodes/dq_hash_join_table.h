@@ -132,6 +132,33 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         });
     }
 
+    static constexpr ui32 kProbeBatchSize = 16;
+
+    /// Batched probe with prefetching: looks up kProbeBatchSize rows at once.
+    /// \p rows array may contain fewer valid entries; pad the rest with nullptr PackedData.
+    /// \p consumeMatch is called for each (probeIndex, buildTuple) pair.
+    template <typename ConsumeMatch>
+    void LookupBatch(const std::array<TSingleTuple, kProbeBatchSize>& rows, ui32 count, ConsumeMatch consumeMatch) {
+        if (Empty() || count == 0) {
+            return;
+        }
+        std::array<const ui8*, kProbeBatchSize> rawRows{};
+        for (ui32 i = 0; i < count; ++i) {
+            rawRows[i] = rows[i].PackedData;
+        }
+        auto iters = Table_.FindBatch(rawRows, BuildData_.Overflow.data());
+        for (ui32 i = 0; i < count; ++i) {
+            while (const ui8* matched = Table_.NextMatch(iters[i], BuildData_.Overflow.data())) {
+                if (TrackUsed_) {
+                    size_t index = (matched - BuildData_.PackedTuples.data()) / RowWidth_;
+                    MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+                    Used_[index] = 1;
+                }
+                consumeMatch(i, TSingleTuple{matched, BuildData_.Overflow.data()});
+            }
+        }
+    }
+
     void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
         MKQL_ENSURE(TrackUsed_, "ForEachUnused called but not tracking used tuples");
         for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
@@ -146,7 +173,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
-    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, true> Table_;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
     TMKQLVector<ui8> Used_;

@@ -205,7 +205,9 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
             Converters_.Probe->Unpack(Output_.Probe, out);
-            Output_.Probe.Reset();
+            Output_.Probe.PackedTuples.clear();
+            Output_.Probe.Overflow.clear();
+            Output_.Probe.NTuples = 0;
             TVector<arrow::Datum> renamed;
             for(auto rename: *Renames_){
                 MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
@@ -216,7 +218,10 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
             TSides<TVector<arrow::Datum>> sides;
             for(ESide side: EachSide) {
                 Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), sides.SelectSide(side));
-                Output_.SelectSide(side).Reset();
+                auto& pack = Output_.SelectSide(side);
+                pack.PackedTuples.clear();
+                pack.Overflow.clear();
+                pack.NTuples = 0;
             }
             TVector<arrow::Datum> renamed;
             for (auto rename : *Renames_) {

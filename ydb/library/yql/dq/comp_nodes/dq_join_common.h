@@ -554,6 +554,60 @@ class THybridHashJoin {
                 }
             }
         };
+        static constexpr ui32 kBatchSize = TTable::kProbeBatchSize;
+        auto lookupToTableBatched = [&](TTable& table, const ui8* data, const ui8* overflow,
+                                        ui32 startIdx, ui32 endIdx, size_t rowWidth) {
+            for (ui32 batchStart = startIdx; batchStart < endIdx; batchStart += kBatchSize) {
+                const ui32 batchEnd = std::min(batchStart + kBatchSize, endIdx);
+                const ui32 batchCount = batchEnd - batchStart;
+                std::array<TSingleTuple, kBatchSize> rows{};
+                for (ui32 i = 0; i < batchCount; ++i) {
+                    rows[i] = TSingleTuple{data + static_cast<size_t>(batchStart + i) * rowWidth, overflow};
+                }
+                if constexpr (Kind == EJoinKind::Inner) {
+                    table.LookupBatch(rows, batchCount, [&](ui32 probeIdx, TSingleTuple buildMatch) {
+                        consume(TSides<TSingleTuple>{.Build = buildMatch, .Probe = rows[probeIdx]});
+                    });
+                } else if constexpr (Kind == EJoinKind::Left) {
+                    std::array<bool, kBatchSize> found{};
+                    table.LookupBatch(rows, batchCount, [&](ui32 probeIdx, TSingleTuple buildMatch) {
+                        found[probeIdx] = true;
+                        consume(TSides<TSingleTuple>{.Build = buildMatch, .Probe = rows[probeIdx]});
+                    });
+                    if (!Settings_.LeftIsBuild()) {
+                        for (ui32 i = 0; i < batchCount; ++i) {
+                            if (!found[i]) {
+                                consume(rows[i]);
+                            }
+                        }
+                    }
+                } else if constexpr (Kind == EJoinKind::LeftOnly) {
+                    std::array<bool, kBatchSize> found{};
+                    table.LookupBatch(rows, batchCount, [&](ui32 probeIdx, TSingleTuple) {
+                        found[probeIdx] = true;
+                    });
+                    for (ui32 i = 0; i < batchCount; ++i) {
+                        if (!found[i]) {
+                            consume(rows[i]);
+                        }
+                    }
+                } else if constexpr (Kind == EJoinKind::LeftSemi) {
+                    std::array<bool, kBatchSize> found{};
+                    table.LookupBatch(rows, batchCount, [&](ui32 probeIdx, TSingleTuple) {
+                        found[probeIdx] = true;
+                    });
+                    for (ui32 i = 0; i < batchCount; ++i) {
+                        if (found[i]) {
+                            consume(rows[i]);
+                        }
+                    }
+                } else {
+                    for (ui32 i = 0; i < batchCount; ++i) {
+                        lookupToTable(table, rows[i]);
+                    }
+                }
+            }
+        };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
@@ -800,17 +854,12 @@ class THybridHashJoin {
                     }
                     if (table->CurrentProbePack.has_value()) {
                         size_t rowWidth = table->CurrentProbePack->PackedTuples.size() / table->CurrentProbePack->NTuples;
-                        const ui8* data = table->CurrentProbePack->PackedTuples.data() + table->ProbeResumeIndex * rowWidth;
+                        const ui8* data = table->CurrentProbePack->PackedTuples.data();
                         const ui8* overflow = table->CurrentProbePack->Overflow.data();
-                        ui32 idx = table->ProbeResumeIndex;
-                        for (; idx < static_cast<ui32>(table->CurrentProbePack->NTuples); ++idx, data += rowWidth) {
-                            TSingleTuple probeTuple{data, overflow};
-                            lookupToTable(table->Table, probeTuple);
-                            if (isFull()) {
-                                table->ProbeResumeIndex = idx + 1;
-                                return EFetchResult::One;
-                            }
-                        }
+                        lookupToTableBatched(table->Table, data, overflow,
+                                             table->ProbeResumeIndex,
+                                             static_cast<ui32>(table->CurrentProbePack->NTuples),
+                                             rowWidth);
                         table->CurrentProbePack = std::nullopt;
                         table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {

@@ -675,36 +675,57 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     if close_issues:
         closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
-    # First, collect all tests into temporary dictionary
-    for test in all_tests:
-        for test_from_file in tests_from_file:
-            if test['full_name'] == test_from_file['full_name']:
-                if test['full_name'] in muted_tests_in_issues:
-                    logging.info(
-                        f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}"
-                    )
-                else:
-                    key = f"{test_from_file['testsuite']}:{test['owner']}"
-                    if not temp_tests_by_suite.get(key):
-                        temp_tests_by_suite[key] = []
-                    temp_tests_by_suite[key].append(
-                        {
-                            'mute_string': f"{ test.get('suite_folder')} {test.get('test_name')}",
-                            'test_name': test.get('test_name'),
-                            'suite_folder': test.get('suite_folder'),
-                            'full_name': test.get('full_name'),
-                            'success_rate': test.get('success_rate'),
-                            'days_in_state': test.get('days_in_state'),
-                            'date_window': test.get('date_window', 'N/A'),
-                            'owner': test.get('owner'),
-                            'state': test.get('state'),
-                            'summary': test.get('summary'),
-                            'fail_count': test.get('fail_count'),
-                            'pass_count': test.get('pass_count'),
-                            'branch': test.get('branch'),
-                            'build_type': test.get('build_type', DEFAULT_BUILD_TYPE),
-                        }
-                    )
+    monitor_by_name = {t['full_name']: t for t in all_tests if t.get('full_name')}
+
+    for test_from_file in tests_from_file:
+        full_name = test_from_file['full_name']
+        if full_name in muted_tests_in_issues:
+            logging.info(
+                f"test {full_name} already have issue, {muted_tests_in_issues[full_name][0]['url']}"
+            )
+            continue
+
+        monitor = monitor_by_name.get(full_name)
+        if monitor:
+            entry = {
+                'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
+                'test_name': monitor.get('test_name'),
+                'suite_folder': monitor.get('suite_folder'),
+                'full_name': full_name,
+                'success_rate': monitor.get('success_rate'),
+                'days_in_state': monitor.get('days_in_state'),
+                'date_window': monitor.get('date_window', 'N/A'),
+                'owner': monitor.get('owner'),
+                'state': monitor.get('state'),
+                'summary': monitor.get('summary'),
+                'fail_count': monitor.get('fail_count'),
+                'pass_count': monitor.get('pass_count'),
+                'branch': monitor.get('branch'),
+                'build_type': monitor.get('build_type', DEFAULT_BUILD_TYPE),
+            }
+        else:
+            entry = {
+                'mute_string': f"{test_from_file['testsuite']} {test_from_file['testcase']}",
+                'test_name': test_from_file['testcase'],
+                'suite_folder': test_from_file['testsuite'],
+                'full_name': full_name,
+                'success_rate': 0,
+                'days_in_state': 0,
+                'date_window': 'N/A',
+                'owner': 'Unknown',
+                'state': 'Muted',
+                'summary': 'added manually, no monitor data',
+                'fail_count': 0,
+                'pass_count': 0,
+                'branch': 'main',
+                'build_type': DEFAULT_BUILD_TYPE,
+            }
+            logging.info(f"test {full_name} not in monitor, using fallback data")
+
+        key = f"{test_from_file['testsuite']}:{entry['owner']}"
+        if not temp_tests_by_suite.get(key):
+            temp_tests_by_suite[key] = []
+        temp_tests_by_suite[key].append(entry)
     
     # Split groups larger than 40 tests
     for key, tests in temp_tests_by_suite.items():

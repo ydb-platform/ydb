@@ -8,23 +8,30 @@ For the general idea of fulltext search, see [Fulltext search](../concepts/fullt
 
 Fulltext indexes in {{ ydb-short-name }} are built by tokenizing text and creating an inverted index. This enables:
 
-* fast filtering with `FulltextMatch()`
-* relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with `FulltextScore()` when using `fulltext_relevance`
+* fast filtering with [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match)
+* relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](#relevance)
 * case normalization, stemming, and n-gram matching via index filters
 
 The current implementation supports two indexes:
 
-* `fulltext_plain` — basic fulltext index
-* `fulltext_relevance` — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring
+* [fulltext_plain](#basic) — basic fulltext index
+* [fulltext_relevance](#relevance) — fulltext index with [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) statistics for relevance scoring
 
 Additionally, a fulltext index can be **covering** (via `COVER`), meaning it includes a copy of extra columns from the base table.
 
 
 ## Types of Fulltext Indexes {#types}
 
+{{ ydb-short-name }} supports two types of fulltext indexes, differing in the statistics they store:
+
+* [fulltext_plain](#basic) — stores only the inverted index. Supports filtering via [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match), but does not support relevance ranking.
+* [fulltext_relevance](#relevance) — additionally stores term frequency statistics (TF-IDF / [BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) required by [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score).
+
 ### Basic fulltext index (`fulltext_plain`) {#basic}
 
-A global fulltext index on the `body` column for filtering with `FulltextMatch()`:
+Use `fulltext_plain` when you only need to check whether terms are present in the text, without relevance ranking. This index is more compact than `fulltext_relevance` and is suitable for most filtering tasks.
+
+Example: create a global fulltext index on the `body` column:
 
 ```yql
 ALTER TABLE articles
@@ -33,6 +40,8 @@ ALTER TABLE articles
   ON (body)
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
+
+Here `tokenizer=standard` splits text into words on whitespace and punctuation, and `use_filter_lowercase=true` normalizes all tokens to lowercase, making the search case-insensitive.
 
 Example query:
 
@@ -45,13 +54,15 @@ LIMIT 20;
 
 ### Fulltext index for ranking (`fulltext_relevance`) {#relevance}
 
-For relevance ranking, use `fulltext_relevance` and `FulltextScore()`:
+`fulltext_relevance` stores the inverted index along with term frequency statistics ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)), which allows [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) to compute a relevance score for each document. Use this type when you need not just to find documents containing certain words, but also to rank them by how well they match the query.
+
+Example index:
 
 ```yql
 ALTER TABLE articles
   ADD INDEX ft_index
   GLOBAL USING fulltext_relevance
-  ON (body) COVER (title)
+  ON (body)
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
@@ -74,8 +85,8 @@ If you need substring search, create the index with n-grams. Two types of n-gram
 
 When using n-grams, the following becomes available:
 
-* `FulltextMatch(..., "Wildcard" AS Mode)` (patterns with `%` / `_`)
-* `LIKE` / `ILIKE` predicates over the indexed text column (they use the index)
+* [FulltextMatch(..., "Wildcard" AS Mode)](../yql/reference/builtins/fulltext.md#fulltext-match) — patterns with `%` and `_` (similar to `LIKE`)
+* `LIKE` / `ILIKE` predicates over the indexed text column — {{ ydb-short-name }} automatically uses the n-gram index when accessed via `VIEW IndexName`
 
 Example index with n-grams:
 
@@ -110,6 +121,8 @@ FROM articles VIEW ngram_index
 WHERE body LIKE "%learn%ing%"
 LIMIT 20;
 ```
+
+A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
 
 ## Full syntax for fulltext indexes {#syntax}
 

@@ -2,29 +2,36 @@
 
 Полнотекстовые индексы — это специализированный тип [вторичного индекса](../concepts/glossary.md#secondary-index), который позволяет эффективно выполнять поиск по текстовому содержимому в колонках таблицы: по словам, фразам и (с N-граммами) по подстрокам. В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону, полнотекстовые индексы обеспечивают поиск по текстовому содержимому.
 
-Общее описание полнотекстового поиска см. в разделе [Полнотекстовый поиск](../concepts/fulltext_search.md).
+Общее описание полнотекстового поиска см. в разделе [Полнотекстовый поиск](../concepts/query_execution/fulltext_search.md).
 
 ## Характеристики полнотекстовых индексов {#characteristics}
 
 Полнотекстовые индексы в {{ ydb-short-name }} строятся путём токенизации текста и создания инвертированного индекса. Это позволяет:
 
-* быстро фильтровать строки через `FulltextMatch()`;
-* ранжировать результаты по релевантности ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) через `FulltextScore()` при использовании `fulltext_relevance`;
+* быстро фильтровать строки через [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match);
+* ранжировать результаты по релевантности ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) через [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) при использовании [fulltext_relevance](#relevance);
 * применять нормализацию регистра, стемминг и N-граммы с помощью фильтров индекса.
 
 В текущей реализации доступны два варианта индекса:
 
-* `fulltext_plain` — базовый полнотекстовый индекс;
-* `fulltext_relevance` — полнотекстовый индекс со статистикой [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) для расчёта релевантности.
+* [fulltext_plain](#basic) — базовый полнотекстовый индекс;
+* [fulltext_relevance](#relevance) — полнотекстовый индекс со статистикой [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) для расчёта релевантности.
 
 Кроме этого, полнотекстовый индекс может быть **покрывающим** (через `COVER`) и включать копию данных дополнительных колонок из основной таблицы.
 
 
 ## Виды полнотекстовых индексов {#types}
 
+{{ ydb-short-name }} поддерживает два типа полнотекстовых индексов, которые различаются составом хранимой статистики:
+
+* [fulltext_plain](#basic) — хранит только инвертированный индекс. Поддерживает фильтрацию через [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match), но не позволяет ранжировать результаты по релевантности.
+* [fulltext_relevance](#relevance) — дополнительно хранит частотную статистику (TF-IDF / [BM25](https://en.wikipedia.org/wiki/Okapi_BM25)), необходимую для работы [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score).
+
 ### Базовый полнотекстовый индекс (`fulltext_plain`) {#basic}
 
-Глобальный полнотекстовый индекс по колонке `body` для фильтрации через `FulltextMatch()`:
+Используйте `fulltext_plain`, когда достаточно проверить наличие термов в тексте без ранжирования по релевантности. Такой индекс компактнее `fulltext_relevance` и подходит для большинства задач фильтрации.
+
+Пример создания глобального полнотекстового индекса по колонке `body`:
 
 ```yql
 ALTER TABLE articles
@@ -33,6 +40,8 @@ ALTER TABLE articles
   ON (body)
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
+
+Здесь `tokenizer=standard` разбивает текст на слова по пробелам и знакам препинания, а `use_filter_lowercase=true` нормализует все токены к нижнему регистру — это делает поиск регистронезависимым.
 
 Пример запроса к индексу:
 
@@ -45,13 +54,15 @@ LIMIT 20;
 
 ### Полнотекстовый индекс для ранжирования (`fulltext_relevance`) {#relevance}
 
-Для ранжирования результатов по релевантности используйте `fulltext_relevance` и функцию `FulltextScore()`:
+`fulltext_relevance` хранит инвертированный индекс вместе с частотной статистикой ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)), которая позволяет функции [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) вычислять оценку релевантности документа запросу. Используйте этот тип, когда нужно не просто найти документы с нужными словами, но и упорядочить их по степени соответствия.
+
+Пример создания индекса:
 
 ```yql
 ALTER TABLE articles
   ADD INDEX ft_index
   GLOBAL USING fulltext_relevance
-  ON (body) COVER (title)
+  ON (body)
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
@@ -74,8 +85,8 @@ LIMIT 10;
 
 При использовании N-грамм станут доступны:
 
-* `FulltextMatch(..., "Wildcard" AS Mode)` (шаблоны с `%` / `_`);
-* предикаты `LIKE` / `ILIKE` по индексируемой текстовой колонке (используют индекс).
+* [FulltextMatch(..., "Wildcard" AS Mode)](../yql/reference/builtins/fulltext.md#fulltext-match) — поиск с шаблонами `%` и `_` (аналогично `LIKE`);
+* предикаты `LIKE` / `ILIKE` по индексируемой текстовой колонке — {{ ydb-short-name }} автоматически использует N-граммовый индекс при обращении к нему через `VIEW IndexName`.
 
 Пример индекса с N-граммами:
 
@@ -110,6 +121,8 @@ FROM articles VIEW ngram_index
 WHERE body LIKE "%обуч%ние%"
 LIMIT 20;
 ```
+
+Запрос с `LIKE` / `ILIKE` использует ту же логику, что и `FulltextMatch(body, ..., "Wildcard" AS Mode)`, и обращается к тому же N-граммовому индексу.
 
 ## Полный синтаксис полнотекстовых индексов {#syntax}
 

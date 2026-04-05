@@ -12,7 +12,7 @@ items:
   include:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
-- name: AI
+- name: Векторный поиск
   href: vector-search/index.md
   include:
     mode: link

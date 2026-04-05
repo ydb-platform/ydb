@@ -19,14 +19,14 @@ Only one fulltext predicate is supported per read through `VIEW`. `FulltextMatch
 For relevance access, you must include `FulltextScore(...) > 0` in `WHERE`.
 
 For function details, see [{#T}](../../builtins/fulltext.md), including
-[`FulltextMatch`](../../builtins/fulltext.md#fulltext-match) and
-[`FulltextScore`](../../builtins/fulltext.md#fulltext-score).
+[FulltextMatch](../../builtins/fulltext.md#fulltext-match) and
+[FulltextScore](../../builtins/fulltext.md#fulltext-score).
 
 {% endnote %}
 
 ## FulltextMatch
 
-`FulltextMatch(text, query)` filters rows by whether the text matches the fulltext query:
+[FulltextMatch(text, query)](../../builtins/fulltext.md#fulltext-match) filters rows by whether the text matches the fulltext query:
 
 ```yql
 SELECT id, title
@@ -34,6 +34,17 @@ FROM articles VIEW ft_idx
 WHERE FulltextMatch(body, "machine learning")
 LIMIT 20;
 ```
+
+Only the first two arguments can be positional. Additional parameters must be passed as **named arguments**:
+
+* `Mode` (String): query mode:
+  * `Keywords` (default) — the query is split into individual terms; how they are combined is determined by `DefaultOperator`
+  * `Query` — extended syntax with logical operators: required terms via `+`, excluded terms via `-`, exact phrases in double quotes
+  * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
+* `DefaultOperator` (String): term combination operator in `Keywords` mode:
+  * `And` (default) — all query terms must be present in the text
+  * `Or` — matching at least one term is sufficient; use `MinimumShouldMatch` to set a minimum threshold
+* `MinimumShouldMatch` (String): minimum number of matched terms when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of query terms (for example, `"50%"`)
 
 ### `Wildcard` mode and `%` / `_` patterns (requires n-grams)
 
@@ -60,37 +71,39 @@ LIMIT 20;
 
 ## FulltextScore ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25) relevance)
 
-`FulltextScore(text, query)` returns a relevance score and can be used for ranking.
-Relevance scoring requires the `fulltext_relevance` index type.
+[FulltextScore(text, query)](../../builtins/fulltext.md#fulltext-score) returns a relevance score and can be used for ranking.
+Relevance scoring requires the [fulltext_relevance](../../../../dev/fulltext-indexes.md#relevance) index type.
 
 ```yql
-SELECT id, title, FulltextScore(body, "quick fox") AS relevance
+SELECT id, title, FulltextScore(body, "machine learning") AS relevance
 FROM articles VIEW ft_idx
-WHERE FulltextScore(body, "quick fox") > 0
+WHERE FulltextScore(body, "machine learning") > 0
 ORDER BY relevance DESC
 LIMIT 10;
 ```
 
 ### Optional parameters
 
-Additional parameters must be passed as **named arguments**.
+Additional parameters must be passed as **named arguments**:
 
-* `DefaultOperator` (String): `"And"` or `"Or"`
-* `MinimumShouldMatch` (String): when `DefaultOperator` is set to `"Or"`, minimum number of matched terms (absolute like `"1"` or percent like `"50%"`)
-* `K1` (Double): [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) K1 parameter
-* `B` (Double): [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) B parameter
+* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (at least one term must match)
+* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of matched terms — specified as an absolute number (for example, `"2"`) or a percentage (for example, `"50%"`)
+* `K1` (Double): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; typical range: 1.2–2.0
+* `B` (Double): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; typical value: 0.75
 
 Example:
 
 ```yql
-SELECT id, FulltextScore(body, "quick fox", "Or" AS DefaultOperator, "50%" AS MinimumShouldMatch) AS relevance
+SELECT id, FulltextScore(body, "machine learning", "Or" AS DefaultOperator, "50%" AS MinimumShouldMatch) AS relevance
 FROM articles VIEW ft_idx
-WHERE FulltextScore(body, "quick fox", "Or" AS DefaultOperator, "50%" AS MinimumShouldMatch) > 0
+WHERE FulltextScore(body, "machine learning", "Or" AS DefaultOperator, "50%" AS MinimumShouldMatch) > 0
 ORDER BY relevance DESC;
 ```
 
 {% note info %}
 
 Only the first two arguments of `FulltextMatch` / `FulltextScore` can be positional. Use named arguments for all additional parameters.
+
+The `FulltextScore(...)` expression is repeated in full in both `SELECT` and `WHERE` — YQL, like standard SQL, evaluates `WHERE` before `SELECT`, so aliases defined in `SELECT` are not available in `WHERE`. Both occurrences must be identical.
 
 {% endnote %}

@@ -21,8 +21,6 @@ items:
   include:
     path: query_execution/toc_p.yaml
     mode: link
-- name: Полнотекстовый поиск
-  href: fulltext_search.md
 - name: Транзакции
   href: transactions.md
 - name: Вторичные индексы

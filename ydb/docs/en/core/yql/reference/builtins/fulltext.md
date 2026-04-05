@@ -22,9 +22,14 @@ Only the first two arguments can be positional. Additional parameters must be pa
 
 Supports named arguments:
 
-* `Mode` (String): query mode — `"Keywords"` (default), `"Query"`, `"Wildcard"`
-* `DefaultOperator` (String): operator for `"Keywords"` mode — `"And"` or `"Or"` (default `"And"`)
-* `MinimumShouldMatch` (String): when `DefaultOperator` is set to `"Or"`, minimum number of matched terms (absolute like `"3"` or percent like `"50%"`)
+* `Mode` (String): query mode:
+  * `Keywords` (default) — the query is split into individual terms; how they are combined is determined by `DefaultOperator`
+  * `Query` — extended syntax with logical operators: required terms via `+`, excluded terms via `-`, exact phrases in double quotes
+  * `Wildcard` — wildcard search: `%` matches any substring, `_` matches a single character (similar to `LIKE`); requires an n-gram index
+* `DefaultOperator` (String): term combination operator in `Keywords` mode:
+  * `And` (default) — all query terms must be present in the text
+  * `Or` — matching at least one term is sufficient; use `MinimumShouldMatch` to set a minimum threshold
+* `MinimumShouldMatch` (String): minimum number of matched terms when `DefaultOperator = "Or"` — specified as an absolute number (for example, `"3"`) or a percentage of query terms (for example, `"50%"`)
 
 `Mode` and `DefaultOperator` values are case-insensitive.
 
@@ -55,7 +60,7 @@ WHERE FulltextMatch(
 );
 ```
 
-In this example, `Mode` is set to `"Keywords"` (treating the query as a set of terms), `DefaultOperator` is set to `"Or"` (allowing matching any subset of terms), and `MinimumShouldMatch` is set to `"50%"` (requiring at least 4 out of 8 terms to match). This helps filter out documents that contain only one or two words from a long query.
+In this example, `Mode` is set to `Keywords` (treating the query as a set of terms), `DefaultOperator` is set to `Or` (allowing matching any subset of terms), and `MinimumShouldMatch` is set to `"50%"` (requiring at least 4 out of 8 terms to match). This helps filter out documents that contain only one or two words from a long query.
 
 ## FulltextScore {#fulltext-score}
 
@@ -64,9 +69,9 @@ In this example, `Mode` is set to `"Keywords"` (treating the query as a set of t
 Requires the `fulltext_relevance` index type.
 
 ```yql
-SELECT id, FulltextScore(body, "quick fox") AS relevance
+SELECT id, FulltextScore(body, "machine learning") AS relevance
 FROM articles VIEW ft_idx
-WHERE FulltextScore(body, "quick fox") > 0
+WHERE FulltextScore(body, "machine learning") > 0
 ORDER BY relevance DESC
 LIMIT 10;
 ```
@@ -75,24 +80,24 @@ Only the first two arguments can be positional. Additional parameters must be pa
 
 Supports named arguments:
 
-* `DefaultOperator` (String): `"And"` or `"Or"` (default `"And"`)
-* `MinimumShouldMatch` (String): when `DefaultOperator` is set to `"Or"`, minimum number of matched terms (absolute or percentage)
-* `K1` (Double): [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) \(k_1\) parameter
-* `B` (Double): [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) \(b\) parameter
+* `DefaultOperator` (String): term combination operator — `And` (default, all terms must be present) or `Or` (at least one term must match)
+* `MinimumShouldMatch` (String): when `DefaultOperator = "Or"`, minimum number of matched terms — specified as an absolute number (for example, `"2"`) or a percentage (for example, `"50%"`)
+* `K1` (Double): term frequency saturation parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — controls how strongly repeated occurrences of a term affect the score; typical range: 1.2–2.0
+* `B` (Double): document length normalization parameter in [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) — `0.0` disables normalization, `1.0` fully normalizes by document length; typical value: 0.75
 
 Example:
 
 ```yql
 SELECT id,
-       FulltextScore(body, "quick fox", "Or" AS DefaultOperator, "1" AS MinimumShouldMatch, 0.75 AS K1, 1.2 AS B) AS relevance
+       FulltextScore(body, "machine learning", "Or" AS DefaultOperator, "1" AS MinimumShouldMatch, 0.75 AS K1, 1.2 AS B) AS relevance
 FROM articles VIEW ft_idx
-WHERE FulltextScore(body, "quick fox", "Or" AS DefaultOperator, "1" AS MinimumShouldMatch, 0.75 AS K1, 1.2 AS B) > 0
+WHERE FulltextScore(body, "machine learning", "Or" AS DefaultOperator, "1" AS MinimumShouldMatch, 0.75 AS K1, 1.2 AS B) > 0
 ORDER BY relevance DESC;
 ```
 
 {% note info %}
 
-`MinimumShouldMatch` is supported only when `DefaultOperator` is set to `"Or"`. When `DefaultOperator` is set to `"And"`, use `FulltextScore` without `MinimumShouldMatch`.
+`MinimumShouldMatch` is supported only when `DefaultOperator` is set to `Or`. When `DefaultOperator` is set to `And`, use `FulltextScore` without `MinimumShouldMatch`.
 
 
 {% endnote %}

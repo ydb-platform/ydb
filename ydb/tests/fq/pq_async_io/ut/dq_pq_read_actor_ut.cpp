@@ -488,6 +488,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         Sleep(TDuration::MilliSeconds(100));
 
         auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay, false, true);
+        settings.clear_disposition();
         InitSource(std::move(settings));
         
         messages = std::vector{Message2};

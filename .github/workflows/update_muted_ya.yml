@@ -129,7 +129,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          .github/scripts/tests/create_new_muted_ya.py sync_issues \
+          .github/scripts/tests/create_new_muted_ya.py create_issues \
             --file_path=base_muted_ya.txt \
             --branch=${{ env.BASE_BRANCH }}
 

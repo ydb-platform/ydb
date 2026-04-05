@@ -84,11 +84,18 @@ class NemesisManager:
 
                 try:
                     if action == 'inject':
+                        runner.start_inject_fault()
                         _invoke_inject(runner, payload)
                     elif action == 'extract':
                         _invoke_extract(runner, payload)
                     else:
                         raise Exception('Unknown action type')
+                except Exception:
+                    if action == 'inject':
+                        runner.on_failed_inject_fault()
+                    elif action == 'extract':
+                        runner.on_failed_extract_fault()
+                    raise
                 finally:
                     exec_logger.removeHandler(handler)
                     exec_logger.setLevel(original_level)

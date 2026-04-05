@@ -13,11 +13,19 @@ class MonitoredAgentActor(base.AbstractMonitoredNemesis):
     """
     Agent-side execution only: AbstractMonitoredNemesis counters.
     Planning stays on the orchestrator (NemesisPlannerBase subclasses).
+
+    Each subclass gets a child logger ``<NEMESIS_EXECUTION_LOGGER>.<ClassName>``
+    so that log records carry the concrete runner class name.  Python logging
+    propagation ensures the ``ThreadLocalHandler`` attached to the parent
+    ``NEMESIS_EXECUTION_LOGGER`` in :class:`NemesisManager` still captures
+    every record.
     """
 
     def __init__(self, scope: str = "node") -> None:
         base.AbstractMonitoredNemesis.__init__(self, scope=scope)
-        self._logger = logging.getLogger(NEMESIS_EXECUTION_LOGGER)
+        self._logger = logging.getLogger(
+            f"{NEMESIS_EXECUTION_LOGGER}.{self.__class__.__name__}"
+        )
         self._logger.setLevel(logging.DEBUG)
 
     @property

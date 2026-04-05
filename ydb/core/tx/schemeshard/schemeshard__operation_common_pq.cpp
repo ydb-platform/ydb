@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-
+#include <library/cpp/iterator/iterate_keys.h>
 
 namespace NKikimr::NSchemeShard::NPQState {
 
@@ -43,6 +43,47 @@ void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTop
     partition.SetTabletId(tabletId);
 }
 
+struct TPartitionsGraphTraverse {
+    const TTopicInfo& PqGroup;
+    using TVisitedMap = THashMap<ui32, bool>;
+    TVector<ui32> Queue;
+    TVisitedMap Visited;
+
+    explicit TPartitionsGraphTraverse(const TTopicInfo& pqGroup)
+        : PqGroup(pqGroup)
+    {}
+
+    void Add(ui32 partitionId) {
+        if (!PqGroup.Partitions.contains(partitionId)) {
+            return;
+        }
+        auto [_, ins] = Visited.emplace(partitionId, false);
+        if (ins) {
+            Queue.push_back(partitionId);
+        }
+    }
+
+    auto Traverse() Y_LIFETIME_BOUND {
+        while (!Queue.empty()) {
+            const ui32 partitionId = Queue.back();
+            Queue.pop_back();
+            auto& visited = Visited[partitionId];
+            if (std::exchange(visited, true)) {
+                continue;
+            }
+            auto it = PqGroup.Partitions.FindPtr(partitionId);
+            if (it == nullptr) {
+                continue;
+            }
+            for (ui32 pp : (*it)->ParentPartitionIds) {
+                Add(pp);
+            }
+        }
+        return IterateKeys(Visited);
+    }
+};
+
+
 void MakePQTabletConfig(const TOperationContext& context,
                                 NKikimrPQ::TPQTabletConfig& config,
                                 const TTopicInfo& pqGroup,
@@ -72,6 +113,7 @@ void MakePQTabletConfig(const TOperationContext& context,
     }
 
     THashSet<ui32> linkedPartitions;
+    TPartitionsGraphTraverse parentPartitions(pqGroup);
 
     for(const auto& pq : pqShard.Partitions) {
         config.AddPartitionIds(pq->PqId);
@@ -89,6 +131,10 @@ void MakePQTabletConfig(const TOperationContext& context,
             }
             linkedPartitions.insert(it->second->ParentPartitionIds.begin(), it->second->ParentPartitionIds.end());
         }
+        parentPartitions.Add(pq->PqId);
+    }
+    for (const ui32 p : parentPartitions.Traverse()) {
+        linkedPartitions.insert(p);
     }
 
     for(auto lp : linkedPartitions) {

@@ -929,8 +929,8 @@ void TTupleLayoutFallback::BucketPack(
         // isValid bitmap is NOT included into hashed data
         WriteUnaligned<ui32>(res, hash);
 
-        /// most-significant bits of hash
-        const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
+        /// Use the same rule as TSpillerSettings::BucketIndex: low bits of the row hash.
+        const auto bucket = hash & ((1u << bucketsLogNum) - 1);
 
         auto& overflow = overflows[bucket];
 
@@ -1503,8 +1503,8 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             // isValid bitmap is NOT included into hashed data
             WriteUnaligned<ui32>(res, hash);
 
-            /// most-significant bits of hash
-            const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
+            /// Use the same rule as TSpillerSettings::BucketIndex: low bits of the row hash.
+            const auto bucket = hash & ((1u << bucketsLogNum) - 1);
 
             auto& overflow = overflows[bucket];
 
@@ -1709,7 +1709,23 @@ void TTupleLayout::Concat(
     }
 }
 
+void TTupleLayout::AppendPackResult(TPackResult& accum, TPackResult&& chunk) const {
+    if (chunk.NTuples == 0) {
+        return;
+    }
+    const ui32 dstCount = static_cast<ui32>(accum.PackedTuples.size() / TotalRowSize);
+    MKQL_ENSURE(
+        accum.NTuples == 0 || dstCount == static_cast<ui32>(accum.NTuples),
+        "AppendPackResult: NTuples does not match packed buffer size");
+    Concat(accum.PackedTuples, accum.Overflow, dstCount, chunk.PackedTuples.data(), chunk.Overflow.data(),
+           static_cast<ui32>(chunk.NTuples), static_cast<ui32>(chunk.Overflow.size()));
+    accum.NTuples += chunk.NTuples;
+}
+
 TPackResult TTupleLayout::Flatten(TArrayRef<TPackResult> tuples) const {
+    if (tuples.size() == 1) {
+        return std::move(tuples[0]);
+    }
     TPackResult flattened;
     flattened.NTuples = std::accumulate(tuples.begin(), tuples.end(), i64{0},
                                         [](i64 summ, const auto& packRes) { return summ += packRes.NTuples; });

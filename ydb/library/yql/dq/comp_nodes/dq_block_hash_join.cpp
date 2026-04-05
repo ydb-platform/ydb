@@ -10,6 +10,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <arrow/scalar.h>
+#include <array>
+#include <bit>
 
 #include "dq_join_common.h"
 
@@ -80,6 +82,40 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
+    }
+
+    static constexpr ui32 BucketPackLogBuckets =
+        static_cast<ui32>(std::bit_width(static_cast<unsigned>(TestStorageBucketCount)) - 1);
+
+    /// Build side only: pack one input block straight into partition buckets (no Pack + per-row TupleDeepCopy).
+    NYql::NUdf::EFetchStatus FetchBuildIntoSpiller(TBucketsSpiller<TestStorageSettings>& spiller) {
+        MKQL_ENSURE(Side_ == ESide::Build, "FetchBuildIntoSpiller: build side only");
+        if (Finished()) {
+            return NYql::NUdf::EFetchStatus::Finish;
+        }
+        auto res = StreamValues_.WideFetch(Buff_.data(), Buff_.size());
+        if (res != NYql::NUdf::EFetchStatus::Ok) {
+            if (res == NYql::NUdf::EFetchStatus::Finish) {
+                Finished_ = true;
+                return NYql::NUdf::EFetchStatus::Finish;
+            }
+            return NYql::NUdf::EFetchStatus::Yield;
+        }
+        const size_t cols = UserDataCols();
+        TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
+        if (!ColumnPermutation_.empty()) {
+            TVector<arrow::Datum> permuted(cols);
+            for (size_t j = 0; j < cols; ++j) {
+                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
+            }
+            columns = std::move(permuted);
+        }
+        static_assert(TestStorageBucketCount == TestStorageSettings.Buckets);
+        std::array<TPackResult, static_cast<size_t>(TestStorageBucketCount)> bucketPacks{};
+        TPaddedPtr<TPackResult> packsPtr(bucketPacks.data());
+        ArrowBlockToInternalConverter_->BucketPack(columns, packsPtr, BucketPackLogBuckets);
+        spiller.AppendPreBucketedBlock(bucketPacks.data(), TestStorageSettings.Buckets);
+        return NYql::NUdf::EFetchStatus::Ok;
     }
 
   private:
@@ -169,7 +205,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
             Converters_.Probe->Unpack(Output_.Probe, out);
-            Output_.Probe.Clear();
+            Output_.Probe.Reset();
             TVector<arrow::Datum> renamed;
             for(auto rename: *Renames_){
                 MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
@@ -180,7 +216,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
             TSides<TVector<arrow::Datum>> sides;
             for(ESide side: EachSide) {
                 Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), sides.SelectSide(side));
-                Output_.SelectSide(side).Clear();
+                Output_.SelectSide(side).Reset();
             }
             TVector<arrow::Datum> renamed;
             for (auto rename : *Renames_) {
@@ -247,7 +283,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Kind>;
+        using JoinType =
+            NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Kind, true>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,

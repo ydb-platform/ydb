@@ -295,16 +295,17 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (FetchedPack_.has_value()) {
-            ui32 idx = 0;
-            for (TSingleTuple probeTuple : *FetchedPack_) {
-                if (idx++ < ResumeIndex_) {
-                    continue;
-                }
+            size_t rowWidth = FetchedPack_->PackedTuples.size() / FetchedPack_->NTuples;
+            const ui8* data = FetchedPack_->PackedTuples.data() + ResumeIndex_ * rowWidth;
+            const ui8* overflow = FetchedPack_->Overflow.data();
+            ui32 idx = ResumeIndex_;
+            for (; idx < static_cast<ui32>(FetchedPack_->NTuples); ++idx, data += rowWidth) {
+                TSingleTuple probeTuple{data, overflow};
                 Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                 });
                 if (isFull()) {
-                    ResumeIndex_ = idx;
+                    ResumeIndex_ = idx + 1;
                     return EFetchResult::One;
                 }
             }
@@ -319,14 +320,17 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
                 ResumeIndex_ = 0;
+                size_t rowWidth = FetchedPack_->PackedTuples.size() / FetchedPack_->NTuples;
+                const ui8* data = FetchedPack_->PackedTuples.data();
+                const ui8* overflow = FetchedPack_->Overflow.data();
                 ui32 idx = 0;
-                for (TSingleTuple probeTuple : *FetchedPack_) {
-                    idx++;
+                for (; idx < static_cast<ui32>(FetchedPack_->NTuples); ++idx, data += rowWidth) {
+                    TSingleTuple probeTuple{data, overflow};
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
                     if (isFull()) {
-                        ResumeIndex_ = idx;
+                        ResumeIndex_ = idx + 1;
                         return EFetchResult::One;
                     }
                 }
@@ -351,7 +355,8 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
 };
 
-template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
+template <typename Source, TSpillerSettings Settings, EJoinKind Kind, bool UseBucketPackBuild = false>
+class THybridHashJoin {
     struct Logger {
         Logger(TComputationContext& ctx, TString name)
         : Logger_(ctx.MakeLogger())
@@ -364,7 +369,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         }
     };
 
-    using Self = THybridHashJoin<Source, Settings, Kind>;
+    using Self = THybridHashJoin<Source, Settings, Kind, UseBucketPackBuild>;
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -554,16 +559,37 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
             if (!state.Pack.has_value()) {
-                FetchResult<TPackResult> var = state.Build.FetchRow();
-                NYql::NUdf::EFetchStatus status = AsStatus(var);
-                if (status == NYql::NUdf::EFetchStatus::Yield) {
-                    return EFetchResult::Yield;
-                } else if (status == NYql::NUdf::EFetchStatus::Ok) {
-                    state.Pack = std::move(GetPayload(var));
+                if constexpr (UseBucketPackBuild) {
+                    NYql::NUdf::EFetchStatus status = state.Build.FetchBuildIntoSpiller(state.Spiller);
+                    if (status == NYql::NUdf::EFetchStatus::Yield) {
+                        return EFetchResult::Yield;
+                    } else if (status == NYql::NUdf::EFetchStatus::Ok) {
+                        ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
+                        switch (res) {
+                        case Spilling:
+                            return WaitWhileSpilling();
+                        case FinishedSpilling:
+                            break;
+                        case DontHavePages:
+                            break;
+                        }
+                    } else {
+                        MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
+                        MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                        State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    }
                 } else {
-                    MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
-                    MKQL_ENSURE(state.Build.Finished(), "sanity check");
-                    State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    FetchResult<TPackResult> var = state.Build.FetchRow();
+                    NYql::NUdf::EFetchStatus status = AsStatus(var);
+                    if (status == NYql::NUdf::EFetchStatus::Yield) {
+                        return EFetchResult::Yield;
+                    } else if (status == NYql::NUdf::EFetchStatus::Ok) {
+                        state.Pack = std::move(GetPayload(var));
+                    } else {
+                        MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
+                        MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                        State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
+                    }
                 }
             } else {
                 ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
@@ -576,8 +602,13 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     break;
                 }
                 }
-                for (TSingleTuple tuple: *state.Pack) { 
-                    state.Spiller.AddRow(tuple); 
+                {
+                    size_t rowWidth = state.Pack->PackedTuples.size() / state.Pack->NTuples;
+                    const ui8* data = state.Pack->PackedTuples.data();
+                    const ui8* overflow = state.Pack->Overflow.data();
+                    for (i64 i = 0; i < state.Pack->NTuples; ++i, data += rowWidth) {
+                        state.Spiller.AddRow(TSingleTuple{data, overflow});
+                    }
                 }
                 state.Pack = std::nullopt;
             }
@@ -692,11 +723,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
-                    if (idx++ < state.ResumeIndex) {
-                        continue;
-                    }
+                size_t rowWidth = state.FetchedPack->PackedTuples.size() / state.FetchedPack->NTuples;
+                const ui8* data = state.FetchedPack->PackedTuples.data() + state.ResumeIndex * rowWidth;
+                const ui8* overflow = state.FetchedPack->Overflow.data();
+                ui32 idx = state.ResumeIndex;
+                for (; idx < static_cast<ui32>(state.FetchedPack->NTuples); ++idx, data += rowWidth) {
+                    TSingleTuple tuple{data, overflow};
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
@@ -707,7 +739,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         lookupToTable(*thisTable, tuple);
                     }
                     if (isFull()) {
-                        state.ResumeIndex = idx;
+                        state.ResumeIndex = idx + 1;
                         return EFetchResult::One;
                     }
                 }
@@ -767,14 +799,15 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        ui32 idx = 0;
-                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
-                            if (idx++ < table->ProbeResumeIndex) {
-                                continue;
-                            }
+                        size_t rowWidth = table->CurrentProbePack->PackedTuples.size() / table->CurrentProbePack->NTuples;
+                        const ui8* data = table->CurrentProbePack->PackedTuples.data() + table->ProbeResumeIndex * rowWidth;
+                        const ui8* overflow = table->CurrentProbePack->Overflow.data();
+                        ui32 idx = table->ProbeResumeIndex;
+                        for (; idx < static_cast<ui32>(table->CurrentProbePack->NTuples); ++idx, data += rowWidth) {
+                            TSingleTuple probeTuple{data, overflow};
                             lookupToTable(table->Table, probeTuple);
                             if (isFull()) {
-                                table->ProbeResumeIndex = idx;
+                                table->ProbeResumeIndex = idx + 1;
                                 return EFetchResult::One;
                             }
                         }

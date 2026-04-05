@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <library/cpp/threading/future/wait/wait.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_join_table.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
@@ -37,7 +38,10 @@ struct TSpillerSettings {
 
 // constexpr TSpillerSettings RuntimeStorageSettings{.Buckets = 128, .BucketSizeBytes = (1<<19), .SpillingPagesAtTime =
 // 3};
-constexpr TSpillerSettings TestStorageSettings{.Buckets = 64, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
+/// Must match TestStorageSettings.Buckets (used for std::array sizing in block hash join).
+inline constexpr int TestStorageBucketCount = 64;
+constexpr TSpillerSettings TestStorageSettings{
+    .Buckets = TestStorageBucketCount, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
 
 enum ESpillResult {
     Spilling,
@@ -100,6 +104,20 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
+    }
+
+    /// Merges rows already packed per-bucket (e.g. from TupleLayout::BucketPack) without per-row TupleDeepCopy.
+    void AppendPreBucketedBlock(TPackResult* bucketPacks, int bucketCount) {
+        MKQL_ENSURE(bucketCount == Settings.Buckets, "AppendPreBucketedBlock: bucket count mismatch");
+        for (int i = 0; i < bucketCount; ++i) {
+            TPackResult& pack = bucketPacks[i];
+            if (pack.Empty()) {
+                continue;
+            }
+            TBucket& bucket = Buckets_[i];
+            Layout_->AppendPackResult(bucket.BuildingPage, std::move(pack));
+            bucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
+        }
     }
 
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {

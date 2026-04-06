@@ -7,4 +7,8 @@ SRCS(
     aclib.proto
 )
 
+PEERDIR(
+    ydb/public/api/protos/annotations
+)
+
 END()

@@ -14,7 +14,7 @@ SPLIT_FACTOR(100)
 
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility
-    SKIP_TEST("DEVTOOLSUPPORT-44637")  
+    SKIP_TEST("DEVTOOLSUPPORT-44637")
 
     # TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
     TAG(

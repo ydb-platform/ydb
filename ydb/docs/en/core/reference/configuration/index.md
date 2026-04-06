@@ -28,6 +28,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||
 || [{#T}](security_config.md) | No | Security configuration settings ||
 || [{#T}](table_service_config.md) | No | Query processing configuration||
+|| [{#T}](tli_config.md) | No | [Transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) diagnostics parameters ||
 || [{#T}](tls.md) | No | TLS configuration for secure connections ||
 |#
 
@@ -39,7 +40,7 @@ While this documentation section focuses on complete reference documentation for
 
     - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Manual](../../devops/deployment-options/manual/initial-deployment.md)
+    - [Manual](../../devops/deployment-options/manual/initial-deployment/index.md)
 
 - As part of [troubleshooting](../../troubleshooting/index.md)
 - As part of [security hardening](../../security/index.md)

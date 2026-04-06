@@ -156,6 +156,10 @@ public:
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
     }
 
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
+        return ChunkTracker.GetPDiskCapacityAlert();
+    }
+
     double GetVDiskSlotUsage(TOwner owner) const {
         i64 used = ChunkTracker.GetOwnerUsed(owner);
         ui32 lightYellowLimit = ChunkTracker.ColorFlagLimit(owner, NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW);

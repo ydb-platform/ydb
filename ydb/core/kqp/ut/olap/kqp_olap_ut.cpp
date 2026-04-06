@@ -4467,8 +4467,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             if (AddNull) {
                 testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
-                    "'length')");
+                    "Bulk upsert to table '/Root/ttt' Received NULL value for not null column: length");
             } else {
                 testHelper.BulkUpsert(testTable, rowsBuilder);
             }

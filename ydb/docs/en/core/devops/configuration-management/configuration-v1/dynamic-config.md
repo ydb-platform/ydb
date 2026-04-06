@@ -26,7 +26,7 @@ Before starting to use dynamic configuration in the cluster, it is necessary to 
          admin console configs dump-yaml > dynconfig.yaml
     ```
 
-    You must first obtain an authentication token using the `ydb auth get-token` command, similar to the [cluster initialization procedure](../../../devops/deployment-options/manual/initial-deployment.md#initialize-cluster).
+    You must first obtain an authentication token using the `ydb auth get-token` command, similar to the [cluster initialization procedure](../../../devops/deployment-options/manual/initial-deployment/deployment-configuration-v1.md#initialize-cluster).
 
 3. Create the initial dynamic configuration file:
 

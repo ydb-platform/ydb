@@ -1078,7 +1078,7 @@ class TestJoinStreaming(TestYdsBase):
                             user Int32,
                             skip Bool
                         )
-                        , WATERMARK AS ($event_time(`ts`) - Interval('PT3S'))
+                        , WATERMARK = $event_time(`ts`) - Interval('PT3S')
                         , WATERMARK_GRANULARITY = 'PT2S'
                         {idle_clause}
                     )            ;

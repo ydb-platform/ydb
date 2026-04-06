@@ -140,6 +140,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         const TString& readSessionId = commitRequest->read_session_id();
 
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
+        const auto& topicPath = topicInitInfo.TopicNameConverter->GetPrimaryPath();
 
         for (auto& parent: partitionNode->AllParents) {
             TDistributedCommitHelper::TCommitInfo commit {
@@ -147,7 +148,8 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                 .Offset = Max<i64>(),
                 .KillReadSession = killReadSession,
                 .OnlyCheckCommitedToFinish = false,
-                .ReadSessionId = readSessionId
+                .ReadSessionId = readSessionId,
+                .TopicPath = topicPath
             };
             commits.push_back(commit);
         }
@@ -158,7 +160,8 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                     .PartitionId = child->Id,
                     .Offset = 0,
                     .KillReadSession = true,
-                    .OnlyCheckCommitedToFinish = false
+                    .OnlyCheckCommitedToFinish = false,
+                    .TopicPath = topicPath
                 };
                 commits.push_back(commit);
             }
@@ -169,12 +172,15 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
             .Offset = commitRequest->offset(),
             .KillReadSession = killReadSession,
             .OnlyCheckCommitedToFinish = false,
-            .ReadSessionId = readSessionId
+            .ReadSessionId = readSessionId,
+            .TopicPath = topicPath
         };
         commits.push_back(commit);
 
-        auto topic = topicInitInfo.TopicNameConverter->GetPrimaryPath();
-        Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
+        Kqp = std::make_unique<TDistributedCommitHelper>(
+            Request().GetDatabaseName().GetOrElse(TString()),
+            ClientId,
+            commits);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
@@ -197,7 +203,6 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
     }
 
     auto step = Kqp->Handle(ev, ctx);
-
     if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);

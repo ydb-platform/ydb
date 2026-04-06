@@ -29,6 +29,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/queue.h>
+#include <util/string/hex.h>
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
@@ -804,7 +805,9 @@ private:
 
                 if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
                     for (auto term: NJsonIndex::BuildSearchTerms(literal)) {
-                        searchTerms.emplace_back(std::move(term));
+                        // Tokens are binary (contain null bytes and type bytes) and
+                        // cannot be embedded directly in a JSON string, so hex-encode for display.
+                        searchTerms.emplace_back(HexEncode(term));
                     }
                 } else {
                     auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);

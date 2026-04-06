@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Written to 2 primary and 1 hand-off
         TLocationMask requested =
-            TLocationMask::Make(false, true, true, true, false);
+            TLocationMask::MakePBuffer(false, true, true, true, false);
         TLocationMask confirmed = requested;
 
         dirtyMap.WriteFinished(
@@ -442,8 +442,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
-            requested,
-            confirmed);
+            requested.LogicalAnd(TLocationMask::MakeAllPBuffers()),
+            confirmed.LogicalAnd(TLocationMask::MakeAllPBuffers()));
 
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
 
         TLocationMask requested =
-            TLocationMask::Make(true, true, true, false, false);
+            TLocationMask::MakePBuffer(true, true, true, false, false);
         TLocationMask confirmed = requested;
 
         // Range below write watermark. Should be flushed to 4 ddisks.
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
 
         TLocationMask requested =
-            TLocationMask::Make(true, true, true, false, false);
+            TLocationMask::MakePBuffer(true, true, true, false, false);
         TLocationMask confirmed = requested;
 
         // Range below write watermark. Should be flushed.

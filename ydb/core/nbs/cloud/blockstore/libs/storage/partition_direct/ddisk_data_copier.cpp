@@ -55,7 +55,9 @@ TDDiskDataCopier::TDDiskDataCopier(
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
     , DirtyMap(dirtyMap)
-{}
+{
+    Y_ASSERT(IsDDisk(Destination));
+}
 
 TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Start()
 {

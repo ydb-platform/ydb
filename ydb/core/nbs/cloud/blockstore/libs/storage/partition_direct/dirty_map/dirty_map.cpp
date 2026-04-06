@@ -166,7 +166,7 @@ TDDiskState::EState TDDiskState::GetState() const
 
 bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
 {
-    return State == EState::Operational || OperationalBlockCount >= range.End;
+    return State == EState::Operational || range.End < OperationalBlockCount;
 }
 
 bool TDDiskState::NeedFlushToDDisk(TBlockRange64 range) const
@@ -473,6 +473,8 @@ void TBlocksDirtyMap::RestorePBuffer(
     TBlockRange64 range,
     ELocation location)
 {
+    Y_ABORT_UNLESS(IsPBuffer(location));
+
     if (auto item = Inflight.GetValue(lsn)) {
         Y_ABORT_UNLESS(item->Range == range);
 
@@ -644,6 +646,9 @@ void TBlocksDirtyMap::WriteFinished(
     TLocationMask requested,
     TLocationMask confirmed)
 {
+    Y_ABORT_UNLESS(requested.OnlyPBuffer());
+    Y_ABORT_UNLESS(confirmed.OnlyPBuffer());
+
     const bool inserted = Inflight.AddRange(
         lsn,
         range,
@@ -656,6 +661,9 @@ void TBlocksDirtyMap::FlushFinished(
     const TVector<ui64>& flushOk,
     const TVector<ui64>& flushFailed)
 {
+    Y_ABORT_UNLESS(IsPBuffer(route.Source));
+    Y_ABORT_UNLESS(IsDDisk(route.Destination));
+
     for (ui64 lsn: flushOk) {
         auto item = Inflight.GetValue(lsn);
         Y_ABORT_UNLESS(item);
@@ -678,6 +686,8 @@ void TBlocksDirtyMap::EraseFinished(
     const TVector<ui64>& eraseOk,
     const TVector<ui64>& eraseFailed)
 {
+    Y_ABORT_UNLESS(IsPBuffer(location));
+
     for (ui64 lsn: eraseOk) {
         auto item = Inflight.GetValue(lsn);
         Y_ABORT_UNLESS(item);
@@ -700,12 +710,16 @@ void TBlocksDirtyMap::EraseFinished(
 
 void TBlocksDirtyMap::MarkFresh(ELocation location, ui64 bytesOffset)
 {
+    Y_ABORT_UNLESS(IsDDisk(location));
+
     DDiskStates[location].SetReadWatermark(bytesOffset / BlockSize);
     DDiskStates[location].SetFlushWatermark(bytesOffset / BlockSize);
 }
 
 std::optional<ui64> TBlocksDirtyMap::GetFreshWatermark(ELocation location) const
 {
+    Y_ABORT_UNLESS(IsDDisk(location));
+
     if (DDiskStates[location].GetState() == TDDiskState::EState::Operational) {
         return std::nullopt;
     }
@@ -714,11 +728,15 @@ std::optional<ui64> TBlocksDirtyMap::GetFreshWatermark(ELocation location) const
 
 void TBlocksDirtyMap::SetReadWatermark(ELocation location, ui64 bytesOffset)
 {
+    Y_ABORT_UNLESS(IsDDisk(location));
+
     DDiskStates[location].SetReadWatermark(bytesOffset / BlockSize);
 }
 
 void TBlocksDirtyMap::SetFlushWatermark(ELocation location, ui64 bytesOffset)
 {
+    Y_ABORT_UNLESS(IsDDisk(location));
+
     DDiskStates[location].SetFlushWatermark(bytesOffset / BlockSize);
 }
 

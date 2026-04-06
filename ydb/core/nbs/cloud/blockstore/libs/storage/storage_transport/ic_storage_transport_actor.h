@@ -79,11 +79,11 @@ private:
         const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleWriteDDisk(
+    void HandleWriteToDDisk(
         const TEvTransportPrivate::TEvWriteToDDisk::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleWriteDDiskResult(
+    void HandleWriteToDDiskResult(
         const NKikimr::NDDisk::TEvWriteResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 

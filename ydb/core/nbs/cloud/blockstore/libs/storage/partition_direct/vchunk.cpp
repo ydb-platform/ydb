@@ -38,7 +38,7 @@ TVChunk::TVChunk(
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
     , BlockSize(DefaultBlockSize)
-    , BlocksCount(VChunkSize / DefaultBlockSize)
+    , BlocksCount(VChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)

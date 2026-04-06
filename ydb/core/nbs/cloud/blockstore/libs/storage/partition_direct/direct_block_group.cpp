@@ -293,14 +293,14 @@ TDirectBlockGroup::WriteBlocksToDDisk(
     auto childSpan = NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         std::move(traceId),
-        "NbsPartition.WriteBlocks.WritePBuffer",
+        "NbsPartition.WriteBlocks.WriteDDisk",
         NWilson::EFlags::NONE,
         ActorSystem);
 
     auto promise = NewPromise<TDBGWriteBlocksResponse>();
     auto result = promise.GetFuture();
     auto future = StorageTransport->WriteToDDisk(
-        PBufferConnections[hostIndex].HostConnection,
+        DDiskConnections[hostIndex].HostConnection,
         NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             range.Start * DefaultBlockSize,

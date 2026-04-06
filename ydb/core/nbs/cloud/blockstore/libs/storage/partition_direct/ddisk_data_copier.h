@@ -46,25 +46,16 @@ public:
     NThreading::TFuture<EResult> Stop();
 
 private:
-    struct TCopyRangeRequestState
-    {
-        TBlockRange64 Range;
-        TRangeLock Lock;
-        TString Data;
-        NWilson::TSpan Span;
-
-        TGuardedSgList GetSgList() const;
-    };
-
+    struct TCopyRangeRequestState;
     using TCopyRangeRequestStatePtr = std::shared_ptr<TCopyRangeRequestState>;
 
     NWilson::TSpan CreateSpan() const;
     void StartCopyRange();
     void OnRangeRead(
-        TCopyRangeRequestStatePtr state,
+        TCopyRangeRequestStatePtr copyRangeState,
         const TReadRequestExecutor::TResponse& response);
     void OnRangeWritten(
-        TCopyRangeRequestStatePtr state,
+        TCopyRangeRequestStatePtr copyRangeState,
         const TDBGWriteBlocksResponse& response);
 
     NActors::TActorSystem* const ActorSystem = nullptr;

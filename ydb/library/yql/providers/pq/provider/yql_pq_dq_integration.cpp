@@ -33,24 +33,6 @@ namespace NYql {
 using namespace NNodes;
 using namespace std::literals::string_view_literals;
 
-namespace {
-
-/// PqReadTopic may use Void as a placeholder when WATERMARK is omitted (see yql_pq_datasource.cpp).
-TMaybeNode<TCoLambda> TryPqReadTopicWatermarkLambda(const TPqReadTopic& topic) {
-    if (topic.Ref().ChildrenSize() <= TPqReadTopic::idx_Watermark) {
-        return {};
-    }
-    const TExprNode::TPtr watermark = topic.Ref().ChildPtr(TPqReadTopic::idx_Watermark);
-    if (!watermark) {
-        return {};
-    }
-    if (TCoVoid::Match(watermark.Get())) {
-        return {};
-    }
-    YQL_ENSURE(TCoLambda::Match(watermark.Get()));
-    return TMaybeNode<TCoLambda>(watermark);
-}
-
 class TPqDqIntegration : public TDqIntegrationBase {
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
@@ -124,8 +106,10 @@ public:
                 return {};
             }
 
+            const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
+
             TMaybeNode<TCoAtom> watermarkSerialized;
-            if (const auto maybeWatermark = TryPqReadTopicWatermarkLambda(pqReadTopic)) {
+            if (maybeWatermark) {
                 const auto watermark = maybeWatermark.Cast();
 
                 TStringBuilder err;
@@ -144,6 +128,8 @@ public:
                 watermarkSerialized = Build<TCoAtom>(ctx, watermark.Pos()).Value(serializedWatermarkExpr).Done();
             }
 
+            const auto expandedRowType = ExpandType(pqReadTopic.Pos(), *rowType, ctx);
+
             return Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
@@ -154,11 +140,11 @@ public:
                         .Name().Build(token)
                         .Build()
                     .FilterPredicate().Value(TString()).Build()  // Empty predicate by default <=> WHERE TRUE
-                    .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
-                    .WatermarkExpr(pqReadTopic.Watermark().Maybe<TCoLambda>())
+                    .RowType(expandedRowType)
+                    .WatermarkExpr(maybeWatermark)
                     .WatermarkSerialized(watermarkSerialized)
                     .Build()
-                .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
+                .RowType(expandedRowType)
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done().Ptr();
@@ -543,7 +529,7 @@ public:
         const auto& cluster = pqReadTopic.DataSource().Cluster().StringValue();
         const auto format = pqReadTopic.Format().Ref().Content();
         const auto& settings = pqReadTopic.Settings();
-        const auto maybeWatermark = TryPqReadTopicWatermarkLambda(pqReadTopic);
+        const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
         TVector<TCoNameValueTuple> props;
 

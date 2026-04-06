@@ -518,9 +518,11 @@ private:
                     TopicPartitionsCount
                 );
             }
-            PartitionsCount = 0;
             for (const auto& cluster : Clusters) {
-                PartitionsCount += GetPartitionsToRead(cluster).size();
+                const auto& partitionsToRead = GetPartitionsToRead(cluster);
+                for (const auto partitionId : partitionsToRead) {
+                    Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+                }
             }
 
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
@@ -729,12 +731,11 @@ private:
 
     void CheckFinishedByOffsets() {
         if (Clusters.empty()
-            || PartitionsCount != PartitionToOffset.size()      // Not all partition connected. 
             || SourceParams.GetStreamingMode() 
             || FinishedByOffsets) {
             return;
         }
-        for (const auto& [key, info] : PartitionToOffset) {
+        for (const auto& [key, info] : Partitions) {
             if (!info.EndOffset) {                              // Not connected yet.
                 SRC_LOG_T("SessionId: " << GetSessionId() << ", CheckFinishedByOffsets 2");
                 return;
@@ -817,6 +818,10 @@ private:
         return { cluster, partitionSession->GetPartitionId() };
     }
 
+    static TPartitionKey MakePartitionKey(const TString& cluster, ui64 partitionId) {
+        return { cluster, partitionId };
+    }
+
     void SubscribeOnNextEvent() {
         if (FinishedByOffsets) {
             return;
@@ -854,7 +859,6 @@ private:
 
     // must be called with bound allocator
     bool MaybeReturnReadyBatch(TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, i64& usedSpace) {
-        
         if (ReadyBuffer.empty()) {
             CheckFinishedByOffsets();
             SubscribeOnNextEvent();
@@ -875,7 +879,7 @@ private:
                     CurrentDeferredCommit.Add(partitionSession, start, end);
                 }
             }
-            PartitionToOffset[MakePartitionKey(TString(cluster), partitionSession)].Offset = ranges.back().second;
+            Partitions[MakePartitionKey(TString(cluster), partitionSession)].Offset = ranges.back().second;
         }
 
         ReadyBuffer.pop();
@@ -891,7 +895,6 @@ private:
             << " DataCount = " << buffer.RowCount()
             << " Watermark = " << (watermark ? ToString(*watermark) : "none")
             << " Used space = " << usedSpace);
-
         return true;
     }
 
@@ -985,7 +988,7 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
 
-            auto& partitionInfo = Self.PartitionToOffset[partitionKey];
+            auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
             }
@@ -1069,7 +1072,6 @@ private:
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
     bool FinishedByOffsets = false;
-    ui64 PartitionsCount = 0;   // all clusters sum
 };
 
 ui32 ExtractPartitionsFromParams(

@@ -82,13 +82,16 @@ void TDqPqReadActorBase::SaveState(const NDqProto::TCheckpoint& /*checkpoint*/, 
     topic->SetDatabase(SourceParams.GetDatabase());
     topic->SetTopicPath(SourceParams.GetTopicPath());
 
-    for (const auto& [clusterAndPartition, info] : PartitionToOffset) {
+    for (const auto& [clusterAndPartition, info] : Partitions) {
+        if (!info.Offset) {
+            continue;
+        }
         const auto& [cluster, partition] = clusterAndPartition;
         NPq::NProto::TDqPqTopicSourceState::TPartitionReadState* partitionState = stateProto.AddPartitions();
         partitionState->SetTopicIndex(0); // Now we are supporting only one topic per source.
         partitionState->SetCluster(cluster);
         partitionState->SetPartition(partition);
-        partitionState->SetOffset(info.Offset);
+        partitionState->SetOffset(*info.Offset);
     }
 
     SRC_LOG_D("SessionId: " << GetSessionId() << " SaveState, offsets: " << LogPartitionToOffset());
@@ -116,11 +119,11 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
         YQL_ENSURE(stateProto.ParseFromString(data.Blob), "Serialized state is corrupted");
         YQL_ENSURE(stateProto.TopicsSize() == 1, "One topic per source is expected");
 
-        PartitionToOffset.reserve(PartitionToOffset.size() + stateProto.PartitionsSize());
+        Partitions.reserve(Partitions.size() + stateProto.PartitionsSize());
         for (const auto& partitionProto : stateProto.GetPartitions()) {
-            ui64& offset = PartitionToOffset[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}].Offset;
+            auto& offset = Partitions[TPartitionKey{partitionProto.GetCluster(), partitionProto.GetPartition()}].Offset;
             if (offset) {
-                offset = Min(offset, partitionProto.GetOffset());
+                offset = Min(*offset, partitionProto.GetOffset());
             } else {
                 offset = partitionProto.GetOffset();
             }
@@ -181,7 +184,7 @@ void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime
 
 TString TDqPqReadActorBase::LogPartitionToOffset() const {
     TStringBuilder str;
-    for (const auto& [clusterAndPartition, info] : PartitionToOffset) {
+    for (const auto& [clusterAndPartition, info] : Partitions) {
         str << "{" << clusterAndPartition.Cluster << ":" << clusterAndPartition.PartitionId << "," << info.Offset << "},";
     }
     return str;

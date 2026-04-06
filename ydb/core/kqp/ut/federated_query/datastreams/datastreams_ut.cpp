@@ -5075,7 +5075,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         config.MutablePQConfig()->SetRequireCredentialsInNewProtocol(true);
 
         constexpr char topic[] = "tableMode";
-        CreateTopic(topic, std::nullopt, /* local */ true);
+
+        ui32 partitionCount = 4;
+        CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
+
         WriteTopicMessage(topic, "data", 0, /* local */ true);
         Sleep(TDuration::Seconds(1));
 

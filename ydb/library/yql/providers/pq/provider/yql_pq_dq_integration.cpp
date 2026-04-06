@@ -681,7 +681,9 @@ public:
                 }
             }
         }
-        Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
+        if (streamingTopicReadEnabled != State_->StreamingTopicsReadByDefault) {
+            Add(props, StreamingTopicRead, ToString(streamingTopicReadEnabled), pos, ctx);
+        }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
             ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode, use WITH (STREAMING = \"TRUE\")"));

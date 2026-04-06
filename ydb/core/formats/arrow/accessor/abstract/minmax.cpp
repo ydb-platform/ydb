@@ -2,13 +2,16 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
+#include <ydb/library/arrow_kernels/operations.h>
+#include <ydb/core/formats/arrow/program/functions.h>
 
-#include <arrow/array/array_base.h>
-#include <arrow/c/bridge.h>   //order matters
-#include <arrow/chunked_array.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/c/bridge.h>   //order matters
+#include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h>   // Для MakeArrayFromScalar
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/c/bridge.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -97,4 +100,45 @@ NJson::TJsonValue TMinMax::Json() const {
     json.InsertValue("max", Max()->ToString());
     return json;
 }
+
+void TMinMax::UniteWith(TMinMax other) {
+    if (!other.IsNull()) {
+        if (IsNull()) {
+            *this = other;
+        } else {
+            using namespace NArrowCompare;
+            if (Max() < other.Max()) {
+                Max() = other.Max();
+            }
+            if (Min() > other.Min()) {
+                Min() = other.Min();
+            }
+        }
+    }
+}
+namespace NArrowCompare{
+
+inline bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    arrow::Datum res =
+        NKikimr::NArrow::TStatusValidator::GetValid(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
+    return res.scalar_as<arrow::BooleanScalar>().value;
+}
+
+inline bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    return cmp(NKernels::EOperation::Less, left, right);
+}
+
+inline bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    return cmp(NKernels::EOperation::Greater, left, right);
+}
+
+inline bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    return cmp(NKernels::EOperation::LessEqual, left, right);
+}
+
+inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+    return cmp(NKernels::EOperation::GreaterEqual, left, right);
+}
+}
+
 }   // namespace NKikimr::NArrow::NAccessor

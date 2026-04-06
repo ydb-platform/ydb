@@ -9,30 +9,9 @@
 #include <cstring>
 #define AFL_VERIFY_UNREACHABLE(...) AFL_VERIFY(false)("error", "unreachable")
 
-#define VALUE_OR_VERIFY(result) NKikimr::NArrow::TStatusValidator::GetValid(result)
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
-inline bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    arrow::Datum res =
-        VALUE_OR_VERIFY(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
-    return res.scalar_as<arrow::BooleanScalar>().value;
-}
-
-inline bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return cmp(NKernels::EOperation::Less, left, right);
-}
-
-inline bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return cmp(NKernels::EOperation::Greater, left, right);
-}
-
-inline bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return cmp(NKernels::EOperation::LessEqual, left, right);
-}
-
-inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    return cmp(NKernels::EOperation::GreaterEqual, left, right);
-}
+using namespace NArrow::NAccessor::NArrowCompare;
 
 bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
@@ -88,6 +67,11 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
     const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
     auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
+    if (chunkValue.Max()->type == arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)) {
+        // cast to timestamp to uint64
+        chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();
+        chunkValue.Max() = chunkValue.Max()->CastTo(arrow::uint64()).ValueOrDie();
+    }
     return !Skip(chunkValue, requestValue, op);
 }
 
@@ -111,6 +95,7 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
     auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
     auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType);
+    
     return minmax.Json();
 }
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {

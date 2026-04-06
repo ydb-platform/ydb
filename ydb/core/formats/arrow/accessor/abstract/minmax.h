@@ -33,16 +33,7 @@ struct TMinMax {
         return MinMax.value[1];
     }
 
-    void UniteWith(TMinMax other) {
-        if (!other.IsNull()) {
-            if (IsNull()) {
-                *this = other;
-            } else {
-                Max() = std::max(Max(), other.Max());
-                Min() = std::min(Min(), other.Min());
-            }
-        }
-    }
+    void UniteWith(TMinMax other);
 
     static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
 
@@ -53,5 +44,14 @@ struct TMinMax {
 
     NJson::TJsonValue Json() const;
 };
+namespace NArrowCompare{
+bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+
+bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+
+bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+
+bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
+}
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -66,7 +66,7 @@ class TestYdbMinMaxIndex(TestBase):
         "Utf8": lambda i: f"utf8_{i}",
         "Date": lambda i: date(2000 + (i % 105), 1, 1),
         "Datetime": lambda i: datetime(2000 + (i % 105), 1, 1, 12, 0, 0),
-        # "Timestamp": lambda i: 1696200000000000 + i * 100000, #see gh35699
+        "Timestamp": lambda i: 1696200000000000 + i * 100000
     }
 
     @classmethod

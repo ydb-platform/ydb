@@ -402,4 +402,9 @@
   logging.getLogger('ydb').setLevel(logging.DEBUG)
   ```
 
+- JavaScript
+
+  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
+  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
+
 {% endlist %}

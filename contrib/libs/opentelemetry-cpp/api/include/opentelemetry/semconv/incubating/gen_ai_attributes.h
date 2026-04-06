@@ -35,6 +35,11 @@ static constexpr const char *kGenAiAgentId = "gen_ai.agent.id";
 static constexpr const char *kGenAiAgentName = "gen_ai.agent.name";
 
 /**
+  The version of the GenAI agent.
+ */
+static constexpr const char *kGenAiAgentVersion = "gen_ai.agent.version";
+
+/**
   Deprecated, use Event API to report completions contents.
 
   @deprecated
@@ -312,6 +317,27 @@ static constexpr const char *kGenAiResponseId = "gen_ai.response.id";
 static constexpr const char *kGenAiResponseModel = "gen_ai.response.model";
 
 /**
+  The documents retrieved.
+  <p>
+  Instrumentations MUST follow <a href="/docs/gen-ai/gen-ai-retrieval-documents.json">Retrieval
+  documents JSON schema</a>. When the attribute is recorded on events, it MUST be recorded in
+  structured form. When recorded on spans, it MAY be recorded as a JSON string if structured format
+  is not supported and SHOULD be recorded in structured form otherwise. <p> Each document object
+  SHOULD contain at least the following properties:
+  @code id @endcode (string): A unique identifier for the document, @code score @endcode (double):
+  The relevance score of the document
+ */
+static constexpr const char *kGenAiRetrievalDocuments = "gen_ai.retrieval.documents";
+
+/**
+  The query text used for retrieval.
+  <blockquote>
+  [!Warning]
+  This attribute may contain sensitive information.</blockquote>
+ */
+static constexpr const char *kGenAiRetrievalQueryText = "gen_ai.retrieval.query.text";
+
+/**
   Deprecated, use @code gen_ai.provider.name @endcode instead.
 
   @deprecated
@@ -419,6 +445,22 @@ static constexpr const char *kGenAiToolName = "gen_ai.tool.name";
 static constexpr const char *kGenAiToolType = "gen_ai.tool.type";
 
 /**
+  The number of input tokens written to a provider-managed cache.
+  <p>
+  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+ */
+static constexpr const char *kGenAiUsageCacheCreationInputTokens =
+    "gen_ai.usage.cache_creation.input_tokens";
+
+/**
+  The number of input tokens served from a provider-managed cache.
+  <p>
+  The value SHOULD be included in @code gen_ai.usage.input_tokens @endcode.
+ */
+static constexpr const char *kGenAiUsageCacheReadInputTokens =
+    "gen_ai.usage.cache_read.input_tokens";
+
+/**
   Deprecated, use @code gen_ai.usage.output_tokens @endcode instead.
 
   @deprecated
@@ -430,6 +472,11 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kGenAiUsageCompletionToken
 
 /**
   The number of tokens used in the GenAI input (prompt).
+  <p>
+  This value SHOULD include all types of input tokens, including cached tokens.
+  Instrumentations SHOULD make a best effort to populate this value, using a total
+  provided by the provider when available or, depending on the provider API,
+  by summing different token types parsed from the provider output.
  */
 static constexpr const char *kGenAiUsageInputTokens = "gen_ai.usage.input_tokens";
 
@@ -508,6 +555,13 @@ static constexpr const char *kTextCompletion = "text_completion";
   API</a>
  */
 static constexpr const char *kEmbeddings = "embeddings";
+
+/**
+  Retrieval operation such as <a
+  href="https://platform.openai.com/docs/api-reference/vector-stores/search">OpenAI Search Vector
+  Store API</a>
+ */
+static constexpr const char *kRetrieval = "retrieval";
 
 /**
   Create GenAI agent

@@ -101,7 +101,7 @@ TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TEx
             Y_ENSURE(0 <= sp);
         }
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 IGraphTransformer::TStatus InferPgCommonType(
@@ -451,7 +451,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
                 output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx.Expr);
             } else {
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
             }
             return IGraphTransformer::TStatus::Repeat;
         } catch (const yexception& e) {

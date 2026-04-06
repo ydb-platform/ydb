@@ -6,7 +6,7 @@ namespace NKqp {
 namespace {
 
 bool IsValidLimit(const TExpression& expression) {
-    return !!TMaybeNode<TCoUint64>(TCoLambda(expression.Node).Body().Ptr());
+    return !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
 }
 
 bool CanPushLimitToSource(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
@@ -52,7 +52,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
 
     const auto limit = CastOperator<TOpLimit>(input);
     // Split one limit on final and intermediate, we will later propagate intermediate through stages.
-    if (limit->GetLimitPhase() == EOpPhase::NotDefined) {
+    if (limit->GetLimitPhase() == EOpPhase::Undefined) {
         return EmitFinalAndIntermediateLimits(limit);
     }
     Y_ENSURE(limit->GetLimitPhase() == EOpPhase::Intermediate);
@@ -72,7 +72,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
         newOperator->Props.StageId = limitInput->Props.StageId;
         if (CanPushLimitToSource(limit, limitInput)) {
             auto read = CastOperator<TOpRead>(limitInput);
-            const auto limitCond = TCoLambda(limit->GetLimitCond().Node).Body().Ptr();
+            const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
             newOperator = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda,
                                                  limitCond, read->Props, read->Pos);
         }

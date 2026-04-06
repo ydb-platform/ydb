@@ -89,11 +89,7 @@ enum class EColumnRefState {
     MatchRecognizeDefineAggregate,
 };
 
-enum class EYqlSelectMode {
-    Disable,
-    Auto,
-    Force,
-};
+using NSQLTranslation::EYqlSelect;
 
 enum class EFlattenAndAggrExprsPersistence {
     Disable,
@@ -276,13 +272,13 @@ public:
 
     TScopedStatePtr CreateScopedState() const;
 
-    EYqlSelectMode GetYqlSelectMode() const {
+    EYqlSelect GetYqlSelectMode() const {
         return YqlSelectMode_;
     }
 
-    void SetYqlSelectMode(EYqlSelectMode mode) {
+    void SetYqlSelectMode(EYqlSelect mode) {
         YqlSelectMode_ = mode;
-        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+        if (YqlSelectMode_ != EYqlSelect::Disable) {
             DeriveColumnOrder = true;
         }
     }
@@ -290,6 +286,11 @@ public:
     bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
 
     bool EnsureBackwardCompatibleFeatureAvailable(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
+    bool EnsureFeatureNotExpired(
         TPosition position,
         TStringBuf feature,
         NYql::TLangVersion version);
@@ -329,7 +330,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
-    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
+    EYqlSelect YqlSelectMode_ = EYqlSelect::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;

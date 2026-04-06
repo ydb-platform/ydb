@@ -37,6 +37,13 @@ class ExemplarData;
 class ExemplarReservoir
 {
 public:
+  ExemplarReservoir() = default;
+
+  ExemplarReservoir(const ExemplarReservoir &)            = delete;
+  ExemplarReservoir(ExemplarReservoir &&)                 = delete;
+  ExemplarReservoir &operator=(const ExemplarReservoir &) = delete;
+  ExemplarReservoir &operator=(ExemplarReservoir &&)      = delete;
+
   virtual ~ExemplarReservoir() = default;
 
   /** Offers a long measurement to be sampled. */
@@ -72,12 +79,12 @@ public:
 
   static nostd::shared_ptr<ExemplarReservoir> GetSimpleFixedSizeExemplarReservoir(
       size_t size,
-      std::shared_ptr<ReservoirCellSelector> reservoir_cell_selector,
+      const std::shared_ptr<ReservoirCellSelector> &reservoir_cell_selector,
       MapAndResetCellType map_and_reset_cell);
 
   static nostd::shared_ptr<ExemplarReservoir> GetAlignedHistogramBucketExemplarReservoir(
       size_t size,
-      std::shared_ptr<ReservoirCellSelector> reservoir_cell_selector,
+      const std::shared_ptr<ReservoirCellSelector> &reservoir_cell_selector,
       MapAndResetCellType map_and_reset_cell);
 
   static nostd::shared_ptr<ExemplarReservoir> GetNoExemplarReservoir();

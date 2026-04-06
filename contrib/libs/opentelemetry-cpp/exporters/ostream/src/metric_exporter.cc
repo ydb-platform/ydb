@@ -76,7 +76,7 @@ namespace metrics
 {
 
 template <typename Container>
-inline void printVec(std::ostream &os, Container &vec)
+static inline void printVec(std::ostream &os, Container &vec)
 {
   using T = typename std::decay<decltype(*vec.begin())>::type;
   os << '[';

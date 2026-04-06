@@ -83,9 +83,6 @@ ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.
 ydb/tests/functional/tenants py3test.[*/*] chunk
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
-ydb/tests/olap py3test.[*/*] chunk
-ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
-ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

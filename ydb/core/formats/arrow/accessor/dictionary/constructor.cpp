@@ -81,7 +81,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {
-    return NKikimrArrowAccessorProto::TConstructor();
+    NKikimrArrowAccessorProto::TConstructor result;
+    result.MutableDictionary();
+    return result;
 }
 
 bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TConstructor& /*proto*/) {

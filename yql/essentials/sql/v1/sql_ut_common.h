@@ -2890,6 +2890,8 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
         "PARALLEL FOR is not available before language version 2026.01");
 }
 
+#ifdef YQL_BUILTIN_MIN_MAX_LANGVER
+
 Y_UNIT_TEST(FunctionLangVer) {
     {
         NYql::TAstParseResult res = SqlToYql(R"sql(
@@ -2915,6 +2917,8 @@ Y_UNIT_TEST(FunctionLangVer) {
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     }
 }
+
+#endif
 
 Y_UNIT_TEST(StringLiteralWithEscapedBackslash) {
     NYql::TAstParseResult res1 = SqlToYql(R"foo(SELECT 'a\\';)foo");
@@ -5238,22 +5242,13 @@ Y_UNIT_TEST(CreateSecretCorrect) {
     }
 }
 
-Y_UNIT_TEST(CreateSecretWithExpression) {
+Y_UNIT_TEST(CreateSecretWithExpressionOk) {
     { // Named node on other named nodes
         const auto res = SqlToYql(R"sql(
             USE plato;
             DECLARE $sec1 AS String;
             DECLARE $sec2 AS String;
             CREATE SECRET `secret-name` WITH (VALUE = $sec1 || $sec2);
-        )sql");
-        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    }
-
-    { // Named node on literal: $x = 1; value = $x
-        auto res = SqlToYql(R"sql(
-            USE plato;
-            $x = 1;
-            CREATE SECRET `x` WITH (VALUE = $x);
         )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
     }
@@ -5271,16 +5266,6 @@ Y_UNIT_TEST(CreateSecretWithExpression) {
         auto res = SqlToYql(R"sql(
             USE plato;
             $x = (SELECT Max(value) FROM secrets);
-            CREATE SECRET `x` WITH (VALUE = $x);
-        )sql");
-        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-    }
-
-    { // Named node on named node: $y = 1; $x = $y; value = $x
-        auto res = SqlToYql(R"sql(
-            USE plato;
-            $y = 1;
-            $x = $y;
             CREATE SECRET `x` WITH (VALUE = $x);
         )sql");
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -5304,6 +5289,29 @@ Y_UNIT_TEST(CreateSecretWithExpression) {
             CREATE SECRET `x` WITH (VALUE = (SELECT Max(value) FROM secrets));
         )sql", settings);
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    }
+}
+
+Y_UNIT_TEST(CreateSecretWithExpressionFail) {
+    { // Named node on literal: $x = 1; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $x = 1;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:45: Error: Unsupported type for parameter: VALUE. String was expected\n");
+    }
+
+    { // Named node on named node: $y = 1; $x = $y; value = $x
+        auto res = SqlToYql(R"sql(
+            USE plato;
+            $y = 1;
+            $x = $y;
+            CREATE SECRET `x` WITH (VALUE = $x);
+        )sql");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:45: Error: Unsupported type for parameter: VALUE. String was expected\n");
     }
 }
 
@@ -13795,6 +13803,53 @@ Y_UNIT_TEST(QuotedAtoms) {
     UNIT_ASSERT_STRING_CONTAINS(program, R"('"a b")");
     UNIT_ASSERT_STRING_CONTAINS(program, R"('"c d")");
     UNIT_ASSERT_STRING_CONTAINS(program, R"('"e f")");
+}
+
+Y_UNIT_TEST(PriorityFieldOverNothing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT x FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(PriorityFlagOverField) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+    settings.Flags.insert("AutoYqlSelect");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT x FROM plato.x;
+        )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(PriorityPragmaOverField) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NSQLTranslationV1::YqlSelectLangVersion();
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'disable';
+        SELECT x FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)

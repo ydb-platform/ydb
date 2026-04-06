@@ -3,7 +3,7 @@
 #include "timer_queue.h"
 #include "log.h"
 
-#include <ydb/core/util/spsc_circular_queue.h>
+#include "spsc_circular_queue.h"
 
 #include <util/system/hp_timer.h>
 #include <util/system/spinlock.h>

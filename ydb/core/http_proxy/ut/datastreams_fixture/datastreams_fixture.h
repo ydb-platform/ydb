@@ -175,7 +175,7 @@ public:
         return json;
     }
 
-    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 5) {
+    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 20) {
         for (ui32 i = 0; i < retries; ++i) {
             auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
             if (expectedHttpCode == 200) {

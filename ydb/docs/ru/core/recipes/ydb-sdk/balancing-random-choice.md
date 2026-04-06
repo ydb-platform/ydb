@@ -38,14 +38,7 @@
       defer db.Close(ctx)
       // ...
     }
-<<<<<<< HEAD
-    defer db.Close(ctx)
-    ...
-  }
-  ```
-=======
     ```
->>>>>>> a2e4fdea9da (docs: align RU YDB SDK docs with nested tab structure (#36458))
 
   - database/sql
 
@@ -79,11 +72,6 @@
       }
       defer nativeDriver.Close(ctx)
 
-<<<<<<< HEAD
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-=======
       connector, err := ydb.Connector(nativeDriver)
       if err != nil {
         panic(err)
@@ -112,7 +100,6 @@
     // ...
     driver.Stop(true);
     return 0;
->>>>>>> a2e4fdea9da (docs: align RU YDB SDK docs with nested tab structure (#36458))
   }
   ```
 

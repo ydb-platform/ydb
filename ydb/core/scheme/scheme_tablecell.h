@@ -915,6 +915,10 @@ public:
         return CellVectors.size();
     }
 
+    size_t DataSizeEstimate() const {
+        return Pool->MemoryAllocated();
+    }
+
     bool Empty() const {
         return CellVectors.empty();
     }

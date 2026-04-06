@@ -15,7 +15,7 @@ message TPQSourceMessage {
 
 message TPQSinkMessage {
    optional string Cluster = 1;
-   repeated string Endpoints = 5;
+   optional string Endpoint = 5;
    optional string CmEndpoint = 6;
    optional TPqClusterConfig.EClusterType ClusterType = 2;
    optional string Database = 3;

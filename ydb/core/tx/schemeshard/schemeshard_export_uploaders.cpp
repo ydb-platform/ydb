@@ -314,7 +314,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
 
     static TString GetDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
         if (itemIdx < ui32(settings.items_size())) {
-            TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
+            const TString itemDest = NBackup::NFieldsWrappers::GetItemDestination(settings.items(itemIdx));
             if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
                 return CanonizePath(TStringBuilder() << settings.base_path() << "/" << itemDest);
             }

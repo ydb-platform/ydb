@@ -720,7 +720,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
         Decorate(t, IsFs,
             {{EPathTypePersQueueGroup, topic.GetPrivateProto().DebugString()}},
-            {{"/MyRoot/Topic_0", "/Topic_0"}},
+            {{"/MyRoot/Topic_0", "Topic_0"}},
             func,
             TTestWithReboots::GetDefaultTestEnvOptions());
     }

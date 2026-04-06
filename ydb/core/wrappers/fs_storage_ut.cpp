@@ -479,28 +479,27 @@ public:
         const TString file1 = KeyPath("data/file1.txt");
         const TString file2 = KeyPath("data/file2.txt");
         const TString file3 = KeyPath("other/file3.txt");
-        const TString content1 = "content1";
-        const TString content2 = "content2";
-        const TString content3 = "content3";
+        const TString content = "content";
 
         {
-            auto result = PutObject(file1, content1);
+            auto result = PutObject(file1, content);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
         }
         {
-            auto result = PutObject(file2, content2);
+            auto result = PutObject(file2, content);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
         }
         {
-            auto result = PutObject(file3, content3);
+            auto result = PutObject(file3, content);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
         }
 
         {
-            auto result = ListObjects();
+            auto result = ListObjects(TempDir->Name());
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
             const auto& contents = result.GetResult().GetContents();
             UNIT_ASSERT_VALUES_EQUAL(contents.size(), 3);
+            UNIT_ASSERT(!result.GetResult().GetIsTruncated());
         }
 
         {
@@ -508,7 +507,7 @@ public:
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError().GetMessage());
             const auto& contents = result.GetResult().GetContents();
             UNIT_ASSERT_VALUES_EQUAL(contents.size(), 2);
-            
+
             THashSet<TString> keys;
             for (const auto& obj : contents) {
                 keys.insert(TString(obj.GetKey().data(), obj.GetKey().size()));

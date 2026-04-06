@@ -12,7 +12,7 @@ namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
 void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
-    using TTestCreateFunc = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&, 
+    using TTestCreateFunc = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&,
         const TVector<TExpectedResult>&, const TApplyIf&);
 
     static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
@@ -47,7 +47,9 @@ void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const 
 void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-        if (runtimeSetup) runtimeSetup(runtime);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -86,7 +88,9 @@ void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTe
 void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-        if (runtimeSetup) runtimeSetup(runtime);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
@@ -130,7 +134,9 @@ void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, 
 void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t, TRuntimeSetup runtimeSetup) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
         runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
-        if (runtimeSetup) runtimeSetup(runtime);
+        if (runtimeSetup) {
+            runtimeSetup(runtime);
+        }
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);

@@ -349,7 +349,12 @@ namespace {
     THashMap<TString, TString> ConvertTestData(const THashMap<TString, TTestDataWithScheme>& data) {
         THashMap<TString, TString> result;
 
-        for (const auto& [prefix, item] : data) {
+        for (const auto& [rawPrefix, item] : data) {
+            TString prefix = rawPrefix;
+            if (!prefix.empty() && !prefix.StartsWith('/')) {
+                prefix = "/" + prefix;
+            }
+
             bool withChecksum = item.Metadata.Data != R"({"version": 0})";
 
             auto metadataKey = prefix + "/metadata.json";
@@ -8382,7 +8387,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     topic.GetPublicProto().DebugString()
                 }
             }
-        }, {{topic.GetDir(), TStringBuilder() << "/MyRoot/Restored" << topic.GetDir()}});
+        }, {{topic.GetDir(), TStringBuilder() << "/MyRoot/Restored/" << topic.GetDir()}});
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnMaterializedIndex, 2, 1, false, IsFs) {

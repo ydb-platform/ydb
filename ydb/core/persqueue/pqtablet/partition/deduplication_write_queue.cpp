@@ -37,9 +37,10 @@ public:
         DisableTimestamp = TInstant::Zero();
         const auto* partition = partitionGraph.GetPartition(partitionId);
         AFL_ENSURE(partition)("partitionId", partitionId);
+        ParentPartitions.reserve(partition->AllParents.size());
         for (const TPartitionGraph::Node* parentPartition : partition->AllParents) {
             TParentPartitionInfo info{
-                .CreationTime = TInstant::Max(), // TODO: Get from partition graph/config
+                .CreationTime = parentPartition->CreationTime,
                 .TabletId = parentPartition->TabletId,
                 .PartitionId = parentPartition->Id,
             };
@@ -47,8 +48,15 @@ public:
             TabletInfo[info.TabletId].Partitions.push_back(info.PartitionId);
             ParentPartitions.push_back(std::move(info));
         }
-        std::ranges::sort(ParentPartitions.begin(), ParentPartitions.end(), std::greater<>{}, &TParentPartitionInfo::PartitionId); // oldest partitions at end
-        LOG_D("Partitions: " << JoinSeq(", ", ParentPartitions));
+        // filter partitions
+        const TInstant now = TAppData::TimeProvider->Now();
+        const auto isRecentPartition = [this, now](const TParentPartitionInfo& info) -> bool {
+            return info.CreationTime + MaxDeduplicationTimeInterval >= now;
+        };
+        const auto recentPartitionsIt = std::partition(ParentPartitions.begin(), ParentPartitions.end(), isRecentPartition);
+        std::ranges::sort(ParentPartitions.begin(), recentPartitionsIt, std::greater<>{}, &TParentPartitionInfo::PartitionId); // oldest partitions at end
+        LOG_D("Partitions: " << JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt) << "; OldPartitions " << JoinRange(", ", recentPartitionsIt, ParentPartitions.end()) << "; DisableTimestamp " << DisableTimestamp);
+        ParentPartitions.erase(recentPartitionsIt, ParentPartitions.end());
     }
 
     void Bootstrap() {
@@ -58,6 +66,15 @@ public:
     TString BuildLogPrefix() const override {
         return TStringBuilder() << "[DeduplicationQueue][" << PartitionId << "][" << TopicName << "] ";
     }
+
+    size_t GetRecentPartitionsCount() const {
+        return ParentPartitions.size();
+    }
+
+    TInstant GetDisableTimestamp() const {
+        return DisableTimestamp;
+    }
+
 
 private:
     struct TParentPartitionInfo {
@@ -415,14 +432,15 @@ private:
     }
 };
 
-NActors::IActor* CreateDeduplicationWriteQueueActor(
+TCreateDeduplicationWriteQueueActorResult CreateDeduplicationWriteQueueActor(
     ui64 tabletId,
     TActorId tabletActorId,
     TActorId partitionActorId,
     TString topicName,
     ui32 partitionId,
     const TPartitionGraph& partitionGraph) {
-    return new TDeduplicationQueueActor(
+
+    THolder h = MakeHolder<TDeduplicationQueueActor>(
         tabletId,
         tabletActorId,
         partitionActorId,
@@ -430,6 +448,14 @@ NActors::IActor* CreateDeduplicationWriteQueueActor(
         partitionId,
         partitionGraph
     );
+
+    TCreateDeduplicationWriteQueueActorResult result{
+        .RecentPartitionsCount = h->GetRecentPartitionsCount(),
+        .DisableTimestamp = h->GetDisableTimestamp(),
+        .Actor = std::move(h),
+    };
+
+    return result;
 }
 
 } // namespace NKikimr::NPQ

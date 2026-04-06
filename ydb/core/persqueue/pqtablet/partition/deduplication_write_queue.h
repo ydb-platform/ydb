@@ -7,7 +7,13 @@
 
 namespace NKikimr::NPQ {
 
-    NActors::IActor* CreateDeduplicationWriteQueueActor(
+    struct TCreateDeduplicationWriteQueueActorResult {
+        size_t RecentPartitionsCount = 0;
+        TInstant DisableTimestamp;
+        THolder<NActors::IActor> Actor;
+    };
+
+    TCreateDeduplicationWriteQueueActorResult CreateDeduplicationWriteQueueActor(
         ui64 tabletId,
         NActors::TActorId tabletActorId,
         NActors::TActorId partitionActorId,

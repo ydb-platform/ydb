@@ -784,15 +784,17 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         CreateMirrorerActor();
     }
     if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
-        // TODO: check creation time of parent partitions
-        DeduplicationQueueActor = ctx.Register(CreateDeduplicationWriteQueueActor(
+        TCreateDeduplicationWriteQueueActorResult writeQueue = CreateDeduplicationWriteQueueActor(
             this->TabletId,
             this->TabletActorId,
             ctx.SelfID,
             TopicName(),
             Partition.OriginalPartitionId,
             PartitionGraph
-        ));
+        );
+        if (writeQueue.RecentPartitionsCount != 0 && writeQueue.Actor) {
+            DeduplicationQueueActor = ctx.Register(writeQueue.Actor.Release());
+        }
     }
 
     ProcessMLPPendingEvents();

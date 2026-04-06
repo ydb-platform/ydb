@@ -469,7 +469,7 @@ void FillLocalBloomFilterSetting(TIndexDescription::TLocalBloomFilterDescription
             return;
         }
 
-        desc.FalsePositiveProbability = fpp;
+        desc.FalsePositiveProbability.emplace(fpp);
         return;
     }
 
@@ -486,40 +486,18 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
             return;
         }
 
-        desc.NgramSize = uiValue;
+        desc.NgramSize.emplace(uiValue);
         return;
     }
 
-    if (name == "hashes_count") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid hashes_count value: " << value;
+    if (name == "false_positive_probability") {
+        double fpValue = 0;
+        if (!TryFromString<double>(value, fpValue)) {
+            error = TStringBuilder() << "Invalid false_positive_probability value: " << value;
             return;
         }
 
-        desc.HashesCount = uiValue;
-        return;
-    }
-
-    if (name == "filter_size_bytes") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid filter_size_bytes value: " << value;
-            return;
-        }
-
-        desc.FilterSizeBytes = uiValue;
-        return;
-    }
-
-    if (name == "records_count") {
-        ui32 uiValue = 0;
-        if (!TryFromString<ui32>(value, uiValue)) {
-            error = TStringBuilder() << "Invalid records_count value: " << value;
-            return;
-        }
-
-        desc.RecordsCount = uiValue;
+        desc.FalsePositiveProbability.emplace(fpValue);
         return;
     }
 
@@ -530,7 +508,7 @@ void FillLocalBloomNgramFilterSetting(TIndexDescription::TLocalBloomNgramFilterD
             return;
         }
 
-        desc.CaseSensitive = boolValue;
+        desc.CaseSensitive.emplace(boolValue);
         return;
     }
 

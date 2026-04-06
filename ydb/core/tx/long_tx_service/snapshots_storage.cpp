@@ -123,7 +123,7 @@ void TRemoteSnapshotsStorage::UpdateBorder(const TRowVersion& border) {
 void TRemoteSnapshotsStorage::Clear() {
     NodeIdToState.clear();
     SnapshotBorder = TRowVersion::Max();
-    Ready = false;;
+    Ready = false;
 }
 
 TRowVersion TRemoteSnapshotsStorage::GetBorder() const {

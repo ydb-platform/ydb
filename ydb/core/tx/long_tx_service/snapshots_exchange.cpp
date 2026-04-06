@@ -51,7 +51,7 @@ namespace {
                     const auto& root = actorIds.begin();
                     auto& subtree = subtrees[*root];
                     subtree = actorIds;
-                    subtree.erase(root);
+                    subtree.erase(*root);
                 }
 
                 if (!unknownDataCenterIdActorIds.empty()) {

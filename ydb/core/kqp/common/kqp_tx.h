@@ -179,6 +179,7 @@ public:
 
         DeferredEffects.Clear();
         ParamsState = MakeIntrusive<TParamsState>();
+        SnapshotHandle.Snapshot = IKqpGateway::TKqpSnapshot::InvalidSnapshot;
         SnapshotHandle.Handle = NKqp::TSnapshotHandle();
         HasImmediateEffects = false;
 

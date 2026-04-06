@@ -36,7 +36,7 @@ public:
 
     virtual void SetSnapshotBorder(const TRowVersion& version) = 0;
 
-    virtual void AddSnapshot(const TVector<NKikimr::TTableId>& tableId, const TRowVersion& version) = 0;
+    virtual void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) = 0;
 
     virtual std::unique_ptr<IImmutableSnapshotRegistry> Build() && = 0;
 };

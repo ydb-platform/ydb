@@ -71,7 +71,7 @@ public:
             auto srcSettings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(srcSettings.Raw())) {
                 TDqPqTopicSource topicSource = maybeTopicSource.Cast();
-                bool streamingTopicRead = true;
+                bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
                 size_t const settingsCount = topicSource.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSource.Settings().Item(i);

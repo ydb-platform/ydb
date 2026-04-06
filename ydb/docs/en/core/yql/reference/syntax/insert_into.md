@@ -60,7 +60,7 @@ If necessary, specify multiple modifiers, they should be enclosed in parentheses
 
 To clear the table of existing data before writing new data to it, add the modifier: `INSERT INTO ... WITH TRUNCATE`.
 
-### Examples
+## Examples
 
 ```yql
 INSERT INTO my_table WITH TRUNCATE
@@ -80,7 +80,7 @@ When working with [external file data sources](../../../concepts/datamodel/exter
 * `projection.<field_name>.type` — field type for [extended data partitioning](../../../concepts/query_execution/federated_query/s3/partition_projection.md). Allowed values: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` — extended properties of a field for [extended data partitioning](../../../concepts/query_execution/federated_query/s3/partition_projection.md).
 
-### Example
+## Example
 
 ```yql
 INSERT INTO `connection`.`test/`

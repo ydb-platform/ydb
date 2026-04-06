@@ -454,7 +454,7 @@ Pear;15;33'''
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_csv_empty_schema_rejected(self, kikimr, s3, client, unique_prefix):
-        """csv (headerless): SCHEMA = () тАФ ╨╜╨╡╤В ╨╕╨╝╤С╨╜ ╨║╨╛╨╗╨╛╨╜╨╛╨║ ╨┤╨╗╤П ╨┐╨╛╤А╤П╨┤╨║╨░ ╨┐╨╛╨╗╨╡╨╣ ╨▓ ╤Д╨░╨╣╨╗╨╡."""
+        """Headerless csv: SCHEMA = () must be rejected (no column names to define field order in the file)."""
         self.create_bucket_and_upload_file_body("x", "empty_schema.csv", s3, kikimr)
 
         storage_connection_name = unique_prefix + "emptyschemabucket"

@@ -12,7 +12,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
-#include "minmax_with_arrow_next.h"
+#include "minmax.h"
 namespace NKikimr::NScheme {
 class TTypeInfo;
 }

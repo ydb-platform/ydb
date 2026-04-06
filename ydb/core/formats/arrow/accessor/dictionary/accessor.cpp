@@ -1,8 +1,6 @@
 #include "accessor.h"
 #include "constructor.h"
 
-#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
-#include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
@@ -153,7 +151,7 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
 
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
-    return ComputeMinMaxWithArrowNext(ArrayDictionary);
+    return TMinMax::FromArray(ArrayDictionary);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

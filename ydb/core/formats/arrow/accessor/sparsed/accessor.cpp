@@ -1,6 +1,5 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -203,7 +202,7 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 }
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
-    TMinMax value = ComputeMinMaxWithArrowNext(ColValue);
+    TMinMax value = TMinMax::FromArray(ColValue);
     if (value.IsNull() && DefaultValue) {
         value.Min() = DefaultValue;
         value.Max() = DefaultValue;
@@ -223,7 +222,6 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 skippedCount = 0;
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
-    TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
     auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
     auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {

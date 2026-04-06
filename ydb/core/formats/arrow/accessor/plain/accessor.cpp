@@ -1,6 +1,5 @@
 #include "accessor.h"
 
-#include <ydb/core/formats/arrow/accessor/abstract/minmax_with_arrow_next.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
@@ -16,7 +15,7 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
 
 
 TMinMax TTrivialArray::DoGetMinMaxScalars() const {
-    return ComputeMinMaxWithArrowNext(Array);
+    return TMinMax::FromArray(Array);
 }
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
@@ -93,7 +92,7 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
 }
 
 TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
-    return ComputeMinMaxWithArrowNext(Array);
+    return TMinMax::FromArray(Array);
 }
 
 

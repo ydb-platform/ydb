@@ -46,12 +46,12 @@ struct TMinMax {
 
     static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
 
+    static TMinMax FromArray(std::shared_ptr<arrow::Array> arr);
+    static TMinMax FromArray(std::shared_ptr<arrow::ChunkedArray> arr);
+
     std::string ToBinaryString() const;
 
     NJson::TJsonValue Json() const;
 };
-
-TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::Array> arr);
-TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::ChunkedArray> arr);
 
 }   // namespace NKikimr::NArrow::NAccessor

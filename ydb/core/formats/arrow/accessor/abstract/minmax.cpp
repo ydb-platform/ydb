@@ -1,4 +1,4 @@
-#include "minmax_with_arrow_next.h"
+#include "minmax.h"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/scalar/serialization.h>
@@ -12,7 +12,7 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::Array> arr) {
+TMinMax TMinMax::FromArray(std::shared_ptr<arrow::Array> arr) {
     struct ArrowArray c_array;
     struct ArrowSchema c_schema;
     namespace arrow5 = arrow;
@@ -34,10 +34,10 @@ NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<a
     // --- ШАГ 3: Извлекаем скаляр из массива (старая версия) ---
     return *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
 }
-NKikimr::NArrow::NAccessor::TMinMax ComputeMinMaxWithArrowNext(std::shared_ptr<arrow::ChunkedArray> arr) {
+TMinMax TMinMax::FromArray(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
     for (auto& chunk : arr->chunks()) {
-        res.UniteWith(ComputeMinMaxWithArrowNext(chunk));
+        res.UniteWith(FromArray(chunk));
     }
     return res;
 }

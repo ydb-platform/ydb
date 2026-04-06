@@ -306,11 +306,7 @@ public:
             }
 
             Cerr << "DURATION " << (TInstant::Now() - start) << "\n";
-<<<<<<< HEAD
-            UNIT_ASSERT_GT(TInstant::Now() - start, minTime);
-=======
             UNIT_ASSERT(TInstant::Now() - start > minTime);
->>>>>>> 67725c9df20 (Revert "Fixed topic partition quota wait time (#36114)")
         }
     }
 

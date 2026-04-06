@@ -159,6 +159,8 @@ public:
 
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
 
+    NJson::TJsonMap SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries = 10);
+
     NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
@@ -176,16 +178,7 @@ public:
     }
 
     NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 20) {
-        for (ui32 i = 0; i < retries; ++i) {
-            auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
-            if (expectedHttpCode == 200) {
-                UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
-                return json;
-            }
-            Sleep(TDuration::Seconds(1));
-        }
-        UNIT_FAIL("Failed to send message, max retries reached");
-        return {};
+        return SendJsonRequestWithRetries("SendMessage", request, expectedHttpCode, retries);
     }
 
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {

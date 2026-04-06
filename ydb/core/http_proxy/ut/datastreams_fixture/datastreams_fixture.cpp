@@ -300,6 +300,26 @@ NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJson
     return json;
 }
 
+
+NJson::TJsonMap THttpProxyTestMock::SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries) {
+    for (ui32 i = 0; i < retries; ++i) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
+        if (expectedHttpCode != 0 && res.HttpCode != expectedHttpCode) {
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        NJson::TJsonMap json;
+        if (NJson::ReadJsonTree(res.Body, &json)) {
+            return json;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_FAIL("SendJsonRequestWithRetries: failed to send request after " << retries << " retries");
+    return {};
+}
+
+
 void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
     WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
         for (const auto& [k, v] : attributes.GetMapSafe()) {

@@ -145,9 +145,9 @@ protected:
 class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
 public:
     struct TServerMtlsCreds {
-        std::vector<TSslHolder<X509>> ServerCertChain;
+        TSslHolder<X509> ServerCert;
         TSslHolder<EVP_PKEY> ServerPrivateKey;
-        std::vector<TSslHolder<X509>> CaCertChain;
+        TSslHolder<X509> CACert;
         bool AllowSelfSignedCerts = false;
     };
 
@@ -183,7 +183,7 @@ public:
         BIO_set_nbio(Bio.get(), 1);
 
         if (UseMtlsAuth) {
-            if (!ServerCreds || ServerCreds->ServerCertChain.empty() || !ServerCreds->ServerPrivateKey || ServerCreds->CaCertChain.empty()) {
+            if (!ServerCreds || !ServerCreds->ServerCert || !ServerCreds->ServerPrivateKey || !ServerCreds->CACert) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Not enough data in MTLS configuration.");
                 return false;
             }
@@ -192,19 +192,10 @@ public:
             } else {
                 SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
             }
-
-            i32 retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCertChain[0].get());
+            i32 retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCert.get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
-            }
-
-            for (size_t i = 1; i < ServerCreds->ServerCertChain.size(); ++i) {
-                int retServerCertChain = SSL_CTX_add0_chain_cert(ctx, ServerCreds->ServerCertChain[i].get());
-                if (retServerCertChain != 1) {
-                    LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load additional server certificate from file to ssl context, it might be incorrect.");
-                    return false;
-                }
             }
 
             if (!ServerCreds->ServerPrivateKey) {
@@ -222,16 +213,10 @@ public:
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't get cert store from SSL context.");
                 return false;
             }
-            if (ServerCreds->CaCertChain.empty()) {
-                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "CA file is empty. Check its correctness.");
-                return false;
-            }
 
-            for (auto& cert : ServerCreds->CaCertChain) {
-                if (X509_STORE_add_cert(store, cert.get()) != 1) {
-                    LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load one of CA files. Check its correctness.");
-                    return false;
-                }
+            if (X509_STORE_add_cert(store, ServerCreds->CACert.get()) != 1) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't load CA file. Check its correctness.");
+                return false;
             }
 
             SSL_CTX_set_verify_depth(ctx, 9);
@@ -257,23 +242,6 @@ public:
         return false;
     }
 
-    TSslHolder<X509> GetServerCert(const TString& certificate) {
-        TSslHolder<BIO> bio(BIO_new_mem_buf(certificate.data(), certificate.size()));
-        if (bio) {
-            TSslHolder<X509> cert(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-            return cert;
-        }
-        return TSslHolder<X509>();
-    }
-
-     TSslHolder<EVP_PKEY> GetServerPrivateKey(const TString& privateKey) {
-        TSslHolder<BIO> bio(BIO_new_mem_buf(privateKey.data(), privateKey.size()));
-        if (bio) {
-            TSslHolder<EVP_PKEY> pkey(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-            return pkey;
-        }
-        return TSslHolder<EVP_PKEY>();
-    }
 
     int ProcessResult(int res) {
         if (res <= 0) {

@@ -37,6 +37,7 @@ message TUpdateBalancerConfig { //for schemeshard use only
         repeated uint32 ParentPartitionIds = 6;
         repeated uint32 ChildPartitionIds = 7;
         optional uint64 CreateVersion = 8;
+        optional uint64 CreationTimestamp = 9;
     }
 
     repeated TPartition Partitions = 6;

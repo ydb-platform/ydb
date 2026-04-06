@@ -41,6 +41,9 @@ void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTop
         partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
     }
     partition.SetTabletId(tabletId);
+    if (pq->CreationTimestamp) {
+        partition.SetCreationTimestamp(pq->CreationTimestamp.Seconds());
+    }
 }
 
 struct TPartitionsGraphTraverse {
@@ -579,6 +582,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                     info->MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
                     for (const auto children : pq->ChildPartitionIds) {
                         info->MutableChildPartitionIds()->AddAlreadyReserved(children);
+                    }
+                    if (pq->CreationTimestamp) {
+                        info->SetCreationTimestamp(pq->CreationTimestamp.Seconds());
                     }
                 }
             }

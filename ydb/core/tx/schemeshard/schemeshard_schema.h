@@ -512,10 +512,11 @@ struct Schema : NIceDb::Schema {
         struct Parent:          Column<10, NScheme::NTypeIds::Uint32> {};
         // Adjacent parent partition for merge operation
         struct AdjacentParent:  Column<11, NScheme::NTypeIds::Uint32> {};
+        struct CreationTimestamp: Column<12, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, PqId>;
         using TColumns = TableColumns<PathId, PqId, ShardIdx, AlterVersion, GroupId, RangeBegin, RangeEnd,
-                                      CreateVersion, Status, Parent, AdjacentParent>;
+                                      CreateVersion, Status, Parent, AdjacentParent, CreationTimestamp>;
     };
 
     struct RtmrVolumes : Table<20> {

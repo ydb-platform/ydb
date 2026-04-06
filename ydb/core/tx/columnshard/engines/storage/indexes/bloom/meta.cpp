@@ -66,12 +66,17 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
             });
         dataOwners.pop_front();
     }
-    const TString indexData = GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
+    const TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(filterBits));
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
+<<<<<<< HEAD
 bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op) const {
+=======
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+>>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     const ui32 bitsCount = data.GetBitsCount();

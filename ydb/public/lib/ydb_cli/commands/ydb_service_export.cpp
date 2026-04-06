@@ -26,10 +26,7 @@ namespace {
     using TFilterOp = TRecursiveListSettings::TFilterOp;
 
     bool FilterTables(const NScheme::TSchemeEntry& entry) {
-        return IsIn({
-            NScheme::ESchemeEntryType::Table,
-            NScheme::ESchemeEntryType::ColumnTable,
-        }, entry.Type);
+        return entry.Type == NScheme::ESchemeEntryType::Table;
     }
 
     bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {

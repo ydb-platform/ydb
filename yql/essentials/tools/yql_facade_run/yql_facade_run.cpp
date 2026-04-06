@@ -422,7 +422,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
             QPlayerCaptureMode = EQPlayerCaptureMode::MetaOnly;
         });
         opts.AddLongOption("gateways-patch", "QPlayer patch for gateways conf").Optional().RequiredArgument("FILE").Handler1T<TString>([this](const TString& file) {
-            GatewaysPatch = TFileInput(file).ReadAll();
+            GatewaysPatch = TFacadeRunOptions::ParseProtoConfig<TGatewaysConfig>(file);
         });
     }
 
@@ -499,17 +499,24 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
         throw yexception() << "Simultaneous usage of run and replay options requires replay data to contain full capture";
     }
 
-    if (!GatewaysConfig) {
+    if (QPlayerContext.CanRead()) {
+        GatewaysConfig = GatewaysConfigFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            GatewaysConfig->MergeFrom(*GatewaysPatch);
+        }
+    } else if (!GatewaysConfig) {
         GatewaysConfig = ParseProtoFromResource<TGatewaysConfig>("gateways.conf");
     }
 
-    {
-        TGatewaySQLFlags flags;
-        if (GatewaysConfig) {
-            flags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysConfig));
+    if (QPlayerContext.CanRead()) {
+        auto sqlFlags = SQLFlagsFromQContext(QPlayerContext);
+        if (GatewaysPatch) {
+            // Gateways Patch is used for experimental features
+            sqlFlags.ExtendWith(TGatewaySQLFlags::FromTesting(*GatewaysPatch));
         }
-        flags.ExtendWith(SQLFlagsFromQContext(QPlayerContext));
-        flags.CollectAllTo(SqlFlags);
+        sqlFlags.CollectAllTo(SqlFlags);
+    } else if (GatewaysConfig) {
+        TGatewaySQLFlags::FromTesting(*GatewaysConfig).CollectAllTo(SqlFlags);
     }
 
     if (!FsConfig) {
@@ -693,8 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
-                                         RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -793,7 +799,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
 }
 
 int TFacadeRunner::DoRun(TProgramFactory& factory) {
-    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext, RunOptions_.GatewaysPatch);
+    TProgramPtr program = factory.Create(RunOptions_.ProgramFile, RunOptions_.ProgramText, RunOptions_.OperationId, EHiddenMode::Disable, RunOptions_.QPlayerContext);
     program->SetLanguageVersion(RunOptions_.LangVer);
     program->SetMaxLanguageVersion(RunOptions_.MaxLangVer);
     if (RunOptions_.Params) {

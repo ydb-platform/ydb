@@ -132,8 +132,8 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
 
 TExprNode::TPtr NYql::NPureCalc::ApplyToIterable(
     const TPositionHandle& pos,
-    const TExprNode::TPtr iterable,
-    const TExprNode::TPtr lambda,
+    const TExprNode::TPtr& iterable,
+    const TExprNode::TPtr& lambda,
     bool wrapLMap,
     TExprContext& ctx) {
     if (wrapLMap) {

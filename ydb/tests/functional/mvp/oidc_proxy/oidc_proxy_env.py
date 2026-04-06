@@ -12,7 +12,7 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 
 def mvp_oidc_proxy_bin():
-    return yatest.common.binary_path("ydb/mvp/oidc_proxy/bin/mvp_oidc_proxy")
+    return yatest.common.binary_path(os.getenv("OIDC_PROXY_BINARY"))
 
 
 def started_mock_nc_iam_service():

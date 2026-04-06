@@ -5,6 +5,8 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <util/string/builder.h>
+
 using namespace NKikimr::NPQ;
 
 struct MockTimeProvider : public ITimeProvider {

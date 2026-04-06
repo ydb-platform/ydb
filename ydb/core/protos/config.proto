@@ -2224,6 +2224,15 @@ message TImmediateControlsConfig {
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
     optional TBootstrapperControls BootstrapperControls = 20;
+
+    message TQuoterControls {
+        optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
+            Description: "Quoter proxy protocol version (0 = legacy, 1 = dual channel)",
+            MinValue: 0,
+            MaxValue: 10,
+            DefaultValue: 1 }];
+    }
+    optional TQuoterControls QuoterControls = 21;
 };
 
 message TMeteringConfig {
@@ -3004,6 +3013,14 @@ message TSystemTabletBackupConfig {
     repeated fixed64 ExcludeTabletIds = 2;
     optional uint64 NewBackupChangelogMinBytes = 3 [default = 524288000]; // 500 MB
     optional uint64 MaxBackupsLimit = 4 [default = 3];
+    optional uint64 ChangelogInFlightBytesLimit = 5 [default = 536870912]; // 512 MB
+
+    enum EFailBehaviour {
+        RETRY_BACKUP = 0;
+        TABLET_RESTART = 1;
+    }
+    optional EFailBehaviour FailBehaviour = 6 [default = RETRY_BACKUP];
+    optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
 }
 
 message TClusterDiagnosticsConfig {

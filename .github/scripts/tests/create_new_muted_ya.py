@@ -60,7 +60,7 @@ def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_
 
     result = []
     for pattern, chunks in wildcard_groups.items():
-        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate(chunk, aggregated_for_unmute)]
+        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate(chunk)]
         if len(passed_chunks) == len(chunks) and chunks:
             debug = create_debug_string(
                 passed_chunks[0],
@@ -88,7 +88,7 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
 
     result = []
     for pattern, chunks in wildcard_groups.items():
-        passed_chunks = [chunk for chunk in chunks if is_delete_candidate(chunk, aggregated_for_delete)]
+        passed_chunks = [chunk for chunk in chunks if is_delete_candidate(chunk)]
         if len(passed_chunks) == len(chunks) and chunks:
             debug = create_debug_string(
                 passed_chunks[0],
@@ -229,6 +229,7 @@ def aggregate_test_data(all_data, period_days):
                     'mute_count': 0,
                     'skip_count': 0,
                     'owner': test.get('owner'),
+                    'owner_date': test.get('date_window'),
                     'is_muted': test.get('is_muted'),
                     'is_muted_date': test.get('date_window'),  # Store the date used for is_muted.
                     'state': test.get('state'),
@@ -251,7 +252,13 @@ def aggregate_test_data(all_data, period_days):
                 if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
-            
+
+                # Owner must follow the latest day in the window (tests_monitor owner can change
+                # when TESTOWNERS is updated); the first row is the earliest date due to sort order.
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('owner_date', 0)):
+                    aggregated[full_name]['owner'] = test.get('owner')
+                    aggregated[full_name]['owner_date'] = test.get('date_window')
+
             # Accumulate aggregated counters.
             aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
             aggregated[full_name]['fail_count'] += test.get('fail_count', 0)
@@ -261,6 +268,7 @@ def aggregate_test_data(all_data, period_days):
     # Compute success_rate, build summary, and collapse state history for each test.
     date_window_range = f"{start_date.strftime('%Y-%m-%d')}:{today.strftime('%Y-%m-%d')}"
     for test_data in aggregated.values():
+        test_data.pop('owner_date', None)
         test_data['date_window'] = date_window_range
         total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
         if total_runs > 0:
@@ -342,112 +350,55 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
-def is_mute_candidate(test, aggregated_data):
+def is_mute_candidate(test):
     """Check whether a test is a mute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
-    if not test_data:
+    if test.get('is_muted', False):
         return False
-    
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-    
-    # A test already muted cannot be considered flaky for new mute.
-    if test_data.get('is_muted', False):
-        return False
-    
-    total_runs = test_data['pass_count'] + test_data['fail_count']
-    result = (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
-    
-    # Add detailed logging for diagnostics.
-    if not test_data.get('is_muted', False):  # Log only for currently unmuted tests.
-        logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
+    total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
+    fail_count = test.get('fail_count', 0)
+    result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
+
+    logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+
     return result
 
-def is_unmute_candidate(test, aggregated_data):
+def is_unmute_candidate(test):
     """Check whether a test is an unmute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
-    if not test_data:
-        return False
-    
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-    
-    total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
-    total_fails = test_data['fail_count'] + test_data['mute_count']
-    
+    total_runs = test.get('pass_count', 0) + test.get('fail_count', 0) + test.get('mute_count', 0)
+    total_fails = test.get('fail_count', 0) + test.get('mute_count', 0)
+
     result = total_runs >= 4 and total_fails == 0
-    
-    # Add detailed logging for diagnostics.
-    if test_data.get('is_muted', False):  # Log only for currently muted tests.
-        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
+    if test.get('is_muted', False):
+        logging.debug(f"UNMUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{total_fails}, mute_count:{test.get('mute_count')}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+
     return result
 
-def is_delete_candidate(test, aggregated_data):
+def is_delete_candidate(test):
     """Check whether a test is a delete-from-mute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
-    if not test_data:
-        return False
-    
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['skip_count'] = test_data['skip_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-    
-    pass_count = test_data['pass_count']
-    fail_count = test_data['fail_count']
-    mute_count = test_data['mute_count']
-    skip_count = test_data['skip_count']
+    pass_count = test.get('pass_count', 0)
+    fail_count = test.get('fail_count', 0)
+    mute_count = test.get('mute_count', 0)
+    skip_count = test.get('skip_count', 0)
     total_runs = pass_count + fail_count + mute_count + skip_count
 
-    # Delete stale muted tests with no runs at all,
-    # and muted tests that were only skipped during the whole delete window.
     only_skipped_while_muted = (
-        test_data.get('is_muted', False)
+        test.get('is_muted', False)
         and skip_count > 0
         and pass_count == 0
         and fail_count == 0
         and mute_count == 0
     )
     result = total_runs == 0 or only_skipped_while_muted
-    
-    # Add detailed logging for diagnostics.
-    if test_data.get('is_muted', False):  # Log only for currently muted tests.
+
+    if test.get('is_muted', False):
         logging.debug(
             f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
             f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "
-            f"muted:{test_data.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
+            f"muted:{test.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
         )
-    
+
     return result
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
@@ -524,23 +475,20 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
 
     try:
         # 1. Mute candidates.
-        def is_mute_candidate_wrapper(test):
-            return is_mute_candidate(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
         # 2. Unmute candidates.
-        def is_unmute_candidate_wrapper(test):
+        def is_unmute_non_chunk(test):
             if is_chunk_test(test):
-                return False  # Do not unmute chunks individually.
-            return is_unmute_candidate(test, aggregated_for_unmute)
-        
-        # Regular unmute candidates (non-chunk tests only).
+                return False
+            return is_unmute_candidate(test)
+
         to_unmute, to_unmute_debug = create_file_set(
-            aggregated_for_unmute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
+            aggregated_for_unmute, is_unmute_non_chunk, mute_check, resolution='to_unmute'
         )
         
         # Wildcard unmute patterns:
@@ -557,14 +505,13 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Delete-from-mute candidates (to_delete).
-        def is_delete_candidate_wrapper(test):
+        def is_delete_non_chunk(test):
             if is_chunk_test(test):
-                return False  # Do not delete chunks individually.
-            return is_delete_candidate(test, aggregated_for_delete)
-        
-        # Regular delete candidates (non-chunk tests only).
+                return False
+            return is_delete_candidate(test)
+
         to_delete, to_delete_debug = create_file_set(
-            aggregated_for_delete, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
+            aggregated_for_delete, is_delete_non_chunk, mute_check, resolution='to_delete'
         )
         
         # Wildcard delete patterns:

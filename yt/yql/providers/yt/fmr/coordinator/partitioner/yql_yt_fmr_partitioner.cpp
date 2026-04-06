@@ -175,7 +175,7 @@ TPartitionResult PartitionInputTablesIntoTasks(
     if (!fmrPartitionStatus) {
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition fmr input tables into tasks"
         }};
     }
@@ -191,7 +191,7 @@ TPartitionResult PartitionInputTablesIntoTasks(
     if (settings.MaxParts <= gottenFmrTasks.size()) {
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks: max parts exceeded"
         }};
     }
@@ -201,7 +201,7 @@ TPartitionResult PartitionInputTablesIntoTasks(
     if (!ytPartitionStatus) {
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition yt input tables into tasks"
         }};
     }

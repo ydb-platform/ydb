@@ -90,6 +90,7 @@ public:
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
     size_t PartitionMaxInflightBytes = 0; // zero means no limit
+    bool DirectRead = false;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
     size_t ProducerKeysCount = 0;
     bool KeyedWrites = false;

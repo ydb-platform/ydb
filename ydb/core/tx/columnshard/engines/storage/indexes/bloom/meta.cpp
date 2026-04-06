@@ -66,11 +66,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
             });
         dataOwners.pop_front();
     }
-    const TString indexData = GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
+    const TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(filterBits));
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
@@ -125,7 +125,9 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
+
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

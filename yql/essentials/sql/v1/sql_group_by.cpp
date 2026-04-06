@@ -281,7 +281,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
             break;
         }
         case TRule_grouping_element::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }

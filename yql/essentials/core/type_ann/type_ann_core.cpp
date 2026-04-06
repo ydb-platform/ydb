@@ -6511,6 +6511,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto type = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(type);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (type->GetKind() == ETypeAnnotationKind::Null) {
             output = ctx.Expr.NewCallable(input->Pos(), "Null", {});
             return IGraphTransformer::TStatus::Repeat;
@@ -8220,6 +8225,47 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus PositionOfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto pos = ctx.Expr.GetPosition(input->Head().Pos());
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("AsStruct")
+                .List(0)
+                    .Atom(0, "File")
+                    .Callable(1, "String")
+                        .Atom(0, pos.File ? pos.File : "<main>")
+                    .Seal()
+                .Seal()
+                .List(1)
+                    .Atom(0, "Row")
+                    .Callable(1, "Uint32")
+                        .Atom(0, pos.Row)
+                    .Seal()
+                .Seal()
+                .List(2)
+                    .Atom(0, "Column")
+                    .Callable(1, "Uint32")
+                        .Atom(0, pos.Column)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    IGraphTransformer::TStatus WithIssueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        output = input->HeadPtr();
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SourceOfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -9491,6 +9537,12 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 typeConfig = input->Child(3)->Content();
             }
 
+            if (!cached.FunctionType) {
+                YQL_ENSURE(ctx.Types.UdfResolver->IsPartial());
+                input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             const auto callableTypeNode = ExpandType(input->Pos(), *cached.FunctionType, ctx.Expr);
             const auto runConfigTypeNode = ExpandType(input->Pos(), *cached.RunConfigType, ctx.Expr);
             TExprNode::TPtr runConfigValue;
@@ -9710,39 +9762,40 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         scriptType = NKikimr::NMiniKQL::CanonizeScriptType(scriptType);
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
         auto canonizedModuleName = isCustomPython ? moduleName : NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
-        bool foundModule = false;
         TStringBuf fileAlias = ""_sb;
+        if (!ctx.Types.UdfResolver->IsPartial()) {
+            bool foundModule = false;
+            // resolve script udf from external resources (files / urls)
+            // (main usage of CustomPython)
+            {
+                TVector<IUdfResolver::TFunction*> functions;
 
-        // resolve script udf from external resources (files / urls)
-        // (main usage of CustomPython)
-        {
-            TVector<IUdfResolver::TFunction*> functions;
+                if (!ctx.LoadUdfMetadata(functions)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
 
-            if (!ctx.LoadUdfMetadata(functions)) {
+                if (auto udfInfo = ctx.Types.UdfModules.FindPtr(canonizedModuleName)) {
+                    foundModule = true;
+                    fileAlias = udfInfo->FileAlias;
+                }
+            }
+
+            // fallback for preinstalled CustomPython case
+            if (!foundModule) {
+                foundModule = static_cast<bool>(ctx.Types.UdfResolver->GetSystemModulePath(canonizedModuleName));
+            }
+
+            if (!foundModule) {
+                if (isCustomPython) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "Module with CustomPython UDF not found\n"
+                    "Provide it via url / file link or add it to your YQL installation"));
+                } else {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
+                        << "Module not loaded for script type: " << canonizedModuleName));
+                }
                 return IGraphTransformer::TStatus::Error;
             }
-
-            if (auto udfInfo = ctx.Types.UdfModules.FindPtr(canonizedModuleName)) {
-                foundModule = true;
-                fileAlias = udfInfo->FileAlias;
-            }
-        }
-
-        // fallback for preinstalled CustomPython case
-        if (!foundModule) {
-            foundModule = static_cast<bool>(ctx.Types.UdfResolver->GetSystemModulePath(canonizedModuleName));
-        }
-
-        if (!foundModule) {
-            if (isCustomPython) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                    << "Module with CustomPython UDF not found\n"
-                   "Provide it via url / file link or add it to your YQL installation"));
-            } else {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder()
-                    << "Module not loaded for script type: " << canonizedModuleName));
-            }
-            return IGraphTransformer::TStatus::Error;
         }
 
         if (input->ChildrenSize() > 4) {
@@ -15878,6 +15931,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ConstraintsOf"] = &ConstraintsOfWrapper;
         Functions["CostsOf"] = &CostsOfWrapper;
         Functions["InstanceOf"] = &InstanceOfWrapper;
+        Functions["PositionOf"] = &PositionOfWrapper;
+        Functions["WithIssue"] = &WithIssueWrapper;
         Functions["SourceOf"] = &SourceOfWrapper;
         Functions["MatchType"] = &MatchTypeWrapper;
         Functions["IfType"] = &IfTypeWrapper;

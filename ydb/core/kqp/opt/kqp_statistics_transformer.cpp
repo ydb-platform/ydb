@@ -280,7 +280,7 @@ void InferStatisticsForKqpTable(
 void InferStatisticsForSteamLookup(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* /*typeCtx*/,
-    const TKqpOptimizeContext kqpCtx,
+    const TKqpOptimizeContext& kqpCtx,
     TKqpStatsStore* kqpStats
 ) {
     auto inputNode = TExprBase(input);
@@ -1313,6 +1313,9 @@ private:
     TInterestingOrderingsCollector InterestingOrderingsCollector;
 };
 
+// Forward declaration (defined below)
+static void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats);
+
 /**
  * DoTransform method matches operators and callables in the query DAG and
  * uses pre-computed statistics and costs of the children to compute their cost.
@@ -1322,14 +1325,30 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
     TExprNode::TPtr& output,
     TExprContext& ctx
 ) {
-
     output = input;
     if (Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel) == 0) {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    auto runPass = [&] {
+        VisitExprLambdasLast(
+            input,
+            [&](const TExprNode::TPtr& input) {
+                BeforeLambdas(input, ctx) || BeforeLambdasSpecific(input, ctx) || BeforeLambdasUnmatched(input, ctx);
+                if (input->IsCallable()) {
+                    PropagateStatisticsToLambdaArgument(input, KqpStats);
+                }
+                return true;
+            },
+            [&](const TExprNode::TPtr& input) {
+                AfterLambdas(input, ctx) || AfterLambdasSpecific(input, ctx);
+                PropogateTableAliasesFromChildren(input, KqpStats);
+                return true;
+            });
+    };
+
     if (!KqpStats->ShufflingsFSM) {
-        TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+        runPass();
         /* ^ we have to propogate statistics to work with aliases */
 
         auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx, KqpStats);
@@ -1337,8 +1356,9 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(
     }
 
     TxStats.clear();
+    runPass();
 
-    return TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
+    return IGraphTransformer::TStatus::Ok;
 }
 
 bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1398,6 +1418,139 @@ bool TKqpStatisticsTransformer::AfterLambdasSpecific(const TExprNode::TPtr& inpu
         matched = false;
     }
 
+    return matched;
+}
+
+// KQP version of table-alias propagation (uses TKqpStatsStore instead of TTypeAnnotationContext).
+static void PropogateTableAliasesFromChildren(const TExprNode::TPtr& input, TKqpStatsStore* kqpStats) {
+    auto inputNode = TExprBase(input);
+    auto stats = kqpStats->GetStats(inputNode.Raw());
+
+    // Don't process these, already processed at the InferStatistics stage
+    if (
+        stats && stats->TableAliases &&
+        (
+            TCoAsStruct::Match(inputNode.Raw()) ||
+            TCoEquiJoin::Match(inputNode.Raw()) ||
+            input->Content().Contains("ReadTable")
+        )
+    ) {
+        return;
+    }
+
+    TTableAliasMap tableAliases;
+    for (const auto& child: input->Children()) {
+        auto childStats = kqpStats->GetStats(TExprBase(child).Raw());
+        if (childStats && childStats->TableAliases) {
+            tableAliases.Merge(*childStats->TableAliases);
+        }
+    }
+
+    if (tableAliases.Empty()) {
+        return;
+    }
+
+    if (stats == nullptr) {
+        stats = std::make_shared<TOptimizerStatistics>();
+    } else {
+        stats = std::make_shared<TOptimizerStatistics>(*stats);
+    }
+
+    stats->TableAliases = MakeIntrusive<TTableAliasMap>(std::move(tableAliases));
+    kqpStats->SetStats(inputNode.Raw(), std::move(stats));
+}
+
+bool TKqpStatisticsTransformer::BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    bool matched = true;
+    auto hints = KqpCtx.GetOptimizerHints();
+
+    if (TCoFilterBase::Match(input.Get())) {
+        InferStatisticsForFilter(input, KqpStats);
+    }
+    else if (TCoSkipNullMembers::Match(input.Get())) {
+        InferStatisticsForSkipNullMembers(input, KqpStats);
+    }
+    else if (auto aggregateBase = TMaybeNode<TCoAggregateBase>(input.Get())) {
+        InferStatisticsForAggregateBase(input, KqpStats);
+    }
+    else if (TCoAggregateMergeFinalize::Match(input.Get())) {
+        InferStatisticsForAggregateMergeFinalize(input, KqpStats);
+    }
+    else if (TCoAsList::Match(input.Get())) {
+        InferStatisticsForAsList(input, KqpStats);
+    }
+    else if (TCoParameter::Match(input.Get()) && InferStatisticsForListParam(input, KqpStats)) {
+    }
+    else if (TCoMapJoinCore::Match(input.Get())) {
+        InferStatisticsForMapJoin(input, KqpStats, KqpPctx, hints);
+    }
+    else if (TCoGraceJoinCore::Match(input.Get())) {
+        InferStatisticsForGraceJoin(input, KqpStats, KqpPctx, hints, &KqpCtx.ShufflingOrderingsByJoinLabels);
+    }
+    else if (TDqBlockHashJoinCore::Match(input.Get())) {
+        InferStatisticsForBlockHashJoin(input, KqpStats, KqpPctx, hints);
+    }
+    else if (auto dqJoinBase = TMaybeNode<TDqJoinBase>(input.Get())) {
+        InferStatisticsForDqJoinBase(input, KqpStats, KqpPctx, hints);
+    }
+    // Do nothing in case of EquiJoin, otherwise the EquiJoin rule won't fire
+    else if (TCoEquiJoin::Match(input.Get())) {
+        InferStatisticsForEquiJoin(input, KqpStats);
+    }
+    // In case of DqSource, propagate the statistics from the correct argument
+    else if (TDqSource::Match(input.Get())) {
+        InferStatisticsForDqSource(input, KqpStats);
+    }
+    else if (TDqCnMerge::Match(input.Get())) {
+        InferStatisticsForDqMerge(input, KqpStats);
+    }
+    else if (auto extendBase = TMaybeNode<TCoExtendBase>(input)) {
+        InferStatisticsForExtendBase(input, KqpStats);
+    }
+    else if (TCoAsStruct::Match(input.Get())) {
+        InferStatisticsForAsStruct(input, KqpStats);
+    }
+    else if (auto topBase = TMaybeNode<TCoTopBase>(input)) {
+        InferStatisticsForTopBase(input, KqpStats);
+    }
+    else if (auto sortBase = TMaybeNode<TCoSortBase>(input)) {
+        InferStatisticsForSortBase(input, KqpStats);
+    }
+    else if (TCoUnionAll::Match(input.Get())) {
+        InferStatisticsForUnionAll(input, KqpStats);
+    }
+    else if (TCoShuffleByKeys::Match(input.Get())) {
+        InferStatisticsForAggregationCallable<TCoShuffleByKeys>(input, KqpStats);
+    }
+    else {
+        matched = false;
+    }
+
+    return matched;
+}
+
+bool TKqpStatisticsTransformer::BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    if (input->ChildrenSize() >= 1) {
+        auto stats = KqpStats->GetStats(input->ChildRef(0).Get());
+        if (stats) {
+            KqpStats->SetStats(input.Get(), RemoveOrderings(stats, input));
+        }
+    }
+    return true;
+}
+
+bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    bool matched = true;
+    if (TDqStageBase::Match(input.Get())) {
+        InferStatisticsForStage(input, KqpStats);
+    } else if (TCoFlatMapBase::Match(input.Get())) {
+        InferStatisticsForFlatMap(input, KqpStats);
+    } else {
+        matched = false;
+    }
     return matched;
 }
 

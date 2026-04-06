@@ -37,7 +37,9 @@ private:
   std::vector<std::unique_ptr<TMainClass>> subCommands;
 };
 
-TClientCommandOption& ConfigureCompletionOption(TClientCommandOption& option, TStringBuf command, TClientCommandTree *commandTree, TClientCommand::TConfig& config);
+TString MakeCompletionInfo(TStringBuf command, TStringBuf flag);
+
+TString DetectShellFromEnv();
 
 } // namespace NConsoleClient
 } // namespace NYdb

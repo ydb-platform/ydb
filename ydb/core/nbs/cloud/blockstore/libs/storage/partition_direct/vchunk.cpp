@@ -30,18 +30,19 @@ TVChunk::TVChunk(
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
+    TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
     , PartitionDirectService(partitionDirectService)
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
-    , BlocksCount(VChunkSize / DefaultBlockSize)
+    , BlockSize(DefaultBlockSize)
+    , BlocksCount(VChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
+    , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
-{
-    Y_UNUSED(PartitionDirectService);
-}
+{}
 
 TVChunk::~TVChunk() = default;
 
@@ -128,6 +129,8 @@ TFuture<TReadBlocksLocalResponse> TVChunk::ReadBlocksLocal(
 TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -171,6 +174,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          vchunkRange,
          callContext = std::move(callContext),
          request = std::move(request),
+         writeMode,
+         pbufferReplyTimeoutMicroseconds,
          lsn,
          span = std::move(span)]() mutable
         {
@@ -183,6 +188,8 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     vchunkRange,
                     std::move(callContext),
                     std::move(request),
+                    writeMode,
+                    pbufferReplyTimeoutMicroseconds,
                     lsn,
                     std::move(span));
             } else {
@@ -253,6 +260,11 @@ void TVChunk::DoReadBlocksLocal(
             NWilson::EFlags::AUTO_END);
 
         readHint = BlocksDirtyMap.MakeReadHint(vchunkRange);
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "Read hint: %s",
+            readHint.DebugPrint().c_str());
     }
 
     if (readHint.RangeHints.empty()) {
@@ -319,6 +331,8 @@ void TVChunk::DoWriteBlocksLocal(
     TBlockRange64 vchunkRange,
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
     ui64 lsn,
     std::shared_ptr<NWilson::TSpan> span)
 {
@@ -326,13 +340,16 @@ void TVChunk::DoWriteBlocksLocal(
 
     auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
         ActorSystem,
+        Executor,
+        PartitionDirectService,
         VChunkConfig,
         DirectBlockGroup,
         vchunkRange,
         std::move(callContext),
         std::move(request),
         lsn,
-        span->GetTraceId());
+        span->GetTraceId(),
+        WriteHandoffDelay);
     auto future = writeExecutor->GetFuture();
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -355,7 +372,7 @@ void TVChunk::DoWriteBlocksLocal(
         });
 
     span->Event("Run");
-    writeExecutor->Run();
+    writeExecutor->Run(writeMode, pbufferReplyTimeoutMicroseconds);
 }
 
 void TVChunk::OnWriteBlocksResponse(

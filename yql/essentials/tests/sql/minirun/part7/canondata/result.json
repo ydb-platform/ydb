@@ -139,6 +139,20 @@
             "uri": "https://{canondata_backend}/1784117/0861081e9a27c636cbdf4a677c7d177df206a99e/resource.tar.gz#test.test_agg_phases-count_all_null-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[agg_phases-histogram_opt-default.txt-Debug]": [
+        {
+            "checksum": "0d319e516f9e4fedcb4924c7ac1637df",
+            "size": 4376,
+            "uri": "https://{canondata_backend}/1881367/8352327b68f73eb0bc9672b198a22fb87ed32de8/resource.tar.gz#test.test_agg_phases-histogram_opt-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[agg_phases-histogram_opt-default.txt-Results]": [
+        {
+            "checksum": "626870bd5649e062d46be2bf2c2a0958",
+            "size": 18500,
+            "uri": "https://{canondata_backend}/1881367/8352327b68f73eb0bc9672b198a22fb87ed32de8/resource.tar.gz#test.test_agg_phases-histogram_opt-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[agg_phases-max_by_opt-default.txt-Debug]": [
         {
             "checksum": "249e842d0665e26640681d8d0014d45a",
@@ -721,6 +735,20 @@
             "checksum": "bcb271590f24d275a64ccc3379fa7d66",
             "size": 8877,
             "uri": "https://{canondata_backend}/1942525/5b75160303fccf854ef8bcd60aae18ec7c47ceda/resource.tar.gz#test.test_expr-uuid-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[expr-with_issue_ok--Debug]": [
+        {
+            "checksum": "caf4874f93b99fabe37ea83589c7c6eb",
+            "size": 240,
+            "uri": "https://{canondata_backend}/1775059/beb35bab1a4f3c8ad06fbe812969a2472f2e95e9/resource.tar.gz#test.test_expr-with_issue_ok--Debug_/opt.yql"
+        }
+    ],
+    "test.test[expr-with_issue_ok--Results]": [
+        {
+            "checksum": "907820c462f4b0e69374b64ec0bed3f2",
+            "size": 695,
+            "uri": "https://{canondata_backend}/1775059/beb35bab1a4f3c8ad06fbe812969a2472f2e95e9/resource.tar.gz#test.test_expr-with_issue_ok--Results_/results.txt"
         }
     ],
     "test.test[in-in_ansi_list-default.txt-Debug]": [

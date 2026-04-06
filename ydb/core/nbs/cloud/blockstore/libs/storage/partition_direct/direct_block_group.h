@@ -123,6 +123,13 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) = 0;
+
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
@@ -205,6 +212,13 @@ public:
         ui32 vChunkIndex,
         ui8 hostIndex,
         ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;

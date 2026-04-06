@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    ddisk_data_copier_ut.cpp
     partition_direct_ut.cpp
 )
 

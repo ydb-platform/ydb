@@ -35,6 +35,9 @@ constexpr ui64 VChunkSize = 128_MB;
 // VChunks per Region count.
 constexpr ui32 VChunksPerRegionCount = RegionSize / VChunkSize;
 
+//
+constexpr ui64 CopyRangeSize = 1_MB;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

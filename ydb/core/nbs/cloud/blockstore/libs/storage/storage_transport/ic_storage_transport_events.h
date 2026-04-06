@@ -69,6 +69,38 @@ struct TEvTransportPrivate
         ~TWriteToPBuffer();
     };
 
+    struct TWriteToDDisk: TDisableCopyMove
+    {
+        using TResult = NKikimrBlobStorage::NDDisk::TEvWriteResult;
+
+        const NActors::TActorId ServiceId;
+        const NKikimr::NDDisk::TQueryCredentials Credentials;
+        const NKikimr::NDDisk::TBlockSelector Selector;
+        const NKikimr::NDDisk::TWriteInstruction Instruction;
+        const TGuardedSgList Data;
+        NWilson::TTraceId TraceId;
+        NThreading::TPromise<TResult> Promise =
+            NThreading::NewPromise<TResult>();
+
+        TWriteToDDisk(
+            const NActors::TActorId serviceId,
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            const NKikimr::NDDisk::TBlockSelector& selector,
+            const NKikimr::NDDisk::TWriteInstruction instruction,
+            const TGuardedSgList& data,
+            NWilson::TTraceId traceId)
+            : ServiceId(serviceId)
+            , Credentials(credentials)
+            , Selector(selector)
+            , Instruction(instruction)
+            , Data(data)
+            , TraceId(std::move(traceId))
+
+        {}
+
+        ~TWriteToDDisk();
+    };
+
     struct TEraseFromPBuffer: TDisableCopyMove
     {
         using TResult =
@@ -272,6 +304,7 @@ struct TEvTransportPrivate
     {
         EvConnect,
         EvWriteToPBuffer,
+        EvWriteToDDisk,
         EvEraseFromPBuffer,
         EvReadFromPBuffer,
         EvReadFromDDisk,
@@ -290,6 +323,9 @@ struct TEvTransportPrivate
 
     using TEvWriteToPBuffer =
         TRequestEvent<TWriteToPBuffer, EEvents::EvWriteToPBuffer>;
+
+    using TEvWriteToDDisk =
+        TRequestEvent<TWriteToDDisk, EEvents::EvWriteToDDisk>;
 
     using TEvSyncWithPBuffer =
         TRequestEvent<TSyncWithPBuffer, EEvents::EvSyncWithPBuffer>;

@@ -227,7 +227,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
 };
 
 std::shared_ptr<arrow::UInt32Array> MakeUInt32Array(const TMKQLVector<ui32>& indices) {
-    auto buffer = arrow::Buffer::Wrap(indices.data(), indices.size());
+    auto buffer = arrow::Buffer::Wrap(indices.data(), static_cast<int64_t>(indices.size()) * sizeof(ui32));
     auto data = arrow::ArrayData::Make(arrow::uint32(), indices.size(), {nullptr, buffer});
     return std::make_shared<arrow::UInt32Array>(data);
 }

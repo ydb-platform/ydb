@@ -41,7 +41,6 @@ extern "C" {
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
-#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/utils/log/log_level.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/string/builder.h>

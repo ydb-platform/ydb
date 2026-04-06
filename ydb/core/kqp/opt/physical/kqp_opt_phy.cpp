@@ -51,6 +51,7 @@ public:
         AddHandler(0, &TDqStage::Match, HNDL(ApplyVectorTopKToStageWithSource));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapProjections));
+        AddHandler(0, &TCoTake::Match, HNDL(DisableOlapBlocks));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushAggregateCombineToStage));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushOlapAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
@@ -211,12 +212,12 @@ protected:
     TMaybeNode<TExprBase> BuildStreamIdxLookupJoinStagesKeepSorted(TExprBase node, TExprContext& ctx) {
         bool useFSM = KqpCtx.Config->GetEnableOrderOptimizaionFSM();
         if (useFSM) {
-            TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(node, ctx, TypesCtx, true);
+            TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(node, ctx, TypesCtx, true, &KqpCtx.KqpStats);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSortedFSM", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
         else {
-            TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, true);
+            TExprBase output = KqpBuildStreamIdxLookupJoinStagesKeepSorted(node, ctx, TypesCtx, true, &KqpCtx.KqpStats);
             DumpAppliedRule("BuildStreamIdxLookupJoinStagesKeepSorted", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
@@ -311,6 +312,12 @@ protected:
     TMaybeNode<TExprBase> PushOlapProjections(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapProjections(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapProjections", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> DisableOlapBlocks(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpDisableOlapBlocksOnLimit(node, TypesCtx, KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit());
+        DumpAppliedRule("DisableOlapBlocksOnLimit", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -470,12 +477,12 @@ protected:
         bool useFSM = KqpCtx.Config->GetEnableOrderOptimizaionFSM();
         if (useFSM)
         {
-            TExprBase output = KqpBuildTopStageRemoveSortFSM(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true);
+            TExprBase output = KqpBuildTopStageRemoveSortFSM(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true, &KqpCtx.KqpStats);
             DumpAppliedRule("BuildTopStageRemoveSortFSM", node.Ptr(), output.Ptr(), ctx);
             return output;
         }
         else {
-            TExprBase output = KqpBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true);
+            TExprBase output = KqpBuildTopStageRemoveSort(node, ctx, optCtx, TypesCtx, *getParents(), IsGlobal, true, &KqpCtx.KqpStats);
             DumpAppliedRule("BuildTopStageRemoveSort", node.Ptr(), output.Ptr(), ctx);
             return output;
         }

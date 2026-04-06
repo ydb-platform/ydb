@@ -1670,3 +1670,30 @@ message TEvControllerAllocateDDiskBlockGroupResult {
     }
     repeated TDirectBlockGroup DirectBlockGroups = 4;
 }
+
+message TEvInterpilePut {
+    message TItem {
+        optional NKikimrProto.TLogoBlobID BlobId = 1;
+        optional uint64 Deadline = 2;
+        optional bool IssueKeepFlag = 3;
+        optional bool IgnoreBlock = 4;
+        optional bool AlreadyEncrypted = 5;
+        repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 6;
+        optional NActorsProto.TTraceId TraceId = 7;
+    }
+
+    optional uint32 GroupId = 1;
+    optional uint32 GroupGeneration = 2;
+    optional NKikimrBlobStorage.EPutHandleClass HandleClass = 3;
+    optional uint32 Tactic = 4;
+    repeated TItem Items = 5;
+}
+
+message TEvInterpilePutResult {
+    message TItem {
+        optional NKikimrProto.EReplyStatus Status = 1;
+        optional string ErrorReason = 2;
+    }
+
+    repeated TItem Items = 1;
+}

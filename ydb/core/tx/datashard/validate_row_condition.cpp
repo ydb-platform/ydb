@@ -137,7 +137,10 @@ void TDataShard::Handle(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, 
 void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
-    TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    const ui64 id = record.GetId();
+    auto rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
+    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
+
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
@@ -145,7 +148,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
 
     auto sendResponse = [&](NKikimrIndexBuilder::EBuildStatus status, const TString& error = "") {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
-        response->Record.SetId(record.GetId());
+        response->Record.SetId(id);
         response->Record.SetTabletId(TabletID());
         response->Record.SetStatus(status);
         if (!error.empty()) {
@@ -167,32 +170,15 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         return;
     }
 
-    if (!record.HasSnapshotStep() || !record.HasSnapshotTxId()) {
-        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, "Request doesn't have Snapshot Step or TxId");
-        return;
-    }
-
-    const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
-    const TSnapshot* snapshot = SnapshotManager.FindAvailable(snapshotKey);
-    if (!snapshot) {
-        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder()
-                   << "No snapshot has been found"
-                   << ", path id is " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
-                   << ", snapshot step is " << snapshotKey.Step
-                   << ", snapshot tx is " << snapshotKey.TxId);
-        return;
-    }
-
     if (!IsStateActive()) {
         sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
     }
 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
-    TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
     auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable);
-    StartScan(this, scan, record.GetId(), seqNo, rowVersion, userTable.LocalTid);
+    StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid);
 }
 
 } // namespace NKikimr::NDataShard

@@ -81,32 +81,88 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Start flushes
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer0));
+            ELocation::PBuffer0,
+            inflightInfo.RequestFlush(ELocation::DDisk0));
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer1));
+            ELocation::PBuffer1,
+            inflightInfo.RequestFlush(ELocation::DDisk1));
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer2));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestFlush(ELocation::HOPBuffer0));
-        UNIT_ASSERT_VALUES_EQUAL(
-            false,
-            inflightInfo.RequestFlush(ELocation::HOPBuffer1));
+            ELocation::PBuffer2,
+            inflightInfo.RequestFlush(ELocation::DDisk2));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(ELocation::PBuffer0);
+        inflightInfo.ConfirmFlush(TRoute{
+            .Source = ELocation::PBuffer0,
+            .Destination = ELocation::DDisk0});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(ELocation::PBuffer1);
+        inflightInfo.ConfirmFlush(
+            {.Source = ELocation::PBuffer1, .Destination = ELocation::DDisk1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(ELocation::PBuffer2);
+        inflightInfo.ConfirmFlush(
+            {.Source = ELocation::PBuffer2, .Destination = ELocation::DDisk2});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+
+        // Check erase requests
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.RequestErase(ELocation::PBuffer0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.RequestErase(ELocation::PBuffer1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.RequestErase(ELocation::PBuffer2));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.RequestErase(ELocation::HOPBuffer0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.RequestErase(ELocation::HOPBuffer1));
+
+        // Confirm erases
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.ConfirmErase(ELocation::PBuffer0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.ConfirmErase(ELocation::PBuffer1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            inflightInfo.ConfirmErase(ELocation::PBuffer2));
+    }
+
+    Y_UNIT_TEST(ShouldHandleLock)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            123,
+            TLocationMask::MakePrimaryPBuffers(),
+            TLocationMask::MakePrimaryPBuffers());
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
+
+        // Start flushes
+        auto l = inflightInfo.RequestFlush(ELocation::DDisk0);
+        l = inflightInfo.RequestFlush(ELocation::DDisk1);
+        l = inflightInfo.RequestFlush(ELocation::DDisk2);
+        Y_UNUSED(l);
+
+        // Confirm two flushes
+        inflightInfo.ConfirmFlush(TRoute{
+            .Source = ELocation::PBuffer0,
+            .Destination = ELocation::DDisk0});
+        inflightInfo.ConfirmFlush(
+            {.Source = ELocation::PBuffer1, .Destination = ELocation::DDisk1});
 
         // Check lock/unlock PBuffer
         inflightInfo.LockPBuffer();
-        UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
+
+        // Confirm last flush
+        inflightInfo.ConfirmFlush(
+            {.Source = ELocation::PBuffer2, .Destination = ELocation::DDisk2});
+        UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.empty());
+
         inflightInfo.UnlockPBuffer();
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
@@ -150,31 +206,39 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Flush started
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer0));
+            ELocation::PBuffer0,
+            inflightInfo.RequestFlush(ELocation::DDisk0));
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer1));
+            ELocation::PBuffer1,
+            inflightInfo.RequestFlush(ELocation::DDisk1));
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer2));
+            ELocation::PBuffer2,
+            inflightInfo.RequestFlush(ELocation::DDisk2));
 
         // When a flush fails, the lsn must be queued for a flush again.
         readyQueue.ReadyToFlush.clear();
-        inflightInfo.FlushFailed(ELocation::PBuffer0);
+        inflightInfo.FlushFailed(TRoute{
+            .Source = ELocation::PBuffer0,
+            .Destination = ELocation::DDisk0});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToFlush.contains(123));
 
-        // Restart flush from PBuffer0
+        // Restart flush to DDisk0
         UNIT_ASSERT_VALUES_EQUAL(
-            true,
-            inflightInfo.RequestFlush(ELocation::PBuffer0));
+            ELocation::PBuffer0,
+            inflightInfo.RequestFlush(ELocation::DDisk0));
 
         // Confirm flushes
-        inflightInfo.ConfirmFlush(ELocation::PBuffer0);
+        inflightInfo.ConfirmFlush(TRoute{
+            .Source = ELocation::PBuffer0,
+            .Destination = ELocation::DDisk0});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(ELocation::PBuffer1);
+        inflightInfo.ConfirmFlush(TRoute{
+            .Source = ELocation::PBuffer1,
+            .Destination = ELocation::DDisk1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
-        inflightInfo.ConfirmFlush(ELocation::PBuffer2);
+        inflightInfo.ConfirmFlush(TRoute{
+            .Source = ELocation::PBuffer2,
+            .Destination = ELocation::DDisk2});
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
 
         // Erase started

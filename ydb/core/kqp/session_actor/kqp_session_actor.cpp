@@ -1898,7 +1898,7 @@ public:
         }
 
         auto executerActor = CreateKqpSchemeExecuter(
-            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            tx, QueryState->GetType(), QueryState->QueryData, SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
@@ -1986,7 +1986,7 @@ public:
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
 
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-        } else if (txCtx->BufferActorId) {
+        } else if (txCtx->BufferActorId && !isRollback) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }
@@ -2306,20 +2306,6 @@ public:
         } else if (brokenLockQuerySpanId) {
             victimQuerySpanId = *brokenLockQuerySpanId;
             victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
-        }
-
-        // In Snapshot Isolation the conflict is detected during the write, but the actual
-        // victim is the read that established the snapshot.  When the resolved VictimQueryText
-        // is the same as the current (commit) query, prefer the first collected query text
-        // which is the lock-establishing read.
-        if (!victimQueryText.empty() && QueryState->TxCtx) {
-            TString currentQueryText = QueryState->ExtractQueryText();
-            if (victimQueryText == currentQueryText) {
-                TString firstText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
-                if (!firstText.empty() && firstText != currentQueryText) {
-                    victimQueryText = firstText;
-                }
-            }
         }
 
         // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the

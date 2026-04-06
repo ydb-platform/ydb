@@ -1617,8 +1617,6 @@ struct TColumnInfoRaw {
     const char* UdtType;
 };
 
-// NOLINTBEGIN(modernize-use-designated-initializers)
-
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const TTableInfoRaw AllStaticTablesRaw[] = {
 #include "pg_class.generated.h"
@@ -1628,8 +1626,6 @@ const TTableInfoRaw AllStaticTablesRaw[] = {
 const TColumnInfoRaw AllStaticColumnsRaw[] = {
 #include "columns.generated.h"
 };
-
-// NOLINTEND(modernize-use-designated-initializers)
 
 // NOLINTNEXTLINE(modernize-avoid-c-arrays)
 const char* AllowedProcsRaw[] = {

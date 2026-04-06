@@ -73,6 +73,21 @@ static constexpr const char *kPprofProfileDropFrames = "pprof.profile.drop_frame
  */
 static constexpr const char *kPprofProfileKeepFrames = "pprof.profile.keep_frames";
 
+/**
+  Records the pprof's default_sample_type in the original profile. Not set if the default sample
+  type was missing. <p> This attribute, if present, MUST be set at the scope level
+  (resource_profiles[].scope_profiles[].scope.attributes[]).
+ */
+static constexpr const char *kPprofScopeDefaultSampleType = "pprof.scope.default_sample_type";
+
+/**
+  Records the indexes of the sample types in the original profile.
+  <p>
+  This attribute, if present, MUST be set at the scope level
+  (resource_profiles[].scope_profiles[].scope.attributes[]).
+ */
+static constexpr const char *kPprofScopeSampleTypeOrder = "pprof.scope.sample_type_order";
+
 }  // namespace pprof
 }  // namespace semconv
 OPENTELEMETRY_END_NAMESPACE

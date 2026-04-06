@@ -751,14 +751,12 @@ private:
 class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IActorExceptionHandler {
     struct TEvPrivate {
         enum EEv {
-            EvMailboxCleaned = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvFlush,
+            EvFlush = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvEnd
         };
 
         static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE));
 
-        struct TEvMailboxCleaned : TEventLocal<TEvMailboxCleaned, EvMailboxCleaned> {};
         struct TEvFlush : TEventLocal<TEvFlush, EvFlush> {
             TEvFlush(ui64 cookie)
                 : Cookie(cookie)
@@ -801,8 +799,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWriteChangelog, Handle);
             hFunc(TEvPrivate::TEvFlush, Handle);
-            cFunc(TEvents::TEvPoisonPill::EventType, CleanMailbox);
-            cFunc(TEvPrivate::TEvMailboxCleaned::EventType, FlushAndDie);
+            cFunc(TEvents::TEvPoisonPill::EventType, FlushAndDie);
             hFunc(TEvSnapshotCompleted, Handle);
         }
     }
@@ -815,6 +812,7 @@ public:
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
         const auto* msg = ev->Get();
+        const ui64 msgSize = msg->GetTotalSize();
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -913,6 +911,8 @@ public:
             Checksum.Update(Buffer.data() + changesStart, changesSize);
         }
 
+        Send(Owner, new TEvWriteChangelogAck(msgSize));
+
         if (Buffer.Size() >= 1_MB) {
             Flush();
         }
@@ -962,25 +962,23 @@ public:
             }
 
             if (NeedNewBackup()) {
-                Send(Owner, new TEvStartNewBackup);
+                Send(Owner, new TEvStartNewBackup());
             }
         }
         Schedule(TDuration::Seconds(5), new TEvPrivate::TEvFlush(++ExpectedFlushCookie));
     }
 
-    void CleanMailbox() {
-        Dying = true;
-        Send(SelfId(), new TEvPrivate::TEvMailboxCleaned());
-    }
-
     void FlushAndDie() {
+        Dying = true;
         Flush();
         PassAway();
     }
 
     void ReplyAndDie(const TString& error) {
-        Send(Owner, new TEvChangelogFailed(error));
-        PassAway();
+        if (!Dying) {
+            Send(Owner, new TEvChangelogFailed(error));
+            PassAway();
+        }
     }
 
     void WriteChangelogChecksum() {

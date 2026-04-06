@@ -87,8 +87,8 @@ public:
     ) { return {}; }
 
     virtual std::vector<TPartIdInfo> GetPartIdsForTask(
-        const GetPartIdsForTaskContext& /* context */
-    ) { return {}; }
+        const GetPartIdsForTaskContext& context
+    ) = 0;
 
     virtual TAdvanceStageResult AdvanceToNextStage() = 0;
 };

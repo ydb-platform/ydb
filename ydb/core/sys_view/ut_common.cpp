@@ -144,6 +144,8 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
     featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
     featureFlags.SetEnableFulltextIndex(settings.EnableFulltextIndex);
+    featureFlags.SetEnableCsDictionaryEncoding(settings.EnableCsDictionaryEncoding);
+    featureFlags.SetEnableLocalBloomFilterIndex(settings.EnableLocalBloomFilterIndex);
 
     Settings->SetFeatureFlags(featureFlags);
 

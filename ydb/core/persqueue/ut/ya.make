@@ -6,7 +6,7 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(40)
+SPLIT_FACTOR(400)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
@@ -39,6 +39,7 @@ SRCS(
     make_config.cpp
     metering_sink_ut.cpp
     partition_chooser_ut.cpp
+    partitioning_keys_manager_ut.cpp
     pq_ut.cpp
     partition_ut.cpp
     partitiongraph_ut.cpp
@@ -48,6 +49,7 @@ SRCS(
     pqrb_describes_ut.cpp
     partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
+    events_ut.cpp
 )
 
 RESOURCE(

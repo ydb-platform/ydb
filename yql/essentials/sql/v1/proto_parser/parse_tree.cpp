@@ -1,5 +1,7 @@
 #include "parse_tree.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
 namespace NSQLTranslationV1 {
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
@@ -119,7 +121,7 @@ const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rul
         case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
             return rule.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
         case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 

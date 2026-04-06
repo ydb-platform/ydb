@@ -17,6 +17,7 @@ TFmrTableDataServiceSortedWriter::TFmrTableDataServiceSortedWriter(
 )
     : TFmrTableDataServiceBaseWriter(tableId, partId, tableDataService, columnGroupSpec, settings)
     , KeyColumns_(std::move(keyColumns))
+    , SkipSortedCheck_(settings.SkipSortedCheck)
 {
 }
 
@@ -30,7 +31,9 @@ void TFmrTableDataServiceSortedWriter::PutRows() {
     parserKeyIndexes.Parse();
     const auto& chunkIndexes = parserKeyIndexes.GetRows();
 
-    CheckIsSorted(currentYsonContent, chunkIndexes);
+    if (!SkipSortedCheck_) {
+        CheckIsSorted(currentYsonContent, chunkIndexes);
+    }
 
     auto sortedChunkStats = GetSortedChunkStats(currentYsonContent, chunkIndexes);
 

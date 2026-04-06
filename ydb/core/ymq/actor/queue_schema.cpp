@@ -501,7 +501,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
 
     auto* consumer = config->AddConsumers();
-    consumer->SetName("sqs_consumer");
+    consumer->SetName(ConsumerName);
     consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
     consumer->SetKeepMessageOrder(IsFifo_);
     if (ValidatedAttributes_.DelaySeconds) {
@@ -1661,6 +1661,12 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;
         }
+        case EDeleting::RemoveTopic: {
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveTopicEvent(GetVersionedQueueDir(QueuePath_, Version_), "streamImpl"), false, QueuePath_, GetTransactionCounters(UserCounters_))
+            );
+            break;
+        }
         case EDeleting::RemoveTables: {
             Y_ABORT_UNLESS(!Tables_.empty());
 
@@ -1703,6 +1709,10 @@ void TDeleteQueueSchemaActorV2::NextAction() {
 void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
     switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
+            DeletionStep_ = EDeleting::RemoveTopic;
+            break;
+        }
+        case EDeleting::RemoveTopic: {
             if (TablesFormat_ == 0) {
                 DeletionStep_ = EDeleting::RemoveTables;
             } else {
@@ -1746,8 +1756,8 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
             DeletionStep_ = EDeleting::Finish;
             break;
         }
-        default: {
-            Y_VERIFY_S(false, "incorrect queue deletion step: " << DeletionStep_); // unreachable
+        case EDeleting::Finish: {
+            break;
         }
     }
 

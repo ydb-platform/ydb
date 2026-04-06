@@ -52,7 +52,7 @@ private:
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
+    TLineageScanner(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
         : Root_(root)
         , Ctx_(ctx)
         , ExprCtx_(exprCtx)
@@ -67,6 +67,7 @@ public:
     }
 
     TString Process() {
+        auto startTime = TInstant::Now();
         VisitExpr(Root_, [&](const TExprNode& node) {
             for (auto& p : Ctx_.DataSources) {
                 if (p->IsRead(node)) {
@@ -171,6 +172,8 @@ public:
 
         writer.OnEndList();
         writer.OnEndMap();
+        Ctx_.LineageStats.Duration = (TInstant::Now() - startTime).MicroSeconds();
+        Ctx_.LineageStats.Memory = Allocator_->GetAllocatedSize();
         return s.Str();
     }
 
@@ -1109,9 +1112,9 @@ private:
 
 private:
     const TExprNode& Root_;
-    const TTypeAnnotationContext& Ctx_;
+    TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;
-    std::unique_ptr<IAllocator> Allocator_;
+    std::unique_ptr<ILimitingAllocator> Allocator_;
     TNodeMapLimited<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
@@ -1147,7 +1150,7 @@ void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& li
 
 } // namespace
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
+TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
     TLineageScanner scanner(root, ctx, exprCtx, standalone);
     return scanner.Process();
 }

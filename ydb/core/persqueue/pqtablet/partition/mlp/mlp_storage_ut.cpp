@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/join.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -176,7 +177,7 @@ struct TUtils {
         TStorage::TPosition position;
         auto result = Storage.Next(TimeProvider->Now() + timeout, position);
         UNIT_ASSERT(result);
-        return result.value();
+        return result.value().Offset;
     }
 
     bool Commit(ui64 offset) {
@@ -629,7 +630,7 @@ Y_UNIT_TEST(NextWithoutKeepMessageOrderStorage) {
     TStorage::TPosition position;
     auto result = storage.Next(processingDeadline + TDuration::MilliSeconds(31), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
 
     auto it = storage.begin();
     UNIT_ASSERT(it != storage.end());
@@ -668,7 +669,7 @@ Y_UNIT_TEST(NextWithKeepMessageOrderStorage) {
     TStorage::TPosition position;
     auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -704,7 +705,7 @@ Y_UNIT_TEST(NextWithWriteRetentionPeriod) {
     TStorage::TPosition position;
     auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(*result, 4);
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 4);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
@@ -737,7 +738,7 @@ Y_UNIT_TEST(NextWithInfinityRetentionPeriod) {
     TStorage::TPosition position;
     auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
@@ -800,13 +801,13 @@ Y_UNIT_TEST(SkipLockedMessageGroups) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
 
     TStorage::TPosition position;
     auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
     UNIT_ASSERT(result.has_value());
-    UNIT_ASSERT_VALUES_EQUAL(*result, 5);
+    UNIT_ASSERT_VALUES_EQUAL(result->Offset, 5);
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);
@@ -838,7 +839,7 @@ Y_UNIT_TEST(CommitLockedMessage_WithoutKeepMessageOrder) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
     {
         auto result = storage.Commit(3);
@@ -1646,7 +1647,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             TStorage::TPosition position;
             auto r = storage.Next(deadline3, position);
             UNIT_ASSERT(r);
-            UNIT_ASSERT_VALUES_EQUAL(*r, 3);
+            UNIT_ASSERT_VALUES_EQUAL(r->Offset, 3);
         }
 
         {
@@ -1662,7 +1663,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithMoveBaseTime_Deadline) {
             TStorage::TPosition position;
             auto r = storage.Next(deadline4, position);
             UNIT_ASSERT(r);
-            UNIT_ASSERT_VALUES_EQUAL(*r, 4);
+            UNIT_ASSERT_VALUES_EQUAL(r->Offset, 4);
         }
 
         {
@@ -2658,7 +2659,7 @@ Y_UNIT_TEST(NextFromLockedStorage) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
 }
 
@@ -2715,7 +2716,7 @@ Y_UNIT_TEST(LockedStorageGeneration) {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
         UNIT_ASSERT(result.has_value());
-        UNIT_ASSERT_VALUES_EQUAL(*result, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 3);
     }
 }
 

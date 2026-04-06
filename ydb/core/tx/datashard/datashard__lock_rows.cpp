@@ -697,7 +697,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     multiLock = MultiTxIdManager.FindMultiTxId(row.LockTxId);
                     if (multiLock) {
                         // Find the first conflicting lock we would need to wait
-                        TMultiTxIdEnumerator enumerator(MultiTxIdManager, multiLock, lockMode);
+                        auto enumerator = MultiTxIdManager.EnumerateLocks(multiLock, lockMode);
                         while (auto result = enumerator.Next()) {
                             if (result.LockId != lockId) {
                                 // Note: we are not supposed to have removed or broken locks in the owners list
@@ -815,12 +815,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     continue;
                 }
 
-                if (multiLock) {
-                    // We are going to overwrite this row lock below
-                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
-                }
-
                 if (currentOwner) {
+                    // For multiLock currentOwner points to the first conflict (which we are not supposed to have)
+                    Y_ENSURE(!multiLock);
                     Y_ENSURE(currentOwner->GetLockId() != lockId);
                     Y_ENSURE(IsCompatibleRowLockMode(currentLockMode, lockMode));
 
@@ -840,6 +837,11 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     setLockMode(NTable::ELockMode::Multi, newMultiTxId);
                     finishLocked();
                     continue;
+                }
+
+                if (multiLock) {
+                    // We are going to overwrite this row lock below
+                    MultiTxIdManager.DecrementLockedRowsCount(db, row.LockTxId);
                 }
 
                 setLockMode(lockMode, lockId);

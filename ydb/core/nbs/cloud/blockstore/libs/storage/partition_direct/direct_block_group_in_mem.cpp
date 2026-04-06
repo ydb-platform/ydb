@@ -98,12 +98,6 @@ TInMemoryDirectBlockGroup::TInMemoryDirectBlockGroup(
         NPDisk::NSectorMap::DM_NONE);
 }
 
-ui64 TInMemoryDirectBlockGroup::GenerateLsn()
-{
-    static std::atomic<ui64> LsnGenerator;   // TODO
-    return ++LsnGenerator;
-}
-
 void TInMemoryDirectBlockGroup::EstablishConnections()
 {}
 

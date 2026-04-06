@@ -1,6 +1,7 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -124,7 +125,7 @@ bool TStorage::CanReadMessageGroupIdHash(const ui32 messageGroupIdHash) const {
     return !LockedMessageGroupsId.contains(messageGroupIdHash);
 }
 
-std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
+std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position) {
     std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {
@@ -133,6 +134,14 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
 
     auto retentionExpired = [&](const auto& message) {
         return retentionDeadlineDelta && message.WriteTimestampDelta <= retentionDeadlineDelta.value();
+    };
+
+    auto asResult = [&](auto offset, auto& message) {
+        return TReadMessage{
+            .Offset = offset,
+            .ApproximateReceiveCount = message.ProcessingCount,
+            .ApproximateFirstReceiveTimestamp = TimeProvider->Now(), // TODO: replace with persisted first-receive timestamp
+        };
     };
 
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
@@ -147,7 +156,8 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
                 continue;
             }
 
-            return DoLock(offset, message, deadline);
+            DoLock(offset, message, deadline);
+            return asResult(offset, message);
         }
     }
 
@@ -173,7 +183,9 @@ std::optional<ui64> TStorage::Next(TInstant deadline, TPosition& position) {
 
             ui64 offset = FirstOffset + i;
             position.FastPosition = offset + 1;
-            return DoLock(offset, message, deadline);
+
+            DoLock(offset, message, deadline);
+            return asResult(offset, message);
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }

@@ -47,7 +47,7 @@ TReadRequestExecutor::~TReadRequestExecutor()
             NKikimrServices::NBS_PARTITION,
             "TReadRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
-            Request->Range.Print().c_str());
+            Request->Headers.Range.Print().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -75,6 +75,12 @@ void TReadRequestExecutor::Run()
         Reply(MakeError(E_REJECTED, error));
         return;
     }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor. Reading from location %s",
+        ToString(*location).c_str());
 
     auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
                                            VChunkConfig.VChunkIndex,
@@ -108,6 +114,13 @@ void TReadRequestExecutor::OnReadResponse(
         Reply(response.Error);
         return;
     }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        TryNumber,
+        FormatError(response.Error).c_str());
 
     ++TryNumber;
     Run();

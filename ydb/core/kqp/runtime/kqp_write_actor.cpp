@@ -129,20 +129,34 @@ namespace {
         }
     }
 
-    void FillTopicsCommit(NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
+    void FillTopicsCommit(const bool isImmediateCommit, NKikimrPQ::TDataTransaction& transaction, const NKikimr::NKqp::IKqpTransactionManagerPtr& txManager) {
         transaction.SetOp(NKikimrPQ::TDataTransaction::Commit);
-        const auto prepareSettings = txManager->GetPrepareTransactionInfo();
 
-        if (!prepareSettings.ArbiterColumnShard) {
-            for (const ui64 sendingShardId : prepareSettings.SendingShards) {
-                transaction.AddSendingShards(sendingShardId);
-            }
-            for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
-                transaction.AddReceivingShards(receivingShardId);
+        if (!isImmediateCommit) {
+            const auto prepareSettings = txManager->GetPrepareTransactionInfo();
+
+            if (!prepareSettings.ArbiterColumnShard) {
+                for (const ui64 sendingShardId : prepareSettings.SendingShards) {
+                    transaction.AddSendingShards(sendingShardId);
+                }
+                for (const ui64 receivingShardId : prepareSettings.ReceivingShards) {
+                    transaction.AddReceivingShards(receivingShardId);
+                }
+            } else {
+                transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
+                transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
             }
         } else {
-            transaction.AddSendingShards(*prepareSettings.ArbiterColumnShard);
-            transaction.AddReceivingShards(*prepareSettings.ArbiterColumnShard);
+            // Transaction with single topic.
+            for (const ui64 sendingShardId : txManager->GetTopicOperations().GetSendingTabletIds()) {
+                transaction.AddSendingShards(sendingShardId);
+            }
+            for (const ui64 receivingShardId : txManager->GetTopicOperations().GetReceivingTabletIds()) {
+                transaction.AddReceivingShards(receivingShardId);
+            }
+
+            AFL_ENSURE(transaction.GetSendingShards().size() == 1);
+            AFL_ENSURE(transaction.GetReceivingShards().size() == 1);
         }
     }
 
@@ -3641,7 +3655,7 @@ public:
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
             return;
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
+        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->GetTopicOperations().GetSize() <= 1 /* tmp fix */) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(traceId));
         } else {
@@ -3671,7 +3685,7 @@ public:
             || CurrentStateFunc() == &TThis::StateFlush);
         Become(&TThis::StatePrepare);
 
-        PendingPrepareShards = TxManager->GetShardsCount();
+        PendingPrepareShards = CountParticipatingShards();
 
         CheckQueuesEmpty();
         AFL_ENSURE(TxId);
@@ -3696,7 +3710,7 @@ public:
         CA_LOG_D("Start immediate commit");
         YQL_ENSURE(CurrentStateFunc() == &TThis::StateWaitTasks);
         Become(&TThis::StateCommit);
-        PendingCommitShards = TxManager->GetShardsCount();
+        PendingCommitShards = CountParticipatingShards();
 
         IsImmediateCommit = true;
         CheckQueuesEmpty();
@@ -3718,7 +3732,7 @@ public:
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(CurrentStateFunc() == &TThis::StatePrepare);
         Become(&TThis::StateCommit);
-        PendingCommitShards = TxManager->GetShardsCount();
+        PendingCommitShards = CountParticipatingShards();
         CheckQueuesEmpty();
         ForEachWriteActor([](TKqpTableWriteActor* actor, const TActorId) {
             actor->SetDistributedCommit();
@@ -3754,6 +3768,39 @@ public:
         for (const auto& [_, queue] : RequestQueues) {
             AFL_ENSURE(queue.empty());
         }
+    }
+
+    // Count shards that actually participate in prepare/commit: write-actor
+    // shards + external shards that have locks + topic shards.  Shards tracked
+    // by TxManager but having neither writes nor locks are excluded because no
+    // prepare/commit message is ever sent to them, so no response will arrive.
+    size_t CountParticipatingShards() const {
+        THashSet<ui64> writeActorShards;
+        ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            for (const auto& shardId : actor->GetShardsIds()) {
+                writeActorShards.insert(shardId);
+            }
+        });
+
+        size_t count = writeActorShards.size();
+
+        for (const auto& shardId : TxManager->GetShards()) {
+            if (writeActorShards.contains(shardId)) {
+                continue;
+            }
+            if (TxManager->GetLocks(shardId).empty()) {
+                continue;
+            }
+            ++count;
+        }
+
+        if (TxManager->HasTopics()) {
+            TTopicTabletTxs topicTxs;
+            TxManager->BuildTopicTxs(topicTxs);
+            count += topicTxs.size();
+        }
+
+        return count;
     }
 
     void SendToExternalShards() {
@@ -3833,9 +3880,7 @@ public:
         for (auto& [tabletId, t] : topicTxs) {
             auto& transaction = t.tx;
 
-            if (!isImmediateCommit) {
-                FillTopicsCommit(transaction, TxManager);
-            }
+            FillTopicsCommit(isImmediateCommit, transaction, TxManager);
 
             if (t.hasWrite && writeId.Defined() && !kafkaTransaction) {
                 auto* w = transaction.MutableWriteId();
@@ -4742,6 +4787,13 @@ public:
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
             return;
+        }
+        // Fallback: when a shard error arrived via OnError (without shardId),
+        // ConsumeCommitResult was never called for that shard, so the condition
+        // above may never become true.  Flush the deferred error once all
+        // expected commit responses have been received.
+        if (PendingCommitShards == 0) {
+            FlushDeferredLocksBrokenIfPending();
         }
     }
 

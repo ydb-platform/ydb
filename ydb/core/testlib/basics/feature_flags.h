@@ -86,6 +86,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramSorting)
     FEATURE_FLAG_SETTER(EnableDataShardSplitKeySelection)
     FEATURE_FLAG_SETTER(EnableDataShardSplitHistogramOmission)
+    FEATURE_FLAG_SETTER(EnableCsDictionaryEncoding)
     #undef FEATURE_FLAG_SETTER
 };
 

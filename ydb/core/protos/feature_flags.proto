@@ -230,7 +230,7 @@ message TFeatureFlags {
     optional bool EnableSchemaSecrets = 203 [default = true];
     optional bool EnableTableCacheModes = 204 [default = true];
     optional bool EnableSkipMessagesWithObsoleteTimestamp = 205 [default = false];
-    optional bool EnableStreamingQueries = 206 [default = false];
+    optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
     optional bool EnableCompileCacheView = 209 [default = false];
@@ -283,4 +283,7 @@ message TFeatureFlags {
     optional bool EnableDataShardSplitKeySelection = 245 [default = false];
     optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
+    optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
 }

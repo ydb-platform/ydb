@@ -62,13 +62,17 @@ nostd::shared_ptr<opentelemetry::trace::Span> Tracer::StartSpan(
   {
     return kNoopTracer->StartSpan(name, attributes, links, options);
   }
-  opentelemetry::trace::SpanContext parent_context = GetCurrentSpan()->GetContext();
+
+  // make sure to always overwrite this parent_context
+  bool get_current_context = true;
+  opentelemetry::trace::SpanContext parent_context(false, false);
   if (nostd::holds_alternative<opentelemetry::trace::SpanContext>(options.parent))
   {
     auto span_context = nostd::get<opentelemetry::trace::SpanContext>(options.parent);
     if (span_context.IsValid())
     {
-      parent_context = span_context;
+      parent_context      = span_context;
+      get_current_context = false;
     }
   }
   else if (nostd::holds_alternative<context::Context>(options.parent))
@@ -78,15 +82,21 @@ nostd::shared_ptr<opentelemetry::trace::Span> Tracer::StartSpan(
     auto span_context = opentelemetry::trace::GetSpan(context)->GetContext();
     if (span_context.IsValid())
     {
-      parent_context = span_context;
+      parent_context      = span_context;
+      get_current_context = false;
     }
     else
     {
       if (opentelemetry::trace::IsRootSpan(context))
       {
-        parent_context = opentelemetry::trace::SpanContext{false, false};
+        get_current_context = false;
       }
     }
+  }
+
+  if (get_current_context)
+  {
+    parent_context = GetCurrentSpan()->GetContext();
   }
 
   IdGenerator &generator = GetIdGenerator();

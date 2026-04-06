@@ -94,7 +94,12 @@ public:
             YQL_ENSURE(clusterConnections.size() == 1);
             auto& connection = clusterConnections.begin()->second;
             auto ytTableWriter = YtJobService_->MakeWriter(ytTable, connection, Settings_.YtWriterSettings);
-            ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
+            auto& parseRecordSettings = Settings_.ParseRecordSettings;
+            if (parseRecordSettings.UploadNumThreads > 1) {
+                ParseRecordsPipelined(tableDataServiceReader, ytTableWriter, parseRecordSettings.UploadReadBlockCount, parseRecordSettings.UploadReadBlockSize, Settings_.RawTableQueueSettings, cancelFlag);
+            } else {
+                ParseRecords(tableDataServiceReader, ytTableWriter, parseRecordSettings.UploadReadBlockCount, parseRecordSettings.UploadReadBlockSize, cancelFlag);
+            }
             ytTableWriter->Flush();
 
             return TStatistics(); // TODO - get actual stats from yt table.
@@ -123,10 +128,9 @@ public:
                 params.CookieYson,
                 clusterConnection
             );
-            ParseRecordsToYtDistributed(
+            StreamBulkToYtDistributed(
                 tableDataServiceReader,
                 *writer,
-                Settings_.ParseRecordSettings.UploadReadBlockCount,
                 Settings_.ParseRecordSettings.UploadReadBlockSize,
                 cancelFlag);
             writer->Finish();
@@ -161,7 +165,7 @@ public:
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
                     try {
-                        auto inputTableReaders = GetTableInputStreams(YtJobService_, TableDataService_, inputTableRef, clusterConnections);
+                        auto inputTableReaders = GetTableInputStreams(YtJobService_, TableDataService_, inputTableRef, clusterConnections, Settings_.FmrReaderSettings);
                         for (auto& tableReader: inputTableReaders) {
                             ParseRecords(tableReader, tableDataServiceWriter, parseRecordSettings.MergeReadBlockCount, parseRecordSettings.MergeReadBlockSize, cancelFlag, mutex);
                         }
@@ -194,12 +198,13 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
             YQL_ENSURE(!output.SortingColumns.Columns.empty(), "SortedMerge output key columns must be set");
 
+            auto writerSettings = Settings_.FmrWriterSettings;
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
                 output.TableId,
                 output.PartId,
                 TableDataService_,
                 output.SerializedColumnGroups,
-                Settings_.FmrWriterSettings,
+                writerSettings,
                 output.SortingColumns
             );
             TMaybe<TMutex> mutex = TMutex();
@@ -216,7 +221,8 @@ public:
                         fmrInput->SerializedColumnGroups,
                         fmrInput->IsFirstRowInclusive,
                         fmrInput->FirstRowKeys,
-                        fmrInput->LastRowKeys
+                        fmrInput->LastRowKeys,
+                        Settings_.FmrReaderSettings.ReadAheadChunks
                     ));
                 } else {
                     throw TFmrNonRetryableJobException() << "YtTables unsupported inside SortedMerge task";
@@ -268,12 +274,13 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
             YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
 
+            auto writerSettings = Settings_.FmrWriterSettings;
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
                 output.TableId,
                 output.PartId,
                 TableDataService_,
                 output.SerializedColumnGroups,
-                Settings_.FmrWriterSettings,
+                writerSettings,
                 output.SortingColumns
             );
             TMaybe<TMutex> mutex = TMutex();
@@ -290,7 +297,8 @@ public:
                         fmrInput->SerializedColumnGroups,
                         fmrInput->IsFirstRowInclusive,
                         fmrInput->FirstRowKeys,
-                        fmrInput->LastRowKeys
+                        fmrInput->LastRowKeys,
+                        Settings_.FmrReaderSettings.ReadAheadChunks
                     ));
                 } else {
                     auto ytTableTaskRef = std::get<TYtTableTaskRef>(inputTableRef);
@@ -422,6 +430,7 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
 
     parseRecordSettings.UploadReadBlockCount = jobSettings["upload"]["read_block_count"].AsInt64();
     parseRecordSettings.UploadReadBlockSize = jobSettings["upload"]["read_block_size"].AsInt64();
+    parseRecordSettings.UploadNumThreads = jobSettings["upload"]["num_threads"].AsInt64();
 
     auto& jobIoSettings = jobSettings["job_io"];
     resultSettings.FmrReaderSettings.ReadAheadChunks = jobIoSettings["fmr_table_reader"]["inflight_chunks"].AsInt64();
@@ -430,6 +439,9 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
     fmrWriterSettings.MaxInflightChunks = jobIoSettings["fmr_table_writer"]["inflight_chunks"].AsInt64();
     fmrWriterSettings.ChunkSize = jobIoSettings["fmr_table_writer"]["chunk_size"].AsInt64();
     fmrWriterSettings.MaxRowWeight = jobIoSettings["fmr_table_writer"]["max_row_weight"].AsInt64();
+    if (jobIoSettings["fmr_table_writer"].HasKey("skip_sorted_check")) {
+        fmrWriterSettings.SkipSortedCheck = jobIoSettings["fmr_table_writer"]["skip_sorted_check"].AsBool();
+    }
 
     auto& jobProcessSettings = jobSettings["job_process"];
     auto& fmrUserJobSettings = resultSettings.FmrUserJobSettings;
@@ -438,7 +450,10 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
 
     resultSettings.YtWriterSettings.MaxRowWeight = jobIoSettings["yt_table_writer"]["max_row_weight"].AsInt64();
 
-    // TODO - maybe pass other optional settings here.
+    if (jobIoSettings.HasKey("raw_table_queue") && jobIoSettings["raw_table_queue"].HasKey("max_inflight_bytes")) {
+        resultSettings.RawTableQueueSettings.MaxInflightBytes = jobIoSettings["raw_table_queue"]["max_inflight_bytes"].AsInt64();
+    }
+
     return resultSettings;
 }
 

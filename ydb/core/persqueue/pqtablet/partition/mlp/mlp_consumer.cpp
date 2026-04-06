@@ -708,14 +708,14 @@ void TConsumerActor::ProcessEventQueue() {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
-        std::deque<ui64> messages;
+        std::deque<TReadMessage> messages;
         for (; count; --count) {
             auto result = Storage->Next(visibilityDeadline, position);
             if (!result) {
                 break;
             }
 
-            messages.push_back(result.value());
+            messages.push_back(std::move(result.value()));
         }
 
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
@@ -962,8 +962,8 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
             ScheduleProcessing();
+            NotifyPQRB(true);
             UpdateMetrics();
-            NotifyPQRB();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
             break;
         }
@@ -1043,8 +1043,8 @@ void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;
     }
+    NotifyPQRB(true);
     UpdateMetrics();
-    NotifyPQRB();
     Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
 }
 
@@ -1064,8 +1064,17 @@ bool TConsumerActor::UseForReading() const {
 void TConsumerActor::NotifyPQRB(bool force) {
     auto useForReading = UseForReading();
     if (force || useForReading != LastUseForReading) {
-        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId,
-            PartitionEndOffset - LastCommittedOffset, useForReading);
+        auto ev = std::make_unique<TEvPQ::TEvMLPConsumerStatus>(Config.GetName(), PartitionId, useForReading);
+
+        const auto& metrics = Storage->GetMetrics();
+        const i64 rawMessageCount = static_cast<i64>(PartitionEndOffset)
+            - static_cast<i64>(LastCommittedOffset)
+            - static_cast<i64>(metrics.CommittedMessageCount);
+
+        ev->Record.SetLockedMessageCount(metrics.LockedMessageCount);
+        ev->Record.SetDelayedMessageCount(metrics.DelayedMessageCount);
+        ev->Record.SetMessageCount(std::max<i64>(0, rawMessageCount));
+
         Send(PartitionActorId, std::move(ev));
         LastUseForReading = useForReading;
     }

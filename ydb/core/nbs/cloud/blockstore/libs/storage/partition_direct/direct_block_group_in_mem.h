@@ -36,8 +36,6 @@ public:
 
     TExecutorPtr GetExecutor() override;
 
-    ui64 GenerateLsn() override;
-
     void EstablishConnections() override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromPBuffer(

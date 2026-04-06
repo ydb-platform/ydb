@@ -232,7 +232,7 @@ private:
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
 
-        UploaderId = TlsActivationContext->Register(actor);
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
 private:

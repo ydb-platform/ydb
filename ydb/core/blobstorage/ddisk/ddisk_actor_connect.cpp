@@ -6,7 +6,6 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvConnect::TPtr ev) {
         const auto& record = ev->Get()->Record;
-
         STLOG(PRI_DEBUG, BS_DDISK, BSDD00, "TDDiskActor::Handle(TEvConnect)", (DDiskId, DDiskId),
             (Record, record));
 

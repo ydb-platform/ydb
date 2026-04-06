@@ -171,7 +171,9 @@ public:
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext()))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
-        , Pctx(TKqpProviderContext(*OptimizeCtx, Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel())))
+        , Pctx(TKqpProviderContext(*OptimizeCtx, 
+            Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()),
+            Config->UseBlockHashJoin.Get().GetOrElse(false)))
         , ActorSystem(actorSystem)
     {
         CreateGraphTransformer(typesCtx, sessionCtx, funcRegistry);
@@ -502,7 +504,7 @@ private:
                     // TTransformStage{ newRBOPhysicalPeepholeTransformer, "NewRBOPhysicalPeephole", TIssuesIds::DEFAULT_ERROR },
                     // LogStage("NewRBOPhysicalPeephole"),
                     TTransformStage{newRBOCompilePhysicalQuery, "CompilePhysicalQuery", TIssuesIds::DEFAULT_ERROR},
-                    // TTransformStage{ newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR }, // TODO(sk): only on stats mode or
+                    TTransformStage{newRBOPreparedExplainTransformer, "NewRBOExplainQuery", TIssuesIds::DEFAULT_ERROR}, // TODO(sk): only on stats mode or
                     // if explain-only
                 },
                 false);

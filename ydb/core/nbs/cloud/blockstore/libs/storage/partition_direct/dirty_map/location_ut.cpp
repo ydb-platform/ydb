@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TLocationTest)
 
     Y_UNIT_TEST(TestLocationMaskMakePrimaryDDisk)
     {
-        auto mask = TLocationMask::MakePrimaryDDisk();
+        auto mask = TLocationMask::MakePrimaryDDisks();
         UNIT_ASSERT(!mask.Empty());
         UNIT_ASSERT_VALUES_EQUAL(3, mask.Count());
         UNIT_ASSERT(mask.HasDDisk());
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TLocationTest)
         UNIT_ASSERT(!mixedMask.OnlyDDisk());
         UNIT_ASSERT(!mixedMask.OnlyPBuffer());
         // Test with only DDisk
-        auto ddiskMask = TLocationMask::MakePrimaryDDisk();
+        auto ddiskMask = TLocationMask::MakePrimaryDDisks();
         UNIT_ASSERT(ddiskMask.HasDDisk());
         UNIT_ASSERT(!ddiskMask.HasPBuffer());
         UNIT_ASSERT(ddiskMask.OnlyDDisk());
@@ -324,6 +324,82 @@ Y_UNIT_TEST_SUITE(TLocationTest)
         UNIT_ASSERT(foundPBuffer2);
         UNIT_ASSERT(foundHOPBuffer0);
         UNIT_ASSERT(foundHOPBuffer1);
+    }
+
+    Y_UNIT_TEST(TestTranslateDDiskToPBuffer)
+    {
+        // Test translation from DDisk to PBuffer
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer0,
+            TranslateDDiskToPBuffer(ELocation::DDisk0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer1,
+            TranslateDDiskToPBuffer(ELocation::DDisk1));
+        UNIT_ASSERT_EQUAL(
+            ELocation::PBuffer2,
+            TranslateDDiskToPBuffer(ELocation::DDisk2));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HOPBuffer0,
+            TranslateDDiskToPBuffer(ELocation::HODDisk0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HOPBuffer1,
+            TranslateDDiskToPBuffer(ELocation::HODDisk1));
+    }
+
+    Y_UNIT_TEST(TestTranslatePBufferToDDisk)
+    {
+        // Test translation from PBuffer to DDisk
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk0,
+            TranslatePBufferToDDisk(ELocation::PBuffer0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk1,
+            TranslatePBufferToDDisk(ELocation::PBuffer1));
+        UNIT_ASSERT_EQUAL(
+            ELocation::DDisk2,
+            TranslatePBufferToDDisk(ELocation::PBuffer2));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HODDisk0,
+            TranslatePBufferToDDisk(ELocation::HOPBuffer0));
+        UNIT_ASSERT_EQUAL(
+            ELocation::HODDisk1,
+            TranslatePBufferToDDisk(ELocation::HOPBuffer1));
+    }
+
+    Y_UNIT_TEST(TestIteratorOverEmptyMask)
+    {
+        TLocationMask mask;
+        TSet<ELocation> locations;
+        for (ELocation location: mask) {
+            locations.insert(location);
+        }
+        UNIT_ASSERT_EQUAL(0, locations.size());
+    }
+
+    Y_UNIT_TEST(TestIteratorWithLast)
+    {
+        TLocationMask mask;
+        mask.Set(ELocation::HODDisk1);
+        TSet<ELocation> locations;
+        for (ELocation location: mask) {
+            locations.insert(location);
+        }
+        UNIT_ASSERT_EQUAL(1, locations.size());
+        UNIT_ASSERT(locations.contains(ELocation::HODDisk1));
+    }
+
+    Y_UNIT_TEST(TestIterator)
+    {
+        TLocationMask mask =
+            TLocationMask::MakeDDisk(true, false, true, false, true);
+        TSet<ELocation> locations;
+        for (ELocation location: mask) {
+            locations.insert(location);
+        }
+        UNIT_ASSERT_EQUAL(3, locations.size());
+        UNIT_ASSERT(locations.contains(ELocation::DDisk0));
+        UNIT_ASSERT(locations.contains(ELocation::DDisk2));
+        UNIT_ASSERT(locations.contains(ELocation::HODDisk1));
     }
 }
 

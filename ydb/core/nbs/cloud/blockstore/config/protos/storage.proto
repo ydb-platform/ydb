@@ -4,6 +4,18 @@ package NYdb.NBS.NProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Mode of write requests.
+enum EWriteMode {
+    // Persistent Buffers replication is going from one of PBuffers. Write request
+    // will be sended to 1 PBuffer, then this PBuffer will send request to other PBuffer.
+    PBufferReplication = 0;
+
+    // WriteRequests are going to all Persistent Buffers directly.
+    DirectPBuffersFilling = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TStorageServiceConfig
 {
     // Schemeshard directory for volumes.
@@ -41,4 +53,12 @@ message TStorageServiceConfig
 
     // Default stripe size for volumes.
     optional uint64 StripeSize = 13;
+
+    optional EWriteMode WriteMode = 14;
+
+    // Timeout for request to PBuffer.
+    optional uint32 PBufferReplyTimeoutMicroseconds = 15;
+
+    // Delay (in microseconds) before writing to handoff persistent buffers.
+    optional uint32 WriteHandoffDelay = 16;
 }

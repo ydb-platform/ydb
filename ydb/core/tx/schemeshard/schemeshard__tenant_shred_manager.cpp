@@ -336,6 +336,7 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
         }
         if (Status == EShredStatus::IN_PROGRESS && WaitingShredShards.empty()) {
             Status = EShredStatus::COMPLETED;
+            CompletedGeneration = Generation;
         }
     }
     RunningShardsCounter->Set(0);

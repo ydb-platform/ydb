@@ -42,6 +42,7 @@ class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
 class EvictionToExternalStorageSettings;
+class CompactItem;
 
 } // namespace Table
 } // namespace Ydb
@@ -541,6 +542,37 @@ public:
         float Progress;
         std::string Path;
         std::optional<TIndexDescription> Desctiption;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TCompact {
+public:
+    TCompact(bool cascade, uint32_t maxShardsInFlight);
+    TCompact();
+
+    void SerializeTo(Ydb::Table::CompactItem& proto) const;
+private:
+    bool Cascade_;
+    uint32_t MaxShardsInFlight_;
+};
+
+class TCompactionOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TCompactionOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        ECompactState State;
+        float Progress;
+        std::string Path;
+        bool Cascade;
+        uint32_t MaxInFlight;
+        uint32_t Total;
+        uint32_t Done;
     };
 
     const TMetadata& Metadata() const;
@@ -2037,6 +2069,8 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
 
     FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter);
+
+    FLUENT_SETTING_OPTIONAL(TCompact, Compact);
 
     FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings);
     TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, uint64_t readReplicasCount) {

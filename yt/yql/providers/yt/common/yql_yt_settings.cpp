@@ -631,6 +631,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
     REGISTER_SETTING(*this, KeepWorldDepForFillOp);
     REGISTER_SETTING(*this, CostBasedOptimizerPartial);
+    REGISTER_SETTING(*this, _MinJobStateSizeToPassViaFile);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
@@ -665,7 +666,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

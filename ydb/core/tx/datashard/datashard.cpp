@@ -7,6 +7,7 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -438,6 +439,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
 
     if (State != TShardState::Offline) {
         VolatileTxManager.Start(ctx);
+        MultiTxIdManager.Start();
     }
 
     SignalTabletActive(ctx);
@@ -4782,6 +4784,8 @@ void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volati
         if (info->State != EVolatileTxState::Aborting) {
             volatileDependencies.insert(txId);
         }
+    } else if (auto* entry = GetMultiTxIdManager().FindMultiTxId(txId)) {
+        GetMultiTxIdManager().BreakMultiTxId(entry);
     } else {
         SysLocksTable().BreakLock(txId);
     }
@@ -4945,10 +4949,6 @@ TString TEvDataShard::TEvReadResult::ToString() const {
            << " ArrowCols: " << ArrowBatch->num_columns();
     }
 
-    if (!Rows.empty()) {
-        ss << " RowsSize: " << Rows.size();
-    }
-
     return ss.Str();
 }
 
@@ -4992,15 +4992,6 @@ void TEvDataShard::TEvReadResult::FillRecord() {
         return;
     }
 
-    if (!Rows.empty()) {
-        auto* protoBatch = Record.MutableCellVec();
-        protoBatch->MutableRows()->Reserve(Rows.size());
-        for (const auto& row: Rows) {
-            protoBatch->AddRows(TSerializedCellVec::Serialize(row));
-        }
-        Rows.clear();
-        return;
-    }
 }
 
 std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() const {
@@ -5016,6 +5007,26 @@ std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch()
 
     ArrowBatch = NArrow::CreateNoColumnsBatch(Record.GetRowCount());
     return ArrowBatch;
+}
+
+size_t TEvDataShard::TEvReadResult::GetDataSizeEstimate() const {
+    if (ArrowBatch) {
+        return NArrow::GetBatchDataSize(ArrowBatch);
+    }
+
+    if (!Batch.Empty()) {
+        return Batch.DataSizeEstimate();
+    }
+
+    if (!RowsSerialized.empty()) {
+        size_t size = 0;
+        for (const auto& row : RowsSerialized) {
+            size += row.GetBuffer().size();
+        }
+        return size;
+    }
+
+    return 0;
 }
 
 } // NKikimr

@@ -7,6 +7,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -193,7 +194,7 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
-    std::optional<ui64> Next(TInstant deadline, TPosition& position);
+    std::optional<TReadMessage> Next(TInstant deadline, TPosition& position);
     bool Commit(ui64 message);
     bool Unlock(ui64 message);
     // For SQS compatibility

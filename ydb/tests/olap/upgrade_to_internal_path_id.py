@@ -40,7 +40,7 @@ class TestUpgradeToInternalPathId:
         self.config.yaml_config["column_shard_config"]["generate_internal_path_id"] = generate_internal_path_id
         self.cluster.update_configurator_and_restart(self.config)
         driver = ydb.Driver(endpoint=self.cluster.nodes[1].endpoint, database="/Root")
-        driver.wait(20)
+        driver.wait(timeout=60)
         self.session = ydb.QuerySessionPool(driver)
 
     def create_table_with_data(self, table_name, start_value):

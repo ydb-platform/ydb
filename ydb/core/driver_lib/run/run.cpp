@@ -84,7 +84,6 @@
 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
-#include <ydb/core/security/sasl/static_credentials_provider.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
@@ -635,8 +634,6 @@ TKikimrRunner::~TKikimrRunner() {
         ActorSystem->Stop();
         ActorSystem.Destroy();
     }
-
-    NSasl::TStaticCredentialsProvider::GetInstance().Clear();
 }
 
 void TKikimrRunner::AddGlobalObject(std::shared_ptr<void> object) {
@@ -2200,7 +2197,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
-void TKikimrRunner::Start() {
+void TKikimrRunner::KikimrStart() {
     for (auto plugin: Plugins) {
         plugin->Start();
     }
@@ -2238,7 +2235,7 @@ void TKikimrRunner::Start() {
     ThreadSigmask(SIG_UNBLOCK);
 }
 
-void TKikimrRunner::Stop(bool graceful) {
+void TKikimrRunner::KikimrStop(bool graceful) {
     Y_UNUSED(graceful);
 
     bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
@@ -2475,11 +2472,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
-        runner->Start();
+        runner->KikimrStart();
         runner->BusyLoop();
         // exit busy loop by a signal
         Cout << "Shutting YDB server down" << Endl;
-        runner->Stop(false);
+        runner->KikimrStop(false);
     }
 
     return 0;

@@ -15,6 +15,12 @@ namespace NYdbWorkload {
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     auto addUpsertParam = [&]() {
+        opts.AddLongOption("bulk-size", "Number of rows in a upsert batch")
+            .DefaultValue(UpsertBulkSize).StoreResult(&UpsertBulkSize);
+        opts.AddLongOption("prefixed", "Index is prefixed")
+            .StoreTrue(&UpsertPrefixed);
+        opts.AddLongOption("prefix-count", "Number of pregenerated prefixes. Used only in prefix index")
+            .DefaultValue(UpsertPrefixCount).StoreResult(&UpsertPrefixCount);
     };
 
     auto addSelectParam = [&]() {
@@ -39,11 +45,22 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
         NVector::ConfigureTableOpts(opts, &TableOpts);
+        NVector::ConfigureTablePartitioningOpts(opts, &TablePartitioningOpts);
+        opts.AddLongOption("prefixed", "Add prefix column to the table")
+            .StoreTrue(&KmeansTreePrefixed);
         break;
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);
+        ConfigureIndexOpts(opts);
+        opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
+            .DefaultValue(IndexType).StoreResult(&IndexType);
+        opts.AddLongOption("kmeans-tree-covering", "Index is covering")
+            .DefaultValue(0).StoreResult(&KmeansTreeCovering);
+        opts.AddLongOption("kmeans-tree-prefixed", "Index is prefixed")
+            .DefaultValue(0).StoreResult(&KmeansTreePrefixed);
         break;
     case TWorkloadParams::ECommandType::Run:
+        RunWorkloadType = workloadType;
         ConfigureCommonOpts(opts);
         switch (static_cast<EWorkloadRunType>(workloadType)) {
         case EWorkloadRunType::Upsert:
@@ -68,13 +85,20 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
+    opts.AddLongOption("distance", "Distance/similarity function. "
+            "Possible values: 'inner_product', 'cosine_similarity', 'cosine_distance', 'cosine', 'euclidean', 'manhattan'")
+        .DefaultValue("inner_product").StoreResult(&Distance);
+    opts.AddLongOption("kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .DefaultValue(KmeansTreeLevels).StoreResult(&KmeansTreeLevels);
+    opts.AddLongOption("kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .DefaultValue(KmeansTreeClusters).StoreResult(&KmeansTreeClusters);
+}
 
-    opts.AddLongOption( "distance", "Distance/similarity function")
-        .Required().StoreResult(&Distance);
-    opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
-        .Required().StoreResult(&KmeansTreeLevels);
-    opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
-        .Required().StoreResult(&KmeansTreeClusters);
+TString TVectorWorkloadParams::GetDistanceDDL() const {
+    if (Distance == "inner_product" || Distance == "cosine_similarity") {
+        return "similarity=" + Distance;
+    }
+    return "distance=" + Distance;
 }
 
 TVector<TString> TVectorWorkloadParams::GetColumns() const {

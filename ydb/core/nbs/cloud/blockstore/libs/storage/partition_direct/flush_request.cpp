@@ -10,17 +10,19 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    ELocation location,
+    TRoute route,
     TFlushHint hint,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan span)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
-    , TraceId(std::move(traceId))
-    , Location(location)
+    , Span(std::move(span))
+    , Route(route)
     , Hint(std::move(hint))
-
-{}
+{
+    Y_ABORT_UNLESS(IsPBuffer(Route.Source));
+    Y_ABORT_UNLESS(IsDDisk(Route.Destination));
+}
 
 TFlushRequestExecutor::~TFlushRequestExecutor()
 {
@@ -38,10 +40,10 @@ void TFlushRequestExecutor::Run()
 {
     auto future = DirectBlockGroup->SyncWithPBuffer(
         VChunkConfig.VChunkIndex,
-        VChunkConfig.GetHostIndex(Location),   // TODO
-        VChunkConfig.GetHostIndex(Location),
+        VChunkConfig.GetHostIndex(Route.Source),
+        VChunkConfig.GetHostIndex(Route.Destination),
         Hint.Segments,
-        NWilson::TTraceId(TraceId));
+        Span.GetTraceId());
     future.Subscribe(
         [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGFlushResponse>& f)
@@ -88,7 +90,7 @@ void TFlushRequestExecutor::Reply(
     TVector<ui64> flushFailed)
 {
     Promise.TrySetValue(TResponse{
-        .Location = Location,
+        .Route = Route,
         .FlushOk = std::move(flushOk),
         .FlushFailed = std::move(flushFailed)});
 }

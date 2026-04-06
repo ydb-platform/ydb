@@ -5,6 +5,10 @@
 #include "context.h"
 #include "storage.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
 #include <library/cpp/threading/future/future.h>
 
 #include <functional>
@@ -12,6 +16,31 @@
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TTestPartitionDirectService final: public IPartitionDirectService
+{
+public:
+    // IPartitionDirectService implementation
+    TVolumeConfigPtr GetVolumeConfig() const override
+    {
+        return nullptr;
+    }
+
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override
+    {
+        Y_UNUSED(name);
+        return NWilson::TSpan();
+    }
+
+    void ScheduleAfterDelay(
+        TExecutorPtr executor,
+        TDuration delay,
+        TCallback callback) override
+    {
+        Y_UNUSED(delay);
+        executor->ExecuteSimple(std::move(callback));
+    }
+};
 
 struct TTestStorage: public IStorage
 {

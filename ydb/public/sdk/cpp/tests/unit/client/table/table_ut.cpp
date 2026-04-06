@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <util/string/builder.h>
 
@@ -129,8 +129,9 @@ namespace {
         std::unique_ptr<NTable::TSession>& tableSession
     ) {
         // Start the local GRPC service for the given table API service
-        TPortManager pm;
-        ui16 tablePort = pm.GetPort();
+        NTesting::InitPortManagerFromEnv();
+        const auto tablePortHolder = NTesting::GetFreePort();
+        const ui16 tablePort = static_cast<ui16>(tablePortHolder);
 
         grpcServer = StartGrpcServer(
             TStringBuilder() << "127.0.0.1:" << tablePort,

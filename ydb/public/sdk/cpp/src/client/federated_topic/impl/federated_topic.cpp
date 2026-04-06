@@ -13,7 +13,7 @@ TReadOriginalSettings& TReadOriginalSettings::AddDatabase(const std::string& dat
 }
 
 TReadOriginalSettings& TReadOriginalSettings::AddDatabases(const std::vector<std::string>& databases) {
-    Databases.insert(Databases.end(), databases.begin(), databases.end());
+    Databases.insert(databases.begin(), databases.end());
     return *this;
 }
 

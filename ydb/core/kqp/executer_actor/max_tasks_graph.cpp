@@ -13,7 +13,7 @@ void TMaxTasksGraph::AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& reso
     YQL_ENSURE(!resourcesSnapshot.empty());
 
     Nodes.reserve(resourcesSnapshot.size());
-    Nodes.resize(resourcesSnapshot.size(), {MaxChannelsCount});
+    Nodes.resize(resourcesSnapshot.size(), {.MaxChannelsCount=MaxChannelsCount});
 
     size_t nodeIdx = 0;
     for (const auto& node : resourcesSnapshot) {
@@ -26,7 +26,7 @@ void TMaxTasksGraph::AddNode(TNodeId node) {
     if (nodeIt == NodeIds.end()) {
         {
             TStringStream ss;
-            ss << "Adding node not found in resource snapshot: " << node << Endl;
+            ss << "Adding node that is not found in resource snapshot: " << node << Endl;
             ss << "Known nodes:";
             for (const auto [knownNode, _] : NodeIds) {
                 ss << " " << knownNode;
@@ -35,7 +35,7 @@ void TMaxTasksGraph::AddNode(TNodeId node) {
         }
 
         NodeIds.emplace(node, Nodes.size());
-        Nodes.push_back({MaxChannelsCount});
+        Nodes.push_back({.MaxChannelsCount=MaxChannelsCount});
     }
 }
 

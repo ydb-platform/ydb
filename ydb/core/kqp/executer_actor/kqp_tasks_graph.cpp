@@ -2884,9 +2884,13 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     }
 
     // TODO: remove this part later. The nodes from snapshot should be sufficient.
+    //       Right now the snapshot is not sufficient on cluster start.
     for (const auto [_, node] : GetMeta().ShardIdToNodeId) {
         MaxTasksGraph.AddNode(node);
     }
+
+    // TODO: we always have at least current node.
+    MaxTasksGraph.AddNode(GetMeta().ExecuterId.NodeId());
 
     for (ui32 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);

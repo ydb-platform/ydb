@@ -9,3 +9,4 @@ items:
 - { name: Working with YDB databases,                   href: ydb.md }
 - name: Working with S3 buckets
   include: { path: s3/toc_i.yaml, mode: link }
+- { name: Data import and export,                         href: import_and_export.md }

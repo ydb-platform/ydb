@@ -60,6 +60,7 @@ class ClusterKillTabletByTypeNemesis(MonitoredAgentActor):
             if self._tablet_ids:
                 self.inject_fault()
             else:
+                self.on_failed_inject_fault()
                 self._logger.warning("No tablets of type %s", self._tablet_type)
 
     def extract_fault(self, payload=None) -> None:

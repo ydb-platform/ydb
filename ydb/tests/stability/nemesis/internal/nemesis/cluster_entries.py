@@ -226,7 +226,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         }
 
     # --- topology-conditional (datacenter / bridge pile) --------------------
-    out.update(_topology_conditional_entries())
+    # out.update(_topology_conditional_entries())
     return out
 
 

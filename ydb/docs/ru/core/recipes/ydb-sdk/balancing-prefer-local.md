@@ -20,16 +20,6 @@
       "github.com/ydb-platform/ydb-go-sdk/v3"
       "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
     )
-<<<<<<< HEAD
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
-=======
->>>>>>> a2e4fdea9da (docs: align RU YDB SDK docs with nested tab structure (#36458))
 
     func main() {
       ctx, cancel := context.WithCancel(context.Background())

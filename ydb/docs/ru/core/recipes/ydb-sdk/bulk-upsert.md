@@ -14,14 +14,9 @@
 
 - Go
 
-<<<<<<< HEAD
-  ```go
-  package main
-=======
   {% list tabs %}
 
   - Native SDK
->>>>>>> a2e4fdea9da (docs: align RU YDB SDK docs with nested tab structure (#36458))
 
     {% cut "Пакетная вставка нативных {{ ydb-short-name }} данных" %}
 

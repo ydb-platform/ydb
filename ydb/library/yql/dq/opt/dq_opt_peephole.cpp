@@ -905,37 +905,36 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     // Extract key columns using TDqJoinBase API
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, blockHashJoin, leftTableLabel, rightTableLabel);
 
-    // Detect if an input is block-typed.
-    // Struct inputs with Block<T>/Scalar<T> fields → block. Multi inputs check element types.
-    // Plain non-block types in all columns → scalar.
-    auto hasBlockItemType = [](const TTypeAnnotationNode* itemType) -> bool {
-        if (itemType->GetKind() == ETypeAnnotationKind::Multi) {
-            for (const auto* item : itemType->Cast<TMultiExprType>()->GetItems()) {
-                if (item->GetKind() == ETypeAnnotationKind::Block || item->GetKind() == ETypeAnnotationKind::Scalar)
-                    return true;
+    // Walk the expression tree to detect block-ness, same approach as DqPeepholeRewriteWideCombiner.
+    // This is more reliable than type annotation alone: _wide_channels stores logical types (e.g. Int64),
+    // not physical block types (Block<Int64>), so annotation-only checks can miss block inputs.
+    // By peeling ToFlow/FromFlow/WideFromBlocks/WideToBlocks, we find what the data actually is:
+    //   WideFromBlocks → the stripped node is a block-wide stream (isBlock = true)
+    //   WideToBlocks   → the stripped node is a scalar-wide stream (isBlock = false)
+    auto peelInputWrappers = [](TExprNode::TPtr inputExpr, bool& isBlock) -> TExprNode::TPtr {
+        isBlock = false;
+        while (inputExpr->IsCallable()) {
+            const auto name = inputExpr->Content();
+            if (name != "ToFlow"sv && name != "FromFlow"sv &&
+                name != "WideFromBlocks"sv && name != "WideToBlocks"sv) {
+                break;
             }
-            return false;
+            if (name == "WideFromBlocks"sv) isBlock = true;
+            else if (name == "WideToBlocks"sv) isBlock = false;
+            inputExpr = inputExpr->ChildPtr(0);
         }
-        if (itemType->GetKind() == ETypeAnnotationKind::Struct) {
-            for (const auto* item : itemType->Cast<TStructExprType>()->GetItems()) {
-                const auto colKind = item->GetItemType()->GetKind();
-                if (colKind == ETypeAnnotationKind::Block || colKind == ETypeAnnotationKind::Scalar)
-                    return true;
-            }
-            return false;
-        }
-        return itemType->GetKind() == ETypeAnnotationKind::Block || itemType->GetKind() == ETypeAnnotationKind::Scalar;
+        return inputExpr;
     };
 
-    const auto leftRawItemType  = GetSequenceItemType(blockHashJoin.LeftInput(),  false, ctx);
-    const auto rightRawItemType = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx);
-    const bool isLeftBlock  = hasBlockItemType(leftRawItemType);
-    const bool isRightBlock = hasBlockItemType(rightRawItemType);
+    bool isLeftBlock = false, isRightBlock = false;
+    const auto leftCoreExpr  = peelInputWrappers(blockHashJoin.LeftInput().Ptr(),  isLeftBlock);
+    const auto rightCoreExpr = peelInputWrappers(blockHashJoin.RightInput().Ptr(), isRightBlock);
     const bool isBlockInput = isLeftBlock || isRightBlock;
 
-    // All inputs must be struct-typed (DqCn channels always serialize as structs).
-    const auto itemTypeLeft  = leftRawItemType->Cast<TStructExprType>();
-    const auto itemTypeRight = rightRawItemType->Cast<TStructExprType>();
+    // Struct type is extracted from the original (non-stripped) input — the logical schema
+    // is always available via type annotation on the original node.
+    const auto itemTypeLeft  = GetSequenceItemType(blockHashJoin.LeftInput(),  false, ctx)->Cast<TStructExprType>();
+    const auto itemTypeRight = GetSequenceItemType(blockHashJoin.RightInput(), false, ctx)->Cast<TStructExprType>();
 
     std::vector<TString> fullColNames;
     for (auto i = 0u; i < itemTypeLeft->GetSize(); i++) {
@@ -1007,27 +1006,25 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     const ui32 rightStart = leftBase + leftConv;
     for (ui32 i = 0; i < rightBase; ++i) keep.push_back(rightStart + i);
 
-    // ExpandJoinInput produces a wide flow from a struct stream.
-    // For block structs (Block<T> fields), Member extracts Block<T> values → wide block flow.
-    // For scalar structs (plain T fields), Member extracts T values → wide scalar flow.
-    auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
-        ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
-        ctx, leftConvertedItems, pos);
-    auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
-        ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
-        ctx, rightConvertedItems, pos);
-
     TExprNode::TPtr joinResult;
 
     if (isBlockInput) {
-        // Block path: at least one input has Block<T> columns.
-        // Convert scalar inputs to block, pass block inputs directly.
-        auto makeBlockInput = [&](TExprNode::TPtr wideFlow, bool isBlock) -> TExprNode::TPtr {
+        // Block path: at least one input is block-wide (detected via tree walk).
+        // For block inputs (isBlock=true): coreExpr is the block-wide stream stripped of WideFromBlocks.
+        //   Pass it directly to BlockHashJoinCore — no ExpandJoinInput or WideToBlocks needed.
+        // For scalar inputs (isBlock=false): expand struct → wide scalar → WideToBlocks → block stream.
+        auto makeBlockStreamInput = [&](TExprNode::TPtr coreExpr, bool isBlock,
+                                        const TStructExprType* structType,
+                                        const TExprBase& originalInput,
+                                        const std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems) -> TExprNode::TPtr {
             if (isBlock) {
-                // Already wide block flow — just convert flow→stream.
-                return ctx.Builder(pos).Callable("FromFlow").Add(0, std::move(wideFlow)).Seal().Build();
+                // coreExpr is the block-wide stream (WideFromBlocks was peeled by tree walk).
+                return coreExpr;
             }
-            // Wide scalar flow → wide block stream.
+            // Scalar struct stream → ExpandJoinInput → wide scalar flow → WideToBlocks → block stream.
+            auto wideFlow = ExpandJoinInput(*structType,
+                ctx.NewCallable(originalInput.Pos(), "ToFlow", {originalInput.Ptr()}),
+                ctx, convertedItems, pos);
             return ctx.Builder(pos)
                 .Callable("WideToBlocks")
                     .Callable(0, "FromFlow").Add(0, std::move(wideFlow)).Seal()
@@ -1035,8 +1032,8 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
                 .Build();
         };
 
-        auto leftBlockInput  = makeBlockInput(std::move(leftWideFlow),  isLeftBlock);
-        auto rightBlockInput = makeBlockInput(std::move(rightWideFlow), isRightBlock);
+        auto leftBlockInput  = makeBlockStreamInput(leftCoreExpr,  isLeftBlock,  itemTypeLeft,  blockHashJoin.LeftInput(),  leftConvertedItems);
+        auto rightBlockInput = makeBlockStreamInput(rightCoreExpr, isRightBlock, itemTypeRight, blockHashJoin.RightInput(), rightConvertedItems);
 
         auto blockJoinCore = ctx.Builder(pos)
             .Callable("BlockHashJoinCore")
@@ -1060,8 +1057,14 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
             .Seal()
             .Build();
     } else {
-        // Scalar path: both inputs have plain (non-block) columns.
-        // ScalarHashJoinCore takes wide scalar flows directly — no block conversion needed.
+        // Scalar path: both inputs are scalar struct streams (no WideFromBlocks found in tree walk).
+        // Expand struct → wide scalar flow, pass directly to ScalarHashJoinCore.
+        auto leftWideFlow = ExpandJoinInput(*itemTypeLeft,
+            ctx.NewCallable(blockHashJoin.LeftInput().Pos(), "ToFlow", {blockHashJoin.LeftInput().Ptr()}),
+            ctx, leftConvertedItems, pos);
+        auto rightWideFlow = ExpandJoinInput(*itemTypeRight,
+            ctx.NewCallable(blockHashJoin.RightInput().Pos(), "ToFlow", {blockHashJoin.RightInput().Ptr()}),
+            ctx, rightConvertedItems, pos);
         joinResult = ctx.Builder(pos)
             .Callable("ScalarHashJoinCore")
                 .Add(0, std::move(leftWideFlow))

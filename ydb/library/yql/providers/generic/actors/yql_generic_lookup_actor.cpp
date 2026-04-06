@@ -106,6 +106,7 @@ namespace NYql::NDq {
             , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
+            , ArrowTypes(CreateArrowTypes(typeEnv))
             , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
             , IsMultiMatches(isMultiMatches)
             , RetryPolicy(
@@ -445,7 +446,7 @@ namespace NYql::NDq {
             std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
             for (size_t i = 0; i != columns.size(); ++i) {
                 Y_ABORT_UNLESS(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
-                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
+                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), ArrowTypes[i], HolderFactory);
             }
 
             auto height = columns[0].size();
@@ -532,6 +533,31 @@ namespace NYql::NDq {
             Key,
             Output
         };
+
+        std::vector<NKikimr::NMiniKQL::TType *> CreateArrowTypes(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv) {
+            const auto count = SelectResultType->GetMembersCount();
+            std::vector<NKikimr::NMiniKQL::TType *> result(count);
+            auto ui8_type = NKikimr::NMiniKQL::TDataType::Create(NUdf::TDataType<ui8>::Id, typeEnv);
+            auto optional_ui8_type = NKikimr::NMiniKQL::TOptionalType::Create(ui8_type, typeEnv);
+            for (ui32 i = 0; i < count; ++i) {
+                auto type = SelectResultType->GetMemberType(i);
+                auto innerType = type;
+                if (type->IsOptional()) {
+                    innerType = static_cast<NKikimr::NMiniKQL::TOptionalType *>(type)->GetItemType();
+                }
+                if (innerType->IsData()) {
+                    if (static_cast<NKikimr::NMiniKQL::TDataType *>(innerType)->GetDataSlot() == NKikimr::NUdf::EDataSlot::Bool) {
+                        if (type != innerType) {
+                            type = optional_ui8_type;
+                        } else {
+                            type = ui8_type;
+                        }
+                    }
+                }
+                result[i] = type;
+            }
+            return result;
+        }
 
         std::vector<std::pair<EColumnDestination, size_t>> CreateColumnDestination() {
             THashMap<TStringBuf, size_t> keyColumns;
@@ -625,6 +651,7 @@ namespace NYql::NDq {
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
+        const std::vector<NKikimr::NMiniKQL::TType *> ArrowTypes;
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         ui32 LocalInFlight = 0;

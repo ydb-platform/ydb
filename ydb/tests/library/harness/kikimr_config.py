@@ -199,12 +199,9 @@ class KikimrConfigGenerator(object):
             tiny_mode=False,
             module=None,
             http_proxy_config=None,
-<<<<<<< HEAD
-=======
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
->>>>>>> ecee5f42752 (LOGBROKER-10215 Add sending cloud event in topic operations (#35779))
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []

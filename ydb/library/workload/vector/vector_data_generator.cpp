@@ -435,6 +435,8 @@ TWorkloadVectorFilesDataInitializer::TWorkloadVectorFilesDataInitializer(const T
 { }
 
 void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
+    TWorkloadDataInitializerBase::ConfigureOpts(opts);
+
     NColorizer::TColors colors = GetColors(Cout);
 
     TStringBuilder inputDescription;
@@ -455,13 +457,68 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
         .Required()
         .StoreResult(&DataFiles);
 
+    opts.AddLongOption("format", "Source files format. One of 'csv', 'tsv', 'parquet'. "
+            "Both unpacked and packed .gz files are supported. "
+            "When set, only files matching the specified format are imported from a directory. "
+            "When not set, format is auto-detected from file extensions.")
+        .RequiredArgument("FORMAT")
+        .Optional()
+        .Handler1T<TString>([this](const TString& value) {
+            const TString lower = to_lower(value);
+            Y_ENSURE(lower == "csv" || lower == "tsv" || lower == "parquet",
+                "Invalid format '" << value << "'. Supported formats: csv, tsv, parquet");
+            Format = lower;
+        });
+
     opts.AddLongOption("embedding-column-name", "Alternative source column name for the embedding field in input files.")
         .RequiredArgument("NAME")
         .DefaultValue(EmbeddingColumnName)
         .StoreResult(&EmbeddingColumnName);
 }
 
+static bool MatchesFormat(const TString& filename, const TString& format) {
+    const TString lower = to_lower(filename);
+    if (format == "csv") {
+        return lower.EndsWith(".csv") || lower.EndsWith(".csv.gz");
+    } else if (format == "tsv") {
+        return lower.EndsWith(".tsv") || lower.EndsWith(".tsv.gz");
+    } else if (format == "parquet") {
+        return lower.EndsWith(".parquet");
+    }
+    return false;
+}
+
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
+    const TFsPath inputPath(DataFiles);
+
+    if (!Format.empty() && inputPath.IsDirectory()) {
+        // Filter directory contents by format
+        TVector<TFsPath> children;
+        inputPath.List(children);
+
+        TBulkDataGeneratorList result;
+        for (const auto& child : children) {
+            if (MatchesFormat(child.GetName(), Format)) {
+                const auto basicDataGenerator = std::make_shared<TDataGenerator>(
+                    *this,
+                    VectorParams.TableOpts.Name,
+                    0,
+                    VectorParams.TableOpts.Name,
+                    child,
+                    VectorParams.GetColumns(),
+                    TDataGenerator::EPortionSizeUnit::Line
+                );
+                result.push_back(std::make_shared<TDataGeneratorWrapper>(basicDataGenerator, EmbeddingColumnName));
+            }
+        }
+        return result;
+    }
+
+    if (!Format.empty() && !inputPath.IsDirectory()) {
+        Y_ENSURE(MatchesFormat(inputPath.GetName(), Format),
+            "File '" << DataFiles << "' does not match the specified format '" << Format << "'");
+    }
+
     const auto basicDataGenerator = std::make_shared<TDataGenerator>(
         *this,
         VectorParams.TableOpts.Name,
@@ -483,6 +540,7 @@ TWorkloadVectorGenerateDataInitializer::TWorkloadVectorGenerateDataInitializer(c
 { }
 
 void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts) {
+    TWorkloadDataInitializerBase::ConfigureOpts(opts);
     opts.AddLongOption("rows", "Number of rows to generate")
         .RequiredArgument("NUMBER")
         .DefaultValue(RowCount)

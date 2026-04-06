@@ -710,7 +710,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
+        auto scopedService =
+            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
 
         auto partition = CreatePartitionTablet(env);
 

@@ -15,6 +15,14 @@ protected:
     struct TPartitionInfo {
         std::optional<ui64> Offset;             // offset of next event.
         std::optional<ui64> EndOffset;          // end offset in topic on start.
+
+        bool IsFinishedInTableMode() {
+            if (!EndOffset) {                   // Not connected yet.
+                return false;
+            }
+            return *EndOffset == 0              // No data in partition on start.
+                || (Offset && *EndOffset <= *Offset);
+        }
     };
 
     const ui64 InputIndex = 0;

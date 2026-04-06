@@ -5079,16 +5079,18 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ui32 partitionCount = 4;
         CreateTopic(topic, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), /* local */ true);
 
-        WriteTopicMessage(topic, "data", 0, /* local */ true);
+        for (ui32 i = 0; i < partitionCount; ++i) {
+            WriteTopicMessage(topic, "data", i, /* local */ true);
+        }
         Sleep(TDuration::Seconds(1));
 
         const auto& result1 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}`)","topic"_a = topic));
-        CheckScriptResult(result1[0], 1, 1, [&](TResultSetParser& resultSet) {
+        CheckScriptResult(result1[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
 
         const auto& result2 = ExecQuery(fmt::format(R"(SELECT * FROM `{topic}` WITH(STREAMING="FALSE"))","topic"_a = topic));
-        CheckScriptResult(result2[0], 1, 1, [&](TResultSetParser& resultSet) {
+        CheckScriptResult(result2[0], 1, partitionCount, [&](TResultSetParser& resultSet) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetString(), "data");
         });
     }

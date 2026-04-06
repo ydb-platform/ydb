@@ -350,7 +350,8 @@ public:
 
     NYdb::NTopic::IReadSession& GetReadSession(TClusterState& clusterState) {
         if (!clusterState.ReadSession) {
-            if (const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew())) {
+            const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew());
+            if (maxPartitionReadSkew && SourceParams.GetStreamingMode()) {
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
                 ui64 amountPartitions = 0;
@@ -735,18 +736,10 @@ private:
             || FinishedByOffsets) {
             return;
         }
-        for (const auto& [key, info] : Partitions) {
-            if (!info.EndOffset) {                              // Not connected yet.
-                return;
-            }
-            bool isPartitionFinished = 
-                *info.EndOffset == 0                            // No data in partition on start.
-                || (info.Offset && *info.EndOffset <= *info.Offset);
-            if (!isPartitionFinished) {
-                return;
-            }
+        if (Partitions.size() != FinishedPartitions.size()) {
+            return;
         }
-        SRC_LOG_T("SessionId: " << GetSessionId() << ", Finish by offsets, close sessions");
+        SRC_LOG_I("SessionId: " << GetSessionId() << ", Finish by offsets, close sessions");
         FinishedByOffsets = true;
 
         for (auto& clusterState : Clusters) {
@@ -877,7 +870,12 @@ private:
                     CurrentDeferredCommit.Add(partitionSession, start, end);
                 }
             }
-            Partitions[MakePartitionKey(TString(cluster), partitionSession)].Offset = ranges.back().second;
+            auto key = MakePartitionKey(TString(cluster), partitionSession);
+            auto& partitionInfo = Partitions[key];
+            partitionInfo.Offset = ranges.back().second;
+            if (partitionInfo.IsFinishedInTableMode()) {
+                FinishedPartitions.insert(key);
+            }
         }
 
         ReadyBuffer.pop();
@@ -918,11 +916,18 @@ private:
     struct TTopicEventProcessor {
         void operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
+            auto& partitionInfo = Self.Partitions[partitionKey];
+
             for (const auto& message : event.GetMessages()) {
                 const std::string& data = message.GetData();
                 Self.IngressStats.Bytes += data.size();
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
+                
+                if (!Self.SourceParams.GetStreamingMode() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
+                    SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message offset: " << message.GetOffset() << ", end offset: " << *partitionInfo.EndOffset << ")");
+                    continue;
+                }
 
                 if (ClusterState.ReadSessionControl) {
                     ClusterState.ReadSessionControl->AdvancePartitionTime(message.GetPartitionSession()->GetPartitionId(), message.GetWriteTime());
@@ -989,6 +994,9 @@ private:
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
+                if (partitionInfo.IsFinishedInTableMode()) {
+                    Self.FinishedPartitions.insert(partitionKey);
+                }
             }
 
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << "StartPartitionSessionEvent received (end offset " << event.GetEndOffset() << "), confirm StartPartitionSession with start offset " << partitionInfo.Offset);
@@ -1070,6 +1078,7 @@ private:
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
     bool FinishedByOffsets = false;
+    THashSet<TPartitionKey> FinishedPartitions;
 };
 
 ui32 ExtractPartitionsFromParams(

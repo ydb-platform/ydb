@@ -45,8 +45,11 @@ public:
             }
         }
         YQL_ENSURE(topicPartitionsCount > 0);
+        if (!streamingTopicRead && maxPartitions == TDqSettings::TDefault::MaxTasksPerStage) {
+            maxPartitions = 1;
+        }
 
-        const size_t tasks = streamingTopicRead ? Min(maxPartitions, topicPartitionsCount) : 1;
+        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;
@@ -528,7 +531,7 @@ public:
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        const bool useSharedReading = UseSharedReading(clusterConfiguration, format);
+        bool useSharedReading = UseSharedReading(clusterConfiguration, format);
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
@@ -669,7 +672,7 @@ public:
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
                     bool withStreamingValue = *parseResult;
                     if (State_->StreamingTopicsReadByDefault && !withStreamingValue) {
-                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
+                        ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported in streaming query now, please use WITH (STREAMING = \"TRUE\") after topic name to read from topics in streaming mode"));
                         return nullptr;
                     }
                     if (!State_->StreamingTopicsReadByDefault && withStreamingValue) {
@@ -686,13 +689,14 @@ public:
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get() && !streamingTopicReadEnabled) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode, use WITH (STREAMING = \"TRUE\")"));
-            return nullptr;
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
         }
 
-        if (useSharedReading && !streamingTopicReadEnabled) {
-            ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Finite topic reading is not supported with sharing reading mode"));
-            return nullptr;
+        if (!streamingTopicReadEnabled && useSharedReading) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
+            useSharedReading = false;
+            Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
+            // TODO/ not working ?
         }
 
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {

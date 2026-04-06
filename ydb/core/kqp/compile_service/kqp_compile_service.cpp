@@ -12,7 +12,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
-
+#include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -303,7 +303,21 @@ private:
             "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
-        if (AppData()->TenantName != tenant or snapshot.empty()) {
+
+        // Check for tenant mismatch (serverless scenario)
+        if (AppData()->TenantName != tenant) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        if (snapshot.empty()) {
             response->Record.SetFinished(true);
             response->Record.SetNodeId(SelfId().NodeId());
             Send(ev->Sender, response.release());

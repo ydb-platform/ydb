@@ -339,6 +339,12 @@ message TCompileCacheQueryInfo {
     optional string MetaInfo = 10;
     optional bool IsTruncated = 11;
     optional string Database = 12;
+    // Part of QueryId hash — must match the original query to get a cache hit on warmup.
+    // {QUERY_TYPE_SQL_DML, QUERY_TYPE_SQL_GENERIC_QUERY, QUERY_TYPE_SQL_GENERIC_SCRIPT, etc.}
+    optional string QueryType = 13;
+    // Part of QueryId hash — must match the original query to get a cache hit on warmup.
+    // {SYNTAX_UNSPECIFIED, SYNTAX_YQL_V1, SYNTAX_PG}
+    optional string Syntax = 14;
 }
 
 message TSessionInfo {
@@ -398,6 +404,8 @@ message TEvListCompileCacheQueriesResponse {
     repeated TCompileCacheQueryInfo CacheCacheQueries = 2;
     optional bool Finished = 3;
     optional string ContinuationToken = 4;
+    optional Ydb.StatusIds.StatusCode Status = 5;
+    repeated Ydb.Issue.IssueMessage Issues = 6;
 }
 
 message TKqpSetting {

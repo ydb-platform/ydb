@@ -10,6 +10,7 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 enum ECheckpointType {
     CHECKPOINT_TYPE_UNSPECIFIED = 0;
@@ -122,7 +123,7 @@ message TRlPath {
     optional string CoordinationNode = 1;
     optional string ResourcePath = 2;
     optional string Database = 3;
-    optional string Token = 4;
+    optional string Token = 4 [(Ydb.sensitive) = true];
 }
 
 message TComputeRuntimeSettings {

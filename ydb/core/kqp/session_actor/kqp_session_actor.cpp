@@ -1939,7 +1939,7 @@ public:
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));
 
-        txCtx->TxManager->SetSkipConflictCheckForTopicsInTransaction(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
+        txCtx->TxManager->SetSkipTopicsConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
 
         if (!txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {

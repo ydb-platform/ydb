@@ -643,6 +643,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 case EFetchResult::Yield:
                     return NYql::NUdf::EFetchStatus::Yield;
                 case EFetchResult::One:
+                    if (Output_.SizeTuples() > 0) {
+                        return FlushTo(output);
+                    }
                     break;
                 }
             }

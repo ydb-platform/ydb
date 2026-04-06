@@ -711,11 +711,6 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
             if (!state.FetchedPack.has_value()) {
-                if constexpr (HasIndexedConsume<decltype(consume)>) {
-                    if (consume.Self.SizeTuples() > 0) {
-                        return EFetchResult::One;
-                    }
-                }
                 auto var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {

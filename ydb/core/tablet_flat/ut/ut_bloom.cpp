@@ -626,6 +626,30 @@ Y_UNIT_TEST_SUITE(Bloom) {
         }
     }
 
+    Y_UNIT_TEST(PrefixExceedsKeyCount)
+    {
+        /* Bloom filter prefix must not exceed the number of key columns.
+           The table has a 2-column PK (name, salt):
+             prefix=1 and prefix=2 are valid prefixes and must be accepted;
+             prefix=3 exceeds the key count and must be rejected. */
+        TDbExec me;
+
+        me.To(10).Begin().Apply(*MakeAlter()).Commit();
+
+        // prefix=1 (first key column): valid
+        me.To(11).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {1})).Commit();
+
+        // prefix=2 (full key): valid
+        me.To(12).Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {2})).Commit();
+
+        // prefix=3: exceeds key column count — must be rejected
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            me.Begin().Apply(*TAlter().SetByKeyFilterPrefixes(1, {3})),
+            yexception,
+            "exceeds key column count"
+        );
+    }
+
     Y_UNIT_TEST(Stairs)
     {
         const ui32 Height = 99;

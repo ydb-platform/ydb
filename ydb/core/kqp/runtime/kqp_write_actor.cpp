@@ -1028,7 +1028,7 @@ public:
             TxManager->BreakLock(brokenShardId);
             YQL_ENSURE(TxManager->BrokenLocks());
 
-            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
             if (TableWriteActorSpan) {
                 TableWriteActorSpan.EndError("LOCKS_BROKEN");
             }
@@ -4635,7 +4635,7 @@ public:
             CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
-            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
             if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
                 return;
             }

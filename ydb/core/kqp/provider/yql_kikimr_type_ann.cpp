@@ -1319,24 +1319,16 @@ private:
 
                     specializedIndexDescription = std::move(localBloomFilterDescription);
                     break;
-                case TIndexDescription::EType::LocalBloomNgramFilter:
+                case TIndexDescription::EType::LocalBloomNgramFilter: {
                     if (indexColums.size() != 1 || !dataColums.empty()) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
                             "Local bloom ngram index requires exactly one index column and does not support data columns"));
                         return IGraphTransformer::TStatus::Error;
                     }
 
-                    if (!localBloomNgramFilterDescription.NgramSize ||
-                        !localBloomNgramFilterDescription.HashesCount ||
-                        !localBloomNgramFilterDescription.FilterSizeBytes ||
-                        !localBloomNgramFilterDescription.RecordsCount) {
-                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()),
-                            "Missing required local bloom ngram index settings: ngram_size, hashes_count, filter_size_bytes, records_count"));
-                        return IGraphTransformer::TStatus::Error;
-                    }
-
                     specializedIndexDescription = std::move(localBloomNgramFilterDescription);
                     break;
+                }
             }
 
             // IndexState and version, pathId are ignored for create table with index request

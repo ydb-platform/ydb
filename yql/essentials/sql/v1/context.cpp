@@ -129,8 +129,10 @@ TContext::TContext(TLexers lexers, TParsers parsers,
         DisableLegacyNotNull = true;
     }
 
+    SetYqlSelectMode(settings.YqlSelect);
+
     if (settings.Flags.contains("AutoYqlSelect")) {
-        SetYqlSelectMode(EYqlSelectMode::Auto);
+        SetYqlSelectMode(EYqlSelect::Auto);
     }
 
     for (auto lib : settings.Libraries) {
@@ -615,6 +617,21 @@ bool TContext::EnsureBackwardCompatibleFeatureAvailable(
 bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
     return NYql::IsBackwardCompatibleFeatureAvailable(
         Settings.LangVer, featureVer, Settings.BackportMode);
+}
+
+bool TContext::EnsureFeatureNotExpired(
+    TPosition position,
+    TStringBuf feature,
+    NYql::TLangVersion version)
+{
+    if (!IsAvailableLangVersion(Settings.LangVer, version)) {
+        Error(position)
+            << feature << " is not available after language version "
+            << NYql::FormatLangVersion(version);
+        return false;
+    }
+
+    return true;
 }
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {

@@ -45,8 +45,15 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
             TKqpReadTableSettings settings;
             if (Read->Limit) {
-                settings.SequentialInFlight = 1;
                 settings.SetItemsLimit(Read->Limit);
+            }
+
+            if (Read->SortDir != ESortDir::None) {
+                const auto sortDirection = Read->SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
+                settings.SetSorting(sortDirection);
+            } else if (Read->Limit) {
+                // Limit without sort.
+                settings.SequentialInFlight = 1;
             }
 
             // clang-format off
@@ -86,6 +93,8 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
         default:
             Y_ENSURE(false, "Unsupported table source type");
     }
+
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
 
     return source;
 }

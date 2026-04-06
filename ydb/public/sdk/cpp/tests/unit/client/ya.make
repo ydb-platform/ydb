@@ -5,6 +5,7 @@ RECURSE(
     draft
     driver
     endpoints
+    iam
     oauth2_token_exchange
     params
     result

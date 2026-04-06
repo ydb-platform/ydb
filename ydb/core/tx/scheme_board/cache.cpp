@@ -2559,7 +2559,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                 << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
@@ -2614,7 +2614,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                       << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                       << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 

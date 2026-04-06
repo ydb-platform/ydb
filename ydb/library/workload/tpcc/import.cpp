@@ -838,7 +838,7 @@ void CompactTable(
     NTable::TTableClient client(driver);
     auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
         TOperation::TOperationId::COMPACTION, NTable::TAlterTableSettings()
-            .Compact(NTable::TCompact())
+            .Compact(NTable::TCompact(false, 1000))
     );
     LOG_T("Compacting table " << table << ": " << id.ToString());
     loadState.CompactionStates.emplace_back(id, table, table);
@@ -1112,13 +1112,11 @@ public:
                         for (const auto& table: TPCC_TABLES) {
                             CompactTable(drivers.front(), LoadState, Config, table, Log.get());
                         }
-/*
                         for (const auto& indexState: LoadState.IndexBuildStates) {
                             TStringBuilder indexImplTable;
                             indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
                             CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
                         }
-*/
                         LoadState.State = TImportState::EWAIT_COMPACTION;
                     } else {
                         LoadState.State = TImportState::ESUCCESS;
@@ -1297,9 +1295,11 @@ private:
             displayData.StatusData.PercentLoaded = 100;
 
             double remainingSeconds = 0;
-            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                const auto& indexState = LoadState.IndexBuildStates[i];
+            for (const auto& indexState: LoadState.IndexBuildStates) {
                 remainingSeconds = std::max(remainingSeconds, indexState.GetRemainingSeconds());
+            }
+            for (const auto& compactionState: LoadState.CompactionStates) {
+                remainingSeconds = std::max(remainingSeconds, compactionState.GetRemainingSeconds());
             }
             displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
             displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
@@ -1319,16 +1319,20 @@ private:
         LastDisplayUpdate = now;
     }
 
-    void UpdateDisplayTextMode(const TImportStatusData& data) {
+    void AddTimeText(std::ostream& ss, const TImportStatusData& data) const {
+        ss << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
+            << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+            << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+    }
+
+    void UpdateDisplayTextMode(const TImportStatusData& data) const {
+        std::stringstream ss;
         if (!data.IsWaitingForPostLoadOps) {
-            std::stringstream ss;
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
                 << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "
                 << std::setprecision(1) << data.InstantSpeedMiBs << " MiB/s "
-                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) "
-                << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) ";
+            AddTimeText(ss, data);
 
             if (data.IsLoadingTablesAndBuildingIndices) {
                 ss << " | ";
@@ -1341,24 +1345,26 @@ private:
                     ss << ", compaction " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
                 }
             }
-
-            LOG_I(ss.str());
         } else {
             // waiting for indices
             if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                std::stringstream ss;
-                ss << "Waiting for indices" << (Config.Compact ? " and compaction" : "");
+                ss << "Waiting for indices ";
+                AddTimeText(ss, data);
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     const auto& indexState = LoadState.IndexBuildStates[i];
                     if (i > 0) ss << ", ";
                     ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
+            } else if (LoadState.CurrentCompaction < LoadState.CompactionStates.size()) {
+                // waiting for compactions
+                ss << "Waiting for compactions ";
+                AddTimeText(ss, data);
                 for (const auto& compactionState: LoadState.CompactionStates) {
-                    ss << ", compaction " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+                    ss << ", " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
                 }
-                LOG_I(ss.str());
             }
         }
+        LOG_I(ss.str());
     }
 
     void ExitTuiMode() {

@@ -8,6 +8,9 @@ SRCS(
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
+    part_initschema.cpp
+    part_readwritemeta.cpp
+    part_database.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     range_translate.cpp
@@ -23,6 +26,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/api
+    ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos

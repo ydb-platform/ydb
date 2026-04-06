@@ -18,6 +18,11 @@
     #include <sched.h>
 #endif
 
+#if defined(__linux__) && defined(__x86_64__)
+    #include <sys/syscall.h>
+    #include <asm/prctl.h>
+#endif
+
 #if defined(_unix_)
     #include <sys/mman.h>
 #endif
@@ -205,6 +210,19 @@ void* TThread::StaticThreadMainTrampoline(void* opaque)
 
 YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
 {
+#if defined(__linux__) && defined(__x86_64__)
+    ::syscall(SYS_arch_prctl, ARCH_GET_FS, &FSBase_);
+
+    if (auto* logFile = TryGetShutdownLogFile()) {
+        ::fprintf(logFile, "%s\t*** Entered thread trampoline (ThreadName: %s, ThreadId: %d, FSBase: %lx)\n",
+            GetInstant().ToString().c_str(),
+            ThreadName_.c_str(),
+            GetCurrentThreadId(),
+            FSBase_
+        );
+    }
+#endif
+
     auto this_ = MakeStrong(this);
 
     ::TThread::SetCurrentThreadName(ThreadName_.c_str());

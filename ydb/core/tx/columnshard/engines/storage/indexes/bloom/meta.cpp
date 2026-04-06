@@ -125,7 +125,9 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
+
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

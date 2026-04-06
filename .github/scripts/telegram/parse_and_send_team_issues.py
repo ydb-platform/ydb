@@ -50,16 +50,7 @@ DATALENS_DASHBOARD_URL = "https://datalens.yandex/4un3zdm0zcnyr?owner_team={team
 
 
 def _execute_ydb_query(query, description):
-    """
-    Execute a YDB query using YDBWrapper and return results.
-    
-    Args:
-        query (str): SQL query to execute
-        description (str): Description for logging
-        
-    Returns:
-        list: Query results or None if error
-    """
+    """Execute a YDB query using YDBWrapper and return results."""
     if not YDB_AVAILABLE:
         print("❌ YDBWrapper not available")
         return None
@@ -89,10 +80,10 @@ def _execute_ydb_query(query, description):
 def get_all_team_data(use_yesterday=False):
     """
     Get all team data (stats + trends) from YDB in one optimized query.
-    
+
     Args:
         use_yesterday (bool): If True, use yesterday's data for development convenience
-        
+
     Returns:
         dict: Dictionary with team names as keys and their data, or None if error
     """
@@ -144,7 +135,10 @@ def get_all_team_data(use_yesterday=False):
     print(f"   Start date: {start_date.strftime('%Y-%m-%d')}")
     print(f"   Target date: {target_date.strftime('%Y-%m-%d')}")
     
-    results = _execute_ydb_query(all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
+    results = _execute_ydb_query(
+        all_data_query,
+        f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}",
+    )
     if results is None:
         return None
     

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+import json
 import os
 import re
 import ydb
@@ -854,6 +855,46 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
     return queue_items
 
 
+_DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'telegram_notification_config.json')
+)
+
+
+def load_configured_digest_profile_ids():
+    """Profile IDs listed in telegram_notification_config.json (branch-build_type).
+
+    Only these may be written to digest_queue so unsent rows always match a send_digest profile.
+    """
+    try:
+        with open(_DIGEST_NOTIFICATION_CONFIG, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        logging.warning(
+            'Digest config not found at %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+        )
+        return set()
+    except json.JSONDecodeError as exc:
+        logging.warning(
+            'Invalid digest config %s: %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+            exc,
+        )
+        return set()
+    profiles = data.get('profiles') or []
+    ids = {
+        make_profile_id(p['branch'], p['build_type'])
+        for p in profiles
+        if p.get('branch') and p.get('build_type')
+    }
+    if not ids:
+        logging.warning(
+            'No profiles in %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+        )
+    return ids
+
+
 _DIGEST_QUEUE_SCHEMA = """\
 CREATE TABLE IF NOT EXISTS `{table_path}` (
     `profile_id`          Utf8      NOT NULL,
@@ -879,6 +920,26 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
     if not queue_items:
         return
 
+    allowed_profiles = load_configured_digest_profile_ids()
+    if not allowed_profiles:
+        logging.info('No digest profiles configured — skip digest_queue enqueue')
+        return
+
+    filtered = []
+    for item in queue_items:
+        pid = make_profile_id(item['branch'], item['build_type'])
+        if pid in allowed_profiles:
+            filtered.append(item)
+        else:
+            logging.info(
+                'Skip digest enqueue for issue #%s (profile %r not in telegram_notification_config.json)',
+                item.get('github_issue_number'),
+                pid,
+            )
+    if not filtered:
+        logging.info('No queue items match configured digest profiles — nothing enqueued')
+        return
+
     try:
         table_path = ydb_wrapper.get_table_path("digest_queue")
     except KeyError:
@@ -893,7 +954,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
     now_dt = datetime.datetime.now(tz=datetime.timezone.utc)
 
     rows = []
-    for item in queue_items:
+    for item in filtered:
         branch = item['branch']
         build_type = item['build_type']
         profile_id = make_profile_id(branch, build_type)

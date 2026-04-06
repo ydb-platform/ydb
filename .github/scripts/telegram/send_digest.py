@@ -189,7 +189,7 @@ def run_digest(
     print(f"Branch  : {profile['branch']}   build_type: {profile['build_type']}")
     print(f"{'=' * 60}")
 
-    with YDBWrapper(use_local_config=False) as w:
+    with YDBWrapper() as w:
         if not w.check_credentials():
             return False
 

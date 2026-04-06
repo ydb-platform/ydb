@@ -4,10 +4,12 @@ ydb/core/blobstorage/ut_blobstorage GroupLayoutSanitizer.StressBlock4Plus2
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
 ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecrets
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecretsFixViaDropCreateCheck
+ydb/core/external_sources/s3/ut unittest.[*/*] chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
 ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk

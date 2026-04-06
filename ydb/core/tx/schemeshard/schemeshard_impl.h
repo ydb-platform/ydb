@@ -335,6 +335,9 @@ public:
 
     THashMap<ui64, TIncrementalRestoreState> IncrementalRestoreStates;
     THashMap<TOperationId, ui64> IncrementalRestoreOperationToState;
+    // Track incremental restore operations that completed with shard failures
+    // Transient (not persisted) — on reboot, operations restart fresh
+    THashSet<TOperationId> FailedIncrementalRestoreOperations;
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
@@ -1265,7 +1268,6 @@ public:
     // Incremental Restore event handlers
     void Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx);
     void CreateIncrementalRestoreOperation(const TPathId& backupCollectionPathId, ui64 operationId, const TString& backupName, const TActorContext& ctx);
 
     void DiscoverAndCreateIndexRestoreOperations(
@@ -1849,7 +1851,6 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev);
 
     // Transaction lifecycle constructor functions
-    NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxProgressIncrementalRestore(TTxId completedTxId, const TActorContext& ctx);
 

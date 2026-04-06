@@ -3693,6 +3693,10 @@ struct TIncrementalRestoreState {
     ui32 CurrentIncrementalIdx = 0;
     bool CurrentIncrementalStarted = false;
 
+    // Transient flag — set by CheckForCompletedOperations when any operation failed
+    // Not persisted to DB. After reboot, operations restart fresh.
+    bool RetryNeeded = false;
+
     // Operation completion tracking for current incremental backup
     THashSet<TOperationId> InProgressOperations;
     THashSet<TOperationId> CompletedOperations;
@@ -3701,6 +3705,21 @@ struct TIncrementalRestoreState {
     THashMap<TOperationId, TTableOperationState> TableOperations;
 
     THashSet<TShardIdx> InvolvedShards;
+
+    // Returns progress within the current incremental as a fraction [0.0, 1.0]
+    // based on per-shard completion across all table operations
+    float CalcCurrentIncrementalProgress() const {
+        ui32 totalShards = 0;
+        ui32 doneShards = 0;
+        for (const auto& [_, tableOp] : TableOperations) {
+            totalShards += tableOp.ExpectedShards.size();
+            doneShards += tableOp.CompletedShards.size() + tableOp.FailedShards.size();
+        }
+        if (totalShards == 0) {
+            return 0.0f;
+        }
+        return static_cast<float>(doneShards) / totalShards;
+    }
 
     bool AllIncrementsProcessed() const {
         return CurrentIncrementalIdx >= IncrementalBackups.size();

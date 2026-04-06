@@ -28,8 +28,14 @@ struct TEvIncrementalRestoreScan {
     struct TEvNoMoreData: public TEventLocal<TEvNoMoreData, EvNoMoreData> {};
     struct TEvFinished: public TEventLocal<TEvFinished, EvFinished> {
         TEvFinished() = default;
-        TEvFinished(ui64 txId) : TxId(txId) {}
-        ui64 TxId;
+        TEvFinished(ui64 txId, bool success = true, const TString& error = "")
+            : TxId(txId)
+            , Success(success)
+            , Error(error)
+        {}
+        ui64 TxId = 0;
+        bool Success = true;
+        TString Error;
     };
 };
 

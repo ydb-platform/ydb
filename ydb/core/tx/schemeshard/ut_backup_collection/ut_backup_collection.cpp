@@ -1,6 +1,7 @@
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/printf.h>
@@ -1071,31 +1072,6 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         }
 
         UNIT_ASSERT_C(incrementalRestoreStateClean, "IncrementalRestoreState table not properly cleaned up");
-
-        bool incrementalRestoreShardProgressClean = true;
-        try {
-            auto result = LocalMiniKQL(runtime, schemeshardTabletId, R"(
-                (
-                    (let key '('('OperationId (Uint64 '0)) '('ShardIdx (Uint64 '0))))
-                    (let select '('OperationId))
-                    (let row (SelectRow 'IncrementalRestoreShardProgress key select))
-                    (return (AsList
-                        (SetResult 'Result row)
-                    ))
-                )
-            )");
-
-            auto& value = result.GetValue();
-            if (value.GetStruct(0).GetOptional().HasOptional()) {
-                incrementalRestoreShardProgressClean = false;
-                Cerr << "ERROR: IncrementalRestoreShardProgress table still has entries after DROP" << Endl;
-            }
-        } catch (...) {
-            incrementalRestoreShardProgressClean = false;
-            Cerr << "ERROR: Failed to query IncrementalRestoreShardProgress table" << Endl;
-        }
-
-        UNIT_ASSERT_C(incrementalRestoreShardProgressClean, "IncrementalRestoreShardProgress table not properly cleaned up");
 
         Cerr << "SUCCESS: All LocalDB tables properly cleaned up after DROP BACKUP COLLECTION" << Endl;
 
@@ -3403,4 +3379,125 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Without fix: init sets PathState=EPathStateCopying on dropped source -> crash.
         DescribePath(runtime, "/MyRoot/Table1");
     }
+    Y_UNIT_TEST(RestoreProgressCalculation) {
+        // Unit test for CalcCurrentIncrementalProgress and the progress percent formula.
+        // Verifies per-shard granularity within each incremental and per-incremental
+        // granularity across the chain.
+
+        using namespace NKikimr::NSchemeShard;
+        using TState = TIncrementalRestoreState;
+        using TTableOp = TState::TTableOperationState;
+
+        TState state;
+        state.State = TState::EState::Running;
+
+        // Set up 3 incrementals
+        state.AddIncrementalBackup(TPathId(1, 100), "incr1", 1);
+        state.AddIncrementalBackup(TPathId(1, 101), "incr2", 2);
+        state.AddIncrementalBackup(TPathId(1, 102), "incr3", 3);
+
+        // Simulate 2 table operations with 3 shards each for the current incremental
+        TOperationId op1(TTxId(1000), 0);
+        TOperationId op2(TTxId(1001), 0);
+
+        auto& tableOp1 = state.TableOperations[op1];
+        tableOp1.OperationId = op1;
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        tableOp1.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+
+        auto& tableOp2 = state.TableOperations[op2];
+        tableOp2.OperationId = op2;
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        tableOp2.ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+
+        // Total: 6 shards across 2 operations, 3 incrementals
+        // Progress formula: 1 + (CurrentIncrementalIdx + shardsDone/6) * 97 / 3
+
+        // --- Incremental 0: no shards done ---
+        state.CurrentIncrementalIdx = 0;
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
+        // percent = 1 + (0 + 0) * 97 / 3 = 1
+        float incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        i32 pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        UNIT_ASSERT_VALUES_EQUAL(pct, 1);
+
+        // --- Incremental 0: 1/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f / 6, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 1/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 1 && pct < 33, TStringBuilder() << "Expected (1, 33), got " << pct);
+
+        // --- Incremental 0: 3/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.5f, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 3/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 10 && pct < 33, TStringBuilder() << "Expected (10, 33), got " << pct);
+
+        // --- Incremental 0: 6/6 shards done ---
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f, 0.01f);
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 0, 6/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(pct, 33);  // 1 + 1*97/3 = 33
+
+        // --- Incremental 1: reset ops, 0/6 shards ---
+        state.CurrentIncrementalIdx = 1;
+        state.TableOperations.clear();
+        state.TableOperations[op1] = TTableOp();
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        state.TableOperations[op2] = TTableOp();
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        UNIT_ASSERT_VALUES_EQUAL(pct, 33);  // 1 + 1*97/3 = 33
+
+        // --- Incremental 1: 3/6 shards done ---
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(3)));
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 1, 3/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_C(pct > 33 && pct < 65, TStringBuilder() << "Expected (33, 65), got " << pct);
+
+        // --- Incremental 2: 6/6 shards done ---
+        state.CurrentIncrementalIdx = 2;
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(4)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(5)));
+        state.TableOperations[op2].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(6)));
+        incrProgress = state.CurrentIncrementalIdx + state.CalcCurrentIncrementalProgress();
+        pct = 1 + static_cast<ui32>(incrProgress * 97 / state.IncrementalBackups.size());
+        Cerr << "Incr 2, 6/6 shards: " << pct << "%" << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(pct, 98);  // 1 + 3*97/3 = 98
+
+        // --- Failed shards also count toward progress ---
+        state.CurrentIncrementalIdx = 0;
+        state.TableOperations.clear();
+        state.TableOperations[op1] = TTableOp();
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].ExpectedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        state.TableOperations[op1].FailedShards.insert(TShardIdx(1, TLocalShardIdx(1)));
+        state.TableOperations[op1].CompletedShards.insert(TShardIdx(1, TLocalShardIdx(2)));
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 1.0f, 0.01f);
+
+        // --- Empty TableOperations returns 0 ---
+        state.TableOperations.clear();
+        UNIT_ASSERT_DOUBLES_EQUAL(state.CalcCurrentIncrementalProgress(), 0.0f, 0.01f);
+    }
+
 } // TBackupCollectionTests

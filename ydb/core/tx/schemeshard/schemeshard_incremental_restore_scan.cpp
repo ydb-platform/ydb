@@ -21,12 +21,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-enum class EIncrementalRestoreShardStatus : ui32 {
-    Unknown = 0,
-    Success = 1,
-    Failed = 2
-};
-
 // Transaction to sequentially process incremental backups
 class TSchemeShard::TTxProgressIncrementalRestore : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
@@ -82,30 +76,50 @@ public:
               << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
               
         if (state.AreAllCurrentOperationsComplete()) {
-            LOG_I("All operations for current incremental backup completed, moving to next");
-            state.MarkCurrentIncrementalComplete();
-            state.MoveToNextIncremental();
+            if (state.RetryNeeded) {
+                LOG_W("Shard failures detected for incremental #" << state.CurrentIncrementalIdx
+                      << ", retrying current incremental");
 
-            // Persist CurrentIncrementalIdx advance
-            db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
-            );
-            
-            LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
-                  << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
-            
-            if (state.AllIncrementsProcessed()) {
-                LOG_I("All incremental backups processed, performing finalization");
-                state.State = TIncrementalRestoreState::EState::Finalizing;
+                // Reset operation tracking for retry (don't advance index)
+                state.InProgressOperations.clear();
+                state.CompletedOperations.clear();
+                state.CurrentIncrementalStarted = false;
+                state.RetryNeeded = false;
+
+                // Persist cleared state
+                TString serializedEmpty = SerializeOperationIds(state.CompletedOperations);
                 db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
-                    NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::SerializedData>(serializedEmpty)
                 );
-                FinalizeIncrementalRestoreOperation(txc, ctx, state);
-                return true;
+
+                // Retry: process same incremental again
+                ProcessNextIncrementalBackup(state, ctx);
+            } else {
+                LOG_I("All operations for current incremental backup completed, moving to next");
+                state.MarkCurrentIncrementalComplete();
+                state.MoveToNextIncremental();
+
+                // Persist CurrentIncrementalIdx advance
+                db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                    NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx)
+                );
+
+                LOG_I("After MoveToNextIncremental: CurrentIncrementalIdx=" << state.CurrentIncrementalIdx
+                      << ", IncrementalBackups.size()=" << state.IncrementalBackups.size());
+
+                if (state.AllIncrementsProcessed()) {
+                    LOG_I("All incremental backups processed, performing finalization");
+                    state.State = TIncrementalRestoreState::EState::Finalizing;
+                    db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
+                        NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(state.State))
+                    );
+                    FinalizeIncrementalRestoreOperation(txc, ctx, state);
+                    return true;
+                }
+
+                // Start processing next incremental backup
+                ProcessNextIncrementalBackup(state, ctx);
             }
-            
-            // Start processing next incremental backup
-            ProcessNextIncrementalBackup(state, ctx);
         } else if (!state.InProgressOperations.empty()) {
             // Still have operations in progress, schedule another check
             auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(OperationId);
@@ -178,24 +192,34 @@ private:
     void CheckForCompletedOperations(TIncrementalRestoreState& state, const TActorContext& ctx) {
         THashSet<TOperationId> stillInProgress;
         bool operationsCompleted = false;
-        
+        bool hasFailedOperations = false;
+
         for (const auto& opId : state.InProgressOperations) {
             TTxId txId = opId.GetTxId();
-            
+
             if (Self->Operations.contains(txId)) {
                 stillInProgress.insert(opId);
             } else {
                 // Check if we've already tracked this completion
                 if (!state.CompletedOperations.contains(opId)) {
+                    // Check if this operation failed at the shard level
+                    if (Self->FailedIncrementalRestoreOperations.erase(opId)) {
+                        hasFailedOperations = true;
+                        LOG_W("Operation " << opId << " FAILED for incremental restore "
+                              << OperationId << ", will retry");
+                    } else {
+                        LOG_I("Operation " << opId << " completed successfully for incremental restore "
+                              << OperationId);
+                    }
                     state.CompletedOperations.insert(opId);
                     operationsCompleted = true;
-                    LOG_I("Operation " << opId << " completed for incremental restore " << OperationId);
                 }
             }
         }
-        
+
         state.InProgressOperations = std::move(stillInProgress);
-        
+        state.RetryNeeded = hasFailedOperations;
+
         // If operations were completed, update the persisted state
         if (operationsCompleted) {
             SetCompletedOperationsChanged(true);
@@ -335,61 +359,6 @@ private:
     }
 };
 
-// Transaction to persist per-shard progress of incremental restore
-class TTxPersistIncrementalRestoreShardProgress : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-public:
-    using TBase = NTabletFlatExecutor::TTransactionBase<TSchemeShard>;
-    TTxPersistIncrementalRestoreShardProgress(TSchemeShard* self, ui64 opId, ui64 shardIdx, EIncrementalRestoreShardStatus status)
-        : TBase(self)
-        , OpId(opId)
-        , ShardIdx(shardIdx)
-        , Status(status)
-    {}
-
-    bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) override {
-        NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::IncrementalRestoreShardProgress>().Key(OpId, ShardIdx).Update(
-            NIceDb::TUpdate<Schema::IncrementalRestoreShardProgress::Status>(static_cast<ui32>(Status))
-        );
-
-        auto stateIt = Self->IncrementalRestoreStates.find(OpId);
-        if (stateIt != Self->IncrementalRestoreStates.end()) {
-            TShardIdx shardIdxObj = Self->GetShardIdx(TTabletId(ShardIdx));
-            stateIt->second.InvolvedShards.insert(shardIdxObj);
-
-            // Persist to long operation if exists
-            auto longOpIt = Self->LongIncrementalRestoreOps.find(TOperationId(OpId, 0));
-            if (longOpIt != Self->LongIncrementalRestoreOps.end()) {
-                // Add shard to the protobuf if not already present
-                auto& proto = longOpIt->second;
-                bool shardAlreadyTracked = false;
-                for (size_t i = 0; i < proto.InvolvedShardsSize(); ++i) {
-                    if (proto.GetInvolvedShards(i) == ShardIdx) {
-                        shardAlreadyTracked = true;
-                        break;
-                    }
-                }
-                if (!shardAlreadyTracked) {
-                    proto.AddInvolvedShards(ShardIdx);
-                    // Persist the updated long operation
-                    db.Table<Schema::IncrementalRestoreOperations>().Key(OpId).Update(
-                        NIceDb::TUpdate<Schema::IncrementalRestoreOperations::Operation>(proto.SerializeAsString())
-                    );
-                }
-            }
-        }
-
-        return true;
-    }
-
-    void Complete(const TActorContext&) override {}
-
-private:
-    ui64 OpId;
-    ui64 ShardIdx;
-    EIncrementalRestoreShardStatus Status;
-};
-
 void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const TActorContext& ctx) {
     auto* msg = ev->Get();
     const auto& backupCollectionPathId = msg->BackupCollectionPathId;
@@ -445,104 +414,6 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev, c
         << " tablet: " << TabletID());
 
     Execute(new TTxProgressIncrementalRestore(this, operationId), ctx);
-}
-
-// Enhanced handler for DataShard completion notifications
-void TSchemeShard::Handle(TEvDataShard::TEvIncrementalRestoreResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto& record = ev->Get()->Record;
-    
-    LOG_I("Handle(TEvIncrementalRestoreResponse)"
-        << " txId: " << record.GetTxId()
-        << " tableId: " << record.GetTableId()
-        << " operationId: " << record.GetOperationId()
-        << " shardIdx: " << record.GetShardIdx()
-        << " incrementalIdx: " << record.GetIncrementalIdx()
-        << " status: " << (int)record.GetRestoreStatus()
-        << " from DataShard, tablet: " << TabletID());
-
-    bool success = (record.GetRestoreStatus() == NKikimrTxDataShard::TEvIncrementalRestoreResponse::SUCCESS);
-    
-    if (!success) {
-        LOG_W("DataShard reported incremental restore error: " << record.GetErrorMessage());
-    }
-
-    // Persist shard progress row via tx
-    {
-        EIncrementalRestoreShardStatus status = success ? EIncrementalRestoreShardStatus::Success : EIncrementalRestoreShardStatus::Failed;
-        Execute(new TTxPersistIncrementalRestoreShardProgress(this, record.GetOperationId(), record.GetShardIdx(), status), ctx);
-    }
-
-    TTabletId shardId = TTabletId(ev->Sender.NodeId());
-    TShardIdx shardIdx = GetShardIdx(shardId);
-    TTxId txId = TTxId(record.GetTxId());
-    TOperationId operationId(txId, 0);
-    
-    LOG_I("Processing DataShard response from shardId: " << shardId 
-        << " shardIdx: " << shardIdx 
-        << " operationId: " << operationId);
-    
-    auto opStateIt = IncrementalRestoreOperationToState.find(operationId);
-    if (opStateIt == IncrementalRestoreOperationToState.end()) {
-        LOG_W("No incremental restore state mapping found for operation: " << operationId);
-        return;
-    }
-    
-    ui64 globalOperationId = opStateIt->second;
-    auto stateIt = IncrementalRestoreStates.find(globalOperationId);
-    if (stateIt == IncrementalRestoreStates.end()) {
-        LOG_W("No incremental restore state found for global operation: " << globalOperationId);
-        return;
-    }
-    
-    auto& state = stateIt->second;
-    
-    // Check if this operation is in progress
-    if (state.InProgressOperations.find(operationId) == state.InProgressOperations.end()) {
-        LOG_W("Operation " << operationId << " not found in InProgressOperations for global operation: " << globalOperationId);
-        return;
-    }
-    
-    // Find the table operation state
-    auto tableOpIt = state.TableOperations.find(operationId);
-    if (tableOpIt == state.TableOperations.end()) {
-        LOG_W("Table operation " << operationId << " not found in TableOperations for global operation: " << globalOperationId);
-        return;
-    }
-    
-    auto& tableOpState = tableOpIt->second;
-    
-    if (success) {
-        tableOpState.CompletedShards.insert(shardIdx);
-        LOG_I("Marked shard " << shardIdx << " as completed for operation " << operationId);
-    } else {
-        tableOpState.FailedShards.insert(shardIdx);
-        LOG_W("Marked shard " << shardIdx << " as failed for operation " << operationId);
-    }
-    
-    if (tableOpState.AllShardsComplete()) {
-        LOG_I("All shards completed for table operation " << operationId);
-        
-        state.InProgressOperations.erase(operationId);
-        state.CompletedOperations.insert(operationId);
-        
-        IncrementalRestoreOperationToState.erase(operationId);
-        TxIdToIncrementalRestore.erase(operationId.GetTxId());
-        
-        if (state.AreAllCurrentOperationsComplete()) {
-            LOG_I("All table operations for current incremental backup completed, moving to next");
-            state.MarkCurrentIncrementalComplete();
-            state.MoveToNextIncremental();
-            
-            if (state.AllIncrementsProcessed()) {
-                LOG_I("All incremental backups processed, operation complete but keeping in memory for list operations");
-                
-                NotifyIncrementalRestoreOperationCompleted(TOperationId(globalOperationId, 0), ctx);
-            } else {
-                auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(globalOperationId);
-                Schedule(TDuration::Seconds(1), progressEvent.Release());
-            }
-        }
-    }
 }
 
 // Create a MultiIncrementalRestore operation for a single incremental backup
@@ -899,16 +770,27 @@ void TSchemeShard::CreateSingleIndexRestoreOperation(
     Send(SelfId(), indexRequest.Release());
 }
 
-// Notification function for operation completion
+// SOLE notification path for incremental restore progress:
+//
+//   DataShard scan completes
+//     → DataShard Tx completes (normal operation pipeline)
+//     → SchemeShard RemoveTx() [schemeshard_impl.cpp]
+//     → NotifyIncrementalRestoreOperationCompleted() (this function)
+//     → schedules TEvProgressIncrementalRestore
+//     → TTxProgressIncrementalRestore::Execute() advances state + persists to DB
+//
+// Required maps: IncrementalRestoreOperationToState, TxIdToIncrementalRestore
+// These maps are populated by ProcessNextIncrementalBackup()/CreateIncrementalRestoreOperation().
+// After reboot, maps are empty — TTxProgressIncrementalRestore handles this by
+// re-calling ProcessNextIncrementalBackup() which repopulates maps.
+// The actor model guarantees serialized execution, so no race conditions.
 void TSchemeShard::NotifyIncrementalRestoreOperationCompleted(const TOperationId& operationId, const TActorContext& ctx) {
-    // Find which incremental restore this operation belongs to
     auto it = IncrementalRestoreOperationToState.find(operationId);
     if (it != IncrementalRestoreOperationToState.end()) {
         ui64 incrementalRestoreId = it->second;
-        
+
         LOG_I("Operation " << operationId << " completed, triggering progress check for incremental restore " << incrementalRestoreId);
-        
-        // Trigger progress check immediately
+
         auto progressEvent = MakeHolder<TEvPrivate::TEvProgressIncrementalRestore>(incrementalRestoreId);
         ctx.Send(ctx.SelfID, progressEvent.Release());
     }
@@ -921,14 +803,6 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRest
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvPrivate::TEvProgressIncrementalRestore::TPtr& ev) {
     auto* msg = ev->Get();
     return new TTxProgressIncrementalRestore(this, msg->OperationId);
-}
-
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, const TActorContext& ctx) {
-    Y_UNUSED(ev);
-    Y_UNUSED(ctx);
-    // For allocator results, we need to find the appropriate operation ID
-    // For now, return a transaction that will find the right operation to process
-    return new TTxProgressIncrementalRestore(this, 0);
 }
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxProgressIncrementalRestore(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev, const TActorContext& ctx) {

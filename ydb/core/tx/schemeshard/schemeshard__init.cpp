@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
@@ -5462,6 +5463,52 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Load incremental restore state (must be before IncrementalRestoreOperations
+        // so IncrementalRestoreStates is populated when the contains() check below runs)
+        {
+            auto rowset = db.Table<Schema::IncrementalRestoreState>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                ui64 operationId = rowset.GetValue<Schema::IncrementalRestoreState::OperationId>();
+                ui32 stateValue = rowset.GetValue<Schema::IncrementalRestoreState::State>();
+                ui32 currentIdx = rowset.GetValue<Schema::IncrementalRestoreState::CurrentIncrementalIdx>();
+                TString serializedData = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::SerializedData>("");
+
+                auto& state = Self->IncrementalRestoreStates[operationId];
+                state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
+                state.CurrentIncrementalIdx = currentIdx;
+
+                // Do NOT load CompletedOperations for Running states.
+                // After reboot, we retry the current incremental from scratch rather than
+                // risk advancing past a partially-completed incremental where some operations
+                // failed and their failure status was lost (transient FailedIncrementalRestoreOperations).
+                // This is safe because incremental restore operations are idempotent.
+                if (state.State != TIncrementalRestoreState::EState::Running && !serializedData.empty()) {
+                    NKikimrSchemeOp::TIncrementalRestoreOperationsList protoList;
+                    if (protoList.ParseFromString(serializedData)) {
+                        for (const auto& protoOp : protoList.GetOperations()) {
+                            state.CompletedOperations.insert(
+                                TOperationId(TTxId(protoOp.GetTxId()), protoOp.GetSubTxId()));
+                        }
+                    }
+                }
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit loaded IncrementalRestoreState"
+                    << ", operationId: " << operationId
+                    << ", state: " << stateValue
+                    << ", currentIdx: " << currentIdx
+                    << ", at schemeshard: " << Self->TabletID());
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read incremental restore operations
         {
             auto rowset = db.Table<Schema::IncrementalRestoreOperations>().Select();
@@ -5576,6 +5623,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             // Check for orphaned incremental restore operations during restart
             for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
                 TTxId txId = opId.GetTxId();
+
+                // Skip orphan recovery if state already loaded from IncrementalRestoreState table
+                // (the IncrementalRestoreStates block above already handles resumption for these)
+                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
+                    continue;
+                }
+
                 bool controlOperationExists = false;
 
                 for (const auto& [txOpId, txState] : Self->TxInFlight) {
@@ -5598,8 +5652,52 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             << ", scheduling TTxProgress to continue operation"
                             << ", at schemeshard: " << Self->TabletID());
 
-                    OnComplete.Send(Self->SelfId(), new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId));
+                    TVector<TString> backupNames;
+                    for (const auto& name : op.GetIncrementalBackupTrimmedNames()) {
+                        backupNames.push_back(name);
+                    }
+                    OnComplete.Send(Self->SelfId(),
+                        new TEvPrivate::TEvRunIncrementalRestore(backupCollectionPathId, opId, backupNames));
                 }
+            }
+        }
+
+        // Reconstruct IncrementalBackups from LongIncrementalRestoreOps for loaded states
+        for (const auto& [opId, op] : Self->LongIncrementalRestoreOps) {
+            ui64 operationId = opId.GetTxId().GetValue();
+            if (Self->IncrementalRestoreStates.contains(operationId)) {
+                auto& state = Self->IncrementalRestoreStates[operationId];
+
+                // Populate IncrementalBackups using trimmed names
+                // Same pattern as Handle(TEvRunIncrementalRestore) at scan.cpp:424-426
+                for (const auto& backupName : op.GetIncrementalBackupTrimmedNames()) {
+                    TPathId dummyPathId;
+                    state.AddIncrementalBackup(dummyPathId, backupName, 0);
+                }
+
+                state.BackupCollectionPathId = TPathId(
+                    op.GetBackupCollectionPathId().GetOwnerId(),
+                    op.GetBackupCollectionPathId().GetLocalId());
+                state.OriginalOperationId = operationId;
+
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit reconstructed IncrementalBackups for operation: " << operationId
+                    << ", backups count: " << state.IncrementalBackups.size()
+                    << ", at schemeshard: " << Self->TabletID());
+            }
+        }
+
+        // Schedule progress for non-completed restores
+        for (const auto& [operationId, state] : Self->IncrementalRestoreStates) {
+            if (state.State == TIncrementalRestoreState::EState::Running ||
+                state.State == TIncrementalRestoreState::EState::Finalizing) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "TTxInit resuming incremental restore operation: " << operationId
+                    << ", state: " << static_cast<ui32>(state.State)
+                    << ", currentIdx: " << state.CurrentIncrementalIdx
+                    << ", at schemeshard: " << Self->TabletID());
+                OnComplete.Send(Self->SelfId(),
+                    new TEvPrivate::TEvProgressIncrementalRestore(operationId));
             }
         }
 

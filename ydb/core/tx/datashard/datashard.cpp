@@ -1664,7 +1664,8 @@ void TDataShard::NotifySchemeshard(const TActorContext& ctx, ui64 txId) {
 
     switch (op->Type) {
         case TSchemaOperation::ETypeBackup:
-        case TSchemaOperation::ETypeRestore: {
+        case TSchemaOperation::ETypeRestore:
+        case TSchemaOperation::ETypeCreateIncrementalRestoreSrc: {
             auto* result = event->Record.MutableOpResult();
             result->SetSuccess(op->Success);
             result->SetExplain(op->Error);

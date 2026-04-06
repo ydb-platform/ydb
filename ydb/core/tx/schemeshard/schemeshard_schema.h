@@ -2220,7 +2220,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<OperationId, State, CurrentIncrementalIdx, SerializedData>;
     };
 
-    // Incremental restore shard progress tracking
+    // Deprecated: kept for compatibility
     struct IncrementalRestoreShardProgress : Table<123> {
         struct OperationId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct ShardIdx : Column<2, NScheme::NTypeIds::Uint64> {};

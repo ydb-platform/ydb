@@ -194,12 +194,19 @@ public:
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         LOG_D("Finish " << status);
 
-        if (status != EStatus::Done) {
-            // TODO: https://github.com/ydb-platform/ydb/issues/18797
-            LOG_W("IncrementalRestoreScan finished with error status: " << status);
+        const bool success = (status == EStatus::Done);
+        if (!success) {
+            // Error propagation: see github.com/ydb-platform/ydb/issues/18797
+            // Failure status is propagated via TEvFinished -> schemeOp->Success -> OpResult
+            // -> SchemeShard detects and retries the current incremental
+            LOG_E("IncrementalRestoreScan finished with error status: " << status);
         }
 
-        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
+        TString errorMsg;
+        if (!success) {
+            errorMsg = TStringBuilder() << "Scan finished with status: " << status;
+        }
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg));
 
         PassAway();
         return nullptr;

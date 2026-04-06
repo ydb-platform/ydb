@@ -26,16 +26,31 @@ public:
         restore.SetId(restoreInfo.OriginalOperationId);
         restore.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        // Calculate progress based on incremental backup processing and overall state
-        if (restoreInfo.IncrementalBackups.empty()) {
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_PREPARING);
-            restore.SetProgressPercent(0);
-        } else {
-            // Once incremental backups are defined and processing has started,
-            // consider the restore operation complete from the user's perspective
-            // Internal operations may still be running, but the main orchestration is done
-            restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
-            restore.SetProgressPercent(100);
+        switch (restoreInfo.State) {
+            case TIncrementalRestoreState::EState::Completed:
+                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_DONE);
+                restore.SetProgressPercent(100);
+                break;
+            case TIncrementalRestoreState::EState::Finalizing:
+                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
+                restore.SetProgressPercent(99);
+                break;
+            case TIncrementalRestoreState::EState::Running: {
+                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_TRANSFER_DATA);
+                const ui32 total = restoreInfo.IncrementalBackups.size();
+                if (total > 0) {
+                    // 1-98% range split across incrementals, with per-shard granularity within each
+                    float incrProgress = restoreInfo.CurrentIncrementalIdx + restoreInfo.CalcCurrentIncrementalProgress();
+                    restore.SetProgressPercent(1 + static_cast<ui32>(incrProgress * 97 / total));
+                } else {
+                    restore.SetProgressPercent(1);
+                }
+                break;
+            }
+            default:
+                restore.SetProgress(Ydb::Backup::RestoreProgress::PROGRESS_PREPARING);
+                restore.SetProgressPercent(0);
+                break;
         }
 
         // Set user information if available

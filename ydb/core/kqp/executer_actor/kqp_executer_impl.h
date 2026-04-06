@@ -155,7 +155,7 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken, shrinkTasksGraph)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, shrinkTasksGraph)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {

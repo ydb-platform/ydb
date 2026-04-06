@@ -3071,6 +3071,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TString& database,
     const TVector<IKqpGateway::TPhysicalTxData>& transactions,
     const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+    const NKikimrConfig::TTableServiceConfig::TResourceManager& resourceManagerConfig,
     const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
@@ -3082,7 +3083,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     , Counters(counters)
     , BufferActorId(bufferActorId)
     , UserToken(std::move(userToken))
-    , MaxTasksGraph(5000)
+    , MaxTasksGraph(resourceManagerConfig.GetMaxChannelCountPerNode())
     , ShrinkTasks(shrinkTasks)
 {
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();

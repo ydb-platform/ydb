@@ -385,6 +385,7 @@ public:
         const TString& database,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
+        const NKikimrConfig::TTableServiceConfig::TResourceManager& resourceManagerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,

@@ -27,6 +27,31 @@
 
 {% list tabs %}
 
+- Go
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+    }
+    ```
+
 - Python
 
     {% list tabs %}
@@ -76,6 +101,17 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -118,6 +154,22 @@
 
 
 {% list tabs %}
+
+- Go
+
+    ```go
+    func createVectorTable(ctx context.Context, db *ydb.Driver, tableName string) error {
+      query := fmt.Sprintf(`
+        CREATE TABLE IF NOT EXISTS %s (
+          id Utf8,
+          document Utf8,
+          embedding String,
+          PRIMARY KEY (id)
+        );`, "`"+tableName+"`")
+
+      return db.Query().Exec(ctx, query)
+    }
+    ```
 
 - Python
 
@@ -182,6 +234,17 @@
     }
     ```
 
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
+
 - Java
 
   ```java
@@ -219,6 +282,56 @@
 В {{ ydb-short-name }} таблицах же вектора хранятся в виде сериализованной последовательности байт. Конвертацию в такое представление **рекомендуется выполнять на клиенте**. Альтернативный способ — делегировать конвертацию на сервер с помощью функции преобразования [Knn UDF](../../yql/reference/udf/list/knn.md#functions-convert). Ниже будут приведены примеры, демонстрирующие оба подхода.
 
 {% list tabs %}
+
+- Go
+
+    Функция конвертирует вектор float32 в бинарное представление и выполняет параметризованный запрос:
+
+    ```go
+    import (
+      "encoding/binary"
+      "math"
+    )
+
+    func convertVectorToBytes(vector []float32) []byte {
+      buf := make([]byte, len(vector)*4+1)
+      for i, v := range vector {
+        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
+      }
+      buf[len(buf)-1] = 0x01
+      return buf
+    }
+
+    func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
+      query := fmt.Sprintf(`
+        DECLARE $items AS List<Struct<
+          id: Utf8,
+          document: Utf8,
+          embedding: String
+        >>;
+
+        UPSERT INTO %s
+        (id, document, embedding)
+        SELECT id, document, embedding
+        FROM AS_TABLE($items);
+      `, "`"+tableName+"`")
+
+      rows := make([]types.Value, 0, len(items))
+      for _, item := range items {
+        rows = append(rows, types.StructValue(
+          types.StructFieldValue("id", types.UTF8Value(item.ID)),
+          types.StructFieldValue("document", types.UTF8Value(item.Document)),
+          types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+        ))
+      }
+
+      return db.Query().Exec(ctx, query,
+        query.WithParameters(
+          ydb.ParamsBuilder().Param("$items").BeginList().AddItems(rows...).EndList().Build(),
+        ),
+      )
+    }
+    ```
 
 - Python
 
@@ -389,6 +502,35 @@
     В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
 
     {% endnote %}
+
+- JavaScript
+
+  ```javascript
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, embedding,
+    FROM AS_TABLE($items);`
+  ```
 
 - Java
 
@@ -684,6 +826,23 @@
     }
     ```
 
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
+
 {% endlist %}
 
 
@@ -712,6 +871,42 @@
 
 
 {% list tabs %}
+
+- Go
+
+    ```go
+    func addVectorIndex(
+      ctx context.Context,
+      db *ydb.Driver,
+      tableName, indexName, strategy string,
+      dimension, levels, clusters int,
+    ) error {
+      tempIndexName := indexName + "__temp"
+      query := fmt.Sprintf(`
+        ALTER TABLE %s
+        ADD INDEX %s
+        GLOBAL USING vector_kmeans_tree
+        ON (embedding)
+        WITH (
+          %s,
+          vector_type="Float",
+          vector_dimension=%d,
+          levels=%d,
+          clusters=%d
+        );
+      `, "`"+tableName+"`", tempIndexName, strategy, dimension, levels, clusters)
+
+      if err := db.Query().Exec(ctx, query); err != nil {
+        return err
+      }
+
+      return db.Table().Do(ctx, func(ctx context.Context, s table.Session) error {
+        return s.AlterTable(ctx, path.Join(db.Name(), tableName),
+          options.WithRenameIndex(tempIndexName, indexName, true),
+        )
+      })
+    }
+    ```
 
 - Python
 
@@ -850,6 +1045,10 @@
     }
     ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
     ```java
@@ -924,6 +1123,68 @@
 Метод возвращает список, состоящий из словарей с полями `id`, `document`, а также `score` — числом, отражающим степень сходства (или расстояния) с искомым вектором.
 
 {% list tabs %}
+
+- Go
+
+    ```go
+    type ResultItem struct {
+      ID       string
+      Document string
+      Score    float32
+    }
+
+    func searchItems(
+      ctx context.Context,
+      db *ydb.Driver,
+      tableName string,
+      embedding []float32,
+      strategy string,
+      limit int,
+      indexName string,
+    ) ([]ResultItem, error) {
+      viewIndex := ""
+      if indexName != "" {
+        viewIndex = "VIEW " + indexName
+      }
+      sortOrder := "DESC"
+      if !strings.HasSuffix(strategy, "Similarity") {
+        sortOrder = "ASC"
+      }
+      q := fmt.Sprintf(`
+        DECLARE $embedding AS String;
+        SELECT id, document, Knn::%s(embedding, $embedding) AS score
+        FROM %s %s
+        ORDER BY score %s
+        LIMIT %d;
+      `, strategy, tableName, viewIndex, sortOrder, limit)
+
+      row, err := db.Query().Query(ctx, q,
+        query.WithParameters(
+          ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+        ),
+      )
+      if err != nil {
+        return nil, err
+      }
+      defer row.Close(ctx)
+
+      var items []ResultItem
+      for rs, err := row.NextResultSet(ctx); err == nil; rs, err = row.NextResultSet(ctx) {
+        for r, err := rs.NextRow(ctx); err == nil; r, err = rs.NextRow(ctx) {
+          var item ResultItem
+          if err := r.ScanNamed(
+            query.Named("id", &item.ID),
+            query.Named("document", &item.Document),
+            query.Named("score", &item.Score),
+          ); err != nil {
+            return nil, err
+          }
+          items = append(items, item)
+        }
+      }
+      return items, nil
+    }
+    ```
 
 - Python
 
@@ -1084,6 +1345,21 @@
         return result;
     }
     ```
+
+- JavaScript
+
+  ```javascript
+  const limit;
+  const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, ${embedding}) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 - Java
 
@@ -1389,6 +1665,21 @@
     }
     ```
 
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
+
 {% endlist %}
 
 ## Итоговый пример {#full-example}
@@ -1403,6 +1694,10 @@
 6. Поиск ближайших векторов с использованем индекса
 
 {% list tabs %}
+
+- Go
+
+    Функциональность векторного поиска полностью поддерживается в Go SDK. Полный пример, объединяющий все вышеописанные операции (создание таблицы, вставка данных, создание индекса, поиск), строится из приведённых выше фрагментов кода. Рабочий пример см. в репозитории [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples).
 
 - Python
 
@@ -1667,6 +1962,10 @@
     ```
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 

@@ -6,6 +6,7 @@
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
+#include <yql/essentials/public/udf_meta/udf_meta.h>
 
 namespace NYql::NFastCheck {
 
@@ -33,10 +34,6 @@ struct TCheckFilter {
     TString CheckNameGlob;
 };
 
-struct TUdfFilter {
-    THashMap<TString, THashSet<TString>> Modules;
-};
-
 struct TChecksRequest {
     TString Program;
     TString File;
@@ -48,7 +45,7 @@ struct TChecksRequest {
     TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
-    const TUdfFilter* UdfFilter = nullptr;
+    const IUdfMeta* UdfMeta = nullptr;
     TMaybe<TVector<TCheckFilter>> Filters;
     TString IssueReportTarget;
 };

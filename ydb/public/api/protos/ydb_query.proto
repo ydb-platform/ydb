@@ -45,18 +45,25 @@ message AttachSessionRequest {
     string session_id = 1 [(Ydb.length).le = 1024];
 }
 
+// Sent by server when this session is being gracefully terminated.
+// Server will attempt to complete in-flight requests within the soft deadline; 
+// requests still running at the hard deadline will be cancelled.
+// Client should not reuse the session after receiving this hint.
 message SessionShutdownHint {
 }
 
+// Sent by server when the node is being gracefully shut down.
+// Server will attempt to complete in-flight requests within the soft deadline;
+// requests still running at the hard deadline will be cancelled.
+// Client should not create new sessions on this node.
 message NodeShutdownHint {
 }
 
 message SessionState {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
-    
-    // The reason the session is ending, for SDK-side handling
-     oneof session_hint {
+
+    oneof session_hint {
         SessionShutdownHint session_shutdown = 3;
         NodeShutdownHint node_shutdown = 4;
     }

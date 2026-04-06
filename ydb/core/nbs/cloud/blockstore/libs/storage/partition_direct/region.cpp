@@ -26,6 +26,7 @@ TRegion::TRegion(
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
+    TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
@@ -40,6 +41,7 @@ TRegion::TRegion(
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            writeHandoffDelay,
             traceSamplePeriod);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));

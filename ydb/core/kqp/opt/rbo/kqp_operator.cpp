@@ -74,6 +74,19 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , OlapFilterLambda(olapFilterLambda) {
 }
 
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
+                 TPositionHandle pos)
+    : IOperator(EOperator::Source, pos, props)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda)
+    , Limit(limit) {
+}
+
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
     return OutputIUs;
 }
@@ -326,12 +339,13 @@ TString TOpMap::ToString(TExprContext& ctx) {
         const auto& mapElement = MapElements[i];
         const auto& k = mapElement.GetElementName();
 
+        TString fromName;
         if (mapElement.IsRename()) {
-            res << mapElement.GetRename().GetFullName();
+            fromName = mapElement.GetRename().GetFullName();
         } else {
-            res << mapElement.GetExpression().ToString();
+            fromName = mapElement.GetExpression().ToString();
         }
-        res << "->" << k.GetFullName();
+        res << k.GetFullName() << ": " << fromName;
 
         if (i != e - 1) {
             res << ", ";
@@ -641,9 +655,22 @@ TVector<std::reference_wrapper<TExpression>> TOpLimit::GetExpressions() {
  * FIXME: This is temporary, we want to get enforcers working
  */
 TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements, std::optional<TExpression> limitCond)
-    : IUnaryOperator(EOperator::Sort, pos, input), SortElements(sortElements), LimitCond(limitCond) {}
+    : IUnaryOperator(EOperator::Sort, pos, input)
+    , SortElements(sortElements)
+    , LimitCond(limitCond) {
+}
 
-TVector<TInfoUnit> TOpSort::GetOutputIUs() { return GetInput()->GetOutputIUs(); }
+TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+                 std::optional<TExpression> limitCond, const EOpPhase sortPhase)
+    : IUnaryOperator(EOperator::Sort, pos, props, input)
+    , SortElements(sortElements)
+    , LimitCond(limitCond)
+    , SortPhase(sortPhase) {
+}
+
+TVector<TInfoUnit> TOpSort::GetOutputIUs() {
+    return GetInput()->GetOutputIUs();
+}
 
 TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
@@ -697,6 +724,8 @@ TString TOpSort::ToString(TExprContext& ctx) {
     if (LimitCond.has_value()) {
         res << ", Limit: " << LimitCond->ToString();
     }
+
+    res << " Phase: " << ToStringPhase(SortPhase);
     
     return res;
 }
@@ -976,7 +1005,6 @@ TString ToStringPhase(EOpPhase phase) {
         PHASE_ENUM(X)
 #undef X
     }
-    Y_ENSURE(false, "Unknown phase.");
 }
 
 } // namespace NKqp

@@ -887,7 +887,7 @@ EYqlSetOp AllQualified(EYqlSetOp op) {
         case EYqlSetOp::UnionAll:
         case EYqlSetOp::ExceptAll:
         case EYqlSetOp::IntersectAll:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
         case EYqlSetOp::Union:
             return EYqlSetOp::UnionAll;
         case EYqlSetOp::Except:

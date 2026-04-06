@@ -51,6 +51,7 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -194,20 +195,25 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
 
     class TWaitGraphInterceptor : public THashMap<TRequestId, TWaitGraphEdge> {
     public:
-        TWaitGraphInterceptor(TTestActorRuntime& runtime)
+        TWaitGraphInterceptor(TTestActorRuntime& runtime, bool suppressEvents = true)
             : Runtime(runtime)
             , AddObserver(Runtime.AddObserver<TEvLongTxService::TEvWaitingLockAdd>(
-                [this](auto& ev) {
+                [this, suppressEvents](auto& ev) {
                     auto* msg = ev->Get();
                     (*this)[TRequestId{ ev->Sender, msg->RequestId }] = TWaitGraphEdge{ msg->Lock.LockId, msg->OtherLock.LockId };
-                    // Prevent long tx service from processing this event
-                    ev.Reset();
+                    if (suppressEvents) {
+                        // Prevent long tx service from processing this event
+                        ev.Reset();
+                    }
                 }))
             , RemoveObserver(Runtime.AddObserver<TEvLongTxService::TEvWaitingLockRemove>(
-                [this](auto& ev) {
+                [this, suppressEvents](auto& ev) {
                     auto* msg = ev->Get();
                     (*this).erase(TRequestId{ ev->Sender, msg->RequestId });
-                    // Prevent long tx service from processing this event
+                    if (suppressEvents) {
+                        // Prevent long tx service from processing this event
+                        ev.Reset();
+                    }
                 }))
         {}
 
@@ -1236,6 +1242,119 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         // Remove lock 1, req3 should successfully lock key 1
         lock1.Reset();
         lockRows.ExpectResult(req3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "");
+    }
+
+    Y_UNIT_TEST(DistributedDeadlock) {
+        TPortManager pm;
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(4);
+        auto [runtime, server, sender] = TestCreateServer(pm, serverSettings);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        THashSet<ui32> shardNodeIds;
+        for (ui64 shard : shards) {
+            ui32 nodeId = ResolveTablet(runtime, shard).NodeId();
+            Cerr << "shard: " << shard << " nodeId: " << nodeId << Endl;
+            shardNodeIds.insert(nodeId);
+        }
+
+        TTestPipe pipe1(runtime, shards.at(0));
+        TLockRowsHelper lockRows1(runtime, pipe1);
+        TTestPipe pipe2(runtime, shards.at(1));
+        TLockRowsHelper lockRows2(runtime, pipe2);
+
+        // Choose lock nodes that are distinct from nodes with table shards.
+        TVector<size_t> lockNodeIdxs;
+        for (size_t i = 0; i < runtime.GetNodeCount(); ++i) {
+            if (!shardNodeIds.contains(runtime.GetNodeId(i))) {
+                lockNodeIdxs.push_back(i);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(lockNodeIdxs.size(), 2u);
+
+        TLockHandle lock1(123, runtime.GetActorSystem(lockNodeIdxs[0]));
+        TLockHandle lock2(234, runtime.GetActorSystem(lockNodeIdxs[1]));
+
+        TWaitGraphInterceptor waitGraph(runtime, /*suppressEvents=*/false);
+
+        // Lock key 1 by lock 1
+        auto req1 = lockRows1.SendRequest(lock1, tableId, TKeysBuilder().Add(1).Build());
+        lockRows1.ExpectResult(req1);
+
+        // Lock key 11 by lock 2
+        auto req2 = lockRows2.SendRequest(lock2, tableId, TKeysBuilder().Add(11).Build());
+        lockRows2.ExpectResult(req2);
+
+        // Try locking key 1 by lock 2
+        auto req3 = lockRows1.SendRequest(lock2, tableId, TKeysBuilder().Add(1).Build());
+        lockRows1.ExpectNoResult();
+
+        // Try locking key 11 by lock 1
+        auto req4 = lockRows2.SendRequest(lock1, tableId, TKeysBuilder().Add(11).Build());
+        lockRows2.ExpectNoResult();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            waitGraph.ToString(),
+            "123 -> 234\n"
+            "234 -> 123\n");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            // Check that the wait cycle is instantiated in the LongTxService on all nodes.
+            ui32 nodeId = runtime.GetNodeId(nodeIdx);
+            auto sender = runtime.AllocateEdgeActor(nodeIdx);
+            runtime.Send(
+                MakeLongTxServiceID(nodeId), sender,
+                new TEvLongTxService::TEvGetLockWaitGraph, nodeIdx, true);
+            auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+
+            TVector<std::pair<ui64, ui64>> edges;
+            for (const auto& edge : result->Get()->WaitEdges) {
+                edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
+            }
+            std::sort(edges.begin(), edges.end());
+            TStringBuilder wgStr;
+            for (auto& [a, b] : edges) {
+                wgStr << a << " -> " << b << "\n";
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                wgStr,
+                "123 -> 234\n"
+                "234 -> 123\n",
+                "with nodeIdx: " << nodeIdx);
+        }
+
+        // break the wait by aborting the request belonging to the youngest lock
+        // TODO: LongTxService should detect the cycle and break it itself.
+        waitGraph.SendDeadlock(234, 123);
+
+        // The third operation should reply with the STATUS_DEADLOCK
+        lockRows1.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK);
+
+        // Perhaps unexpectedly row 11 is still locked until the lock is broken or removed
+        lockRows2.ExpectNoResult();
+
+        // Reset the second lock (it will notify the long tx service and rollback datashard changes)
+        lock2.Reset();
+
+        // Finally req4 should succeed
+        lockRows2.ExpectResult(req4);
+
         UNIT_ASSERT_VALUES_EQUAL(
             waitGraph.ToString(),
             "");

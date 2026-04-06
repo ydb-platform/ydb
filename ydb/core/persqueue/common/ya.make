@@ -6,6 +6,7 @@ SRCS(
     heartbeat.cpp
     key.cpp
     microseconds_sliding_window.cpp
+    partition_id.cpp
     percentiles.cpp
 )
 

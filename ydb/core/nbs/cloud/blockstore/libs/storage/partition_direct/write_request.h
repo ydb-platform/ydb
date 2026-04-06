@@ -4,6 +4,7 @@
 #include "vchunk_config.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
@@ -19,10 +20,8 @@ enum class EWriteMode: ui32
     DirectPBuffersFilling,
 };
 
-EWriteMode GetWriteModeFromProto(
-    NProto::TStorageServiceConfig::TWriteMode writeMode);
-NProto::TStorageServiceConfig::TWriteMode GetProtoWriteMode(
-    EWriteMode writeMode);
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 
 class TWriteRequestExecutor
     : public std::enable_shared_from_this<TWriteRequestExecutor>
@@ -40,13 +39,16 @@ public:
 
     TWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        TExecutorPtr executor,
+        IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
-        NWilson::TTraceId traceId);
+        NWilson::TTraceId traceId,
+        TDuration writeHandoffDelay);
 
     ~TWriteRequestExecutor();
 
@@ -57,6 +59,7 @@ public:
 private:
     void SendWriteRequest(ELocation location);
     void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
+    void SendWriteRequestsToHandoffPBuffers();
     void OnWriteResponse(
         ELocation location,
         const TDBGWriteBlocksResponse& response,
@@ -67,6 +70,8 @@ private:
     void Reply(NProto::TError error);
 
     NActors::TActorSystem* ActorSystem;
+    const TExecutorPtr Executor;
+    IPartitionDirectService* const PartitionDirectService;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;
@@ -74,6 +79,8 @@ private:
     const std::shared_ptr<TWriteBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
     const ui64 Lsn;
+
+    const TDuration WriteHandoffDelay;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

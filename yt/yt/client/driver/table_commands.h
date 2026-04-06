@@ -145,10 +145,13 @@ public:
 private:
     std::vector<NYPath::TRichYPath> Paths;
     NTableClient::ETablePartitionMode PartitionMode;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool EnableKeyGuarantee;
 
+    // TODO(pavook): remove or rename this option, as semantically it's
+    // really nothing more than AreYouReallySureYouWantMaxPartitionCount.
     //! Treat the #DataWeightPerPartition as a hint and not as a maximum limit.
     //! Consider the situation when the #MaxPartitionCount is given
     //! and the total data weight exceeds #MaxPartitionCount * #DataWeightPerPartition.

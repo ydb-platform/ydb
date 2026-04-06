@@ -14,58 +14,64 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```golang
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```golang
+    package main
 
-  func main() {
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithSessionPoolSizeLimit(500),
+    import (
+      "context"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithSessionPoolSizeLimit(500),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  Библиотека `database/sql` имеет свой пул соединений. Каждое соединение в `database/sql` соответствует конкретной сессии {{ ydb-short-name }}. Управлением пулом соединений в `database/sql` осуществляется с помощью функций `sql.DB.SetMaxOpenConns` и `sql.DB.SetMaxIdleConns`. Подробнее об этом написано в [документации](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
+    Библиотека `database/sql` имеет свой пул соединений. Каждое соединение в `database/sql` соответствует конкретной сессии {{ ydb-short-name }}. Управлением пулом соединений в `database/sql` осуществляется с помощью функций `sql.DB.SetMaxOpenConns` и `sql.DB.SetMaxIdleConns`. Подробнее об этом написано в [документации](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
 
-  Пример кода, использующего размер пула соединений `database/sql`:
+    Пример кода, использующего размер пула соединений `database/sql`:
 
-  ```golang
-  package main
+    ```golang
+    package main
 
-  import (
-    "context"
-    "database/sql"
+    import (
+      "context"
+      "database/sql"
 
-    _ "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
 
-  func main() {
-    db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
-    if err != nil {
-      panic(err)
+    func main() {
+      db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close()
+      db.SetMaxOpenConns(100)
+      db.SetMaxIdleConns(100)
+      db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions
+      ...
     }
-    defer db.Close()
-    db.SetMaxOpenConns(100)
-    db.SetMaxIdleConns(100)
-    db.SetConnMaxIdleTime(time.Second) // workaround for background keep-aliving of YDB sessions
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -139,5 +145,9 @@
     Установка размера пула на данный момент не поддержана.
 
   {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

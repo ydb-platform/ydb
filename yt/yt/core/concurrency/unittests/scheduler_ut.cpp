@@ -378,11 +378,11 @@ TEST_F(TSchedulerTest, CurrentInvokerSync)
 TEST_F(TSchedulerTest, CurrentInvokerInActionQueue)
 {
     auto invoker = Queue1->GetInvoker();
-    BIND([=] {
+    WaitFor(BIND([=] {
         EXPECT_EQ(invoker, GetCurrentInvoker());
     })
-    .AsyncVia(invoker).Run()
-    .BlockingGet();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, Intercept)
@@ -390,7 +390,7 @@ TEST_F(TSchedulerTest, Intercept)
     auto invoker = Queue1->GetInvoker();
     int counter1 = 0;
     int counter2 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         TContextSwitchGuard guard(
             [&] {
                 EXPECT_EQ(counter1, 0);
@@ -404,8 +404,8 @@ TEST_F(TSchedulerTest, Intercept)
             });
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .BlockingGet();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 1);
     EXPECT_EQ(counter2, 1);
 }
@@ -417,7 +417,7 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
     int counter2 = 0;
     int counter3 = 0;
     int counter4 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         {
             TContextSwitchGuard guard(
                 [&] { ++counter1; },
@@ -433,8 +433,8 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
         }
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .BlockingGet();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 3);
     EXPECT_EQ(counter2, 3);
     EXPECT_EQ(counter3, 1);
@@ -703,13 +703,12 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
 
     WaitUntilSet(promise.ToFuture());
 
-    auto result = BIND([&] () -> bool {
+    auto result = WaitFor(BIND([&] () -> bool {
         return flag;
     })
     .AsyncVia(serializedInvoker)
-    .Run()
-    .BlockingGet()
-    .ValueOrThrow();
+    .Run())
+        .ValueOrThrow();
 
     EXPECT_TRUE(result);
 }
@@ -942,8 +941,7 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             .AsyncVia(serializedInvoker)
             .Run());
 
-        ASSERT_NO_THROW(testResultFuture
-            .BlockingGet()
+        ASSERT_NO_THROW(WaitFor(testResultFuture)
             .ThrowOnError());
     }
 }

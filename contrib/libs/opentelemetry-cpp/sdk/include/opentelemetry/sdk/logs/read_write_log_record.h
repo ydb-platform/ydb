@@ -34,6 +34,12 @@ class ReadWriteLogRecord final : public ReadableLogRecord
 {
 public:
   ReadWriteLogRecord();
+
+  ReadWriteLogRecord(const ReadWriteLogRecord &)            = delete;
+  ReadWriteLogRecord(ReadWriteLogRecord &&)                 = delete;
+  ReadWriteLogRecord &operator=(const ReadWriteLogRecord &) = delete;
+  ReadWriteLogRecord &operator=(ReadWriteLogRecord &&)      = delete;
+
   ~ReadWriteLogRecord() override;
 
   /**

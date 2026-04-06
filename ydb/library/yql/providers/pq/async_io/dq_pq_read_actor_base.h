@@ -12,13 +12,13 @@ class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
     using TPartitionKey = ::NPq::TPartitionKey;
 
-    struct TPartitonInfo {
+    struct TPartitionInfo {
         std::optional<ui64> Offset;             // offset of next event.
         std::optional<ui64> EndOffset;          // end offset in topic on start.
     };
 
     const ui64 InputIndex = 0;
-    THashMap<TPartitionKey, TPartitonInfo> Partitions;
+    THashMap<TPartitionKey, TPartitionInfo> Partitions;
     const TTxId TxId;
     NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;

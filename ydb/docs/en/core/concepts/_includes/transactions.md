@@ -45,16 +45,12 @@ In this mode, based on the query, {{ ydb-short-name }} decides whether to execut
 - **[Data Manipulation Language](https://en.wikipedia.org/wiki/Data_manipulation_language) (DML) Statements**
   DML statements (such as [`SELECT`](../../yql/reference/syntax/select/index.md), [`UPSERT`](../../yql/reference/syntax/upsert_into.md), [`UPDATE`](../../yql/reference/syntax/update.md), etc.) are wrapped in a transaction with *Serializable* mode. A query can consist only of DML statements. On success, changes are committed. If an error occurs, all changes are rolled back.
 
-- **Batch Modification Statements**
-  Batch modification statements (such as [`BATCH UPDATE`](../../yql/reference/syntax/batch-update.md) and [`BATCH DELETE`](../../yql/reference/syntax/batch-delete.md)) are executed outside a transaction. A query can contain only one batch modification statement. If an error occurs, the statement's changes are not rolled back.
-
 #### Summary Table
 
 | Statement Type | Implicit Transaction Handling                     | Multistatement Support | Rollback on Error     |
 |----------------|---------------------------------------------------|------------------------|-----------------------|
 | DDL            | Outside a transaction                             | Yes (DDL-only)         | No                    |
 | DML            | Auto transaction (Serializable)                   | Yes (DML-only)         | Yes                   |
-| Batch Modification Statements | Outside a transaction              | No                     | No                    |
 
 The transaction execution mode is specified in its settings when creating the transaction. See the examples for the {{ ydb-short-name }} SDK in the [{#T}](../../recipes/ydb-sdk/tx-control.md).
 

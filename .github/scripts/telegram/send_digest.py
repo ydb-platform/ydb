@@ -23,7 +23,6 @@ Usage:
 import argparse
 import json
 import os
-import re
 import sys
 import ydb
 from datetime import datetime, timezone
@@ -43,12 +42,17 @@ from parse_and_send_team_issues import (
 )
 
 
-_SAFE_PROFILE_RE = re.compile(r'^[a-zA-Z0-9._-]+$')
-
-
 def _validate_profile_id(profile_id: str) -> str:
-    if not _SAFE_PROFILE_RE.match(profile_id):
-        raise ValueError(f"Invalid profile_id: {profile_id!r}")
+    """Expect ``branch:build_type``: exactly one ``:``, both sides non-empty (matches ``make_profile_id``)."""
+    if profile_id.count(":") != 1:
+        raise ValueError(
+            f"Invalid profile_id {profile_id!r}: expected exactly one ':' (branch:build_type)"
+        )
+    branch, _, build_type = profile_id.partition(":")
+    if not branch or not build_type:
+        raise ValueError(
+            f"Invalid profile_id {profile_id!r}: expected branch:build_type (e.g. main:relwithdebinfo)"
+        )
     return profile_id
 
 
@@ -98,7 +102,7 @@ def _fetch_closed_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         INNER JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id}'
+        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
           AND q.sent_at IS NULL
           AND i.state = 'CLOSED'
         """,
@@ -133,7 +137,7 @@ def _fetch_unsent(w: YDBWrapper, profile_id: str) -> list:
         FROM `{queue_path}` AS q
         LEFT JOIN `{issues_path}` AS i
             ON q.github_issue_number = i.issue_number
-        WHERE q.profile_id = '{profile_id}'
+        WHERE q.profile_id = '{profile_id.replace("'", "''")}'
           AND q.sent_at IS NULL
           AND (i.state IS NULL OR i.state != 'CLOSED')
         ORDER BY q.owner_team, q.github_issue_number
@@ -241,7 +245,7 @@ def run_digest(
         muted_stats   = None
         all_team_data = None
         try:
-            all_team_data = get_all_team_data()
+            all_team_data = get_all_team_data(build_type=profile["build_type"])
             if all_team_data:
                 muted_stats = {t: d["stats"] for t, d in all_team_data.items()}
         except Exception as exc:
@@ -253,7 +257,11 @@ def run_digest(
             team_channels=team_channels,
             muted_stats=muted_stats,
             include_plots=include_plots,
-            ydb_config={"use_yesterday": False} if include_plots else None,
+            ydb_config=(
+                {"use_yesterday": False, "build_type": profile["build_type"]}
+                if include_plots
+                else None
+            ),
             all_team_data=all_team_data,
         )
 

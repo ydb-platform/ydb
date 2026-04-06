@@ -71,8 +71,13 @@ def parse_body(body: str) -> ParsedIssueBody:
 
 
 def make_profile_id(branch: str, build_type: str) -> str:
-    """Canonical profile_id used by digest_queue and notification config."""
-    return f"{branch}-{build_type}"
+    """Canonical profile_id used by digest_queue and notification config.
+
+    Format is ``branch:build_type`` (colon) so build presets like ``release-asan``
+    stay unambiguous. Legacy rows may still use ``branch-build_type``; migrate
+    those in YDB if you need them picked up by the new code.
+    """
+    return f"{branch}:{build_type}"
 
 
 def create_test_issue_mapping(issues_data):

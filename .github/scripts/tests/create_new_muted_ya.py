@@ -666,7 +666,7 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
+def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -684,7 +684,8 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
     monitor_by_name = {}
     for t in sorted(all_tests, key=lambda x: x.get('date_window') or 0):
         if t.get('full_name'):
-            monitor_by_name[t['full_name']] = t
+            bt = t.get('build_type') or DEFAULT_BUILD_TYPE
+            monitor_by_name[(t['full_name'], bt)] = t
 
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
@@ -694,7 +695,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
             )
             continue
 
-        monitor = monitor_by_name.get(full_name)
+        monitor = monitor_by_name.get((full_name, build_type))
         if monitor:
             entry = {
                 'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
@@ -727,7 +728,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
                 'fail_count': 0,
                 'pass_count': 0,
                 'branch': branch,
-                'build_type': DEFAULT_BUILD_TYPE,
+                'build_type': build_type,
             }
             logging.info(f"test {full_name} not in monitor, using fallback data")
 
@@ -992,8 +993,10 @@ def mute_worker(args):
         if not ydb_wrapper.check_credentials():
             return 1
 
+        build_type = getattr(args, 'build_type', DEFAULT_BUILD_TYPE)
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
+        logging.info(f"build_type: {build_type}")
         
         # Use provided muted_ya file or fallback to default.
         input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
@@ -1003,7 +1006,9 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-        all_data = execute_query(args.branch, days_window=7, ydb_wrapper=ydb_wrapper)
+        all_data = execute_query(
+            args.branch, build_type=build_type, days_window=7, ydb_wrapper=ydb_wrapper
+        )
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
@@ -1023,7 +1028,13 @@ def mute_worker(args):
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
 
-            queue_items = create_mute_issues(all_data, file_path, close_issues=args.close_issues, branch=args.branch)
+            queue_items = create_mute_issues(
+                all_data,
+                file_path,
+                close_issues=args.close_issues,
+                branch=args.branch,
+                build_type=build_type,
+            )
 
             try:
                 enqueue_to_digest_queue(ydb_wrapper, queue_items or [])
@@ -1042,6 +1053,12 @@ if __name__ == "__main__":
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
+    update_muted_ya_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
@@ -1052,6 +1069,12 @@ if __name__ == "__main__":
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
     create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type when loading monitor rows (default: relwithdebinfo)',
+    )
 
     args = parser.parse_args()
 

@@ -244,7 +244,7 @@ public:
         if (ExtSize == Size) {
             TVectorInserterPower2<Size> inserter;
             filler(inserter);
-            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+            return Meta->GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
         } else {
             return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
         }
@@ -340,7 +340,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             }
         }
 
-        TString indexData = GetBitsStorageConstructor()->Build(std::move(resultBits))->SerializeToString();
+        TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(resultBits));
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 
@@ -400,13 +400,18 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     if (!indexData) {
         TVectorInserter inserter(size);
         doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+        indexData = GetBitsStorageConstructor()->SerializeToString(inserter.ExtractBits());
     }
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
+<<<<<<< HEAD
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
     const NArrow::NSSA::TIndexCheckOperation& op) const {
+=======
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
+>>>>>>> 4b171e0e744 (Refactor IBitsStorageConstructor: separate serialization/restoration, simplify viewer interface (#37183))
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;

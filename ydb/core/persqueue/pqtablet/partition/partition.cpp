@@ -784,22 +784,14 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         CreateMirrorerActor();
     }
     if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
-        TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions;
-        for (const auto& parentPartitionId : PartitionConfig->GetParentPartitionIds()) {
-            const NKikimrPQ::TPQTabletConfig::TPartition* configPtr = NPQ::GetPartitionConfigFromAllPartitions(Config, parentPartitionId);
-            AFL_ENSURE(configPtr != nullptr)("parentPartitionId", parentPartitionId);
-            if (configPtr) {
-                // TODO: check creation time of parent partitions
-                parentPartitions.push_back(*configPtr);
-            }
-        }
+        // TODO: check creation time of parent partitions
         DeduplicationQueueActor = ctx.Register(CreateDeduplicationWriteQueueActor(
             this->TabletId,
             this->TabletActorId,
             ctx.SelfID,
             TopicName(),
             Partition.OriginalPartitionId,
-            std::move(parentPartitions)
+            PartitionGraph
         ));
     }
 

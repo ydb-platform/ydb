@@ -28,25 +28,27 @@ public:
         TActorId partitionActorId,
         TString topicName,
         ui32 partitionId,
-        TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions)
+        const TPartitionGraph& partitionGraph)
         : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::EServiceKikimr::PERSQUEUE)
         , PartitionActorId(partitionActorId)
         , TopicName(std::move(topicName))
         , PartitionId(partitionId)
     {
         DisableTimestamp = TInstant::Zero();
-        ParentPartitions.reserve(parentPartitions.size());
-        for (const auto& partition : parentPartitions) {
+        const auto* partition = partitionGraph.GetPartition(partitionId);
+        AFL_ENSURE(partition)("partitionId", partitionId);
+        for (const TPartitionGraph::Node* parentPartition : partition->AllParents) {
             TParentPartitionInfo info{
                 .CreationTime = TInstant::Max(), // TODO: Get from partition graph/config
-                .TabletId = partition.GetTabletId(),
-                .PartitionId = partition.GetPartitionId(),
+                .TabletId = parentPartition->TabletId,
+                .PartitionId = parentPartition->Id,
             };
             DisableTimestamp = Max(DisableTimestamp, info.CreationTime + MaxDeduplicationTimeInterval);
+            TabletInfo[info.TabletId].Partitions.push_back(info.PartitionId);
             ParentPartitions.push_back(std::move(info));
-            TabletInfo[info.TabletId].Partitions.push_back(partition.GetPartitionId());
         }
         std::ranges::sort(ParentPartitions.begin(), ParentPartitions.end(), std::greater<>{}, &TParentPartitionInfo::PartitionId); // oldest partitions at end
+        LOG_D("Partitions: " << JoinSeq(", ", ParentPartitions));
     }
 
     void Bootstrap() {
@@ -411,7 +413,6 @@ private:
                 AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
         }
     }
-
 };
 
 NActors::IActor* CreateDeduplicationWriteQueueActor(
@@ -420,14 +421,20 @@ NActors::IActor* CreateDeduplicationWriteQueueActor(
     TActorId partitionActorId,
     TString topicName,
     ui32 partitionId,
-    TVector<NKikimrPQ::TPQTabletConfig::TPartition> parentPartitions) {
+    const TPartitionGraph& partitionGraph) {
     return new TDeduplicationQueueActor(
         tabletId,
         tabletActorId,
         partitionActorId,
         std::move(topicName),
         partitionId,
-        std::move(parentPartitions));
+        partitionGraph
+    );
 }
 
 } // namespace NKikimr::NPQ
+
+template <>
+void Out<NKikimr::NPQ::TDeduplicationQueueActor::TParentPartitionInfo>(IOutputStream& out, const NKikimr::NPQ::TDeduplicationQueueActor::TParentPartitionInfo& info) {
+    out << "{TabletId: " << info.TabletId << ", PartitionId: " << info.PartitionId << ", CreationTime: " << info.CreationTime << "}";
+}

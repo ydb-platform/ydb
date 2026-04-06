@@ -1475,28 +1475,55 @@ Y_UNIT_TEST(Dedup_MixedGroup_PartialOverlap) {
 }
 
 Y_UNIT_TEST(Dedup_DoubleSplit) {
-    if ("x-fail") {
-        // TODO: fix GetParentPartitions
-        return;
-    }
     RunDedupTest("Dedup_DoubleSplit", {
         {.Write = {
-            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
-            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
-            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-X"},
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
         }},
         {.Write = {
-            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
-            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
-            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-X"},
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
         }},
         {.Write = {
-            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
-            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-X"},
-            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-X"},
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
         }},
     });
 }
+
+Y_UNIT_TEST(Dedup_TripleSplit) {
+    RunDedupTest("Dedup_TripleSplit", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+            {.Body = "s0-dedupI", .DedupId = "dedupI", .GroupId = "group-I"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s0-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+        }},
+        {.Write = {
+            {.Body = "s3-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s3-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s3-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s3-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+            {.Body = "s3-dedupH", .DedupId = "dedupH", .GroupId = "group-H"},
+        }},
+    });
+}
+
 
 }
 

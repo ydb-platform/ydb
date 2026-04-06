@@ -29,8 +29,9 @@
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() << stream)
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
@@ -206,6 +207,10 @@ class TSnapshotWriter : public TActorBootstrapped<TSnapshotWriter>, public IActo
 public:
     using TBase = TActorBootstrapped<TSnapshotWriter>;
 
+    TStringBuilder LogPrefix() const {
+        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    }
+
     struct TTableFile {
         TString Name;
         TFile File;
@@ -233,7 +238,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("Bootstrap for " << SnapshotPath);
+        LOG_N("Starting snapshot to " << SnapshotPath);
 
         DeleteOldBackups();
 
@@ -256,11 +261,13 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
+            LOG_D("Schema written, " << stringOut.Size() << " bytes");
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
+            LOG_D("No tables to scan, finalizing");
             return Finalize();
         }
 
@@ -307,14 +314,16 @@ public:
                     continue;
                 }
     
+                LOG_N("Deleting incomplete backup " << child);
                 child.ForceDelete();
             }
-    
+
             std::sort(backups.begin(), backups.end(), [](const auto& a, const auto& b) {
                 return a.first > b.first; // descending by (generation, step)
             });
-    
+
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
+                LOG_N("Deleting old backup " << backups[i].second);
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
@@ -326,6 +335,7 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
+            LOG_E("Snapshot failed: " << error);
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -339,9 +349,9 @@ public:
     }
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
-        LOG_D("Handle " << ev->ToString());
-
         const auto* msg = ev->Get();
+        LOG_D("Writing " << msg->SnapshotData.Size() << " bytes for table " << msg->TableId);
+
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
             return ReplyAndDie(false, TStringBuilder() << "Got write snapshot for unknown table " << msg->TableId);
@@ -380,6 +390,7 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
+        LOG_D("Table scan done (" << DoneTables.size() << "/" << Tables.size() << ")");
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -464,6 +475,7 @@ public:
 
         DeleteOldBackups();
 
+        LOG_N("Snapshot finalized, " << WrittenBytes << " bytes");
         return ReplyAndDie();
     }
 
@@ -772,16 +784,24 @@ class TChangelogWriter : public TActorBootstrapped<TChangelogWriter>, public IAc
     };
 public:
     TChangelogWriter(TActorId owner, const TFsPath& path, const TScheme& schema,
-                     TIntrusiveConstPtr<TBackupExclusion> exclusion)
+                     TIntrusiveConstPtr<TBackupExclusion> exclusion,
+                     ui64 tabletId, ui32 generation, ui32 step)
         : Owner(owner)
         , ChangelogPath(path.Child("changelog.json"))
         , ChangelogChecksumPath(path.Child("changelog.json.sha256"))
         , Schema(schema)
         , Exclusion(exclusion)
+        , TabletId(tabletId)
+        , Generation(generation)
+        , Step(step)
     {}
 
+    TString LogPrefix() const {
+        return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
+    }
+
     void Bootstrap() {
-        LOG_D("Bootstrap for " << ChangelogPath);
+        LOG_N("Starting changelog to " << ChangelogPath);
 
         try {
             ChangelogPath.Parent().MkDirs();
@@ -810,14 +830,13 @@ public:
     }
 
     void Handle(TEvWriteChangelog::TPtr& ev) {
-        LOG_D("Handle " << ev->ToString());
-
         size_t changesStart = Buffer.Size();
         TBufferOutput out(Buffer);
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
 
         const auto* msg = ev->Get();
         const ui64 msgSize = msg->GetTotalSize();
+        LOG_D("Writing changelog step " << msg->Step << ", " << msgSize << " bytes");
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -936,8 +955,6 @@ public:
     }
 
     void Handle(TEvPrivate::TEvFlush::TPtr& ev) {
-        LOG_D("Handle " << ev->ToString());
-
         if (ev->Get()->Cookie == ExpectedFlushCookie) {
             Flush();
         }
@@ -968,6 +985,7 @@ public:
             TDuration lag = TActivationContext::Monotonic() - *BufferCreatedAt;
             BufferCreatedAt = std::nullopt;
 
+            LOG_D("Flushed " << flushedBytes << " bytes, total " << WrittenBytes << ", lag " << lag);
             Send(Owner, new TEvChangelogStats(flushedBytes, flushLatency, lag));
 
             try {
@@ -981,6 +999,7 @@ public:
             }
 
             if (NeedNewBackup()) {
+                LOG_N("Requesting new backup, changelog " << WrittenBytes << " bytes >= snapshot " << *SnapshotWrittenBytes << " bytes");
                 Send(Owner, new TEvStartNewBackup());
             }
         }
@@ -988,6 +1007,7 @@ public:
     }
 
     void FlushAndDie() {
+        LOG_N("Final flush and shutdown");
         Dying = true;
         Flush();
         PassAway();
@@ -995,6 +1015,7 @@ public:
 
     void ReplyAndDie(const TString& error) {
         if (!Dying) {
+            LOG_E("Changelog failed: " << error);
             Send(Owner, new TEvChangelogFailed(error));
             PassAway();
         }
@@ -1023,6 +1044,10 @@ private:
 
     TScheme Schema;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
+
+    ui64 TabletId;
+    ui32 Generation;
+    ui32 Step;
 
     TBuffer Buffer;
     ui64 ExpectedFlushCookie = 0;
@@ -1062,7 +1087,7 @@ IActor* CreateChangelogWriter(TActorId owner, const NKikimrConfig::TSystemTablet
     if (config.HasFilesystem()) {
         auto path = TFsPath(config.GetFilesystem().GetPath())
             .Child(CreateBackupPath(tabletType, tabletId, generation, step));
-        return new TChangelogWriter(owner, path, schema, exclusion);
+        return new TChangelogWriter(owner, path, schema, exclusion, tabletId, generation, step);
     } else {
         return nullptr;
     }

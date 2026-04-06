@@ -131,7 +131,14 @@ class OrchestratorNemesisSchedule:
             return self._executions_history[-n:][::-1]
 
     def shutdown_disable_all(self) -> None:
-        """App teardown: threads observe enabled=False on next loop iteration."""
+        """App teardown: flush extract commands to agents, then disable all tasks."""
+        with self._lock:
+            to_flush = [pt for pt, info in self._tasks.items() if info.get("enabled")]
+        for process_type in to_flush:
+            try:
+                self.flush_disable_extracts(process_type)
+            except Exception as e:
+                logger.error("Failed to flush extracts for %s on shutdown: %s", process_type, e)
         with self._lock:
             for info in self._tasks.values():
                 info["enabled"] = False

@@ -84,7 +84,6 @@ class NemesisManager:
 
                 try:
                     if action == 'inject':
-                        runner.start_inject_fault()
                         _invoke_inject(runner, payload)
                     elif action == 'extract':
                         _invoke_extract(runner, payload)

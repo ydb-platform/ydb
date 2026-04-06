@@ -392,8 +392,14 @@ class ClusterBridgePileIptablesBlockPortsNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None):
         del payload
-        # Ports are automatically restored via the background sleep command
-        self._logger.info("Skipping manual port restoration — automatic recovery is scheduled")
+        self._logger.info("Flushing YDB_FW iptables chain to restore ports immediately")
+        try:
+            subprocess.run(
+                "sudo /sbin/ip6tables -w -F YDB_FW",
+                shell=True, check=True,
+            )
+        except Exception as e:
+            self._logger.error("Failed to flush YDB_FW chain: %s", e)
         self.on_success_extract_fault()
 
 
@@ -474,6 +480,28 @@ class ClusterBridgePileRouteUnreachableNemesis(MonitoredAgentActor):
 
     def extract_fault(self, payload=None):
         del payload
-        # Routes are automatically restored via the background sleep commands
-        self._logger.info("Skipping manual route restoration — automatic recovery is scheduled")
+        self._logger.info("Removing unreachable routes to restore connectivity immediately")
+        cluster = require_external_cluster()
+        fqdn, hostname = _resolve_local_host()
+
+        local_pile_id = None
+        for node in cluster.nodes.values():
+            if _is_local_host(node.host, fqdn, hostname) and node.bridge_pile_id is not None:
+                local_pile_id = node.bridge_pile_id
+                break
+
+        if local_pile_id is not None:
+            pile_to_nodes, _, _ = _build_bridge_topology(cluster)
+            for pid, nodes in pile_to_nodes.items():
+                if pid != local_pile_id:
+                    for node in nodes:
+                        ip = _resolve_hostname_to_ipv6(node.host)
+                        if ip:
+                            try:
+                                subprocess.run(
+                                    f"sudo /usr/bin/ip -6 ro del unreach {ip}",
+                                    shell=True, check=True,
+                                )
+                            except Exception as e:
+                                self._logger.warning("Failed to remove unreach route for %s: %s", ip, e)
         self.on_success_extract_fault()

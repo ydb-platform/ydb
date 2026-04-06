@@ -317,9 +317,9 @@ def start_warden_checks_on_all_hosts():
 
     # Use ThreadPoolExecutor to run tasks in parallel (since start_warden_checks_helper is now sync)
     with ThreadPoolExecutor() as executor:
-        task_results = list(executor.map(start_safety_on_host, hosts))
+        executor.map(start_safety_on_host, hosts)
 
-    logger.info(f"Agent safety checks initiated")
+    logger.info("Agent safety checks initiated")
 
     # Start orchestrator checks (liveness + orchestrator safety)
     logger.info("Starting orchestrator warden checks (liveness + PDisk + aggregated)")

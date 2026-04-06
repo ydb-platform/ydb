@@ -62,8 +62,6 @@ def start_warden_checks_helper():
 def get_warden_result_helper():
     """Helper function to get warden result (can be called directly)"""
     result = warden_checker.get_last_result()
-    status = result.get("status", "unknown")
-    safety_count = len(result.get("safety_checks", []))
     logger.debug("Agent warden result requested: status={status}, safety_checks={safety_count}")
     return result
 

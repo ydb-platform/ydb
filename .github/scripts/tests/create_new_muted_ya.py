@@ -39,6 +39,11 @@ MUTE_DAYS = 4
 UNMUTE_DAYS = 7
 DELETE_DAYS = 7
 
+_DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
+    os.path.join(dir, '..', '..', 'config', 'telegram_notification_config.json')
+)
+
+
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
     if 'is_test_chunk' in test:
@@ -855,11 +860,6 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main'):
     return queue_items
 
 
-_DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'config', 'telegram_notification_config.json')
-)
-
-
 def load_configured_digest_profile_ids():
     """Profile IDs listed in telegram_notification_config.json (branch-build_type).
 
@@ -895,26 +895,6 @@ def load_configured_digest_profile_ids():
     return ids
 
 
-_DIGEST_QUEUE_SCHEMA = """\
-CREATE TABLE IF NOT EXISTS `{table_path}` (
-    `profile_id`          Utf8      NOT NULL,
-    `github_issue_number` Uint64    NOT NULL,
-    `github_issue_url`    Utf8,
-    `github_issue_title`  Utf8,
-    `owner_team`          Utf8,
-    `branch`              Utf8,
-    `build_type`          Utf8,
-    `enqueued_at`         Timestamp NOT NULL,
-    `sent_at`             Timestamp,
-    PRIMARY KEY (profile_id, github_issue_number)
-)
-WITH (
-    STORE = COLUMN,
-    TTL = Interval("P90D") ON enqueued_at
-)
-"""
-
-
 def enqueue_to_digest_queue(ydb_wrapper, queue_items):
     """Write newly created issues into digest_queue so send_digest.py can find them."""
     if not queue_items:
@@ -946,9 +926,27 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
         logging.warning("digest_queue not found in YDB config — skipping enqueue")
         return
 
+    create_table_sql = """\
+CREATE TABLE IF NOT EXISTS `{table_path}` (
+    `profile_id`          Utf8      NOT NULL,
+    `github_issue_number` Uint64    NOT NULL,
+    `github_issue_url`    Utf8,
+    `github_issue_title`  Utf8,
+    `owner_team`          Utf8,
+    `branch`              Utf8,
+    `build_type`          Utf8,
+    `enqueued_at`         Timestamp NOT NULL,
+    `sent_at`             Timestamp,
+    PRIMARY KEY (profile_id, github_issue_number)
+)
+WITH (
+    STORE = COLUMN,
+    TTL = Interval("P90D") ON enqueued_at
+)
+"""
     ydb_wrapper.create_table(
         table_path,
-        _DIGEST_QUEUE_SCHEMA.format(table_path=table_path),
+        create_table_sql.format(table_path=table_path),
     )
 
     now_dt = datetime.datetime.now(tz=datetime.timezone.utc)

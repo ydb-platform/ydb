@@ -49,11 +49,6 @@ private:
     TExecutorPool ExecutorPool{32};
     std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-
-    TString DiskId;
-    ui32 BlockSize;
-    ui64 BlockCount;
-
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;

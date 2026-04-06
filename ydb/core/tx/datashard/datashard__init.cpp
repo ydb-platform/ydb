@@ -1,6 +1,7 @@
 #include "datashard_txs.h"
 #include "datashard_locks_db.h"
 #include "memory_state_migration.h"
+#include "build_index/common_helper.h"
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tx_processing.h>
@@ -65,6 +66,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->S3Downloads.Reset();
         Self->CdcStreamScanManager.Reset();
         Self->CdcStreamHeartbeatManager.Reset();
+        Self->BuildIndexScanManager.Reset();
 
         Self->KillChangeSender(ctx);
         Self->ChangesQueue.clear();
@@ -189,6 +191,21 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     Self->SwitchToWork(ctx);
     Self->SendRegistrationRequestTimeCast(ctx);
 
+    // Notify SchemeShard about any index build scans that were in progress before reboot.
+    // SchemeShard will move these shards back to ToUpload and retry.
+    for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
+        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+        TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
+        FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+            "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+            << ", buildId# " << buildId
+            << ", tabletId# " << Self->TabletID()
+            << ", sender# " << scanInfo.Sender);
+        ctx.Send(scanInfo.Sender, std::move(response));
+    }
+
     // InReadSets table might have a lot of garbage due to old bug.
     // Run transaction to collect if shard is not going offline.
     if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline)
@@ -293,6 +310,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
         PRECHARGE_SYS_TABLE(Schema::MultiTxIds);
         PRECHARGE_SYS_TABLE(Schema::MultiTxIdGraph);
+        PRECHARGE_SYS_TABLE(Schema::IndexBuildScans);
 
         if (!ready)
             return false;
@@ -660,6 +678,11 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
     if (Self->State != TShardState::Offline) {
         if (!Self->MultiTxIdManager.Load(db)) {
+            return false;
+        }
+    }
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::IndexBuildScans::TableId)) {
+        if (!Self->BuildIndexScanManager.Load(db)) {
             return false;
         }
     }

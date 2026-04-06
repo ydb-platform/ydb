@@ -3,6 +3,7 @@
 #include "datashard.h"
 #include "cdc_stream_heartbeat.h"
 #include "cdc_stream_scan.h"
+#include "build_index/build_index_scan_manager.h"
 #include "change_exchange.h"
 #include "change_record.h"
 #include "change_record_cdc_serializer.h"
@@ -242,6 +243,7 @@ class TDataShard
 
     class TTxHandleSafeKqpScan;
     class TTxHandleSafeBuildIndexScan;
+    class TTxHandleBuildIndexScanProgress;
     class TTxHandleSafeValidateUniqueIndexScan;
     class TTxHandleSafeSampleKScan;
     class TTxHandleSafeLocalKMeansScan;
@@ -293,6 +295,7 @@ class TDataShard
     friend class TConflictsCache;
     friend class TCdcStreamScanManager;
     friend class TCdcStreamHeartbeatManager;
+    friend class TBuildIndexScanManager;
     friend class TReplicationSourceOffsetsClient;
     friend class TReplicationSourceOffsetsServer;
     friend class TMultiTxIdManager;
@@ -1128,6 +1131,16 @@ class TDataShard
             using TKey = TableKey<EdgeId>;
             using TColumns = TableColumns<EdgeId, MultiTxId, NestedTxId, NestedLockMode>;
         };
+        struct IndexBuildScans : Table<39> {
+            struct BuildId : Column<1, NScheme::NTypeIds::Uint64> {};
+            struct SeqNoGeneration : Column<2, NScheme::NTypeIds::Uint64> {};
+            struct SeqNoRound : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct SenderActorId : Column<4, NScheme::NTypeIds::String> {};
+            struct RequestProto : Column<5, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<BuildId, SeqNoGeneration, SeqNoRound>;
+            using TColumns = TableColumns<BuildId, SeqNoGeneration, SeqNoRound, SenderActorId, RequestProto>;
+        };
 
         using TTables = SchemaTables<Sys, UserTables, TxMain, TxDetails, InReadSets, OutReadSets, PlanQueue,
             DeadlineQueue, SchemaOperations, SplitSrcSnapshots, SplitDstReceivedSnapshots, TxArtifacts, ScanProgress,
@@ -1137,7 +1150,7 @@ class TDataShard
             UserTablesStats, SchemaSnapshots, Locks, LockRanges, LockConflicts,
             LockChangeRecords, LockChangeRecordDetails, ChangeRecordCommits,
             TxVolatileDetails, TxVolatileParticipants, CdcStreamScans,
-            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph>;
+            LockVolatileDependencies, CdcStreamHeartbeats, MultiTxIds, MultiTxIdGraph, IndexBuildScans>;
 
         // These settings are persisted on each Init. So we use empty settings in order not to overwrite what
         // was changed by the user
@@ -1373,6 +1386,7 @@ class TDataShard
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TActorContext& ctx);
@@ -2103,6 +2117,9 @@ public:
     TCdcStreamScanManager& GetCdcStreamScanManager() { return CdcStreamScanManager; }
     const TCdcStreamScanManager& GetCdcStreamScanManager() const { return CdcStreamScanManager; }
 
+    TBuildIndexScanManager& GetBuildIndexScanManager() { return BuildIndexScanManager; }
+    const TBuildIndexScanManager& GetBuildIndexScanManager() const { return BuildIndexScanManager; }
+
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
     void EmitHeartbeats();
@@ -2818,6 +2835,7 @@ private:
     TCdcStreamScanManager CdcStreamScanManager;
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
     TMultiTxIdManager MultiTxIdManager;
+    TBuildIndexScanManager BuildIndexScanManager;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3364,6 +3382,7 @@ protected:
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+            HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
             HFuncTraced(TEvDataShard::TEvValidateUniqueIndexRequest, Handle);
             HFunc(TEvDataShard::TEvSampleKRequest, Handle);
             HFunc(TEvDataShard::TEvReshuffleKMeansRequest, Handle);

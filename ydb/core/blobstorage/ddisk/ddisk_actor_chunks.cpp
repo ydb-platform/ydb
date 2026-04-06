@@ -59,6 +59,8 @@ namespace NKikimr::NDDisk {
                     const auto vChunkIndex = data.VChunkIndex;
                     Y_ABORT_UNLESS(ChunkRefs.contains(tabletId) && ChunkRefs[tabletId].contains(vChunkIndex));
 
+                    ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
+
                     IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, chunkIdx, CreateChunkMapIncrement(
                             tabletId, vChunkIndex, chunkIdx), nullptr, [this, tabletId, vChunkIndex, chunkIdx] {
                         TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
@@ -77,8 +79,6 @@ namespace NKikimr::NDDisk {
                         IssuePDiskLogRecord(TLogSignature::SignatureDDiskChunkMap, 0, CreateChunkMapSnapshot(),
                             &ChunkMapSnapshotLsn, {});
                     }
-
-                    ChunkMapIncrementsInFlight.emplace(tabletId, vChunkIndex, chunkIdx);
                 },
                 [this, chunkIdx](const TChunkForPersistentBuffer&) {
                     Y_DEBUG_ABORT_UNLESS(std::find(PersistentBufferChunks.begin(),

@@ -43,12 +43,18 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 processLambda = Read->OlapFilterLambda;
             }
 
+            TKqpReadTableSettings settings;
+            if (Read->Limit) {
+                settings.SequentialInFlight = 1;
+                settings.SetItemsLimit(Read->Limit);
+            }
+
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
                 .Ranges<TCoVoid>().Build()
                 .Columns().Add(columns).Build()
-                .Settings<TCoNameValueTupleList>().Build()
+                .Settings(settings.BuildNode(Ctx, Pos))
                 .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Process(processLambda)
             .Done().Ptr();
@@ -80,6 +86,8 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
         default:
             Y_ENSURE(false, "Unsupported table source type");
     }
+
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);
 
     return source;
 }

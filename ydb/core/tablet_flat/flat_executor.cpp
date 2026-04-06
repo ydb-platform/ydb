@@ -4380,7 +4380,8 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
-        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
+        hFunc(NBackup::TEvStartNewBackup, Handle);
+        hFunc(NBackup::TEvWriteChangelogAck, Handle);
     default:
         break;
     }
@@ -5172,6 +5173,11 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
+    Y_ENSURE(!BackupSnapshotInProgress);
+
+    // Stop the old backup changelog
+    CommitManager->BackupLogic.Stop();
+
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
@@ -5187,21 +5193,69 @@ void TExecutor::StartNewBackup() {
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
             QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+        BackupSnapshotInProgress = true;
+
+        auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        CommitManager->BackupLogic.Start(this, SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
     }
 }
 
-void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
-    Owner->BackupSnapshotComplete(OwnerCtx());
+void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
 
-    if (CommitManager) {
-        Forward(ev, CommitManager->GetBackupWriter());
+    CommitManager->BackupLogic.OnProcessedBytes(ev->Get()->ProcessedBytes);
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    BackupSnapshotInProgress = false;
+    if (ev->Get()->Success) {
+        Owner->BackupSnapshotComplete(OwnerCtx());
+
+        if (CommitManager->BackupLogic.IsRunning()) {
+            CommitManager->BackupLogic.OnSnapshotCompleted(ev);
+        } else {
+            ScheduleRetryBackup();
+        }
+    } else {
+        FailBackup("Backup snapshot failed: " + ev->Get()->Error);
     }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
-    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    FailBackup("Backup changelog failed: " + ev->Get()->Error);
+}
+
+void TExecutor::FailBackup(const TString& error) {
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+
+    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_RESTART) {
+        Y_TABLET_ERROR(error);
+    }
+
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, error);
+    CommitManager->BackupLogic.Stop();
+    ScheduleRetryBackup();
+}
+
+void TExecutor::ScheduleRetryBackup() const {
+    if (!BackupSnapshotInProgress) {
+        auto retryTimeout = TDuration::Seconds(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
+    if (ev->Sender != SelfId() && ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    StartNewBackup();
 }
 
 }

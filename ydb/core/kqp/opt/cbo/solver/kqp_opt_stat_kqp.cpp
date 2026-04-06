@@ -1,4 +1,5 @@
 #include "kqp_opt_stat.h"
+#include "kqp_opt_stat_kqp.h"
 
 #include <yql/essentials/utils/log/log.h>
 

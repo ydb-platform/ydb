@@ -187,7 +187,7 @@ TPartitionResult PartitionInputTablesIntoTasksOrdered(
     if (!status) {
         return TPartitionResult{.Error = TFmrError{
             .Component = EFmrComponent::Coordinator,
-            .Reason = EFmrErrorReason::RestartQuery,
+            .Reason = EFmrErrorReason::FallbackOperation,
             .ErrorMessage = "Failed to partition input tables into tasks (ordered): max parts exceeded"
         }};
     }

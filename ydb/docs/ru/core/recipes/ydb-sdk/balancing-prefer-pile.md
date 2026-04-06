@@ -8,6 +8,10 @@
 
 {% list tabs %}
 
+- Go
+
+  Функциональность на данный момент не поддерживается.
+
 - С++
 
   ```cpp
@@ -29,6 +33,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 

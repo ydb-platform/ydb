@@ -7,7 +7,39 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 using namespace NActors;
 using namespace NKikimr;
 
+namespace {
+
+template <typename TEvent, typename TMap>
+void RejectAllPending(TMap& map)
+{
+    for (auto& request: map) {
+        request.second->Promise.SetValue(
+            TEvent(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+                "TICStorageTransportActor is destroyed")
+                .Record);
+    }
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransportActor::~TICStorageTransportActor()
+{
+    RejectAllPending<NDDisk::TEvConnectResult>(ConnectRequests);
+    RejectAllPending<NDDisk::TEvReadPersistentBufferResult>(
+        ReadFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvReadResult>(ReadFromDDiskRequests);
+    RejectAllPending<NDDisk::TEvWritePersistentBufferResult>(
+        WriteToPBufferRequests);
+    RejectAllPending<NDDisk::TEvSyncWithPersistentBufferResult>(
+        FlushFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
+        EraseFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
+        ListPBufferEntriesRequests);
+}
 
 void TICStorageTransportActor::Bootstrap(const TActorContext& ctx)
 {

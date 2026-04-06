@@ -106,9 +106,12 @@ TWriteMessage Msg(const TString& data, ui64 seqNo) {
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
+TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority, bool enableTopicPartitionSplitBasedOnKllSketch) {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicAutopartitioningForReplication(true);
+    if (enableTopicPartitionSplitBasedOnKllSketch) {
+        ff.SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
 
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);

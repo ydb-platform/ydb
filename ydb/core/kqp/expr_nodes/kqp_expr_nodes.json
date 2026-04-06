@@ -825,7 +825,8 @@
             "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
             "Children": [
                 {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"}
             ]
         },
         {

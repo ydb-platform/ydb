@@ -135,7 +135,7 @@ Element TImportTui::BuildUpperPart() {
                 })
             );
         }
-        for (size_t i = DataToDisplay.ImportState.CompactionStates.size(); i < /*INDEX_COUNT + */TPCC_TABLES.size(); ++i) {
+        for (size_t i = DataToDisplay.ImportState.CompactionStates.size(); i < INDEX_COUNT + TPCC_TABLES.size(); ++i) {
             std::stringstream indexSs;
             indexSs << std::fixed << std::setprecision(1) << 0.f << "%";
             TString tableName = i < TPCC_TABLES.size() ? TPCC_TABLES[i] : ("index " + ToString(i - TPCC_TABLES.size()));

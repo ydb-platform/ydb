@@ -4,86 +4,92 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithBalancer(
-        balancers.PreferLocations(
-          balancers.RandomChoice(),
-          "a",
-          "b",
-        ),
-      ),
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
     )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    // ...
-  }
-  ```
 
-- Go (database/sql)
-
-  Клиентская балансировка в `database/sql` драйвере для {{ ydb-short-name }} осуществляется только в момент установления нового соединения (в терминах `database/sql`), которое представляет собой сессию {{ ydb-short-name }} на конкретной ноде. После того, как сессия создана, все запросы на этой сессии направляются на ту ноду, на которой была создана сессия. Балансировка запросов на одной и той же сессии {{ ydb-short-name }} между разными нодами {{ ydb-short-name }} не происходит.
-
-  Пример кода установки алгоритма балансировки "предпочитать зону доступности":
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "database/sql"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithBalancer(
-        balancers.PreferLocations(
-          balancers.RandomChoice(),
-          "a",
-          "b",
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithBalancer(
+          balancers.PreferLocations(
+            balancers.RandomChoice(),
+            "a",
+            "b",
+          ),
         ),
-      ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // ...
+    }
+    ```
+
+  - database/sql
+
+    Клиентская балансировка в `database/sql` драйвере для {{ ydb-short-name }} осуществляется только в момент установления нового соединения (в терминах `database/sql`), которое представляет собой сессию {{ ydb-short-name }} на конкретной ноде. После того, как сессия создана, все запросы на этой сессии направляются на ту ноду, на которой была создана сессия. Балансировка запросов на одной и той же сессии {{ ydb-short-name }} между разными нодами {{ ydb-short-name }} не происходит.
+
+    Пример кода установки алгоритма балансировки "предпочитать зону доступности":
+
+    ```go
+    package main
+
+    import (
+      "context"
+      "database/sql"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/balancers"
     )
-    if err != nil {
-      panic(err)
-    }
-    defer nativeDriver.Close(ctx)
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithBalancer(
+          balancers.PreferLocations(
+            balancers.RandomChoice(),
+            "a",
+            "b",
+          ),
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    // ...
-  }
-  ```
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      // ...
+    }
+    ```
+
+  {% endlist %}
 
 - С++
 
@@ -108,6 +114,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 

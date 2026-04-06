@@ -3777,8 +3777,8 @@ TExprNode::TPtr OptimizeDistinctFrom(const TExprNode::TPtr& node, TExprContext& 
         return ctx.RenameNode(*node, Not ? "==" : "!=");
     }
 
-    if (leftType->GetKind() == ETypeAnnotationKind::Null && rightType->GetKind() != ETypeAnnotationKind::Optional ||
-        rightType->GetKind() == ETypeAnnotationKind::Null && leftType->GetKind() != ETypeAnnotationKind::Optional) {
+    if (leftType->GetKind() == ETypeAnnotationKind::Null && !rightType->IsOptionalOrNull() ||
+        rightType->GetKind() == ETypeAnnotationKind::Null && !leftType->IsOptionalOrNull()) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with Null and non-Optional args";
         return MakeBool<!Not>(node->Pos(), ctx);
     }

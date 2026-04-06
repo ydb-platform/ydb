@@ -6,71 +6,77 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  Анонимная аутентификация является аутентификацией по умолчанию.
-  Явным образом анонимную аутентификацию можно включить так:
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
+    Анонимная аутентификация является аутентификацией по умолчанию.
+    Явным образом анонимную аутентификацию можно включить так:
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAnonymousCredentials(),
+    import (
+      "context"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAnonymousCredentials(),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  Анонимная аутентификация является аутентификацией по умолчанию.
-  Явным образом анонимную аутентификацию можно включить так:
+    Анонимная аутентификация является аутентификацией по умолчанию.
+    Явным образом анонимную аутентификацию можно включить так:
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAnonymousCredentials(),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAnonymousCredentials(),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -107,7 +113,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   {% include [auth-anonymous](../../_includes/nodejs/auth-anonymous.md) %}
 

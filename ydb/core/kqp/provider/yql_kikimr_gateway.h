@@ -320,8 +320,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
-                return true;
             case EType::GlobalJson:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
                 return false;
@@ -1252,6 +1252,7 @@ struct TBackupSettings {
 struct TSecretSettings {
     TString Name;
     TString Value;
+    TString ValueParamName; // when set, the value is taken from parameter at execution
     bool InheritPermissions = false;
 };
 

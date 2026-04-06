@@ -6,6 +6,10 @@
 
 {% list tabs group=lang %}
 
+- Go
+
+  Функциональность на данный момент не поддерживается.
+
 - C++
 
   Пример кода приложения для создания клиента:
@@ -33,6 +37,15 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+- JavaScript
+
+  Функциональность на данный момент не поддерживается. Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
 
 {% endlist %}
 
@@ -66,6 +79,10 @@
 
 {% list tabs group=lang %}
 
+- Go
+
+  Функциональность на данный момент не поддерживается.
+
 - C++
 
   ```c++
@@ -87,6 +104,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 

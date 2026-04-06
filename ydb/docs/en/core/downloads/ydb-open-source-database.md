@@ -8,6 +8,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Download | Changelog ||
+|| **v25.3** | > | > | > ||
+|| v.25.3.1.25 | 03.04.26 | [Binary file](https://binaries.ydb.tech/release/25.3.1.25/ydbd-25.3.1.25-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-3-1) ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.24 | 28.01.26 | [Binary file](https://binaries.ydb.tech/release/25.2.1.24/ydbd-25.2.1.24-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10-rc | 21.09.25 | [Binary file](https://binaries.ydb.tech/release/25.2.1.10-rc/ydbd-25.2.1.10-rc-linux-amd64.tar.gz) | [See list](../changelog-server.md#25-2-1-10-rc) ||
@@ -38,6 +40,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Docker `registry/image:tag` | Changelog ||
+|| **v25.3** | > | > | > ||
+|| v.25.3.1.25 | 03.04.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.3.1.25` | [See list](../changelog-server.md#25-3-1-25) ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.24  | 28.01.26  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.24` | [See list](../changelog-server.md#25-2-1-24) ||
 || v.25.2.1.10  | 21.09.25  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.10-rc` | [See list](../changelog-server.md#25-2-1-10-rc) ||
@@ -68,6 +72,8 @@ See also [{#T}](yandex-enterprise-database.md).
 
 #|
 || Version |  Release date | Link | Changelog ||
+|| **v25.3** | > | > | > ||
+|| v.25.3.1.25 | 03.04.26 | [https://github.com/ydb-platform/ydb/tree/25.3.1.25](https://github.com/ydb-platform/ydb/tree/25.3.1.25) | [See list](../changelog-server.md#25-3-1-25) ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.23  | 12.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.23](https://github.com/ydb-platform/ydb/tree/25.2.1.23) | [See list](../changelog-server.md#25-2-1-23) ||
 || v.25.2.1.10-rc  | 21.09.25 | [https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc](https://github.com/ydb-platform/ydb/tree/25.2.1.10-rc) | [See list](../changelog-server.md#25-2-1-10-rc) ||

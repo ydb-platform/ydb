@@ -12,6 +12,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -27,6 +28,7 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 
     ~TVChunk();
@@ -84,9 +86,12 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
     const TVChunkConfig VChunkConfig;
     const size_t BlocksCount;
     const ui32 SyncRequestsBatchSize;
+    const TDuration WriteHandoffDelay;
     const TDuration TraceSamplePeriod;
 
     TBlocksDirtyMap BlocksDirtyMap;

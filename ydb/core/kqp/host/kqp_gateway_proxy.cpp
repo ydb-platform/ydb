@@ -1,14 +1,17 @@
 #include "kqp_host_impl.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -362,6 +365,11 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             error = "Column Compression is not supported in row tables";
             return false;
         }
+
+        if (columnIt->second.Encoding) {
+            error = "Column Encoding is not supported in row tables";
+            return false;
+        }
     }
 
     for (const TString& keyColumn : metadata->KeyColumnNames) {
@@ -453,6 +461,39 @@ bool FillSerializer(
     return true;
 }
 
+bool FillAccessor(
+    const TMaybe<TColumnEncodingsList>& from, const std::string& name,
+    NKikimrSchemeOp::TOlapColumnDescription& to,
+    TString& error, Ydb::StatusIds::StatusCode& code) {
+
+    if (!from) {
+        return true;
+    }
+
+    if (from->size() != 1) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = TStringBuilder() << "Column `" << name << "`: several encodings are not yet supported";
+        return false;
+    }
+
+    const auto& encodingType = (*from)[0].Type;
+    switch (encodingType) {
+        case TColumnEncoding::EEncodingType::UNDEFINED:
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::UndefinedAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::DICTIONARY:
+            to.MutableDataAccessorConstructor()->MutableDictionary();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::DictionaryAccessorName);
+            break;
+        case TColumnEncoding::EEncodingType::PLAIN:
+            to.MutableDataAccessorConstructor()->MutablePlain();
+            to.MutableDataAccessorConstructor()->SetClassName(NArrow::NAccessor::TGlobalConst::PlainDataAccessorName);
+            break;
+    }
+
+    return true;
+}
+
 template <typename T>
 bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
@@ -492,6 +533,10 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (!FillSerializer(columnIt->second.Compression, name, columnDesc, error, code)) {
+            return false;
+        }
+
+        if (!FillAccessor(columnIt->second.Encoding, name, columnDesc, error, code)) {
             return false;
         }
     }
@@ -3299,6 +3344,30 @@ public:
                     result.SetSuccess();
                     return MakeFuture(result);
                 } else {
+                    // DropSecret is instantiated with NKikimrSchemeOp::TDrop
+                    if constexpr (std::is_same_v<TSecretSchemaOp, NKikimrSchemeOp::TSecretSchemaOp>) {
+                        if (op.HasValueParamName()) {
+                            const TString& paramName = op.GetValueParamName();
+                            Y_ENSURE(GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret ||
+                                GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSecret);
+                            const TString operationDesc = (GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret)
+                                ? "CREATE SECRET" : "ALTER SECRET";
+                            auto queryData = SessionCtx_->Query().QueryData;
+                            if (!queryData) {
+                                return MakeFuture(ResultFromError<TGenericResult>(TStringBuilder()
+                                    << "Parameter " << paramName << " is required for " << operationDesc
+                                    << " but query has no parameters"));
+                            }
+                            TString resolvedValue;
+                            TString resolveError;
+                            if (!queryData->TryGetParameterAsString(paramName, resolvedValue, resolveError)) {
+                                return MakeFuture(ResultFromError<TGenericResult>(
+                                    TStringBuilder() << resolveError << " for " << operationDesc));
+                            }
+                            op.SetValue(resolvedValue);
+                            op.ClearValueParamName();
+                        }
+                    }
                     return Gateway_->ModifyScheme(std::move(tx));
                 }
             } catch (yexception& e) {
@@ -3339,7 +3408,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (!settings.ValueParamName.empty()) {
+                op.SetValueParamName(settings.ValueParamName);
+            } else {
+                op.SetValue(settings.Value);
+            }
             op.SetInheritPermissions(settings.InheritPermissions);
         }
 
@@ -3370,7 +3443,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (!settings.ValueParamName.empty()) {
+                op.SetValueParamName(settings.ValueParamName);
+            } else {
+                op.SetValue(settings.Value);
+            }
         }
 
     private:

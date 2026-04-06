@@ -95,6 +95,24 @@ struct TEraseHint
     [[nodiscard]] TString DebugPrint() const;
 };
 
+class TEraseHints
+{
+public:
+    using THints = TMap<ELocation, TEraseHint>;
+
+    void AddHint(ELocation location, ui64 lsn, TBlockRange64 range);
+
+    [[nodiscard]] bool Empty() const;
+
+    [[nodiscard]] const THints& GetAllHints() const;
+    [[nodiscard]] THints TakeAllHints();
+
+    [[nodiscard]] TString DebugPrint() const;
+
+private:
+    THints Hints;
+};
+
 struct IReadyQueue
 {
     enum class EQueueType
@@ -210,11 +228,13 @@ class TBlocksDirtyMap
     , public TDisableCopyMove
 {
 public:
+    void UpdateConfig(TLocationMask desired, TLocationMask disabled);
+
     void RestorePBuffer(ui64 lsn, TBlockRange64 range, ELocation location);
 
     [[nodiscard]] TReadHint MakeReadHint(TBlockRange64 range);
     [[nodiscard]] TFlushHints MakeFlushHint(size_t batchSize);
-    [[nodiscard]] TMap<ELocation, TEraseHint> MakeEraseHint(size_t batchSize);
+    [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
 
     void WriteFinished(
         ui64 lsn,
@@ -251,6 +271,11 @@ private:
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, TEmpty>;
 
+    TLocationMask DesiredPBuffers = TLocationMask::MakePrimaryPBuffers();
+    TLocationMask DesiredDDisks = TLocationMask::MakePrimaryDDisks();
+    TLocationMask DisabledLocations;
+
+    // Inflight write requests.
     TInflightMap Inflight;
 
     // Ranges that need to be copied to other PBuffers in order to reach a

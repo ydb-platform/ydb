@@ -2216,7 +2216,7 @@ message TColumnarStatistics
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 
-    optional int64 read_size_estimation = 15;
+    optional int64 read_size_estimate = 15;
 }
 
 message TRspGetColumnarStatistics
@@ -2280,7 +2280,8 @@ message TReqPartitionTables
     optional TFetcherConfig fetcher_config = 3;
     optional TChunkSliceFetcherConfig chunk_slice_fetcher_config = 4;
     required EPartitionTablesMode partition_mode = 5;
-    required int64 data_weight_per_partition = 6;
+    optional int64 data_weight_per_partition = 6;
+    optional int64 compressed_data_size_per_partition = 14;
     optional int32 max_partition_count = 7;
     optional bool enable_key_guarantee = 8;
     optional bool adjust_data_weight_per_partition = 9;

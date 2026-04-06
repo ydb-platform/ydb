@@ -61,8 +61,15 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .IsCommonSensePath()
                 .IsTheSameDomain(subdomainPath);
+
+            if (!checks) {
+                if (tablePath.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath();
+                } else {
+                    checks.IsCommonSensePath();
+                }
+            }
 
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());

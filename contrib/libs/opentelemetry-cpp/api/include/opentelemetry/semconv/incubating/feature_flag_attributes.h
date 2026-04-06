@@ -25,11 +25,17 @@ namespace feature_flag
 static constexpr const char *kFeatureFlagContextId = "feature_flag.context.id";
 
 /**
-  Deprecated, use @code error.message @endcode instead.
+  A message providing more detail about an error that occurred during feature flag evaluation in
+  human-readable form.
+ */
+static constexpr const char *kFeatureFlagErrorMessage = "feature_flag.error.message";
+
+/**
+  Deprecated, use @code feature_flag.error.message @endcode instead.
 
   @deprecated
-  {"note": "Replaced by @code error.message @endcode.", "reason": "renamed", "renamed_to":
-  "error.message"}
+  {"note": "Replaced by @code feature_flag.error.message @endcode.", "reason": "renamed",
+  "renamed_to": "feature_flag.error.message"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kFeatureFlagEvaluationErrorMessage =
     "feature_flag.evaluation.error.message";

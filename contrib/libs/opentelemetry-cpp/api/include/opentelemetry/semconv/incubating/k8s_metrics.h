@@ -5590,6 +5590,128 @@ CreateAsyncDoubleMetricK8sResourcequotaStorageRequestUsed(metrics::Meter *meter)
 }
 
 /**
+  Number of endpoints for a service by condition and address type.
+  <p>
+  This metric is derived from the Kubernetes <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">EndpointSlice
+  API</a>. It reports the number of network endpoints backing a Service, broken down by their
+  condition and address type. <p> In dual-stack or multi-protocol clusters, separate counts are
+  reported for each address family (@code IPv4 @endcode, @code IPv6 @endcode, @code FQDN @endcode).
+  <p>
+  When the optional @code zone @endcode attribute is enabled, counts are further broken down by
+  availability zone for zone-aware monitoring. <p> An endpoint may be reported under multiple
+  conditions simultaneously (e.g., both @code serving @endcode and @code terminating @endcode during
+  a graceful shutdown). See <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/endpoint-slice-v1/">K8s
+  EndpointConditions</a> for more details. <p> The conditions represent: <ul> <li>@code ready
+  @endcode: Endpoints capable of receiving new connections.</li> <li>@code serving @endcode:
+  Endpoints currently handling traffic.</li> <li>@code terminating @endcode: Endpoints that are
+  being phased out but may still be handling existing connections.</li>
+  </ul>
+  <p>
+  For Services with @code publishNotReadyAddresses @endcode enabled (common for headless
+  StatefulSets), this metric will include endpoints that are published despite not being ready. The
+  @code k8s.service.publish_not_ready_addresses @endcode resource attribute indicates this setting.
+  <p>
+  gauge
+ */
+static constexpr const char *kMetricK8sServiceEndpointCount = "k8s.service.endpoint.count";
+static constexpr const char *descrMetricK8sServiceEndpointCount =
+    "Number of endpoints for a service by condition and address type.";
+static constexpr const char *unitMetricK8sServiceEndpointCount = "{endpoint}";
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+
+static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
+CreateSyncInt64MetricK8sServiceEndpointCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64Gauge(kMetricK8sServiceEndpointCount, descrMetricK8sServiceEndpointCount,
+                                 unitMetricK8sServiceEndpointCount);
+}
+
+static inline nostd::unique_ptr<metrics::Gauge<double>>
+CreateSyncDoubleMetricK8sServiceEndpointCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleGauge(kMetricK8sServiceEndpointCount,
+                                  descrMetricK8sServiceEndpointCount,
+                                  unitMetricK8sServiceEndpointCount);
+}
+#endif /* OPENTELEMETRY_ABI_VERSION_NO */
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sServiceEndpointCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableGauge(kMetricK8sServiceEndpointCount,
+                                           descrMetricK8sServiceEndpointCount,
+                                           unitMetricK8sServiceEndpointCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sServiceEndpointCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableGauge(kMetricK8sServiceEndpointCount,
+                                            descrMetricK8sServiceEndpointCount,
+                                            unitMetricK8sServiceEndpointCount);
+}
+
+/**
+  Number of load balancer ingress points (external IPs/hostnames) assigned to the service.
+  <p>
+  This metric reports the number of external ingress points (IP addresses or hostnames)
+  assigned to a LoadBalancer Service.
+  <p>
+  It is only emitted for Services of type @code LoadBalancer @endcode and reflects the assignments
+  made by the underlying infrastructure's load balancer controller in the
+  <a
+  href="https://kubernetes.io/docs/reference/kubernetes-api/service-resources/service-v1/#ServiceStatus">.status.loadBalancer.ingress</a>
+  field. <p> A value of @code 0 @endcode indicates that no ingress points have been assigned yet
+  (e.g., during provisioning). A value greater than @code 1 @endcode may occur when multiple IPs or
+  hostnames are assigned (e.g., dual-stack configurations). <p> This metric signals that external
+  endpoints have been assigned by the load balancer controller, but it does not guarantee that the
+  load balancer is healthy. <p> gauge
+ */
+static constexpr const char *kMetricK8sServiceLoadBalancerIngressCount =
+    "k8s.service.load_balancer.ingress.count";
+static constexpr const char *descrMetricK8sServiceLoadBalancerIngressCount =
+    "Number of load balancer ingress points (external IPs/hostnames) assigned to the service.";
+static constexpr const char *unitMetricK8sServiceLoadBalancerIngressCount = "{ingress}";
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+
+static inline nostd::unique_ptr<metrics::Gauge<int64_t>>
+CreateSyncInt64MetricK8sServiceLoadBalancerIngressCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64Gauge(kMetricK8sServiceLoadBalancerIngressCount,
+                                 descrMetricK8sServiceLoadBalancerIngressCount,
+                                 unitMetricK8sServiceLoadBalancerIngressCount);
+}
+
+static inline nostd::unique_ptr<metrics::Gauge<double>>
+CreateSyncDoubleMetricK8sServiceLoadBalancerIngressCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleGauge(kMetricK8sServiceLoadBalancerIngressCount,
+                                  descrMetricK8sServiceLoadBalancerIngressCount,
+                                  unitMetricK8sServiceLoadBalancerIngressCount);
+}
+#endif /* OPENTELEMETRY_ABI_VERSION_NO */
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sServiceLoadBalancerIngressCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableGauge(kMetricK8sServiceLoadBalancerIngressCount,
+                                           descrMetricK8sServiceLoadBalancerIngressCount,
+                                           unitMetricK8sServiceLoadBalancerIngressCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sServiceLoadBalancerIngressCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableGauge(kMetricK8sServiceLoadBalancerIngressCount,
+                                            descrMetricK8sServiceLoadBalancerIngressCount,
+                                            unitMetricK8sServiceLoadBalancerIngressCount);
+}
+
+/**
   Deprecated, use @code k8s.statefulset.pod.current @endcode instead.
 
   @deprecated

@@ -644,7 +644,7 @@ private:
                 return VarParser();
 
             default:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 

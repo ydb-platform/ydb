@@ -397,9 +397,10 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         check_messages_sent(cloud_q_name, 0)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
-    @pytest.mark.parametrize(**ANOTHER_TABLES_FORMAT_PARAMS)
-    def test_dlq_mechanics_in_cloud(self, is_fifo, tables_format, another_tables_format):
+    def test_dlq_mechanics_in_cloud(self, is_fifo):
+        tables_format = 1
+        another_tables_format = 1
+
         self._init_with_params(is_fifo, tables_format)
 
         self._sqs_api = self._create_api_for_user('ignored', raise_on_error=True, force_private=True, iam_token=self.iam_token, folder_id=self.folder_id)

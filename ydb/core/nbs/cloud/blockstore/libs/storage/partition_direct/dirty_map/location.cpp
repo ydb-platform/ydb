@@ -3,6 +3,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+#include <bit>
 #include <bitset>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -99,10 +100,69 @@ ELocation TranslatePBufferToDDisk(ELocation location)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TLocationMask::TIterator::TIterator(const TLocationMask& mask)
+    : Location(mask.FirstLocation())
+    , Mask(&mask)
+{}
+
+bool TLocationMask::TIterator::operator==(const TIterator& other) const
+{
+    return Location == other.Location;
+}
+
+bool TLocationMask::TIterator::operator!=(const TIterator& other) const
+{
+    return Location != other.Location;
+}
+
+TLocationMask::TIterator& TLocationMask::TIterator::operator++()
+{
+    const int currentBit = std::countr_zero(std::bit_cast<ui16>(Location));
+    const int lastLocationBit =
+        std::countr_zero(std::bit_cast<ui16>(ELocation::HODDisk1));
+
+    for (int i = currentBit + 1; i < 16; ++i) {
+        if (i > lastLocationBit) {
+            Location = ELocation::Unknown;
+            break;
+        }
+        const ui16 rawLocation = 1 << i;
+        Location = std::bit_cast<ELocation>(rawLocation);
+        if (Mask->Get(Location)) {
+            break;
+        }
+    }
+    return *this;
+}
+
+ELocation TLocationMask::TIterator::operator*() const
+{
+    return Location;
+}
+
+ELocation TLocationMask::TIterator::operator->() const
+{
+    return Location;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 // static
 TLocationMask TLocationMask::MakeEmpty()
 {
     return {};
+}
+
+//    static
+TLocationMask TLocationMask::Make(
+    bool primary0,
+    bool primary1,
+    bool primary2,
+    bool handOff0,
+    bool handOff1)
+{
+    return MakePBuffer(primary0, primary1, primary2, handOff0, handOff1)
+        .Include(MakeDDisk(primary0, primary1, primary2, handOff0, handOff1));
 }
 
 // static
@@ -138,7 +198,13 @@ TLocationMask TLocationMask::MakeDDisk(
 }
 
 // static
-TLocationMask TLocationMask::MakePrimaryDDisk()
+TLocationMask TLocationMask::MakePrimary()
+{
+    return TLocationMask(PrimaryDDisks | PrimaryPBuffers);
+}
+
+// static
+TLocationMask TLocationMask::MakePrimaryDDisks()
 {
     return TLocationMask(PrimaryDDisks);
 }
@@ -147,6 +213,43 @@ TLocationMask TLocationMask::MakePrimaryDDisk()
 TLocationMask TLocationMask::MakePrimaryPBuffers()
 {
     return TLocationMask(PrimaryPBuffers);
+}
+
+// static
+TLocationMask TLocationMask::MakeAllDDisks()
+{
+    return TLocationMask(AllDDisks);
+}
+
+// static
+TLocationMask TLocationMask::MakeAllPBuffers()
+{
+    return TLocationMask(AllPBuffers);
+}
+
+TLocationMask TLocationMask::Exclude(const TLocationMask& other) const
+{
+    return TLocationMask(Mask & ~other.Mask);
+}
+
+TLocationMask TLocationMask::Include(const TLocationMask& other) const
+{
+    return TLocationMask(Mask | other.Mask);
+}
+
+TLocationMask TLocationMask::LogicalAnd(const TLocationMask& other) const
+{
+    return TLocationMask(Mask & other.Mask);
+}
+
+TLocationMask TLocationMask::PBuffers() const
+{
+    return TLocationMask(Mask & AllPBuffers);
+}
+
+TLocationMask TLocationMask::DDisks() const
+{
+    return TLocationMask(Mask & AllDDisks);
 }
 
 bool TLocationMask::Get(ELocation location) const
@@ -196,13 +299,14 @@ bool TLocationMask::OnlyPBuffer() const
 
 std::optional<ELocation> TLocationMask::GetLocation(size_t tryNumber) const
 {
-    size_t skip = 0;
+    size_t locationIndex = 0;
     for (auto location: AllLocations) {
         if (Get(location)) {
-            if (skip == tryNumber) {
+            if (locationIndex == tryNumber) {
                 return location;
             }
-            ++skip;
+
+            locationIndex++;
         }
     }
     return std::nullopt;
@@ -211,6 +315,26 @@ std::optional<ELocation> TLocationMask::GetLocation(size_t tryNumber) const
 bool TLocationMask::operator==(const TLocationMask& other) const
 {
     return Mask == other.Mask;
+}
+
+ELocation TLocationMask::FirstLocation() const
+{
+    const ui32 firstSetBit = std::countr_zero(Mask);
+    const ui32 rawLocation = static_cast<ui16>(1) << firstSetBit;
+    if (rawLocation > std::bit_cast<ui16>(ELocation::HODDisk1)) {
+        return ELocation::Unknown;
+    }
+    return static_cast<ELocation>(rawLocation);
+}
+
+TLocationMask::TIterator TLocationMask::begin() const
+{
+    return TIterator(*this);
+}
+
+TLocationMask::TIterator TLocationMask::end() const
+{
+    return TIterator{};
 }
 
 TString TLocationMask::Print() const

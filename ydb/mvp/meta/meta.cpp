@@ -157,12 +157,17 @@ TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
 }
 
 NYdb::NTable::TClientSettings TMVP::GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
-    NYdb::NTable::TClientSettings clientSettings;
-    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
-    clientSettings.Database(location.RootDomain);
+    NYdb::NTable::TClientSettings clientSettings = GetStrictMetaDatabaseClientSettings(request, location);
     if (TString database = location.GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
+    return clientSettings;
+}
+
+NYdb::NTable::TClientSettings TMVP::GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
+    NYdb::NTable::TClientSettings clientSettings;
+    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
+    clientSettings.Database(location.RootDomain);
     return clientSettings;
 }
 

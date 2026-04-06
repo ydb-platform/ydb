@@ -4,7 +4,8 @@ using namespace NKikimr::NDDisk;
 
 TString TSegmentManager::TRequestInFlight::ToString() const {
     TStringBuilder builder;
-    builder << "{\"VChunkIndex\": " << VChunkIndex
+    builder << "{\"TabletId\": " << TabletId
+        << ", \"VChunkIndex\": " << VChunkIndex
         << ", \"SyncId\": " << SyncId
         << ", \"Segments\": [";
     bool sep = false;
@@ -14,23 +15,24 @@ TString TSegmentManager::TRequestInFlight::ToString() const {
         }
         auto [begin, end] = segment;
         builder << "{\"begin\": " << begin << ", \"end\": " << end << "}";
+        sep = true;
     }    
     builder << "]}";
     return builder;
 }
 
 
-void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated) {
+void TSegmentManager::DropSegment(ui64 tabletId, ui64 vchunkIndex, TSegment dropSegment, std::vector<TOutdatedRequest> *outdated) {
     // O(log(Segments.count) + overlapped_segments)
 
     Y_VERIFY(outdated != nullptr);
 
     auto [dropBegin, dropEnd] = dropSegment;
-    TSegmentIt segmentIt = SegmentsInFlight.lower_bound({vchunkIndex, dropBegin, ui32(0)});
+    TSegmentIt segmentIt = SegmentsInFlight.lower_bound({tabletId, vchunkIndex, dropBegin, ui32(0)});
 
     while (segmentIt != SegmentsInFlight.end()) {
-        auto [segVChunkIndex, begin, end] = segmentIt->first;
-        if (segVChunkIndex != vchunkIndex) {
+        auto [segTabletId, segVChunkIndex, begin, end] = segmentIt->first;
+        if (segTabletId != tabletId || segVChunkIndex != vchunkIndex) {
             break;
         }
 
@@ -62,7 +64,7 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // newBegin = dropEnd
             Y_VERIFY(dropBegin <= begin && dropEnd < end);
          
-            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, dropEnd, end}, requestIt).first;
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{tabletId, vchunkIndex, dropEnd, end}, requestIt).first;
             request.Segments.emplace(TSegment{dropEnd, end}, tmpSegmentIt);
         } else {
             // [dropBegin;              dropEnd)
@@ -83,8 +85,8 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
     // look at backward segment; begin < dropBegin
     if (segmentIt != SegmentsInFlight.begin()) {
         --segmentIt;
-        auto [segVChunkIndex, begin, end] = segmentIt->first;
-        if (segVChunkIndex != vchunkIndex) {
+        auto [segTabletId, segVChunkIndex, begin, end] = segmentIt->first;
+        if (segTabletId != tabletId || segVChunkIndex != vchunkIndex) {
             return;
         }
 
@@ -116,7 +118,7 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // newEnd == dropBegin
             Y_VERIFY(begin < dropBegin && end <= dropEnd);
          
-            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, dropBegin}, requestIt).first;
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{tabletId, vchunkIndex, begin, dropBegin}, requestIt).first;
             request.Segments.emplace(TSegment{begin, dropBegin}, tmpSegmentIt);
         } else {
             //               [dropBegin;dropEnd)
@@ -125,12 +127,12 @@ void TSegmentManager::DropSegment(ui64 vchunkIndex, TSegment dropSegment, std::v
             // [begin;newEnd)                   [newBegin;end)
             //
             // newEnd == dropBegin
-            // newBegint == dropEnd
+            // newBegin == dropEnd
 
-            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, dropBegin}, requestIt).first;
+            auto tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{tabletId, vchunkIndex, begin, dropBegin}, requestIt).first;
             request.Segments.emplace(TSegment{begin, dropBegin}, tmpSegmentIt);
 
-            tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, dropEnd, end}, requestIt).first;
+            tmpSegmentIt = SegmentsInFlight.emplace(TSegmentLocation{tabletId, vchunkIndex, dropEnd, end}, requestIt).first;
             request.Segments.emplace(TSegment{dropEnd, end}, tmpSegmentIt);
         }
         SegmentsInFlight.erase(segmentIt);
@@ -167,13 +169,13 @@ ui64 TSegmentManager::GetSync(ui64 requestIdx) {
     return request.SyncId;
 }
 
-void TSegmentManager::PushRequest(ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated) {
+void TSegmentManager::PushRequest(ui64 tabletId, ui64 vchunkIndex, ui64 syncId, TSegment segment, ui64 *requestId, std::vector<TOutdatedRequest> *outdated) {
     Y_VERIFY(requestId != nullptr);
 
-    DropSegment(vchunkIndex, segment, outdated);
+    DropSegment(tabletId, vchunkIndex, segment, outdated);
     *requestId = NextRequestId++;
     auto &[begin, end] = segment;
-    TRequestIt requestIt = RequestsInFlight.emplace(*requestId, TRequestInFlight{vchunkIndex, syncId, {}}).first;
-    TSegmentIt segmentIt = SegmentsInFlight.emplace(TSegmentLocation{vchunkIndex, begin, end}, requestIt).first;
+    TRequestIt requestIt = RequestsInFlight.emplace(*requestId, TRequestInFlight{tabletId, vchunkIndex, syncId, {}}).first;
+    TSegmentIt segmentIt = SegmentsInFlight.emplace(TSegmentLocation{tabletId, vchunkIndex, begin, end}, requestIt).first;
     requestIt->second.Segments.emplace(segment, segmentIt);
 }

@@ -11,7 +11,6 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat_transformer_base.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -26,10 +25,13 @@ using namespace NOpt;
  * but will simply stop propagation if in encounters an operator that it has no rules for.
  * One of such operators is EquiJoin, but there is a special rule to handle EquiJoin.
 */
-class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase {
+class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
 
+    TTypeAnnotationContext* TypeCtx;
     const TKikimrConfiguration::TPtr& Config;
     TKqpOptimizeContext& KqpCtx;
+    TKqpStatsStore* KqpStats;
+    const TKqpProviderContext& KqpPctx;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
     THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
@@ -41,16 +43,24 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
             const TKikimrConfiguration::TPtr& config,
             const TKqpProviderContext& pctx
         ) :
-            TDqStatisticsTransformerBase(&typeCtx, pctx, kqpCtx->GetOptimizerHints(), &kqpCtx->ShufflingOrderingsByJoinLabels, true),
+            TypeCtx(&typeCtx),
             Config(config),
-            KqpCtx(*kqpCtx) {}
+            KqpCtx(*kqpCtx),
+            KqpStats(&kqpCtx->KqpStats),
+            KqpPctx(pctx)
+        {}
 
         // Main method of the transformer
-        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+        IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
+        void Rewind() override {};
 
     private:
-        bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
-        bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx) final;
+        bool BeforeLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool AfterLambdasSpecific(const TExprNode::TPtr& input, TExprContext& ctx);
+
+        bool BeforeLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool BeforeLambdasUnmatched(const TExprNode::TPtr& input, TExprContext& ctx);
+        bool AfterLambdas(const TExprNode::TPtr& input, TExprContext& ctx);
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,

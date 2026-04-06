@@ -1698,7 +1698,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     } else {
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                             "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
                         return Die(ctx);
                     }
                 } else {
@@ -1721,7 +1721,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     } else {
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                             "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
                         return Die(ctx);
                     }
                 } else if (targetUser.HasPassword()) {
@@ -1744,6 +1744,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         auto* computedHashes = ev->Get();
         if (!computedHashes->Error.empty()) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, std::move(computedHashes->Error));
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
+            return Die(ctx);
         }
 
         auto& alterLogin = *GetModifyScheme().MutableAlterLogin();

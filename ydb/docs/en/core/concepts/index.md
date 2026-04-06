@@ -9,6 +9,7 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Connecting to a database](connect.md)
 - [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)
+- [Bridge mode](bridge.md)
 - [Transactions](transactions.md)
 - [Secondary indexes](secondary_indexes.md)
 - [Vector search](vector_search.md)

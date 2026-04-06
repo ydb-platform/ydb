@@ -320,7 +320,8 @@ struct TPartitionTablesOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NChunkClient::TChunkSliceFetcherConfigPtr ChunkSliceFetcherConfig;
     NTableClient::ETablePartitionMode PartitionMode = NTableClient::ETablePartitionMode::Unordered;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;

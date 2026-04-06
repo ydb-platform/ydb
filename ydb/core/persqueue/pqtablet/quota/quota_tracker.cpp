@@ -38,12 +38,12 @@ namespace NKikimr::NPQ {
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {
         Update(timestamp);
-        return AvailableSize >= (i64)MicroSecondsPerSecond; // a whole quota unit has become available
+        return AvailableSize >= static_cast<i64>(MicroSecondsPerSecond); // a whole quota unit has become available
     }
 
     void TQuotaTracker::Exaust(const ui64 size, const TInstant timestamp) {
         Update(timestamp);
-        AvailableSize -= (i64)size * MicroSecondsPerSecond;
+        AvailableSize -= static_cast<i64>(size) * static_cast<i64>(MicroSecondsPerSecond);
         Update(timestamp);
     }
 

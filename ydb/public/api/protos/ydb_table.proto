@@ -685,6 +685,19 @@ message ColumnCompression {
     optional int32 compression_level = 2;
 }
 
+message ColumnEncoding {
+    message Off {
+    }
+
+    message Dictionary {
+    }
+
+    oneof encoding_settings {
+        Off off = 1;
+        Dictionary dictionary = 2;
+    }
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -701,6 +714,7 @@ message ColumnMeta {
         google.protobuf.NullValue empty_default = 7;
     }
     optional ColumnCompression compression = 8;
+    repeated ColumnEncoding encoding = 9;
 }
 
 message EvictionToExternalStorageSettings {

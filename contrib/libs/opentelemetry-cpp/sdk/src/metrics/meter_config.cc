@@ -10,17 +10,17 @@ namespace metrics
 
 OPENTELEMETRY_EXPORT bool MeterConfig::operator==(const MeterConfig &other) const noexcept
 {
-  return disabled_ == other.disabled_;
+  return enabled_ == other.enabled_;
 }
 
 OPENTELEMETRY_EXPORT bool MeterConfig::IsEnabled() const noexcept
 {
-  return !disabled_;
+  return enabled_;
 }
 
 OPENTELEMETRY_EXPORT MeterConfig MeterConfig::Disabled()
 {
-  static const auto kDisabledConfig = MeterConfig(true);
+  static const auto kDisabledConfig = MeterConfig(false);
   return kDisabledConfig;
 }
 

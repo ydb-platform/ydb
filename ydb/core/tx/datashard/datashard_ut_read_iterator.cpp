@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
+#include "datashard_failpoints.h"
 #include "read_iterator.h"
 
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -4006,6 +4007,63 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         };
 
         NKikimr::NTestTli::CheckRegexMatch(ss.Str(), regexToMatchCount);
+    }
+
+    Y_UNIT_TEST(ShouldAbortInCheckReadWhenTableIsDropped) {
+        // Regression test for https://github.com/ydb-platform/ydb/issues/36147
+
+        TTestHelper helper;
+        auto& runtime = *helper.Server->GetRuntime();
+
+        const auto& table = helper.Tables.at("table-1");
+        const ui64 tabletId = table.TabletId;
+
+        // Block immediate writes at BlockFailPoint
+        TBlockOperationsFailPoint::TGuard blockGuard;
+
+        // Send an immediate write — it will add itself to the dependency tracker
+        // then block at BlockFailPoint. Its purpose is to block the DropTable operation until
+        // blockGuard is unlocked.
+        auto writeReq = helper.MakeWriteRequest("table-1", ++helper.TxId, {99, 99, 99, 99});
+        runtime.SendToPipe(tabletId, helper.Sender, writeReq.release());
+        runtime.WaitFor("write blocked", [&]{ return blockGuard.size() >= 1; });
+
+        // Block TEvActivateLowExecution sent to the tablet executor to delay execution
+        // of the TEvRead that we will send later.
+        TBlockEvents<IEventHandle> blockedActivations(runtime,
+            [&](const IEventHandle::TPtr& ev) {
+                return ev->GetTypeName().Contains("TEvActivateLowExecution");
+            });
+
+        // Send a read without a snapshot — it is enqueued as a low-priority local tx and will
+        // not execute until TEvActivateLowExecution is delivered to the tablet executor.
+        auto request = GetBaseReadRequest(
+            table.TableId, table.UserTable.GetDescription(), 1, NKikimrDataEvents::FORMAT_CELLVEC);
+        AddRangeQuery<ui64>(*request, {Min<ui64>(),}, true, {Max<ui64>(),}, true);
+        // Key point: this causes the read op to get upgraded to a repeatable read, and subsequently
+        // get blocked on the DropTable in the ExecuteRead unit.
+        request->Record.SetMaxRows(1);
+        helper.SendReadAsync("table-1", request.release());
+
+        runtime.WaitFor("blocked low-priority executor activation",
+            [&]{ return blockedActivations.size() >= 1; });
+
+        // Drop the table while the read is queued in the low priority executor queue.
+        // Schema-change transactions go through the regular executor queue (TEvActivateExecution),
+        // so they are not affected by the block above.
+        AsyncDropTable(helper.Server, helper.Sender, "/Root", "table-1");
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // Unblock execution of the read. It will now get added to the pipeline and 
+        // would start executing if there were no additional checks on the presence of DropTable.
+        blockedActivations.Stop().Unblock();
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // Unblock the DropTable execution.
+        blockGuard.Unblock();
+
+        auto readResult = helper.WaitReadResult(TDuration::Seconds(5));
+        UNIT_ASSERT_C(readResult, "The read should not deadlock with the drop table op");
     }
 }
 

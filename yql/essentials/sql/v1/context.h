@@ -89,11 +89,7 @@ enum class EColumnRefState {
     MatchRecognizeDefineAggregate,
 };
 
-enum class EYqlSelectMode {
-    Disable,
-    Auto,
-    Force,
-};
+using NSQLTranslation::EYqlSelect;
 
 enum class EFlattenAndAggrExprsPersistence {
     Disable,
@@ -202,7 +198,7 @@ public:
     TString AddSimpleUdf(const TString& udf);
     void SetPackageVersion(const TString& packageName, ui32 version);
 
-    bool IsStreamingService(const TStringBuf service) const;
+    bool IsStreamingService(TStringBuf service) const;
 
     bool CheckColumnReference(TPosition pos, const TString& name) {
         const bool allowed = GetColumnReferenceState() != EColumnRefState::Deny;
@@ -276,13 +272,13 @@ public:
 
     TScopedStatePtr CreateScopedState() const;
 
-    EYqlSelectMode GetYqlSelectMode() const {
+    EYqlSelect GetYqlSelectMode() const {
         return YqlSelectMode_;
     }
 
-    void SetYqlSelectMode(EYqlSelectMode mode) {
+    void SetYqlSelectMode(EYqlSelect mode) {
         YqlSelectMode_ = mode;
-        if (YqlSelectMode_ != EYqlSelectMode::Disable) {
+        if (YqlSelectMode_ != EYqlSelect::Disable) {
             DeriveColumnOrder = true;
         }
     }
@@ -290,6 +286,11 @@ public:
     bool IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const;
 
     bool EnsureBackwardCompatibleFeatureAvailable(
+        TPosition position,
+        TStringBuf feature,
+        NYql::TLangVersion version);
+
+    bool EnsureFeatureNotExpired(
         TPosition position,
         TStringBuf feature,
         NYql::TLangVersion version);
@@ -329,7 +330,7 @@ private:
     TVector<TMatchRecognizeAggregation> MatchRecognizeAggregations_;
     TString NoColumnErrorContext_ = "in current scope";
     TVector<TBlocks*> CurrentBlocks_;
-    EYqlSelectMode YqlSelectMode_ = EYqlSelectMode::Disable;
+    EYqlSelect YqlSelectMode_ = EYqlSelect::Disable;
 
 public:
     THashMap<TString, std::pair<TPosition, TNodePtr>> Variables;
@@ -440,6 +441,7 @@ public:
     bool DebugPositions = false;
     bool StrictWarningAsError = false;
     bool WindowNewPipeline = false;
+    bool YqlSelectAllowUnnamedGroupByExpr = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;

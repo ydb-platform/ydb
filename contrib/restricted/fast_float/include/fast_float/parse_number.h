@@ -251,7 +251,7 @@ clinger_fast_path_impl(uint64_t mantissa, int64_t exponent, bool is_negative,
  * parsing options or other parsing custom function implemented by user.
  */
 template <typename T, typename UC>
-FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars_advanced(parsed_number_string_t<UC> &pns, T &value) noexcept {
   static_assert(is_supported_float_type<T>::value,
                 "only some floating-point types are supported");
@@ -290,7 +290,7 @@ from_chars_advanced(parsed_number_string_t<UC> &pns, T &value) noexcept {
 }
 
 template <typename T, typename UC>
-FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars_float_advanced(UC const *first, UC const *last, T &value,
                           parse_options_t<UC> options) noexcept {
 
@@ -456,6 +456,7 @@ template <size_t TypeIx> struct from_chars_advanced_caller {
 
 template <> struct from_chars_advanced_caller<1> {
   template <typename T, typename UC>
+  fastfloat_really_inline
   FASTFLOAT_CONSTEXPR20 static from_chars_result_t<UC>
   call(UC const *first, UC const *last, T &value,
        parse_options_t<UC> options) noexcept {
@@ -465,7 +466,7 @@ template <> struct from_chars_advanced_caller<1> {
 
 template <> struct from_chars_advanced_caller<2> {
   template <typename T, typename UC>
-  FASTFLOAT_CONSTEXPR20 static from_chars_result_t<UC>
+  fastfloat_really_inline FASTFLOAT_CONSTEXPR20 static from_chars_result_t<UC>
   call(UC const *first, UC const *last, T &value,
        parse_options_t<UC> options) noexcept {
     return from_chars_int_advanced(first, last, value, options);
@@ -473,7 +474,7 @@ template <> struct from_chars_advanced_caller<2> {
 };
 
 template <typename T, typename UC>
-FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20 from_chars_result_t<UC>
 from_chars_advanced(UC const *first, UC const *last, T &value,
                     parse_options_t<UC> options) noexcept {
   return from_chars_advanced_caller<

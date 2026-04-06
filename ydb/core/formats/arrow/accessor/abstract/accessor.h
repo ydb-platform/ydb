@@ -40,7 +40,6 @@ public:
     TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
 };
 
-struct TMInMax;
 class IChunkedArray {
 public:
     // PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS

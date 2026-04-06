@@ -13,8 +13,7 @@ struct TMinMax {
         return *arrow::StructScalar::Make({ arrow::MakeNullScalar(type), arrow::MakeNullScalar(type) }, { "min", "max" }).ValueOrDie();
     }
     bool IsNull() const {
-        auto min = Min();
-        return min->Equals(arrow::MakeNullScalar(min->type));
+        return !Min()->is_valid;
     }
 
     std::shared_ptr<arrow::Scalar>& Min() {

@@ -21,7 +21,7 @@ TMinMax TMinMax::FromArray(std::shared_ptr<arrow::Array> arr) {
     namespace arrow5 = arrow;
 
     arrow5::Status export_status = arrow5::ExportArray(*arr, &c_array, &c_schema);
-    AFL_VERIFY(export_status.ok());
+    AFL_VERIFY(export_status.ok())("error", export_status.ToString());
 
     auto import_result = arrow20::ImportArray(&c_array, &c_schema).ValueOrDie();
 
@@ -29,8 +29,8 @@ TMinMax TMinMax::FromArray(std::shared_ptr<arrow::Array> arr) {
 
     auto new_array = arrow20::MakeArrayFromScalar(*scalar20, 1).ValueOrDie();
 
-    auto export_status20 = arrow20::ExportArray(*new_array, &c_array, &c_schema);
-    AFL_VERIFY(export_status.ok());
+    arrow20::Status export_status20 = arrow20::ExportArray(*new_array, &c_array, &c_schema);
+    AFL_VERIFY(export_status20.ok())("error", export_status20.ToString());
 
     auto import_result5 = arrow5::ImportArray(&c_array, &c_schema).ValueOrDie();
 
@@ -48,6 +48,7 @@ using TSizeType = ui32;
 constexpr char NullTMinMaxFlag = '0';
 
 TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType>& fieldType) {
+    AFL_VERIFY(!data.empty())("details", "empty binary minmax payload");
     if (data[0] == NullTMinMaxFlag) {
         return MakeNull(fieldType);
     }
@@ -118,25 +119,25 @@ void TMinMax::UniteWith(TMinMax other) {
 }
 namespace NArrowCompare{
 
-inline bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     arrow::Datum res =
         NKikimr::NArrow::TStatusValidator::GetValid(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
     return res.scalar_as<arrow::BooleanScalar>().value;
 }
 
-inline bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::Less, left, right);
 }
 
-inline bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::Greater, left, right);
 }
 
-inline bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::LessEqual, left, right);
 }
 
-inline bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
 }

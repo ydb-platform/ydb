@@ -248,7 +248,108 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )"), "[[555550u]]");
 
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        
+    }
+
+    Y_UNIT_TEST_DUO(MinMaxNulls, UseQueryService) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+
+        auto assertDDLQueryOk = [&](TString query) {
+            if (UseQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        };
+
+
+        auto runDMLQuery = [&] (TString query) -> TString {
+            if (/*UseQueryService*/ true) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            } else {
+                NYdb::NTable::TDataQueryResult result = tableClient.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            }
+        };
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_nulls` (
+                `key` Int32 NOT NULL,
+                `null_value` String NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        assertDDLQueryOk(R"(
+            ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=null_value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "null_value"}`);
+        )");
+
+        assertDDLQueryOk(R"(
+            ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_nulls` (`key`, `null_value`)
+            SELECT CAST(item AS Int32) AS `key`, CAST(Null AS String?) AS `null_value` FROM AS_TABLE($data1);
+        )");
+
+        runDMLQuery(R"(
+            $data2 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_nulls` (`key`, `null_value`)
+            SELECT CAST(item AS Int32) AS `key`, CAST(Null AS String?) AS `null_value` FROM AS_TABLE($data2);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto init_approved = csController->GetIndexesApprovedOnSelect().Val();
+
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_nulls` WHERE `null_value` < "Value_500000";
+        )"), "[[0u]]");
+        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
+
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_nulls` WHERE `null_value` > "Value_500000";
+        )"), "[[0u]]");
+
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
+
+
+
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {

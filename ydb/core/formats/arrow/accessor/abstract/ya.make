@@ -9,7 +9,6 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/common
     ydb/library/formats/arrow/protos
     ydb/library/arrow_kernels
-    ydb/core/formats/arrow/program
 )
 
 SRCS(

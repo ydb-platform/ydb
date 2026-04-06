@@ -21,6 +21,10 @@ public:
         return Script->GetStep(CurrentStepIdx)->GetName();
     }
 
+    ui32 GetStepIndex() const {
+        return CurrentStepIdx;
+    }
+
     TString DebugString() const {
         return Script->GetStep(CurrentStepIdx)->DebugString();
     }

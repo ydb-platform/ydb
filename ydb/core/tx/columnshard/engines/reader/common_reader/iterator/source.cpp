@@ -1,7 +1,11 @@
 #include "constructor.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
     if (!CurrentProgramNodeId) {
@@ -202,6 +206,7 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     , ShardingVersionOptional(shardingVersion)
     , HasDeletions(hasDeletions)
 {
+    SourceCreatedTimestamp = TMonotonic::Now();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
 }
@@ -280,6 +285,10 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
     DoBuildStageResult(sourcePtr);
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
+
+    LWTRACK(SourceFinished, DataSourceOrbit, GetPathIdForProbe(), GetTabletIdForProbe(),
+            GetTxIdForProbe(), GetSourceIdx(), 0,
+            TString("SourceFinished"), GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
 }
 
 bool IDataSource::AddTxConflict() {

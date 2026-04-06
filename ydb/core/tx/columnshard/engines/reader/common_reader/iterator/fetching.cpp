@@ -6,11 +6,14 @@
 #include "sub_columns_fetching.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 #include <util/string/builder.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TStepAction::DoApply(IDataReader& owner) {
     AFL_VERIFY(FinishedFlag);
@@ -22,6 +25,7 @@ bool TStepAction::DoApply(IDataReader& owner) {
 
 TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
+    
     if (Source->GetContext()->IsAborted()) {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
@@ -37,6 +41,7 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
     }
+    
     return FinishedFlag;
 }
 
@@ -79,10 +84,26 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
         source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
         auto signals = GetSignals(iterator->GetCurrentNodeId());
+        
+        const TDuration durationMs = source->GetAndResetWaitDuration();
+        LWTRACK(ProgramChainStart, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
+                source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
+                iterator->GetCurrentNode().GetSignalCategoryName(), iterator->GetCurrentNodeId(), durationMs, source->GetRecordsCount());
+        
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
-        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(TMonotonic::Now() - start);
-        signals->AddExecutionDuration(TMonotonic::Now() - start);
+        const TDuration executionDurationMs = TMonotonic::Now() - start;
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
+        signals->AddExecutionDuration(executionDurationMs);
+        source->AddExecutionDuration(executionDurationMs);
+        
+        const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+        ui64 bytesProcessed = 0;
+        LWTRACK(ProgramChainFinish, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
+                source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
+                iterator->GetCurrentNode().GetSignalCategoryName(), iterator->GetCurrentNodeId(), finishDurationMs,
+                executionDurationMs, source->GetRecordsCount(), bytesProcessed);
+        
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

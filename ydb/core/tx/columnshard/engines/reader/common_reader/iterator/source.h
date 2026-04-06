@@ -133,12 +133,52 @@ private:
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    NLWTrace::TOrbit DataSourceOrbit;
+    TMonotonic LastProbeTimestamp;
+    TMonotonic SourceCreatedTimestamp;
+    TDuration TotalExecutionDuration;
+    ui64 TotalBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
 
     ui64 GetReservedMemory() const;
+
+    TDuration GetAndResetWaitDuration() {
+        const TMonotonic now = TMonotonic::Now();
+        const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
+        LastProbeTimestamp = now;
+        return result;
+    }
+
+    void AddExecutionDuration(const TDuration d) {
+        TotalExecutionDuration += d;
+    }
+
+    void AddBytesRead(const ui64 bytes) {
+        TotalBytesRead += bytes;
+    }
+
+    TDuration GetTotalDuration() const {
+        return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
+    }
+
+    TDuration GetTotalExecutionDuration() const {
+        return TotalExecutionDuration;
+    }
+
+    ui64 GetTotalBytesRead() const {
+        return TotalBytesRead;
+    }
+
+    NLWTrace::TOrbit& GetDataSourceOrbit() {
+        return DataSourceOrbit;
+    }
+
+    const NLWTrace::TOrbit& GetDataSourceOrbit() const {
+        return DataSourceOrbit;
+    }
 
     const TPortionDataAccessor& GetPortionAccessor() const;
 
@@ -301,6 +341,20 @@ public:
     TFetchedResult& MutableStageResult();
 
     virtual std::optional<ui64> GetPortionIdOptional() const = 0;
+
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+
+    ui64 GetPathIdForProbe() const {
+        return GetPathId().GetRawValue();
+    }
+
+    ui64 GetTabletIdForProbe() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+
+    ui64 GetTxIdForProbe() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

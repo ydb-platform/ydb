@@ -20,27 +20,33 @@
   NYdb::TDriver driver(driverConfig);
   ```
 
-- Go (native)
+- Go
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+  {% list tabs %}
 
-  ```shell
-  "grpcs://login:password@localohost:2135/local"
-  ```
+  - Native SDK
 
-  Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
+    Передать логин и пароль можно в составе строки подключения. Например, так:
 
-  {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+    ```shell
+    "grpcs://login:password@localhost:2135/local"
+    ```
 
-- Go (database/sql)
+    Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
 
-  {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+  - database/sql
 
-  Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+    Передать логин и пароль можно в составе строки подключения. Например, так:
 
-  {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+
+    Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+
+    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+
+  {% endlist %}
 
 - Java
 

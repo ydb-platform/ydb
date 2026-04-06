@@ -1834,8 +1834,17 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
-            responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
-            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict(),
+            responseCookie,
+            cmd.GetClientId(),
+            cmd.GetOffset(),
+            cmd.HasSessionId() ? cmd.GetSessionId() : "",
+            0, // partitionSessionId
+            0, // generation
+            0, // step
+            TActorId{}, // pipeClient
+            TEvPQ::TEvSetClientInfo::ESCI_OFFSET,
+            0, // readRuleGeneration
+            cmd.GetStrict(),
             cmd.HasCommittedMetadata() ? static_cast<std::optional<TString>>(cmd.GetCommittedMetadata()) : std::nullopt
         );
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));

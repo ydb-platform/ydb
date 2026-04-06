@@ -991,14 +991,14 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
 void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     if (CommitsInfly.empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+        LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " unwaited commit-response with cookie " << cookie << "; waiting for nothing");
         return;
     }
-    ui64 readId = CommitsInfly.front().first;
 
+    ui64 readId = CommitsInfly.front().first;
     if (cookie != readId) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
+        LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " unwaited commit-response with cookie " << cookie << "; waiting for " << readId);
         return;
     }

@@ -22,6 +22,7 @@ enum EEv {
     EvSnapshotCompleted,
 
     EvWriteChangelog,
+    EvWriteChangelogAck,
     EvChangelogFailed,
 
     EvStartNewBackup,
@@ -76,9 +77,25 @@ struct TEvWriteChangelog : public TEventLocal<TEvWriteChangelog, EvWriteChangelo
         , References(references)
     {}
 
+    ui64 GetTotalSize() const {
+        ui64 totalSize = EmbeddedLogBody.size();
+        for (const auto& ref : References) {
+            totalSize += ref.Buffer.size();
+        }
+        return totalSize;
+    }
+
     ui32 Step;
     TString EmbeddedLogBody;
     TVector<TEvTablet::TLogEntryReference> References;
+};
+
+struct TEvWriteChangelogAck : public TEventLocal<TEvWriteChangelogAck, EvWriteChangelogAck> {
+    TEvWriteChangelogAck(ui64 processedBytes)
+        : ProcessedBytes(processedBytes)
+    {}
+
+    ui64 ProcessedBytes;
 };
 
 struct TEvChangelogFailed : public TEventLocal<TEvChangelogFailed, EvChangelogFailed> {

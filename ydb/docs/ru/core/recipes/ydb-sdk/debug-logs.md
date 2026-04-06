@@ -4,309 +4,315 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:
+  {% list tabs %}
 
-  {% cut "Через переменную окружения `YDB_LOG_SEVERITY_LEVEL`" %}
+  - Native SDK
 
-  Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
-  Выставить переменную окружения можно так:
+    Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:
 
-  ```shell
-  export YDB_LOG_SEVERITY_LEVEL=info
-  ```
+    {% cut "Через переменную окружения `YDB_LOG_SEVERITY_LEVEL`" %}
 
-  (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
+    Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
+    Выставить переменную окружения можно так:
 
-  {% endcut %}
+    ```shell
+    export YDB_LOG_SEVERITY_LEVEL=info
+    ```
 
-  {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
+    (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
 
-  ```go
-  package main
+    {% endcut %}
 
-  import (
-    "context"
-    "os"
+    {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
 
-    "go.uber.org/zap"
+    ```go
+    package main
 
-    ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
+    import (
+      "context"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log *zap.Logger // zap-logger with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZap.WithTraces(
-        log,
-        trace.DetailsAll,
-      ),
+      "go.uber.org/zap"
+
+      ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log *zap.Logger // zap-logger with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZap.WithTraces(
+          log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
+    {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "os"
+    import (
+      "context"
+      "os"
 
-    "github.com/rs/zerolog"
+      "github.com/rs/zerolog"
 
-    ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log zerolog.Logger // zap-logger with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZerolog.WithTraces(
-        &log,
-        trace.DetailsAll,
-      ),
+      ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log zerolog.Logger // zap-logger with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZerolog.WithTraces(
+          &log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% include [overlay](_includes/debug-logs-go-appendix.md) %}
+    {% include [overlay](_includes/debug-logs-go-appendix.md) %}
 
-  {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+    {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "os"
+    import (
+      "context"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/log"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var logger log.Logger // logger implementation with init out of this scope
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithLogger(
-        logger,
-        trace.DetailsAll,
-      ),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/log"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var logger log.Logger // logger implementation with init out of this scope
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithLogger(
+          logger,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Реализовать собственный пакет логирования" %}
+    {% cut "Реализовать собственный пакет логирования" %}
 
-  Реализовать собственный пакет логирования можно на основе событий драйвера в пакете трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`. Пакет трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace` содержит описание всех протоколируемых событий драйвера.
+    Реализовать собственный пакет логирования можно на основе событий драйвера в пакете трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`. Пакет трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace` содержит описание всех протоколируемых событий драйвера.
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Реализовать получение информации о серверных ошибках `IterateByIssues`" %}
+    {% cut "Реализовать получение информации о серверных ошибках `IterateByIssues`" %}
 
-  При работе с {{ ydb-short-name }} через Go SDK вы можете не только включать логирование запросов и ответов, но и программно получать детализированные сведения о серверных ошибках (issues) — дополнительных сообщениях, которые YDB возвращает в составе ответа при ошибках выполнения операций. Для итерации по списку issues, содержащихся в ответе от сервера, используйте метод [IterateByIssues](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3#IterateByIssues).
+    При работе с {{ ydb-short-name }} через Go SDK вы можете не только включать логирование запросов и ответов, но и программно получать детализированные сведения о серверных ошибках (issues) — дополнительных сообщениях, которые YDB возвращает в составе ответа при ошибках выполнения операций. Для итерации по списку issues, содержащихся в ответе от сервера, используйте метод [IterateByIssues](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3#IterateByIssues).
 
-  {% endcut %}
+    {% endcut %}
 
-- Go (database/sql)
+  - database/sql
 
-  Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:
+    Есть несколько способов включить логи в приложении, использующем `ydb-go-sdk`:
 
-  {% cut "Через переменную окружения `YDB_LOG_SEVERITY_LEVEL`" %}
+    {% cut "Через переменную окружения `YDB_LOG_SEVERITY_LEVEL`" %}
 
-  Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
-  Выставить переменную окружения можно так:
+    Данная переменная окружения включает встроенный в `ydb-go-sdk` логгер (синхронный, неблочный) с выводом в стандартный поток вывода.
+    Выставить переменную окружения можно так:
 
-  ```shell
-  export YDB_LOG_SEVERITY_LEVEL=info
-  ```
+    ```shell
+    export YDB_LOG_SEVERITY_LEVEL=info
+    ```
 
-  (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
+    (доступные значения `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `quiet`, по умолчанию `quiet`).
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
+    {% cut "Подключить сторонний логгер `go.uber.org/zap`" %}
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "go.uber.org/zap"
+      "go.uber.org/zap"
 
-    ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log *zap.Logger // zap-logger with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZap.WithTraces(
-        log,
-        trace.DetailsAll,
-      ),
+      ydbZap "github.com/ydb-platform/ydb-go-sdk-zap"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log *zap.Logger // zap-logger with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZap.WithTraces(
+          log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
 
-  {% endcut %}
+    ```go
+    package main
 
-  {% cut "Подключить сторонний логгер `github.com/rs/zerolog`" %}
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-  ```go
-  package main
+      "github.com/rs/zerolog"
 
-  import (
-    "context"
-    "database/sql"
-    "os"
-
-    "github.com/rs/zerolog"
-
-    ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var log zerolog.Logger // zap-logger with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydbZerolog.WithTraces(
-        &log,
-        trace.DetailsAll,
-      ),
+      ydbZerolog "github.com/ydb-platform/ydb-go-sdk-zerolog"
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var log zerolog.Logger // zap-logger with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydbZerolog.WithTraces(
+          &log,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
 
-  {% endcut %}
+    {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
-  {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
+    ```go
+    package main
 
-  {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-  ```go
-  package main
-
-  import (
-    "context"
-    "database/sql"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/log"
-    "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    var logger log.Logger // logger implementation with init out of this scope
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithLogger(
-        logger,
-        trace.DetailsAll,
-      ),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/log"
+      "github.com/ydb-platform/ydb-go-sdk/v3/trace"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      var logger log.Logger // logger implementation with init out of this scope
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithLogger(
+          logger,
+          trace.DetailsAll,
+        ),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+    {% endcut %}
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    {% cut "Реализовать собственный пакет логирования" %}
 
-  {% endcut %}
+    Реализовать собственный пакет логирования можно на основе событий драйвера в пакете трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`. Пакет трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace` содержит описание всех протоколируемых событий драйвера.
 
-  {% cut "Реализовать собственный пакет логирования" %}
+    {% endcut %}
 
-  Реализовать собственный пакет логирования можно на основе событий драйвера в пакете трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace`. Пакет трассировки `github.com/ydb-platform/ydb-go-sdk/v3/trace` содержит описание всех протоколируемых событий драйвера.
-
-  {% endcut %}
+  {% endlist %}
 
 - Java
 
@@ -395,5 +401,10 @@
 
   logging.getLogger('ydb').setLevel(logging.DEBUG)
   ```
+
+- JavaScript
+
+  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
+  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
 
 {% endlist %}

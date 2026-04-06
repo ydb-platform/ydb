@@ -212,5 +212,25 @@ class TPruneColumnsStage : public IRBOStage {
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 };
 
+/**
+ * Propagate topsort operator.
+ */
+class TPropagateTopSortThroughStageRule : public ISimplifiedRule {
+  public:
+    TPropagateTopSortThroughStageRule() : ISimplifiedRule("Propagate topsort operator through stages", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Propagate limit operator.
+ */
+class TPropagateLimitThroughStageRule : public ISimplifiedRule {
+  public:
+    TPropagateLimitThroughStageRule() : ISimplifiedRule("Propagate limit operator through stages", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
 } // namespace NKqp
 } // namespace NKikimr

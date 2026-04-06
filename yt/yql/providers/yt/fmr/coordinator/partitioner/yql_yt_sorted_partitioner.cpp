@@ -287,7 +287,7 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
         } else {
             return TReadSliceResult{.Error = TFmrError{
                 .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
+                .Reason = EFmrErrorReason::FallbackOperation,
                 .ErrorMessage = "Undefined behaviour in ReadSlice: intersection doesn't reach separator key"
             }};
         }

@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
@@ -3343,6 +3344,30 @@ public:
                     result.SetSuccess();
                     return MakeFuture(result);
                 } else {
+                    // DropSecret is instantiated with NKikimrSchemeOp::TDrop
+                    if constexpr (std::is_same_v<TSecretSchemaOp, NKikimrSchemeOp::TSecretSchemaOp>) {
+                        if (op.HasValueParamName()) {
+                            const TString& paramName = op.GetValueParamName();
+                            Y_ENSURE(GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret ||
+                                GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterSecret);
+                            const TString operationDesc = (GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateSecret)
+                                ? "CREATE SECRET" : "ALTER SECRET";
+                            auto queryData = SessionCtx_->Query().QueryData;
+                            if (!queryData) {
+                                return MakeFuture(ResultFromError<TGenericResult>(TStringBuilder()
+                                    << "Parameter " << paramName << " is required for " << operationDesc
+                                    << " but query has no parameters"));
+                            }
+                            TString resolvedValue;
+                            TString resolveError;
+                            if (!queryData->TryGetParameterAsString(paramName, resolvedValue, resolveError)) {
+                                return MakeFuture(ResultFromError<TGenericResult>(
+                                    TStringBuilder() << resolveError << " for " << operationDesc));
+                            }
+                            op.SetValue(resolvedValue);
+                            op.ClearValueParamName();
+                        }
+                    }
                     return Gateway_->ModifyScheme(std::move(tx));
                 }
             } catch (yexception& e) {
@@ -3383,7 +3408,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (!settings.ValueParamName.empty()) {
+                op.SetValueParamName(settings.ValueParamName);
+            } else {
+                op.SetValue(settings.Value);
+            }
             op.SetInheritPermissions(settings.InheritPermissions);
         }
 
@@ -3414,7 +3443,11 @@ public:
         }
 
         void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
-            op.SetValue(settings.Value);
+            if (!settings.ValueParamName.empty()) {
+                op.SetValueParamName(settings.ValueParamName);
+            } else {
+                op.SetValue(settings.Value);
+            }
         }
 
     private:

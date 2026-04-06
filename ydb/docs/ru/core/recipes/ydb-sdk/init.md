@@ -6,34 +6,38 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```golang
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```golang
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+    import (
+      "context"
 
-    db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
-    if err != nil {
-        panic(err)
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+    )
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+
+      db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
+      if err != nil {
+          panic(err)
+      }
+      defer db.Close()
+
+      // ...
     }
-    defer db.Close()
+    ```
 
-    // ...
-  }
-  ```
+  - database/sql
 
-- Go (database/sql)
-
-  {% cut "С помощью коннектора (рекомендуемый способ)" %}
+    {% cut "С помощью коннектора (рекомендуемый способ)" %}
 
     ```golang
     package main
@@ -71,11 +75,11 @@
     }
     ```
 
-  {% endcut %}
+    {% endcut %}
 
-  {% cut "С помощью строки подключения" %}
+    {% cut "С помощью строки подключения" %}
 
-    Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивавния:
+    Регистрация драйвера `database/sql` реализуется в момент импорта пакета конкретного драйвера через символ подчеркивания:
 
     ```golang
     package main
@@ -97,7 +101,9 @@
     }
     ```
 
-  {% endcut %}
+    {% endcut %}
+
+  {% endlist %}
 
 - Java
 
@@ -174,6 +180,15 @@
   );
 
   await using var driver = await Driver.CreateInitialized(config);
+  ```
+
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
   ```
 
 - PHP

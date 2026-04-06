@@ -41,6 +41,8 @@ private:
 public:
     TICStorageTransportActor() = default;
 
+    ~TICStorageTransportActor();
+
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:

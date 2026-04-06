@@ -123,7 +123,7 @@ NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataSer
             YQL_ENSURE(colGroupYsonValue.Defined());
             columnGroupsYsonValues.emplace_back(*colGroupYsonValue);
         }
-        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnion(columnGroupsYsonValues, NeededColumns_));
+        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnionRaw(columnGroupsYsonValues, NeededColumns_));
     });
 
 }

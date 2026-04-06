@@ -878,6 +878,48 @@ TEST(TErrorTest, Enrichers)
     }
 }
 
+TEST(TErrorTest, ValueOrCrashSimple)
+{
+    TErrorOr<int> result = 42;
+    EXPECT_EQ(result.ValueOrCrash(), 42);
+
+    result.ValueOrCrash() = 67;
+    EXPECT_EQ(result.ValueOrCrash(), 67);
+}
+
+TEST(TErrorTest, ValueOrCrashHappyPath)
+{
+    TErrorOr<TWidget> result;
+    EXPECT_EQ(result.ValueOrCrash().ResetDefaultCount(), 1);
+
+    {
+        const auto& resultRef = result;
+        auto value = resultRef.ValueOrCrash();
+        EXPECT_EQ(value.ResetCopyCount(), 1);
+    }
+
+    {
+        auto value = std::move(result).ValueOrCrash();
+        EXPECT_EQ(value.ResetMoveCount(), 1);
+    }
+}
+
+TEST(TErrorTest, ValueOrCrashDeath)
+{
+    TErrorOr<TWidget> result = TError("death");
+
+    EXPECT_DEATH({ result.ValueOrCrash(); }, "YT_VERIFY");
+
+    {
+        const auto& resultRef = result;
+        EXPECT_DEATH({ resultRef.ValueOrCrash(); }, "YT_VERIFY");
+    }
+
+    {
+        EXPECT_DEATH({ std::move(result).ValueOrCrash(); }, "YT_VERIFY");
+    }
+}
+
 TEST(TErrorOrConstructionTraitsTest, ValueTraits)
 {
     using TMoveOnlyError = TErrorOr<TMoveOnly>;

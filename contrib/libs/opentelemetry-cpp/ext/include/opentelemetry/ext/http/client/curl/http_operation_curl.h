@@ -73,6 +73,8 @@ struct HttpCurlEasyResource
 
   HttpCurlEasyResource(const HttpCurlEasyResource &other)            = delete;
   HttpCurlEasyResource &operator=(const HttpCurlEasyResource &other) = delete;
+
+  ~HttpCurlEasyResource() = default;
 };
 
 class HttpOperation
@@ -165,6 +167,11 @@ public:
                 bool reuse_connection                       = false,
                 bool is_log_enabled                         = false,
                 const opentelemetry::ext::http::client::RetryPolicy &retry_policy = {});
+
+  HttpOperation(const HttpOperation &)            = delete;
+  HttpOperation(HttpOperation &&)                 = delete;
+  HttpOperation &operator=(const HttpOperation &) = delete;
+  HttpOperation &operator=(HttpOperation &&)      = delete;
 
   /**
    * Destroy CURL instance

@@ -99,6 +99,7 @@ private:
     std::unordered_map<ui64, TActorId> TabletIdToPipe;
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
+    std::unordered_map<ui64, TVector<ui64>> KqpCommitTopicToPartitions;
     TActorId AuthInitActor;
     std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper> Kqp;
     EKafkaErrors Error = NONE_ERROR;

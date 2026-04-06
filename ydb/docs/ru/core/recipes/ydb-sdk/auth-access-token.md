@@ -6,43 +6,17 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
-
-- Go (database/sql)
-
-  {% cut "Если используется коннектор для создания подключения к {{ ydb-short-name }}" %}
+  - Native SDK
 
     ```go
     package main
 
     import (
       "context"
-      "database/sql"
       "os"
 
       "github.com/ydb-platform/ydb-go-sdk/v3"
@@ -51,51 +25,82 @@
     func main() {
       ctx, cancel := context.WithCancel(context.Background())
       defer cancel()
-      nativeDriver, err := ydb.Open(ctx,
+      db, err := ydb.Open(ctx,
         os.Getenv("YDB_CONNECTION_STRING"),
         ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
       )
       if err != nil {
         panic(err)
       }
-      defer nativeDriver.Close(ctx)
-      connector, err := ydb.Connector(nativeDriver)
-      if err != nil {
-        panic(err)
-      }
-      db := sql.OpenDB(connector)
-      defer db.Close()
+      defer db.Close(ctx)
       ...
     }
     ```
 
-  {% endcut %}
+  - database/sql
 
-  {% cut "Если используется строка подключения" %}
+    {% cut "Если используется коннектор для создания подключения к {{ ydb-short-name }}" %}
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-      "context"
-      "database/sql"
-      "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+        "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
 
-    func main() {
-      db, err := sql.Open("ydb", "grpcs://localohost:2135/local?token="+os.Getenv("YDB_TOKEN"))
-      if err != nil {
-        panic(err)
+      func main() {
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        nativeDriver, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+        )
+        if err != nil {
+          panic(err)
+        }
+        defer nativeDriver.Close(ctx)
+        connector, err := ydb.Connector(nativeDriver)
+        if err != nil {
+          panic(err)
+        }
+        db := sql.OpenDB(connector)
+        defer db.Close()
+        ...
       }
-      defer db.Close()
-      ...
-    }
-    ```
+      ```
 
-  {% endcut %}
+    {% endcut %}
 
+    {% cut "Если используется строка подключения" %}
+
+      ```go
+      package main
+
+      import (
+        "context"
+        "database/sql"
+        "os"
+
+        _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
+
+      func main() {
+        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+        if err != nil {
+          panic(err)
+        }
+        defer db.Close()
+        ...
+      }
+      ```
+
+    {% endcut %}
+
+  {% endlist %}
 
 - Java
 
@@ -141,7 +146,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   {% include [auth-access-token](../../_includes/nodejs/auth-access-token.md) %}
 

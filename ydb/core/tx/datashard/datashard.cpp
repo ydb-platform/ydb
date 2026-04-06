@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -4891,10 +4892,6 @@ TString TEvDataShard::TEvReadResult::ToString() const {
            << " ArrowCols: " << ArrowBatch->num_columns();
     }
 
-    if (!Rows.empty()) {
-        ss << " RowsSize: " << Rows.size();
-    }
-
     return ss.Str();
 }
 
@@ -4938,15 +4935,6 @@ void TEvDataShard::TEvReadResult::FillRecord() {
         return;
     }
 
-    if (!Rows.empty()) {
-        auto* protoBatch = Record.MutableCellVec();
-        protoBatch->MutableRows()->Reserve(Rows.size());
-        for (const auto& row: Rows) {
-            protoBatch->AddRows(TSerializedCellVec::Serialize(row));
-        }
-        Rows.clear();
-        return;
-    }
 }
 
 std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch() const {
@@ -4962,6 +4950,26 @@ std::shared_ptr<arrow::RecordBatch> TEvDataShard::TEvReadResult::GetArrowBatch()
 
     ArrowBatch = NArrow::CreateNoColumnsBatch(Record.GetRowCount());
     return ArrowBatch;
+}
+
+size_t TEvDataShard::TEvReadResult::GetDataSizeEstimate() const {
+    if (ArrowBatch) {
+        return NArrow::GetBatchDataSize(ArrowBatch);
+    }
+
+    if (!Batch.Empty()) {
+        return Batch.DataSizeEstimate();
+    }
+
+    if (!RowsSerialized.empty()) {
+        size_t size = 0;
+        for (const auto& row : RowsSerialized) {
+            size += row.GetBuffer().size();
+        }
+        return size;
+    }
+
+    return 0;
 }
 
 } // NKikimr

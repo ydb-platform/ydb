@@ -193,7 +193,7 @@ public:
                 SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
             }
 
-            int retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCertChain[0].get());
+            i32 retServerCert = SSL_CTX_use_certificate(ctx, ServerCreds->ServerCertChain[0].get());
             if (retServerCert != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server certificate to ssl context, it might be incorrect.");
                 return false;
@@ -211,7 +211,7 @@ public:
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't parse server private key, it might be incorrect.");
                 return false;
             }
-            int retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
+            i32 retPrivateKey = SSL_CTX_use_PrivateKey(ctx, ServerCreds->ServerPrivateKey.get());
             if (retPrivateKey != 1) {
                 LOG_ERROR_S(*NActors::TlsActivationContext, Service, "Couldn't add server private key to ssl context, it might be incorrect.");
                 return false;

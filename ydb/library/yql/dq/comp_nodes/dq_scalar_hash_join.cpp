@@ -111,6 +111,8 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
         , FastMode_(converters.Build->CanDirectExtract() && converters.Probe->CanDirectExtract())
+        , HasBuildRenames_(std::any_of(meta->Renames.begin(), meta->Renames.end(),
+                                       [](const auto& r) { return r.Side == ESide::Build; }))
     {}
 
     int Columns() const {
@@ -121,26 +123,58 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
         return NItems_;
     }
 
-    auto MakeConsumeFn() {
-        return [this](TSides<TSingleTuple> tuples) {
-            if (FastMode_) {
-                // Directly extract each output column from the packed tuple row.
-                // Eliminates TupleDeepCopy + UnpackAll round-trip.
-                for (auto rename : *Renames_) {
-                    FastBuffer_.push_back(
-                        Converters_.SelectSide(rename.Side)->ExtractSingleValue(
+    // Returns a callable satisfying JoinMatchFun for THybridHashJoin:
+    //   operator()(TSides<TSingleTuple>) — both sides present (Inner, Left+match)
+    //   operator()(TSingleTuple)         — probe only (LeftSemi, LeftOnly, Left+no-match)
+    struct TConsumeFn {
+        TRenamesScalarOutput* Self;
+
+        void operator()(TSides<TSingleTuple> tuples) {
+            if (Self->FastMode_) {
+                for (auto rename : *Self->Renames_) {
+                    Self->FastBuffer_.push_back(
+                        Self->Converters_.SelectSide(rename.Side)->ExtractSingleValue(
                             tuples.SelectSide(rename.Side), rename.Index));
                 }
             } else {
                 for (ESide side : EachSide) {
-                    Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
+                    Self->Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
                         tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
-                        SlowPacked_.Data.SelectSide(side).PackedTuples,
-                        SlowPacked_.Data.SelectSide(side).Overflow);
+                        Self->SlowPacked_.Data.SelectSide(side).PackedTuples,
+                        Self->SlowPacked_.Data.SelectSide(side).Overflow);
                 }
+                Self->SlowHasBuild_.push_back(true);
             }
-            NItems_++;
-        };
+            Self->NItems_++;
+        }
+
+        // Probe-only: LeftSemi/LeftOnly always; Left join when probe has no match.
+        // For LeftSemi/LeftOnly all renames reference Probe side only.
+        // For Left join unmatched, Build-side renames produce null values.
+        void operator()(TSingleTuple probeTuple) {
+            if (Self->FastMode_) {
+                for (auto rename : *Self->Renames_) {
+                    if (rename.Side == ESide::Probe) {
+                        Self->FastBuffer_.push_back(
+                            Self->Converters_.Probe->ExtractSingleValue(probeTuple, rename.Index));
+                    } else {
+                        // Left join unmatched: Build columns are null.
+                        Self->FastBuffer_.push_back(NUdf::TUnboxedValue{});
+                    }
+                }
+            } else {
+                Self->Converters_.Probe->GetTupleLayout()->TupleDeepCopy(
+                    probeTuple.PackedData, probeTuple.OverflowBegin,
+                    Self->SlowPacked_.Data.Probe.PackedTuples,
+                    Self->SlowPacked_.Data.Probe.Overflow);
+                Self->SlowHasBuild_.push_back(false);
+            }
+            Self->NItems_++;
+        }
+    };
+
+    TConsumeFn MakeConsumeFn() {
+        return TConsumeFn{this};
     }
 
     TFlushResult Flush() {
@@ -149,8 +183,14 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
             res.Buffer = std::move(FastBuffer_);
             FastBuffer_.clear();
         } else {
+            // Count how many tuples actually have a Build side row.
+            i64 nBuildRows = 0;
+            for (bool hasBuild : SlowHasBuild_) {
+                nBuildRows += hasBuild ? 1 : 0;
+            }
+
             TPackResult buildPack, probePack;
-            buildPack.NTuples = NItems_;
+            buildPack.NTuples = nBuildRows;
             buildPack.PackedTuples = std::move(SlowPacked_.Data.Build.PackedTuples);
             buildPack.Overflow = std::move(SlowPacked_.Data.Build.Overflow);
 
@@ -158,19 +198,30 @@ struct TRenamesScalarOutput : NNonCopyable::TMoveOnly {
             probePack.PackedTuples = std::move(SlowPacked_.Data.Probe.PackedTuples);
             probePack.Overflow = std::move(SlowPacked_.Data.Probe.Overflow);
 
-            TVector<NUdf::TUnboxedValue> buildValues(NItems_ * BuildWidth_);
+            TVector<NUdf::TUnboxedValue> buildValues(nBuildRows * BuildWidth_);
             TVector<NUdf::TUnboxedValue> probeValues(NItems_ * ProbeWidth_);
-            Converters_.Build->UnpackAll(buildPack, buildValues.data());
+            if (nBuildRows > 0) {
+                Converters_.Build->UnpackAll(buildPack, buildValues.data());
+            }
             Converters_.Probe->UnpackAll(probePack, probeValues.data());
 
             res.Buffer.reserve(NItems_ * Columns());
+            i64 buildRow = 0;
             for (i64 tupleIndex = 0; tupleIndex < NItems_; ++tupleIndex) {
-                const NUdf::TUnboxedValue* bRow = buildValues.data() + tupleIndex * BuildWidth_;
                 const NUdf::TUnboxedValue* pRow = probeValues.data() + tupleIndex * ProbeWidth_;
+                bool hasBuild = SlowHasBuild_[tupleIndex];
+                const NUdf::TUnboxedValue* bRow = hasBuild
+                    ? buildValues.data() + (buildRow++) * BuildWidth_
+                    : nullptr;
                 for (auto rename : *Renames_) {
-                    res.Buffer.push_back(rename.Side == ESide::Build ? bRow[rename.Index] : pRow[rename.Index]);
+                    if (rename.Side == ESide::Build) {
+                        res.Buffer.push_back(bRow ? bRow[rename.Index] : NUdf::TUnboxedValue{});
+                    } else {
+                        res.Buffer.push_back(pRow[rename.Index]);
+                    }
                 }
             }
+            SlowHasBuild_.clear();
         }
         NItems_ = 0;
         return res;
@@ -186,11 +237,15 @@ private:
     TVector<NUdf::TUnboxedValue> FastBuffer_;
     // Slow path (variable-size columns): accumulate packed tuples, unpack in Flush.
     TSlowPacked SlowPacked_;
+    // Per-row flag: true if the row has a real Build-side tuple (false for probe-only rows).
+    // Used in Flush() to interleave build values with nulls for Left join unmatched rows.
+    TVector<bool> SlowHasBuild_;
     const TDqJoinImplRenames* Renames_;
     TSides<IScalarLayoutConverter*> Converters_;
     const int BuildWidth_;
     const int ProbeWidth_;
     const bool FastMode_;
+    const bool HasBuildRenames_;
 };
 
 template <EJoinKind Kind>
@@ -217,7 +272,7 @@ public:
 private:
     class TStreamState : public TComputationValue<TStreamState> {
         using TBase = TComputationValue<TStreamState>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, EJoinKind::Inner>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TScalarPackedTupleSource, TestStorageSettings, Kind>;
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
@@ -394,8 +449,6 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     const auto rightFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 1));
     MKQL_ENSURE(leftFlow, "Expected WideFlow as a left input");
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
-    MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
-
     TDqUserRenames userRenames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     ValidateRenames(userRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
@@ -405,8 +458,22 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
         meta.Renames.push_back({.Index = rename.Index, .Side = side});
     }
 
-    return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(meta),
-                                                        {.Build = rightFlow, .Probe = leftFlow});
+    switch (joinKind) {
+        case EJoinKind::Inner:
+            return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, std::move(meta),
+                                                                {.Build = rightFlow, .Probe = leftFlow});
+        case EJoinKind::LeftSemi:
+            return new TScalarHashJoinWrapper<EJoinKind::LeftSemi>(ctx.Mutables, std::move(meta),
+                                                                   {.Build = rightFlow, .Probe = leftFlow});
+        case EJoinKind::LeftOnly:
+            return new TScalarHashJoinWrapper<EJoinKind::LeftOnly>(ctx.Mutables, std::move(meta),
+                                                                   {.Build = rightFlow, .Probe = leftFlow});
+        case EJoinKind::Left:
+            return new TScalarHashJoinWrapper<EJoinKind::Left>(ctx.Mutables, std::move(meta),
+                                                               {.Build = rightFlow, .Probe = leftFlow});
+        default:
+            MKQL_ENSURE(false, "Unsupported join kind for ScalarHashJoin: " << (ui32)joinKind);
+    }
 }
 
 } // namespace NKikimr::NMiniKQL

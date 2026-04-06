@@ -93,7 +93,7 @@ TPropagatingStorage::TPropagatingStorage(const TPropagatingStorage& other) = def
 TPropagatingStorage::TPropagatingStorage(TPropagatingStorage&& other) noexcept = default;
 
 TPropagatingStorage& TPropagatingStorage::operator=(const TPropagatingStorage& other) = default;
-TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) = default;
+TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) noexcept = default;
 
 bool TPropagatingStorage::IsNull() const
 {

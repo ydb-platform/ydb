@@ -36,7 +36,7 @@
  import hashlib
  import os
 +import pkgutil
- from typing import Generic, TypeVar, Union, Dict, Optional, Any
+ from typing import Generic, TypeVar, Union, Dict, Optional, Any, Iterator
  from pathlib import Path
  
 @@ -252,12 +253,17 @@ def load_grammar(*, version: str = None, path: str = None):

@@ -209,7 +209,7 @@ struct TConfig
 
     /// Defines replication factor that is used for files that are uploaded to YT
     /// to use them in operations.
-    int FileCacheReplicationFactor = 10;
+    TPatchableField<i64> FileCacheReplicationFactor = TPatchableField<i64>("file_cache_replication_factor", 10);
 
     /// @brief Used when waiting for other process which uploads the same file to the file cache.
     ///

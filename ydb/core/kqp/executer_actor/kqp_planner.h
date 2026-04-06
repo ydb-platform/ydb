@@ -66,7 +66,6 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
-        const bool VerboseMemoryLimitException;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
@@ -148,7 +147,6 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
-    const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;

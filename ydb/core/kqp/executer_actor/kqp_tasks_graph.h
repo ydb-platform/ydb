@@ -83,6 +83,7 @@ struct TStageInfoMeta {
 
     TVector<bool> SkipNullKeys;
 
+    THashSet<TKeyDesc::ERowOperation> AccessCheckOperations;
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
@@ -317,7 +318,6 @@ public:
         Unknown = 0,
         Compute = 1,
         Scan = 2,
-        DataShard = 3,
     };
 
     ui64 ShardId = 0; // only in case of non-scans (data-query & legacy scans)
@@ -339,11 +339,6 @@ public:
         TString Name;
         bool NotNull;
         bool IsPrimary = false;
-    };
-
-    struct TColumnWrite {
-        TColumn Column;
-        ui32 MaxValueSizeBytes = 0;
     };
 
     struct TShardReadInfo {
@@ -370,29 +365,8 @@ public:
         std::vector<std::string> GroupByColumnNames;
     };
 
-    struct TWriteInfo {
-        ui64 UpdateOps = 0;
-        ui64 EraseOps = 0;
-
-        TShardKeyRanges Ranges;
-        THashMap<ui32, TColumnWrite> ColumnWrites;
-
-        void AddUpdateOp() {
-            ++UpdateOps;
-        }
-
-        void AddEraseOp() {
-            ++EraseOps;
-        }
-
-        bool IsPureEraseOp() const {
-            return (EraseOps > 0) && (UpdateOps == 0);
-        }
-    };
-
     TReadInfo ReadInfo;
     TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
-    TMaybe<TWriteInfo> Writes;             // if not set -> no writes
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };
@@ -419,7 +393,7 @@ public:
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
     size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-        TQueryExecutionStats* stats, THashSet<ui64>* ShardsWithEffects
+        TQueryExecutionStats* stats
     );
 
     // TODO: public used by TKqpLiteralExecuter

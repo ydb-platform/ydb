@@ -607,7 +607,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
     InFlightShards.StopScanner(state->TabletId, false);
     Counters->ScanQueryShardDisconnect->Inc();
 
-    if (state->TotalRetries >= ShardsScanningPolicy.GetCriticalTotalRetriesCount()) {
+    if (state->TotalRetries >= ShardsScanningPolicy.CriticalTotalRetriesCount) {
         CA_LOG_E(
             "TKqpScanFetcherActor: broken pipe with tablet " << state->TabletId << ", retries limit exceeded (" << state->TotalRetries << ")");
         SendGlobalFail(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
@@ -615,7 +615,7 @@ void TKqpScanFetcherActor::RetryDeliveryProblem(TShardState::TPtr state) {
         return;
     }
 
-    if (state->RetryAttempt >= ShardsScanningPolicy.GetReaskShardRetriesCount()) {
+    if (state->RetryAttempt >= ShardsScanningPolicy.ReaskShardRetriesCount) {
         state->ResetRetry();
         Send(state->ActorId, new NActors::TEvents::TEvPoisonPill());
         return EnqueueResolveShard(state);

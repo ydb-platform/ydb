@@ -129,8 +129,10 @@ TContext::TContext(TLexers lexers, TParsers parsers,
         DisableLegacyNotNull = true;
     }
 
+    SetYqlSelectMode(settings.YqlSelect);
+
     if (settings.Flags.contains("AutoYqlSelect")) {
-        SetYqlSelectMode(EYqlSelectMode::Auto);
+        SetYqlSelectMode(EYqlSelect::Auto);
     }
 
     for (auto lib : settings.Libraries) {
@@ -240,6 +242,15 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
     auto parseResult = TWarningRule::ParseFrom(codePattern, actionString, rule, parseError);
     YQL_ENSURE(parseResult == TWarningRule::EParseResult::PARSE_OK);
     WarningPolicy.AddRule(rule);
+}
+
+bool TContext::IsAnyUnusedHintForToken(NYql::TPosition tokenPos, std::function<bool(NSQLTranslation::TSQLHint)> pred) {
+    const auto* hints = SqlHints_.FindPtr(tokenPos);
+    if (!hints) {
+        return false;
+    }
+
+    return AnyOf(*hints, pred);
 }
 
 TVector<NSQLTranslation::TSQLHint> TContext::PullHintForToken(NYql::TPosition tokenPos) {
@@ -606,6 +617,21 @@ bool TContext::EnsureBackwardCompatibleFeatureAvailable(
 bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
     return NYql::IsBackwardCompatibleFeatureAvailable(
         Settings.LangVer, featureVer, Settings.BackportMode);
+}
+
+bool TContext::EnsureFeatureNotExpired(
+    TPosition position,
+    TStringBuf feature,
+    NYql::TLangVersion version)
+{
+    if (!IsAvailableLangVersion(Settings.LangVer, version)) {
+        Error(position)
+            << feature << " is not available after language version "
+            << NYql::FormatLangVersion(version);
+        return false;
+    }
+
+    return true;
 }
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {

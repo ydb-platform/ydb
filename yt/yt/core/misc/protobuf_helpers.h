@@ -451,9 +451,9 @@ class TRefCountedProto
 public:
     TRefCountedProto() = default;
     TRefCountedProto(const TRefCountedProto<TProto>& other);
-    TRefCountedProto(TRefCountedProto<TProto>&& other);
+    TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept;
     explicit TRefCountedProto(const TProto& other);
-    explicit TRefCountedProto(TProto&& other);
+    explicit TRefCountedProto(TProto&& other) noexcept;
     ~TRefCountedProto();
 
     i64 GetSize() const;

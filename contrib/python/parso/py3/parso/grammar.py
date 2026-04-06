@@ -1,7 +1,7 @@
 import hashlib
 import os
 import pkgutil
-from typing import Generic, TypeVar, Union, Dict, Optional, Any
+from typing import Generic, TypeVar, Union, Dict, Optional, Any, Iterator
 from pathlib import Path
 
 from parso._compatibility import is_pypy
@@ -9,7 +9,7 @@ from parso.pgen2 import generate_grammar
 from parso.utils import split_lines, python_bytes_to_unicode, \
     PythonVersionInfo, parse_version_string
 from parso.python.diff import DiffParser
-from parso.python.tokenize import tokenize_lines, tokenize
+from parso.python.tokenize import tokenize_lines, tokenize, PythonToken
 from parso.python.token import PythonTokenTypes
 from parso.cache import parser_cache, load_module, try_to_save_module
 from parso.parser import BaseParser
@@ -224,7 +224,7 @@ class PythonGrammar(Grammar):
         )
         self.version_info = version_info
 
-    def _tokenize_lines(self, lines, **kwargs):
+    def _tokenize_lines(self, lines, **kwargs) -> Iterator[PythonToken]:
         return tokenize_lines(lines, version_info=self.version_info, **kwargs)
 
     def _tokenize(self, code):
@@ -256,7 +256,6 @@ def load_grammar(*, version: str = None, path: str = None):
         'grammar%s%s.txt' % (version_info.major, version_info.minor)
     )
 
-    global _loaded_grammars
     path = os.path.join(os.path.dirname(__file__), file)
     try:
         return _loaded_grammars[path]

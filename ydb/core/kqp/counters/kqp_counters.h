@@ -365,6 +365,8 @@ public:
     ::NMonitoring::TDynamicCounterPtr WorkloadManagerGroup;
     ::NMonitoring::TDynamicCounterPtr ChannelGroup;
 
+    TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr FullScansExecuted;
 
     // Lease updates counters
@@ -387,6 +389,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesFetched;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesCompiled;
     ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesTruncated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WarmupQueriesEmptyQueryType;
 
     // Compile computation pattern service
     ::NMonitoring::TDynamicCounters::TCounterPtr CompiledComputationPatterns;

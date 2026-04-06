@@ -42,7 +42,7 @@ TMaybe<TString> CheckedFormat(
     const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     NYql::TIssues& issues,
-    bool isIdempotencyChecked)
+    EConvergenceRequirement convergence)
 {
     NSQLTranslationV1::TLexers lexers = {
         .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
@@ -87,7 +87,25 @@ TMaybe<TString> CheckedFormat(
         }
     }
 
-    if (isIdempotencyChecked) {
+    if (convergence == EConvergenceRequirement::Triple) {
+        TString formatted2;
+        if (!formatter->Format(formatted, formatted2, issues)) {
+            return Nothing();
+        }
+
+        TString formatted3;
+        if (!formatter->Format(formatted2, formatted3, issues)) {
+            return Nothing();
+        }
+
+        if (formatted2 != formatted3) {
+            issues.AddIssue(
+                TStringBuilder()
+                << "Triple formatting check failed. "
+                << "Formatting a doubly formatted query yielded a different result.");
+            return Nothing();
+        }
+    } else if (convergence == EConvergenceRequirement::Double) {
         TString formatted2;
         if (!formatter->Format(formatted, formatted2, issues)) {
             return Nothing();
@@ -96,6 +114,7 @@ TMaybe<TString> CheckedFormat(
         if (formatted != formatted2) {
             issues.AddIssue(
                 TStringBuilder()
+                << "Double formatting check failed. "
                 << "Formatting an already formatted query yielded a different result. "
                 << "Add /* skip double format */ to suppress");
             return Nothing();

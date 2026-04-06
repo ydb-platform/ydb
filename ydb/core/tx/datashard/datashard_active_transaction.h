@@ -58,6 +58,7 @@ struct TSchemaOperation {
         ETypeCreateIncrementalBackupSrc = 18,
         ETypeRotateCdcStream = 19,
         ETypeTruncate = 20,
+        ETypePrepareIndexValidation = 21,
 
         ETypeUnknown = Max<ui32>()
     };
@@ -106,6 +107,7 @@ struct TSchemaOperation {
     bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; }
     bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; }
     bool IsInitiateBuildIndex() const { return Type == ETypeInitiateBuildIndex; }
+    bool IsPrepareIndexValidation() const { return Type == ETypePrepareIndexValidation; }
     bool IsFinalizeBuildIndex() const { return Type == ETypeFinalizeBuildIndex; }
     bool IsDropIndexNotice() const { return Type == ETypeDropIndexNotice; }
     bool IsMove() const { return Type == ETypeMoveTable; }

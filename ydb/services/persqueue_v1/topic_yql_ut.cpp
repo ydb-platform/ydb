@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateTopicYqlBackCompatibility) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -55,7 +54,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateAndAlterTopicYql) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -203,7 +201,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(AlterAutopartitioning) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -251,7 +248,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateSharedConsumer) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         ff.SetEnableTopicMessageLevelParallelism(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
@@ -295,7 +291,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(AlterSharedConsumer) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         ff.SetEnableTopicMessageLevelParallelism(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);

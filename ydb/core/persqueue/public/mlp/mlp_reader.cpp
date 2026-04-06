@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
@@ -143,23 +144,34 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             codec = Ydb::Topic::CODEC_RAW;
         }
 
-        THashMap<TString, TString> messageMetaAttr(proto.messagemeta_size());
-        for (const auto& meta : proto.messagemeta()) {
-            messageMetaAttr.try_emplace(meta.key(), meta.value());
+        TString messageGroupId;
+        TString messageDeduplicationId;
+
+        std::unordered_multimap<TString, TString> attributes(proto.GetMessageMeta().size());
+        for (const auto& meta : proto.GetMessageMeta()) {
+            if (meta.key() == MESSAGE_ATTRIBUTE_KEY) {
+                messageGroupId = std::move(meta.value());
+            } else if (meta.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
+                messageDeduplicationId = std::move(meta.value());
+            } else {
+            attributes.emplace(meta.key(), meta.value());
+            }
         }
 
-        TString messageGroupId;
-        auto it = messageMetaAttr.find(MESSAGE_ATTRIBUTE_KEY);
-        if (it != messageMetaAttr.end()) {
-            messageGroupId = std::move(it->second);
-        }
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
             .Codec = codec,
             .Data = std::move(data),
-            .MessageMetaAttributes = std::move(messageMetaAttr),
-            .SentTimestamp = TInstant::MilliSeconds(message.messagemeta().senttimestampmilliseconds()),
+            .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
+            .MessageDeduplicationId = messageDeduplicationId,
+            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount()
+                ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount())
+                : std::nullopt,
+            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() 
+                ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()))
+                : std::nullopt,
+            .Attributes = std::move(attributes),
         });
     }
 

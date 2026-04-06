@@ -6,6 +6,7 @@ namespace NKikimr::NColumnShard {
 
 TPortionIndexStats::TPortionClass::TPortionClass(const NOlap::TPortionInfo& portion) {
     Produced = portion.GetProduced();
+    IsDefaultTier = portion.IsDefaultTier(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
 }
 
 void TPortionIndexStats::AddPortion(const NOlap::TPortionInfo& portion) {

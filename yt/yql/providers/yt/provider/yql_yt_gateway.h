@@ -256,6 +256,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
@@ -367,6 +368,7 @@ public:
         OPTION_FIELD(TString, UsedCluster)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
@@ -395,6 +397,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
@@ -421,6 +424,7 @@ public:
         OPTION_FIELD(TMaybe<ui32>, PublicId)
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD_DEFAULT(TSet<TString>, SecurityTags, {})
     };
 
@@ -443,6 +447,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
         OPTION_FIELD(TSecureParams, SecureParams)
         OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TLangVersion, LangVer, UnknownLangVersion)
@@ -467,6 +472,7 @@ public:
         OPTION_FIELD(TYtSettings::TConstPtr, Config)
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
+        OPTION_FIELD(TMaybe<TString>, OutputHash)
     };
 
     struct TPublishResult : public NCommon::TOperationResult {

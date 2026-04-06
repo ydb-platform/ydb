@@ -117,57 +117,58 @@ enum class StatusTimeProperty {
 };
 
 /// Creates a status with given additional information
-y_absl::Status StatusCreate(
-    y_absl::StatusCode code, y_absl::string_view msg, const DebugLocation& location,
-    std::vector<y_absl::Status> children) GRPC_MUST_USE_RESULT;
+y_absl::Status StatusCreate(y_absl::StatusCode code, y_absl::string_view msg,
+                          const DebugLocation& location,
+                          std::vector<y_absl::Status> children);
 
 /// Sets the int property to the status
 void StatusSetInt(y_absl::Status* status, StatusIntProperty key, intptr_t value);
 
 /// Gets the int property from the status
-y_absl::optional<intptr_t> StatusGetInt(
-    const y_absl::Status& status, StatusIntProperty key) GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT
+y_absl::optional<intptr_t> StatusGetInt(const y_absl::Status& status,
+                                      StatusIntProperty key);
 
 /// Sets the str property to the status
 void StatusSetStr(y_absl::Status* status, StatusStrProperty key,
                   y_absl::string_view value);
 
 /// Gets the str property from the status
-y_absl::optional<TString> StatusGetStr(
-    const y_absl::Status& status, StatusStrProperty key) GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT y_absl::optional<TString> StatusGetStr(
+    const y_absl::Status& status, StatusStrProperty key);
 
 /// Sets the time property to the status
 void StatusSetTime(y_absl::Status* status, StatusTimeProperty key,
                    y_absl::Time time);
 
 /// Gets the time property from the status
-y_absl::optional<y_absl::Time> StatusGetTime(
-    const y_absl::Status& status, StatusTimeProperty key) GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT y_absl::optional<y_absl::Time> StatusGetTime(
+    const y_absl::Status& status, StatusTimeProperty key);
 
 /// Adds a child status to status
 void StatusAddChild(y_absl::Status* status, y_absl::Status child);
 
 /// Returns all children status from a status
-std::vector<y_absl::Status> StatusGetChildren(y_absl::Status status)
-    GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT std::vector<y_absl::Status> StatusGetChildren(
+    y_absl::Status status);
 
 /// Returns a string representation from status
 /// Error status will be like
 ///   STATUS[:MESSAGE] [{PAYLOADS[, children:[CHILDREN-STATUS-LISTS]]}]
 /// e.g.
 ///   CANCELLATION:SampleMessage {errno:'2021', line:'54', children:[ABORTED]}
-TString StatusToString(const y_absl::Status& status) GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT TString StatusToString(const y_absl::Status& status);
 
 namespace internal {
 
 /// Builds a upb message, google_rpc_Status from a status
 /// This is for internal implementation & test only
-google_rpc_Status* StatusToProto(const y_absl::Status& status,
-                                 upb_Arena* arena) GRPC_MUST_USE_RESULT;
+GRPC_MUST_USE_RESULT google_rpc_Status* StatusToProto(
+    const y_absl::Status& status, upb_Arena* arena);
 
 /// Builds a status from a upb message, google_rpc_Status
 /// This is for internal implementation & test only
-y_absl::Status StatusFromProto(google_rpc_Status* msg) GRPC_MUST_USE_RESULT;
+y_absl::Status StatusFromProto(google_rpc_Status* msg);
 
 /// Returns ptr that is allocated in the heap memory and the given status is
 /// copied into. This ptr can be used to get Status later and should be

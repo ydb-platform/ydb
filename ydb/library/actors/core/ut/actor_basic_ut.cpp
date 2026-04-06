@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -64,7 +65,7 @@ Y_UNIT_TEST_SUITE(ActorBasic) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);

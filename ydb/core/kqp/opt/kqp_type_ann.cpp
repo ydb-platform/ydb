@@ -1975,11 +1975,11 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
-    // First argument: text (should be String or Utf8)
+    // First argument: text (String, Utf8, Json, or JsonDocument — same payload as string for analyzers / tokenize)
     const auto* textArg = node->Child(0);
     if (!EnsureComputable(*textArg, ctx)) {
         return TStatus::Error;
@@ -1991,10 +1991,17 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    if (textDataType->GetSlot() != EDataSlot::String && textDataType->GetSlot() != EDataSlot::Utf8) {
-        ctx.AddError(TIssue(ctx.GetPosition(textArg->Pos()), TStringBuilder()
-            << "Expected String or Utf8 for text argument, but got: " << *textArg->GetTypeAnn()));
-        return TStatus::Error;
+    const auto textSlot = textDataType->GetSlot();
+    switch (textSlot) {
+        case EDataSlot::String:
+        case EDataSlot::Utf8:
+        case EDataSlot::Json:
+        case EDataSlot::JsonDocument:
+            break;
+        default:
+            ctx.AddError(TIssue(ctx.GetPosition(textArg->Pos()), TStringBuilder()
+            << "Expected String, Utf8, Json, or JsonDocument for text argument, but got: " << *textArg->GetTypeAnn()));
+            return TStatus::Error;
     }
 
     // Second argument: settings (should be String - serialized proto)
@@ -2014,8 +2021,15 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
+    // Third argument: mode (should be Atom - "0" (any fulltext), "1" (JI on Json) or "2" (JI on JsonDocument))
+    const auto* modeArg = node->Child(2);
+    if (!EnsureAtom(*modeArg, ctx)) {
+        return TStatus::Error;
+    }
+
     // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
-    auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
+    const EDataSlot tokenSlot = (textSlot == EDataSlot::Json || textSlot == EDataSlot::JsonDocument) ? EDataSlot::String : textSlot;
+    auto stringType = ctx.MakeType<TDataExprType>(tokenSlot);
     TVector<const TItemExprType*> rowItems;
     rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::TokenColumn, stringType));
     rowItems.push_back(ctx.MakeType<TItemExprType>(NTableIndex::NFulltext::FreqColumn, ctx.MakeType<TDataExprType>(EDataSlot::Uint32)));
@@ -2451,22 +2465,55 @@ TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ct
 TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto subquery = node->Child(TKqpSublinkBase::idx_Subquery);
     auto itemType = subquery->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    auto valueType = itemType->GetItems()[0]->GetItemType();
+
     if (TKqpExprSublink::Match(node.Get())) {
-        auto valueType = itemType->GetItems()[0]->GetItemType();
         if (!valueType->IsOptionalOrNull()) {
             valueType = ctx.MakeType<TOptionalExprType>(valueType);
         }
         node->SetTypeAnn(valueType);
-    } else /* (TKqpExistsSublink::Match(node.Get()) || TKqpInSublink::Match(node.Get())) */ {
-        YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+        return TStatus::Ok;
+    }
 
-        auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
-        if (std::stoi(TString(pgSyntax->Content()))) {
-            node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
-        } else {
-            node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+    YQL_CLOG(TRACE, CoreDq) << "Checking boolean sublink";
+
+
+    if (TKqpInSublink::Match(node.Get())) {
+        auto& lambda = node->ChildRef(TKqpInSublink::idx_InLambda);
+        auto outerTypeNode = node->Child(TKqpInSublink::idx_OuterType);
+        auto outerType = outerTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+      
+        
+        TVector<const TItemExprType*> newItemTypes;
+        // Need to modify the outer type to remove _alias prefix
+        for (auto itemType : outerType->GetItems()) {
+            auto oldTypeName = TString(itemType->GetName());
+            if (oldTypeName.StartsWith("_alias_")) {
+                auto newTypeName = oldTypeName.substr(7);
+                newItemTypes.push_back(ctx.MakeType<TItemExprType>(newTypeName, itemType->GetItemType()));
+            }
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(oldTypeName, itemType->GetItemType()));
+        }
+        auto fixedOuterType = ctx.MakeType<TStructExprType>(newItemTypes);
+
+        YQL_CLOG(TRACE, CoreDq) << "Outer type: " << *(TTypeAnnotationNode*)fixedOuterType;
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, { fixedOuterType, valueType }, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
         }
     }
+
+    auto pgSyntax = node->Child(TKqpBooleanSublink::idx_ReturnPgBool);
+    if (std::stoi(TString(pgSyntax->Content()))) {
+        node->SetTypeAnn(ctx.MakeType<TPgExprType>(NYql::NPg::LookupType("bool").TypeId));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+    }
+
     return TStatus::Ok;
 }
 

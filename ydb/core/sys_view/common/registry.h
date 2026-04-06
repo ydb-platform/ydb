@@ -261,6 +261,7 @@ struct Schema : NIceDb::Schema {
         struct State                           : Column<18, NScheme::NTypeIds::Utf8> {};
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct MaintenanceStatus               : Column<21, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -281,7 +282,8 @@ struct Schema : NIceDb::Schema {
             ExpectedSlotCount,
             NumActiveSlots,
             DecommitStatus,
-            SlotSizeInUnits>;
+            SlotSizeInUnits,
+            MaintenanceStatus>;
     };
 
     struct VSlots : Table<5> {
@@ -589,6 +591,10 @@ struct Schema : NIceDb::Schema {
         struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
         struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
         struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -605,7 +611,11 @@ struct Schema : NIceDb::Schema {
             SessionStartAt,
             QueryStartAt,
             StateChangeAt,
-            UserSID>;
+            UserSID,
+            WmPoolId,
+            WmState,
+            WmEnterTime,
+            WmExitTime>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -879,6 +889,8 @@ struct Schema : NIceDb::Schema {
         struct Warnings              : Column<9, NScheme::NTypeIds::Utf8> {};
         struct Metadata              : Column<10, NScheme::NTypeIds::Utf8> {};
         struct IsTruncated           : Column<11, NScheme::NTypeIds::Bool> {};
+        struct QueryType             : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct Syntax                : Column<13, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
@@ -892,7 +904,9 @@ struct Schema : NIceDb::Schema {
             CompilationDurationMs,
             Warnings,
             Metadata,
-            IsTruncated>;
+            IsTruncated,
+            QueryType,
+            Syntax>;
     };
 
     struct StreamingQueries : Table<26> {

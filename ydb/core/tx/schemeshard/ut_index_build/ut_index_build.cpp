@@ -383,13 +383,15 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
 
-        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
+        UNIT_ASSERT_VALUES_EQUAL(shadowData[0], true);
         UNIT_ASSERT_VALUES_EQUAL(shadowData[1], false);
+        UNIT_ASSERT(shadowData.size() < 3 || shadowData[2] == false);
 
-        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers.size(), indexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobal ? 2 : 3);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[0], true);
         UNIT_ASSERT_VALUES_EQUAL(keepEraseMarkers[1], false);
+        UNIT_ASSERT(keepEraseMarkers.size() < 3 || keepEraseMarkers[2] == false);
     }
 
     Y_UNIT_TEST(BaseCase) {

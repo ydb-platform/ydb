@@ -20,6 +20,24 @@ namespace {
 
 constexpr bool PrintCallableTimes = false;
 
+constexpr ui32 MaxChildrenForFuzzing = 100;
+
+THashSet<TStringBuf> FuzzUntypedExcludes = {
+    "S3ReadObject!",
+    "S3ParseSettings",
+    "DqCnMerge",
+    "DqJoin",
+    "DqPhyMapJoin",
+    "DqPhyCrossJoin",
+    "DqPhyJoinDict",
+};
+
+// IO funcs will be skipped during partial typecheck
+THashSet<TStringBuf> FuzzUniversalExcludes = {
+    "ConfRead!",
+    "PgReadTable!",
+};
+
 class TTypeAnnotationTransformer : public TGraphTransformerBase {
 public:
     TTypeAnnotationTransformer(TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types,
@@ -138,6 +156,8 @@ public:
         FunctionStack_.Reset();
         CallableTimes_.clear();
         IsComplete_ = false;
+        FuzzLambdaNode_.Reset();
+        FuzzUniversalNode_.Reset();
     }
 
 
@@ -589,10 +609,107 @@ private:
         }
     }
 
+    enum class EFuzzMode {
+        UntypedLambda,
+        Universal
+    };
+
+    void FuzzCallable(const TExprNode::TPtr& originalInput, TExprContext& ctx, EFuzzMode mode, TStringBuf description) {
+        if (originalInput->ChildrenSize() == 0) {
+            return;
+        }
+
+        if (originalInput->ChildrenSize() > MaxChildrenForFuzzing) {
+            return;
+        }
+
+        TExprNode::TPtr subst;
+        switch (mode) {
+        case EFuzzMode::UntypedLambda:
+            {
+                if (FuzzUntypedExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzLambdaNode_) {
+                    auto voidNode = ctx.NewCallable(originalInput->Pos(), "Void", {});
+                    voidNode->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+                    auto argsNode = ctx.NewArguments(originalInput->Pos(), {});
+                    argsNode->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                    FuzzLambdaNode_ = ctx.NewLambda(originalInput->Pos(),
+                                                    std::move(argsNode), std::move(voidNode));
+                }
+
+                subst = FuzzLambdaNode_;
+                break;
+            }
+        case EFuzzMode::Universal:
+            {
+                if (FuzzUniversalExcludes.contains(originalInput->Content())) {
+                    return;
+                }
+
+                if (!FuzzUniversalNode_) {
+                    auto arg = ctx.NewCallable(originalInput->Pos(), "UniversalType", {});
+                    arg->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TUniversalExprType>()));
+                    FuzzUniversalNode_ = ctx.NewCallable(originalInput->Pos(), "InstanceOf", {arg});
+                    FuzzUniversalNode_->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                }
+
+                subst = FuzzUniversalNode_;
+                break;
+            }
+        }
+
+        ctx.IssueManager.Mute(mode == EFuzzMode::Universal);
+        Y_DEFER {
+            ctx.IssueManager.Unmute();
+        };
+
+        for (ui32 i = 0; i < originalInput->ChildrenSize(); ++i) {
+            auto fuzzInput = ctx.ShallowCopy(*originalInput);
+            fuzzInput->ChildRef(i) = subst;
+
+            TExprNode::TPtr fuzzOutput;
+            try {
+                auto fuzzStatus = CallableTransformer_->Transform(fuzzInput, fuzzOutput, ctx);
+                switch (mode) {
+                case EFuzzMode::UntypedLambda:
+                    Y_UNUSED(fuzzStatus);
+                    break;
+                case EFuzzMode::Universal:
+                    if (fuzzStatus == IGraphTransformer::TStatus::Error) {
+                        throw yexception() << "Error status";
+                    }
+
+                    break;
+                }
+            } catch (...) {
+                ythrow yexception() << "Fuzz " << description << " failed for callable " << originalInput->Content()
+                    << ", mutated input #" << i << ", reason: " << CurrentExceptionMessage();
+            }
+        }
+    }
+
 protected:
     virtual IGraphTransformer::TStatus DoCallableTransform(const TExprNode::TPtr& input,
-        TExprNode::TPtr& output, TExprContext& ctx) {
-        return CallableTransformer_->Transform(input, output, ctx);
+                                                           TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr inputCopy;
+        if (GetTypes().FuzzUntypedLambda || (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal)) {
+            inputCopy = ctx.ShallowCopy(*input);
+        }
+
+        auto status = CallableTransformer_->Transform(input, output, ctx);
+
+        if (GetTypes().FuzzUntypedLambda && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::UntypedLambda, "untyped lambda");
+        }
+
+        if (Mode_ == ETypeCheckMode::Initial && GetTypes().FuzzUniversal && status != TStatus::Error) {
+            FuzzCallable(inputCopy, ctx, EFuzzMode::Universal, "universal");
+        }
+
+        return status;
     }
 
     TTypeAnnotationContext& GetTypes() {
@@ -611,6 +728,8 @@ private:
     TFunctionStack FunctionStack_;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes_;
     bool KeepWorldEnabled_ = false;
+    TExprNode::TPtr FuzzLambdaNode_;
+    TExprNode::TPtr FuzzUniversalNode_;
 };
 
 } // namespace
@@ -804,7 +923,12 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (input->IsCallable({"Udf", "ScriptUdf", "EvaluateAtom",
+        if (input->IsCallable({"Udf", "ScriptUdf"}) && !GetTypes().UdfResolver) {
+            input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (input->IsCallable({"EvaluateAtom",
             "EvaluateExpr", "EvaluateType", "EvaluateCode", "QuoteCode", "Parameter",
             "SubqueryOrderBy", "SubqueryAssumeOrderBy", "SubqueryExtendFor", "SubqueryUnionAllFor",
             "SubqueryMergeFor", "SubqueryUnionMergeFor",
@@ -902,10 +1026,87 @@ public:
     }
 };
 
+class TPartialUdfResolver : public IUdfResolver {
+public:
+    explicit TPartialUdfResolver(const IUdfMeta* udfMeta,
+        std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser)
+        : UdfMeta_(udfMeta)
+        , TypeParser_(std::move(typeParser))
+    {}
+
+    TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
+        Y_UNUSED(moduleName);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool LoadMetadata(const TVector<TImport*>& imports,
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
+        Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
+        Y_UNUSED(storage);
+        Y_UNUSED(ctx);
+        for (auto f : functions) {
+            auto lowered = to_lower(f->Name);
+            TStringBuf moduleName, funcName;
+            if (!SplitUdfName(lowered, moduleName, funcName)) {
+                ctx.AddError(TIssue(f->Pos, TStringBuilder() << "Invalid function name: " << f->Name));
+                return false;
+            }
+
+            auto meta = UdfMeta_->GetMetadata(moduleName, funcName);
+            if (!meta) {
+                continue;
+            }
+
+            f->NormalizedName = f->Name;
+            f->CallableType = TypeParser_(meta->CallableType, ctx);
+            if (!f->CallableType) {
+                return false;
+            }
+
+            if (meta->RunConfigType) {
+                f->RunConfigType = TypeParser_(meta->RunConfigType, ctx);
+                if (!f->RunConfigType) {
+                    return false;
+                }
+
+            }
+
+            f->IsStrict = meta->IsStrict;
+            f->SupportsBlocks = meta->SupportsBlocks;
+            f->MinLangVer = meta->MinLangVer;
+            f->MaxLangVer = meta->MaxLangVer;
+        }
+
+        return true;
+    }
+
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
+        Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
+        Y_UNUSED(storage);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool ContainsModule(const TStringBuf& moduleName) const final {
+        Y_UNUSED(moduleName);
+        ythrow yexception() << "Not supported";
+    }
+
+    bool IsPartial() const final {
+        return true;
+    }
+
+private:
+    const IUdfMeta* UdfMeta_;
+    const std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> TypeParser_;
+};
+
 }
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
-    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory) {
+bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
+    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
+    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser) {
     YQL_ENSURE(astRoot, "AST root is null");
 
     TExprContext ctx;
@@ -918,6 +1119,10 @@ bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issu
 
     TTypeAnnotationContext typeCtx;
     typeCtx.LangVer = langver;
+    if (udfMeta) {
+        typeCtx.UdfResolver = new TPartialUdfResolver(udfMeta, typeParser);
+    }
+
     typeCtx.ArrowResolver = new TFakeArrowResolver;
     typeCtx.LayersRegistry = new TFakeLayersRegistry;
     typeCtx.UserDataStorage = new TUserDataStorage(nullptr, {}, nullptr, new TUdfIndex);

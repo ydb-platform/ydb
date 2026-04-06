@@ -4,6 +4,7 @@
 #include "dsproxy_put_impl.h"
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
@@ -70,6 +71,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     bool TimeStatsEnabled;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
+    bool ReduceInterpileTraffic;
+    std::deque<ui32> InterpileOptions;
 
     TDiskResponsivenessTracker::TPerDiskStatsPtr Stats;
 
@@ -593,6 +596,7 @@ public:
         , ReportedBytes(0)
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Common.Event->Tactic)
+        , ReduceInterpileTraffic(params.Common.Event->ReduceInterpileTraffic)
         , Stats(std::move(params.Stats))
         , AccelerationParams(params.AccelerationParams)
         , IncarnationRecords(Info->GetTotalVDisksNum())
@@ -624,6 +628,7 @@ public:
         , ReportedBytes(0)
         , TimeStatsEnabled(params.TimeStatsEnabled)
         , Tactic(params.Tactic)
+        , ReduceInterpileTraffic(params.ReduceInterpileTraffic)
         , Stats(std::move(params.Stats))
         , AccelerationParams(params.AccelerationParams)
         , IncarnationRecords(Info->GetTotalVDisksNum())
@@ -662,7 +667,14 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " HandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
-            << " RestartCounter# " << RestartCounter);
+            << " RestartCounter# " << RestartCounter
+            << " ReduceInterpileTraffic# " << ReduceInterpileTraffic);
+
+        Become(&TBlobStorageGroupPutRequest::StateWait);
+
+        if (ReduceInterpileTraffic) {
+            return InterpileBootstrap();
+        }
 
         TInstant now = TActivationContext::Now();
 
@@ -689,7 +701,6 @@ public:
             getTotalSize()
         );
 
-        Become(&TBlobStorageGroupPutRequest::StateWait);
         ScheduleNextWakeup(TInstant::Zero());
 
         PartSets.resize(PutImpl.Blobs.size());
@@ -701,6 +712,64 @@ public:
         }
         ResumeBootstrap();
         CheckRequests(TEvents::TSystem::Bootstrap);
+    }
+
+    void InterpileBootstrap() {
+        std::deque<ui32> options;
+
+        size_t orderNumber = 0;
+        for (auto *vdisk : GroupQueues->DisksByOrderNumber) {
+            const ui32 nodeId = Info->GetActorId(orderNumber).NodeId();
+            Y_DEBUG_ABORT_UNLESS(nodeId != SelfId().NodeId());
+
+            bool isConnected = false;
+            vdisk->Queues.ForEachQueue([&](auto& queue) { isConnected |= queue.IsConnected; });
+            if (isConnected) {
+                options.push_back(nodeId);
+            }
+            ++orderNumber;
+        }
+
+        std::random_shuffle(options.begin(), options.end());
+        InterpileOptions = std::move(options);
+        TryInterpileOption();
+    }
+
+    void TryInterpileOption() {
+        if (InterpileOptions.empty()) {
+            // fall back to ordinary algorithm
+            ReduceInterpileTraffic = false;
+            return Bootstrap();
+        }
+
+        const ui32 nodeId = InterpileOptions.front();
+        InterpileOptions.pop_front();
+
+        auto ev = std::make_unique<TEvInterpilePut>();
+        PutImpl.FillInterpilePut(*ev);
+        Send(MakeBlobStorageNodeWardenID(nodeId), ev.release(), IEventHandle::FlagSubscribeOnSession);
+        NodeSubscriptions.try_emplace(nodeId);
+    }
+
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
+        NodeSubscriptions[ev->Get()->NodeId] = ev->Sender;
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
+        NodeSubscriptions.erase(ev->Get()->NodeId);
+        if (ReduceInterpileTraffic) {
+            TryInterpileOption();
+        }
+    }
+
+    void Handle(TEvInterpilePutResult::TPtr ev) {
+        TPutImpl::TPutResultVec putResults;
+        PutImpl.ProcessInterpilePutResult(*ev->Get(), LogCtx, putResults);
+        if (!ReplyAndDieWithLastResponse(putResults)) {
+            ErrorReason = "unexpected behaviour in ProcessInterpilePutResult";
+            Y_DEBUG_ABORT_S(ErrorReason);
+            ReplyAndDie(NKikimrProto::ERROR);
+        }
     }
 
     bool EncodeQuantum() {
@@ -715,6 +784,11 @@ public:
 
             if (BlobsEncrypted <= BlobsSplit) { // first we encrypt the blob (if encryption is enabled)
                 auto& blob = PutImpl.Blobs[BlobsEncrypted];
+                if (blob.AlreadyEncrypted) {
+                    ++BlobsEncrypted;
+                    Y_ABORT_UNLESS(CurrentEncryptionOffset == 0);
+                    continue;
+                }
                 const ui32 size = Min<ui32>(blob.Buffer.size() - CurrentEncryptionOffset, MaxBytesToEncryptAtOnce);
                 EncryptInplace(blob.Buffer, CurrentEncryptionOffset, size, blob.BlobId, *Info);
                 CurrentEncryptionOffset += size;
@@ -869,6 +943,9 @@ public:
             hFunc(TEvAccelerate, Handle);
             cFunc(TEvBlobStorage::EvResume, ResumeBootstrap);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            hFunc(TEvInterpilePutResult, Handle);
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# 0x%08" PRIx32, type);

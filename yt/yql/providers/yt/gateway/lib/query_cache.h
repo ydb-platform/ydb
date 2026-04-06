@@ -22,12 +22,12 @@ public:
     }
 
     // returns true if cache was used
-    bool Lookup(const TAsyncQueue::TPtr& queue) {
+    bool Lookup(const TAsyncQueue::TWeakPtr& queue) {
         return LookupAsync(queue).GetValueSync();
     }
 
     [[nodiscard]]
-    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TPtr& queue) {
+    NThreading::TFuture<bool> LookupAsync(const TAsyncQueue::TWeakPtr& queue) {
         if (Mode == EQueryCacheMode::Disable || Mode == EQueryCacheMode::Refresh) {
             return NThreading::MakeFuture<bool>(false);
         }
@@ -64,10 +64,10 @@ public:
     TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir, const TString& hash,
         const TString& outputTablePath);
     TFsQueryCacheItem(const TYtSettings& config, const TString& cluster, const TString& tmpDir, const TString& hash,
-        const TVector<TString>& outputTablePaths);
+        const TVector<TString>& outputTablePaths, const TMaybe<TString>& singleOutputHash);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
 private:
@@ -78,13 +78,14 @@ private:
 class TYtQueryCacheItem: public TQueryCacheItemBase<TYtQueryCacheItem> {
 public:
     TYtQueryCacheItem(EQueryCacheMode mode, const TTransactionCache::TEntry::TPtr& entry, const TString& hash,
+        const TMaybe<TString>& singleOutputHash,
         const TVector<TString>& dstTables, const TVector<NYT::TNode>& dstSpecs, const TString& userName,
         const TString& tmpFolder, const NYT::TNode& mergeSpec,
         const NYT::TNode& tableAttrs, ui64 chunkLimit, bool useExpirationTimeout, bool useMultiSet,
         const std::pair<TString, TString>& logCtx);
 
     // returns true if cache was used
-    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TPtr& queue);
+    NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
 private:

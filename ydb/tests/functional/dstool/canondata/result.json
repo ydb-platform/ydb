@@ -8,34 +8,6 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.1"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.2"
-        },
-        0,
-        0,
-        null,
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.3"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.4"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.5"
-        },
-        null,
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.6"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.7"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.8"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_capacity_metrics/results.txt.9"
         }
     ],
     "test_canonical_requests.Test.test_cluster_get_set": [
@@ -114,6 +86,20 @@
             "uri": "file://test_canonical_requests.Test.test_essential/results.txt.8"
         }
     ],
+    "test_canonical_requests.Test.test_group_resize": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.1"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_group_resize/results.txt.2"
+        }
+    ],
     "test_canonical_requests.Test.test_group_take_snapshot": [
         {
             "uri": "file://test_canonical_requests.Test.test_group_take_snapshot/results.txt"
@@ -134,6 +120,17 @@
             "uri": "file://test_canonical_requests.Test.test_infer_pdisk_slot_count/results.txt.0"
         }
     ],
+    "test_canonical_requests.Test.test_pdisk_check_leaked_slots": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.0"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
+        }
+    ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt"
@@ -143,6 +140,20 @@
         },
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_set_status_inactive/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_pool_estimated_usage": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt"
+        },
+        null,
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_pool_estimated_usage/results.txt.1"
         }
     ]
 }

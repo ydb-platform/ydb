@@ -155,9 +155,9 @@ void TTcpConnection::Close()
     {
         auto guard = Guard(Lock_);
 
-        if (Error_.Load().IsOK()) {
-            Error_.Store(TError(NBus::EErrorCode::TransportError, "Bus terminated")
-                << *EndpointAttributes_);
+        if (Error_.IsOK()) {
+            Error_ = TError(NBus::EErrorCode::TransportError, "Bus terminated")
+                << *EndpointAttributes_;
         }
 
         if (State_ == EState::Open) {
@@ -552,8 +552,7 @@ void TTcpConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
         }
 
         State_ = EState::Aborted;
-
-        Error_.Store(detailedError);
+        Error_ = detailedError;
 
         // Prevent starting new OnSocketRead/OnSocketWrite and Retry.
         // Already running will continue, Unregister will drain them.
@@ -855,7 +854,7 @@ void TTcpConnection::Terminate(const TError& error)
 
     auto guard = Guard(Lock_);
 
-    if (!Error_.Load().IsOK() ||
+    if (!Error_.IsOK() ||
         State_ == EState::Aborted ||
         State_ == EState::Closed)
     {
@@ -869,7 +868,7 @@ void TTcpConnection::Terminate(const TError& error)
     YT_LOG_DEBUG("Sending termination request");
 
     // Save error for OnTerminate().
-    Error_.Store(detailedError);
+    Error_ = detailedError;
 
     // Arm calling OnTerminate() from OnEvent().
     auto previousPendingControl = static_cast<EPollControl>(PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Terminate)));
@@ -1003,7 +1002,10 @@ void TTcpConnection::OnShutdown()
     // Perform the initial cleanup (the final one will be in dtor).
     Close();
 
-    auto error = Error_.Load();
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
+
     YT_LOG_DEBUG(error, "Connection terminated");
 
     Terminated_.Fire(error);
@@ -1797,7 +1799,11 @@ void TTcpConnection::OnTerminate()
 
     YT_LOG_DEBUG("Termination request received");
 
-    Abort(Error_.Load());
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
+
+    Abort(error);
 }
 
 void TTcpConnection::ProcessQueuedMessages()
@@ -1836,9 +1842,8 @@ void TTcpConnection::ProcessQueuedMessages()
 
 void TTcpConnection::DiscardOutcomingMessages()
 {
-    auto error = Error_.Load();
-
-    auto guard = Guard(QueuedMessagesDiscardLock_);
+    auto guard = Guard(Lock_);
+    auto error = Error_;
     auto queuedMessages = QueuedMessages_.DequeueAll();
     guard.Release();
 
@@ -1853,8 +1858,9 @@ void TTcpConnection::DiscardOutcomingMessages()
 
 void TTcpConnection::DiscardUnackedMessages()
 {
-    auto error = Error_.Load();
-
+    auto guard = Guard(Lock_);
+    auto error = Error_;
+    guard.Release();
 
     while (!UnackedPackets_.empty()) {
         auto& message = UnackedPackets_.front();
@@ -2199,7 +2205,13 @@ void TTcpConnection::TryEstablishSslSession()
     // FIXME(khlebnikov): Stop constructing SSL context from scratch for each connection.
     auto sslContext = New<TSslContext>();
 
-    sslContext->ApplyConfig(Config_, pathResolver);
+    try {
+        sslContext->ApplyConfig(Config_, pathResolver);
+    } catch (const std::exception& ex) {
+        Abort(TError(NBus::EErrorCode::SslError, "Failed to load TLS/SSL certificates")
+            << TError(ex));
+        return;
+    }
 
     if (Config_->CipherList) {
         sslContext->SetCipherList(*Config_->CipherList);

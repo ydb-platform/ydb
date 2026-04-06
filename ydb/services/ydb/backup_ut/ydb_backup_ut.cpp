@@ -20,6 +20,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -345,6 +346,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::GlobalSync:
                 case EIndexType::GlobalAsync:
                 case EIndexType::GlobalUnique:
+                case EIndexType::GlobalJson:
                     UNIT_ASSERT(std::holds_alternative<std::monostate>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::GlobalVectorKMeansTree: {
@@ -783,6 +785,8 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            return NYdb::NTable::EIndexType::GlobalJson;
         default:
             UNIT_FAIL("No conversion to API for this index type");
             return NYdb::NTable::EIndexType::Unknown;
@@ -852,6 +856,15 @@ void TestRestoreTableWithIndex(
                 INDEX {index} GLOBAL USING fulltext_relevance
                     ON (Value)
                     WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
+                ))", "table"_a = table, "index"_a = index);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            query = fmt::format(R"(CREATE TABLE `{table}` (
+                Key Uint64,
+                Group Uint32,
+                Value Json,
+                PRIMARY KEY (Key),
+                INDEX {index} GLOBAL USING json ON (Value)
                 ))", "table"_a = table, "index"_a = index);
             break;
         default:
@@ -2140,6 +2153,63 @@ void TestPrimitiveType(
     CompareResults(GetTableContent(session, tableName.c_str()), originalTableContent);
 }
 
+TString FetchShowCreateTableDdl(NQuery::TSession& session, const char* table) {
+    const auto r = ExecuteQuery(session, std::format("SHOW CREATE TABLE `{}`;", table));
+    UNIT_ASSERT_VALUES_EQUAL(r.GetResultSets().size(), 1u);
+    TResultSetParser parser(r.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    const auto ddl = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+    UNIT_ASSERT_C(ddl.has_value(), "SHOW CREATE TABLE: empty CreateQuery");
+    return TString{*ddl};
+}
+
+void TestOlapColumnEncodingsPreservedThroughBackup(
+    const char* table,
+    NQuery::TSession& session,
+    TBackupFunction&& backup,
+    TRestoreFunction&& restore
+) {
+    ExecuteQuery(session, std::format(R"(
+            CREATE TABLE `{}` (
+                pk Uint64 NOT NULL,
+                dict_col Utf8 ENCODING(DICT),
+                off_col Uint64 NOT NULL ENCODING(OFF),
+                def_col Int32 ENCODING(),
+                PRIMARY KEY (pk)
+            )
+            PARTITION BY HASH(pk)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )", table
+    ), true);
+    ExecuteQuery(session, std::format(R"(
+            UPSERT INTO `{}` (pk, dict_col, off_col, def_col)
+            VALUES
+                (1u, "a", 10u, 100),
+                (2u, "b", 20u, NULL),
+                (3u, NULL, 30u, 300);
+        )", table
+    ));
+
+    const TString ddlBefore = FetchShowCreateTableDdl(session, table);
+    UNIT_ASSERT_C(ddlBefore.Contains("ENCODING (DICT)"), ddlBefore);
+    UNIT_ASSERT_C(ddlBefore.Contains("ENCODING (OFF)"), ddlBefore);
+    const auto originalContent = GetTableContent(session, table, "pk");
+
+    backup();
+
+    ExecuteQuery(session, std::format(R"(
+            DROP TABLE `{}`;
+        )", table
+    ), true);
+
+    restore();
+
+    const TString ddlAfter = FetchShowCreateTableDdl(session, table);
+    UNIT_ASSERT_STRINGS_EQUAL(ddlBefore, ddlAfter);
+
+    CompareResults(GetTableContent(session, table, "pk"), originalContent);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
@@ -2669,6 +2739,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+        appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
 
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -2837,7 +2908,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestTransferBackupRestore(const TTransferTestConfig& config = {}) {
         AssertAuthAndSecretTypes(config);
         TKikimrWithGrpcAndRootSchema server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(config.SecretType == ESecretType::SecretTypeScheme);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3079,7 +3149,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 systemDirectory,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
 
@@ -3092,7 +3162,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 session,
                 schemeClient,
                 CreateBackupLambda(driver, pathToBackup),
-                CreateRestoreLambda(driver, pathToBackup)
+                CreateRestoreLambda(driver, pathToBackup, "/Root", NDump::TRestoreSettings().ReplaceSysACL(true))
             );
         }
     }
@@ -3174,6 +3244,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeInvalid:
                 break; // not applicable
@@ -3189,7 +3260,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_DEBUG);
         server.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_DEBUG);
@@ -3237,7 +3307,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         constexpr const char* systemDirectory = "/Root/.sys";
         constexpr const char* sysView = "/Root/.sys/partition_stats";
 
-        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true).ReplaceSysACL(true);
 
         cleanup();
         TestTableContentIsPreserved(table, querySession,
@@ -3299,7 +3369,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicTransfer(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(true);
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
@@ -3712,6 +3781,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
+                    appConfig.MutableFeatureFlags()->SetEnableShowCreate(true);
+                    appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))
@@ -4144,6 +4217,18 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    Y_UNIT_TEST(OlapColumnEncodingsPreservedThroughS3BackupRestore) {
+        TS3TestEnv testEnv;
+        constexpr const char* table = "/Root/olap_col_encodings_backup";
+
+        TestOlapColumnEncodingsPreservedThroughBackup(
+            table,
+            testEnv.GetQuerySession(),
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "olap_col_encodings_backup" })
+        );
+    }
+
     // TO DO: test view restoration to a different database
 
     void TestTableBackupRestore() {
@@ -4465,6 +4550,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalVectorKmeansTree:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
+            case EIndexTypeGlobalJson:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeInvalid:

@@ -18,7 +18,8 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     TString serializedColumnGroupsSpec,
     TMaybe<bool> isFirstRowKeysInclusive,
     TMaybe<TString> firstRowKeys,
-    TMaybe<TString> lastRowKeys
+    TMaybe<TString> lastRowKeys,
+    ui64 readAheadChunks
 )
     : TableId_(std::move(tableId))
     , TableRanges_(std::move(tableRanges))
@@ -27,6 +28,7 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
     , SortOrders_(std::move(sortOrders))
     , NeededColumns_(std::move(neededColumns))
     , SerializedColumnGroupsSpec_(std::move(serializedColumnGroupsSpec))
+    , ReadAheadChunks_(readAheadChunks)
 {
     if (SortOrders_.empty()) {
         SortOrders_.assign(KeyColumns_.size(), ESortOrder::Ascending);
@@ -44,7 +46,42 @@ TTableDataServiceBlockIterator::TTableDataServiceBlockIterator(
         LastBoundary_ = TFmrTableKeysBoundary(*lastRowKeys, KeyColumns_, SortOrders_);
     }
 
+    if (SerializedColumnGroupsSpec_.empty()) {
+        GroupNamesToRead_.push_back(TString());
+    } else {
+        THashSet<TString> allNeeded;
+        for (const auto& c : NeededColumns_) {
+            allNeeded.insert(c);
+        }
+        for (const auto& c : KeyColumns_) {
+            allNeeded.insert(c);
+        }
+
+        const auto spec = GetColumnGroupsFromSpec(SerializedColumnGroupsSpec_);
+        THashSet<TString> groupNames;
+
+        auto findGroupForColumn = [&spec](const TString& col) -> TString {
+            for (const auto& [groupName, cols] : spec.ColumnGroups) {
+                if (cols.contains(col)) {
+                    return groupName;
+                }
+            }
+            return spec.DefaultColumnGroupName;
+        };
+
+        for (const auto& col : allNeeded) {
+            groupNames.insert(findGroupForColumn(col));
+        }
+
+        GroupNamesToRead_.assign(groupNames.begin(), groupNames.end());
+    }
+
     SetMinChunkInNewRange();
+
+    PrefetchRange_ = CurrentRange_;
+    PrefetchChunk_ = CurrentChunk_;
+
+    FillPrefetchQueue();
 }
 
 TTableDataServiceBlockIterator::~TTableDataServiceBlockIterator() = default;
@@ -52,6 +89,37 @@ TTableDataServiceBlockIterator::~TTableDataServiceBlockIterator() = default;
 void TTableDataServiceBlockIterator::SetMinChunkInNewRange() {
     if (CurrentRange_ < TableRanges_.size()) {
         CurrentChunk_ = TableRanges_[CurrentRange_].MinChunk;
+    }
+}
+
+bool TTableDataServiceBlockIterator::TrySchedulePrefetch() {
+    while (PrefetchRange_ < TableRanges_.size()) {
+        const auto& range = TableRanges_[PrefetchRange_];
+        if (PrefetchChunk_ < range.MaxChunk) {
+            const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
+            TPrefetchEntry entry;
+            entry.Futures.reserve(GroupNamesToRead_.size());
+            for (const auto& gname : GroupNamesToRead_) {
+                const TString dataChunkId = GetTableDataServiceChunkId(PrefetchChunk_, gname);
+                entry.Futures.push_back(TableDataService_->Get(group, dataChunkId));
+            }
+            PrefetchQueue_.push_back(std::move(entry));
+            ++PrefetchChunk_;
+            return true;
+        }
+        ++PrefetchRange_;
+        if (PrefetchRange_ < TableRanges_.size()) {
+            PrefetchChunk_ = TableRanges_[PrefetchRange_].MinChunk;
+        }
+    }
+    return false;
+}
+
+void TTableDataServiceBlockIterator::FillPrefetchQueue() {
+    while (PrefetchQueue_.size() < ReadAheadChunks_) {
+        if (!TrySchedulePrefetch()) {
+            break;
+        }
     }
 }
 
@@ -100,48 +168,32 @@ bool TTableDataServiceBlockIterator::NextBlock(TIndexedBlock& out) {
             continue;
         }
 
-        const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
-
-        THashSet<TString> allNeeded;
-        for (const auto& c : NeededColumns_) {
-            allNeeded.insert(c);
-        }
-        for (const auto& c : KeyColumns_) {
-            allNeeded.insert(c);
-        }
-
-        std::vector<TString> groupNamesToRead;
-        if (SerializedColumnGroupsSpec_.empty()) {
-            groupNamesToRead.push_back(TString());
-        } else {
-            const auto spec = GetColumnGroupsFromSpec(SerializedColumnGroupsSpec_);
-            THashSet<TString> groupNames;
-
-            auto findGroupForColumn = [&spec](const TString& col) -> TString {
-                for (const auto& [groupName, cols] : spec.ColumnGroups) {
-                    if (cols.contains(col)) {
-                        return groupName;
-                    }
-                }
-                return spec.DefaultColumnGroupName;
-            };
-
-            for (const auto& col : allNeeded) {
-                groupNames.insert(findGroupForColumn(col));
-            }
-
-            groupNamesToRead.assign(groupNames.begin(), groupNames.end());
-        }
-
         std::vector<TString> groupYsons;
-        groupYsons.reserve(groupNamesToRead.size());
-        for (const auto& gname : groupNamesToRead) {
-            const TString dataChunkId = GetTableDataServiceChunkId(CurrentChunk_, gname);
-            auto data = TableDataService_->Get(group, dataChunkId).GetValueSync();
-            groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+        groupYsons.reserve(GroupNamesToRead_.size());
+
+        if (!PrefetchQueue_.empty()) {
+            auto& entry = PrefetchQueue_.front();
+            for (auto& future : entry.Futures) {
+                auto data = future.GetValueSync();
+                groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+            }
+            PrefetchQueue_.pop_front();
+            FillPrefetchQueue();
+        } else {
+            const TString group = GetTableDataServiceGroup(TableId_, range.PartId);
+            for (const auto& gname : GroupNamesToRead_) {
+                const TString dataChunkId = GetTableDataServiceChunkId(CurrentChunk_, gname);
+                auto data = TableDataService_->Get(group, dataChunkId).GetValueSync();
+                groupYsons.emplace_back(data.Defined() ? std::move(*data) : TString());
+            }
         }
 
-        const TString unionYson = GetYsonUnion(groupYsons, NeededColumns_);
+        TString unionYson;
+        if (groupYsons.size() == 1 && NeededColumns_.empty()) {
+            unionYson = std::move(groupYsons[0]);
+        } else {
+            unionYson = GetYsonUnionRaw(groupYsons, NeededColumns_);
+        }
 
         TParserFragmentListIndex parser(unionYson, KeyColumns_);
         parser.Parse();

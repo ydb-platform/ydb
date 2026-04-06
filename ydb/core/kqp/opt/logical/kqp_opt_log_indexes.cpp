@@ -268,7 +268,8 @@ struct TReadMatch {
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
                 return {};
             }
 
@@ -284,7 +285,8 @@ struct TReadMatch {
             YQL_ENSURE(tableDesc.Metadata);
             auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Cast().Index().Value());
             if (indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                || indexDesc->Type == TIndexDescription::EType::GlobalJson) {
                 return {};
             }
 
@@ -324,6 +326,22 @@ struct TReadMatch {
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
         if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
             && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+            return {};
+        }
+
+        return read;
+    }
+
+    static TReadMatch MatchJsonRead(const TExprBase& node, const TKqpOptimizeContext& kqpCtx) {
+        auto read = TReadMatch::Match(node, kqpCtx);
+        if (!read || read.Index().Value().empty()) {
+            return {};
+        }
+
+        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+        YQL_ENSURE(tableDesc.Metadata);
+        auto [_, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+        if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
             return {};
         }
 
@@ -1104,9 +1122,9 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
 }
 
 /// Can push flat map node to read from table using only columns available in table description
-bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription& tableDesc, const TParentsMap& parentsMap, TVector<TString> & extraColumns) {
+bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription& tableDesc, const TParentsMap& parentsMap, TVector<TString> & extraColumns, bool& residual) {
     auto flatMapLambda = flatMap.Lambda();
-    if (!IsFilterFlatMap(flatMapLambda)) {
+    if (!flatMapLambda.Body().Maybe<TCoOptionalIf>() && !flatMapLambda.Body().Maybe<TCoListIf>()) {
         return false;
     }
 
@@ -1122,6 +1140,20 @@ bool CanPushFlatMap(const TCoFlatMapBase& flatMap, const TKikimrTableDescription
         auto columnType = tableDesc.GetColumnType(lambdaColumn);
         if (!columnType)
             return false;
+    }
+
+    if (flatMapLambdaConditional.Value().Raw() != flatMapLambda.Args().Arg(0).Raw()) {
+        // doesn't support residial values
+        if (!residual) {
+            return false;
+        }
+
+        if (flatMapLambda.Body().Maybe<TCoListIf>()) {
+            return false;
+        }
+
+    } else {
+        residual = false;
     }
 
     extraColumns.insert(extraColumns.end(), lambdaSubset.begin(), lambdaSubset.end());
@@ -1842,6 +1874,86 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     return res;
 }
 
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMap>().Cast();
+
+    auto read = TReadMatch::MatchJsonRead(flatMap.Input(), kqpCtx);
+    if (!read) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+        return {};
+    }
+
+    auto body = flatMap.Lambda().Body();
+    if (!body.Maybe<TCoOptionalIf>()) {
+        return {};
+    }
+
+    auto optionalIf = body.Maybe<TCoOptionalIf>().Cast();
+    if (!optionalIf.Predicate().Maybe<TCoCoalesce>()) {
+        return {};
+    }
+
+    auto coalesce = optionalIf.Predicate().Maybe<TCoCoalesce>().Cast();
+    if (!coalesce.Predicate().Maybe<TCoJsonExists>()) {
+        return {};
+    }
+
+    auto jsonExists = coalesce.Predicate().Maybe<TCoJsonExists>().Cast();
+
+    if (!jsonExists.Json().Maybe<TCoMember>()) {
+        return {};
+    }
+
+    if (!jsonExists.JsonPath().Maybe<TCoUtf8>()) {
+        return {};
+    }
+
+    auto jsonColumnName = jsonExists.Json().Maybe<TCoMember>().Cast().Name().StringValue();
+    auto jsonPathStr = jsonExists.JsonPath().Maybe<TCoUtf8>().Cast().Literal().StringValue();
+
+    const auto& variables = jsonExists.Variables().Ref();
+    if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
+        return {};
+    }
+
+    auto settings = TKqpReadTableFullTextIndexSettings{};
+    settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build("and").Done().Ptr());
+    settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
+
+    auto queryExpr = Build<TCoString>(ctx, node.Pos())
+        .Literal()
+        .Build(jsonPathStr)
+        .Done();
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonColumnName).Done())
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(read.Columns())
+        .Query<TExprList>().Add(queryExpr).Build()
+        .QueryColumns(searchColumns.Ptr())
+        .Settings(settings.BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(newInput)
+        .Lambda(flatMap.Lambda())
+        .Done();
+}
+
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake
 // through TKqlLookupTable.
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
@@ -1945,7 +2057,8 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
 
     TVector<TString> extraColumns;
 
-    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns))
+    bool hasResidual = false;
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns, hasResidual))
         return node;
 
     if (!CanPushTopSort(topBase, implTableDesc, &extraColumns)) {
@@ -2016,17 +2129,51 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
     const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
 
     TVector<TString> extraColumns;
-    if (!CanPushFlatMap(flatMap, implTableDesc, parentsMap, extraColumns))
+    bool hasResidual = true;
+    if (!CanPushFlatMap(flatMap, implTableDesc, parentsMap, extraColumns, hasResidual))
         return node;
 
     auto filter = [&](const TExprBase& in) mutable {
-        return Build<TCoFlatMap>(ctx, node.Pos())
-            .Input(in)
-            .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
-            .Done();
+        if (!hasResidual) {
+            return Build<TCoFlatMap>(ctx, node.Pos())
+                .Input(in)
+                .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+                .Done();
+        } else {
+            TNodeOnNodeOwnedMap replaces;
+            YQL_ENSURE(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>());
+            replaces.emplace(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>().Value().Raw(), flatMap.Lambda().Args().Arg(0).Ptr());
+
+            auto newLambdaBody = TCoLambda{ctx.NewLambda(
+                flatMap.Lambda().Pos(),
+                std::move(flatMap.Lambda().Args().Ptr()),
+                ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
+
+            return Build<TCoFlatMap>(ctx, node.Pos())
+                .Input(in)
+                .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
+                .Done();
+        }
     };
 
-    return DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+    if (!hasResidual) {
+        return DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+    } else {
+        auto newRead = DoRewriteIndexRead(read, ctx, tableDesc, implTable, extraColumns, filter);
+        TNodeOnNodeOwnedMap replaces;
+        YQL_ENSURE(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>());
+        replaces.emplace(flatMap.Lambda().Body().Raw(), flatMap.Lambda().Body().Cast<TCoConditionalValueBase>().Value().Ptr());
+
+        auto newLambdaBody = TCoLambda{ctx.NewLambda(
+            flatMap.Lambda().Pos(),
+            std::move(flatMap.Lambda().Args().Ptr()),
+            ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
+
+        return Build<TCoMap>(ctx, node.Pos())
+            .Input(newRead)
+            .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
+            .Done();
+    }
 }
 
 
@@ -2039,8 +2186,10 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
     auto take = node.Maybe<TCoTake>().Cast();
 
-    auto maybeFlatMap = take.Input().Maybe<TCoFlatMap>();
-    TExprBase input = maybeFlatMap ? maybeFlatMap.Cast().Input() : take.Input();
+    auto maybeSkip = take.Input().Maybe<TCoSkip>();
+
+    auto maybeFlatMap = maybeSkip ? take.Input().Cast<TCoSkip>().Input().Maybe<TCoFlatMap>() : take.Input().Maybe<TCoFlatMap>();
+    TExprBase input = maybeFlatMap ? maybeFlatMap.Cast().Input() : (maybeSkip ? maybeSkip.Cast().Input() : take.Input());
 
     auto readTableIndex = TReadMatch::MatchIndexedRead(input, kqpCtx);
     if (!readTableIndex)
@@ -2056,7 +2205,8 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
     const auto& implTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, implTable->Name);
 
     TVector<TString> extraColumns;
-    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns))
+    bool hasResidual = true && maybeFlatMap;
+    if (maybeFlatMap && !CanPushFlatMap(maybeFlatMap.Cast(), implTableDesc, parentsMap, extraColumns, hasResidual))
         return node;
 
     auto filter = [&](const TExprBase& in) mutable {
@@ -2064,17 +2214,57 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
         if (maybeFlatMap)
         {
-            takeChild = Build<TCoFlatMap>(ctx, node.Pos())
-                .Input(in)
-                .Lambda(ctx.DeepCopyLambda(maybeFlatMap.Lambda().Ref()))
-                .Done();
+            auto flatMap = maybeFlatMap.Cast();
+            if (!hasResidual) {
+                takeChild = Build<TCoFlatMap>(ctx, node.Pos())
+                    .Input(in)
+                    .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
+                    .Done();
+            } else {
+                TNodeOnNodeOwnedMap replaces;
+                YQL_ENSURE(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>());
+                replaces.emplace(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>().Value().Raw(), flatMap.Lambda().Args().Arg(0).Ptr());
+
+                auto newLambdaBody = TCoLambda{ctx.NewLambda(
+                    flatMap.Lambda().Pos(),
+                    std::move(flatMap.Lambda().Args().Ptr()),
+                    ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
+
+                takeChild = Build<TCoFlatMap>(ctx, node.Pos())
+                    .Input(in)
+                    .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
+                    .Done();
+            }
         }
 
+        if (maybeSkip) {
+            takeChild = TExprBase(ctx.ChangeChild(*maybeSkip.Cast().Ptr(), TCoSkip::idx_Input, takeChild.Ptr()));
+        }
         // Change input for TCoTake. New input is result of TKqlReadTable.
-        return TExprBase(ctx.ChangeChild(*node.Ptr(), 0, takeChild.Ptr()));
+        auto result = TExprBase(ctx.ChangeChild(*node.Ptr(), TCoTake::idx_Input, takeChild.Ptr()));
+        return result;
     };
 
-    return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, extraColumns, filter);
+    if (!hasResidual) {
+        return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, extraColumns, filter);
+    } else {
+        auto flatMap = maybeFlatMap.Cast();
+        auto newRead = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, implTable, extraColumns, filter);
+        TNodeOnNodeOwnedMap replaces;
+        YQL_ENSURE(flatMap.Lambda().Body().Maybe<TCoConditionalValueBase>());
+        replaces.emplace(flatMap.Lambda().Body().Raw(), flatMap.Lambda().Body().Cast<TCoConditionalValueBase>().Value().Ptr());
+
+        auto newLambdaBody = TCoLambda{ctx.NewLambda(
+            flatMap.Lambda().Pos(),
+            std::move(flatMap.Lambda().Args().Ptr()),
+            ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
+
+        return Build<TCoMap>(ctx, node.Pos())
+            .Input(newRead)
+            .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
+            .Done();
+
+    }
 }
 
 } // namespace NKikimr::NKqp::NOpt

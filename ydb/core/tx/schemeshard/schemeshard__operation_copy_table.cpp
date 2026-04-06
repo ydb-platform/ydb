@@ -1053,6 +1053,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
                     break;

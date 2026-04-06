@@ -8,6 +8,7 @@
 
 /CLAUDE.md @ydb-platform/ai-reviewers
 
+/.cursorindexingignore-personal @ydb-platform/ai-reviewers
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci
@@ -28,6 +29,7 @@
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
+/ydb/core/kqp/ut/tli/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs
@@ -115,8 +117,9 @@
 /ydb/core/security @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login* @ydb-platform/Security
 /ydb/core/tx/schemeshard/ut_login_large @ydb-platform/Security
-/ydb/library/login @ydb-platform/Security
 /ydb/library/aclib @ydb-platform/Security
+/ydb/library/login @ydb-platform/Security
+/ydb/library/security @ydb-platform/Security
 /ydb/services/ydb/ydb_ldap_login_ut.cpp @ydb-platform/Security
 /ydb/services/ydb/ydb_register_node_ut.cpp @ydb-platform/Security
 /ydb/core/sys_view/common/registry.h @ydb-platform/Security
@@ -126,3 +129,6 @@
 /ydb/tests/functional/tenants/test_system_views.py @ydb-platform/Security
 
 /ydb/tests/library @ydb-platform/Engineering
+
+/ydb/core/nbs @ydb-platform/nbs_yandex
+/ydb/tests/functional/nbs @ydb-platform/nbs_yandex

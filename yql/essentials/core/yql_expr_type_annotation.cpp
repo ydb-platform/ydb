@@ -719,7 +719,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 break;
             }
             default:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         return IGraphTransformer::TStatus::Repeat;
@@ -812,7 +812,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 break;
             }
             default:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         node = RebuildVariant(node, transforms, ctx);
@@ -2287,6 +2287,11 @@ bool EnsureTupleOfAtoms(TExprNode& node, TExprContext& ctx) {
 
 bool EnsureTupleOfAtomsOrUniversal(TExprNode& node, TExprContext& ctx, bool& isUniversal) {
     isUniversal = false;
+    if (node.GetTypeAnn() && node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return true;
+    }
+
     if (!EnsureTuple(node, ctx)) {
         return false;
     }
@@ -2675,8 +2680,25 @@ bool EnsureLambda(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
-IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 minArgumentsCount,
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount,
     ui32 maxArgumentsCount, bool withTypes) {
+    bool isUniversal = false;
+    auto status = ConvertToLambda(node, ctx, isUniversal, argumentsCount, maxArgumentsCount, withTypes);
+    if (status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
+    if (isUniversal) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Callable with universal type is not supported for lambdas"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return status;
+}
+
+IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, bool& isUniversal,
+    ui32 minArgumentsCount, ui32 maxArgumentsCount, bool withTypes) {
+    isUniversal = false;
     if (node->Type() == TExprNode::Lambda || node->IsCallable("WithOptionalArgs")) {
         auto& actualLambda = node->IsCallable("WithOptionalArgs") ? *node->Child(0) : *node;
         const ui32 optionalArgsCount = node->IsCallable("WithOptionalArgs") ? FromString<ui32>(node->Child(1)->Content()) : 0;
@@ -2747,6 +2769,11 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
 
     if (HasError(node->GetTypeAnn(), ctx)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!withTypes || node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Callable) {
@@ -3343,7 +3370,7 @@ const TMultiExprType* GetWideFlowOrStreamComponents(const TTypeAnnotationNode& t
     } else if (type.GetKind() == ETypeAnnotationKind::Stream) {
         return type.Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
     } else {
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4541,8 +4568,9 @@ bool EnsureDependsOn(const TExprNode& node, TExprContext& ctx, bool inner) {
 
 IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, const TTypeAnnotationContext& types,
-    unsigned requiredArgumentCount, unsigned requiredDependsOnCount
+    ui32 requiredArgumentCount, ui32 requiredDependsOnCount, bool& isUniversal
 ) {
+    isUniversal = false;
     if (!EnsureMinArgsCount(*input, requiredArgumentCount + requiredDependsOnCount, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -4551,7 +4579,12 @@ IGraphTransformer::TStatus EnsureDependsOnTailAndRewrite(
     }
 
     bool inner = input->Child(requiredArgumentCount)->IsCallable("InnerDependsOn");
-    for (unsigned i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = requiredArgumentCount; i < input->ChildrenSize(); ++i) {
+        if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            isUniversal = true;
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureDependsOn(*input->Child(i), ctx, inner)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -5452,7 +5485,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
             break;
         }
         default:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
         }
 
         if (changed1) {
@@ -6493,10 +6526,20 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
     TExprContext& ctx, bool& isUniversal)
 {
     isUniversal = false;
+    if (input->GetTypeAnn() && input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        isUniversal = true;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     auto children = input->Child(index)->ChildrenList();
     bool needRestart = false;
 
     if constexpr (OrListsOfAtomsDepth == 2U) {
+        if (input->Child(index)->GetTypeAnn() && input->Child(index)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(index)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(index), ctx))
             return IGraphTransformer::TStatus::Error;
 
@@ -6518,6 +6561,11 @@ IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, u
                 return IGraphTransformer::TStatus::Error;
         }
     } else if constexpr (OrListsOfAtomsDepth == 1U) {
+        if (input->Child(index)->GetTypeAnn() && input->Child(index)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Child(index)->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTuple(*input->Child(index), ctx))
             return IGraphTransformer::TStatus::Error;
 
@@ -6610,7 +6658,11 @@ template IGraphTransformer::TStatus NormalizeTupleOfAtoms<false, 0U>(const TExpr
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,
     TExprContext &ctx, bool deduplicate)
 {
-    YQL_ENSURE(input->IsCallable() || input->IsList());
+    if (!input->IsCallable() && !input->IsList()) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Expected tuple or callable, but got: " << input->Type()));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     YQL_ENSURE(startIndex <= input->ChildrenSize());
 
     auto children = input->ChildrenList();
@@ -6619,6 +6671,10 @@ IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input,
 
     for (auto item = begin; item != end; ++item) {
         auto node = *item;
+        if (node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureTupleMinSize(*node, 1, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }

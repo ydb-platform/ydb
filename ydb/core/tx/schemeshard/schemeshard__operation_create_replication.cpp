@@ -53,10 +53,6 @@ struct TTransferStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
-        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
-            return true;
-        }
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;

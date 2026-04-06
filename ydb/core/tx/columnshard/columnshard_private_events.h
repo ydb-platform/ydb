@@ -79,6 +79,8 @@ struct TEvPrivate {
         EvRequestFilter,
         EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
+        EvBordersConstructionResult,
+        EvMergeBordersResult,
 
         EvReportScanDiagnostics,
         EvReportScanIteratorDiagnostics,

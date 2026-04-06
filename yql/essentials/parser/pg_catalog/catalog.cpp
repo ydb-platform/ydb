@@ -1594,9 +1594,9 @@ TNamespaces FillNamespaces() {
     const ui32 PgCatalogNamepace = 11;
     const ui32 PgPublicNamepace = 2200;
     return TNamespaces{
-        {PgInformationSchemaNamepace, TNamespaceDesc{PgInformationSchemaNamepace, "information_schema", "information_schema namespace"}},
-        {PgPublicNamepace, TNamespaceDesc{PgPublicNamepace, "public", "public namespace"}},
-        {PgCatalogNamepace, TNamespaceDesc{PgCatalogNamepace, "pg_catalog", "pg_catalog namespace"}},
+        {PgInformationSchemaNamepace, TNamespaceDesc{.Oid=PgInformationSchemaNamepace, .Name="information_schema", .Descr="information_schema namespace"}},
+        {PgPublicNamepace, TNamespaceDesc{.Oid=PgPublicNamepace, .Name="public", .Descr="public namespace"}},
+        {PgCatalogNamepace, TNamespaceDesc{.Oid=PgCatalogNamepace, .Name="pg_catalog", .Descr="pg_catalog namespace"}},
     };
 }
 
@@ -1648,7 +1648,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         State.ConstructInPlace();
         for (const auto& raw : AllStaticTablesRaw) {
             State->AllStaticTables.push_back(
-                {{TString(raw.Schema), TString(raw.Name)}, raw.Kind, raw.Oid});
+                {{.Schema=TString(raw.Schema), .Name=TString(raw.Name)}, raw.Kind, raw.Oid});
         }
 
         for (const auto& raw : AllStaticColumnsRaw) {
@@ -1659,7 +1659,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         if (GetEnv("YDB_EXPERIMENTAL_PG") == "1") {
             // grafana migration_log
             State->AllStaticTables.push_back(
-                {{"public", "migration_log"}, ERelKind::Relation, 100001});
+                {{.Schema="public", .Name="migration_log"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
                 {"public", "migration_log", "id", "int"});
             State->AllStaticColumns.push_back(
@@ -1675,7 +1675,7 @@ struct TCatalog: public IExtensionSqlBuilder {
 
             // zabbix config
             State->AllStaticTables.push_back(
-                {{"public", "config"}, ERelKind::Relation, 100001});
+                {{.Schema="public", .Name="config"}, ERelKind::Relation, 100001});
             State->AllStaticColumns.push_back(
                 {"public", "config", "configid", "bigint"});
             State->AllStaticColumns.push_back(
@@ -1686,7 +1686,7 @@ struct TCatalog: public IExtensionSqlBuilder {
 
             // zabbix dbversion
             State->AllStaticTables.push_back(
-                {{"public", "dbversion"}, ERelKind::Relation, 100002});
+                {{.Schema="public", .Name="dbversion"}, ERelKind::Relation, 100002});
             State->AllStaticColumns.push_back(
                 {"public", "dbversion", "dbversionid", "bigint"});
             State->AllStaticColumns.push_back(
@@ -1702,7 +1702,7 @@ struct TCatalog: public IExtensionSqlBuilder {
         }
 
         for (const auto& c : State->AllStaticColumns) {
-            auto tablePtr = State->StaticColumns.FindPtr(TTableInfoKey{c.Schema, c.TableName});
+            auto tablePtr = State->StaticColumns.FindPtr(TTableInfoKey{.Schema=c.Schema, .Name=c.TableName});
             Y_ENSURE(tablePtr);
             tablePtr->push_back(c);
         }

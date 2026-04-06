@@ -141,7 +141,8 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , CaseSensitive(caseSensitive) {
+        , CaseSensitive(caseSensitive)
+    {
     }
 
     template <class TAction>
@@ -207,7 +208,8 @@ public:
     }
 
     TVectorInserter(const ui32 bitsSize)
-        : Size(bitsSize) {
+        : Size(bitsSize)
+    {
         AFL_VERIFY(bitsSize);
         Values.Reserve(bitsSize);
     }
@@ -246,7 +248,8 @@ private:
 public:
     TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
         : Meta(meta)
-        , ExtSize(size) {
+        , ExtSize(size)
+    {
         AFL_VERIFY(ExtSize <= Size);
     }
 
@@ -290,7 +293,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             recordsCountBase *= 2;
         }
     } else {
-        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1)  / RecordsCount));
+        size = std::bit_ceil(size * ((recordsCount + RecordsCount - 1) / RecordsCount));
     }
     size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
@@ -340,7 +343,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 }
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
@@ -367,6 +370,8 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
         case TSkipIndex::EOperation::EndsWith:
             opLike = NRequest::TLikePart::EOperation::EndsWith;
             break;
+        default:
+            AFL_VERIFY(false);
     }
     auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
     const TString valString((const char*)strVal->value->data(), strVal->value->size());

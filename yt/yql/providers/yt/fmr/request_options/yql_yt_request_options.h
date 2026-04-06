@@ -66,7 +66,8 @@ enum class EFmrErrorReason {
     RestartOperation,
     RestartQuery,
     FallbackOperation,
-    UdfTerminate
+    UdfTerminate,
+    WorkerOOM
 };
 
 struct TFmrError {

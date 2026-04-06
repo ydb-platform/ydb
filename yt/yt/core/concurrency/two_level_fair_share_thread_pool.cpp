@@ -44,8 +44,14 @@ DECLARE_REFCOUNTED_CLASS(TBucket)
 
 struct TExecutionPool;
 
+struct TThreadCookie
+{
+    TTwoLevelFairShareQueue* Queue = nullptr;
+    int ThreadIndex = -1;
+};
+
 // High 16 bits is thread index and 48 bits for thread pool ptr.
-YT_DEFINE_THREAD_LOCAL(TPackedPtr, ThreadCookie, 0);
+YT_DEFINE_THREAD_LOCAL(TThreadCookie, ThreadCookie);
 
 constexpr auto LogDurationThreshold = TDuration::Seconds(1);
 
@@ -229,7 +235,7 @@ struct TAction
     TClosure Callback;
     TBucketPtr BucketHolder;
 
-    TPackedPtr EnqueuedThreadCookie = 0;
+    TThreadCookie EnqueuedThreadCookie;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1120,10 +1126,9 @@ private:
 
             int threadIndex = -1;
 
-            auto unpackedCookie = TTaggedPtr<TTwoLevelFairShareQueue>::Unpack(action.EnqueuedThreadCookie);
             // TODO(lukyan): Check also wait time. If it is too high, no matter where to schedule.
-            if (unpackedCookie.Ptr == this) {
-                threadIndex = unpackedCookie.Tag;
+            if (action.EnqueuedThreadCookie.Queue == this) {
+                threadIndex = action.EnqueuedThreadCookie.ThreadIndex;
             }
 
             if (threadIndex != -1 && threadRequests[threadIndex]) {
@@ -1294,7 +1299,7 @@ protected:
 
     void Initialize()
     {
-        ThreadCookie() = TTaggedPtr(Queue_.Get(), static_cast<ui16>(Index_)).Pack();
+        ThreadCookie() = {.Queue = Queue_.Get(), .ThreadIndex = Index_};
     }
 
     void StopPrologue() override

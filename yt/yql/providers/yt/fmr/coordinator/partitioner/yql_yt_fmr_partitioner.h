@@ -8,6 +8,7 @@ namespace NYql::NFmr {
 struct TFmrPartitionerSettings {
     ui64 MaxDataWeightPerPart = 0;
     ui64 MaxParts = 0;
+    bool AdjustDataWeightPerPartition = false;
 };
 
 class TFmrPartitioner {

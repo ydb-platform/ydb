@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
     }
 
     void TopicAutoPartitioning(bool enabled) {
-        TEnv env(TFeatureFlags().SetEnableTopicAutopartitioningForCDC(true));
+        TEnv env(TFeatureFlags{});
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{

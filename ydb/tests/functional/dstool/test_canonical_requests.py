@@ -22,6 +22,7 @@ from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.core.protos.whiteboard_disk_states_pb2 import EVDiskState
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
+from .conftest import BaseConfigBuilder
 
 logger = logging.getLogger(__name__)
 C_4GB = 4 * 2**30
@@ -108,7 +109,8 @@ class TestBase:
         for vslot in base_config.VSlot:
             assert vslot.VDiskMetrics.State == EVDiskState.OK
 
-    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None):
+    def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
+               mock_base_config=None):
         common.cache.clear()
         common.name_cache.clear()
         results = []
@@ -142,10 +144,15 @@ class TestBase:
             self._canonize_table_output(rows, canonize_columns=canonize_columns)
             return original_table_dump(table_self, rows, args)
 
+        if mock_base_config is not None:
+            invoke_grpc_patch = patch.object(common, 'fetch_base_config_and_storage_pools', return_value=mock_base_config)
+        else:
+            invoke_grpc_patch = patch.object(common, 'invoke_grpc', side_effect=mock_invoke_grpc)
+
         exit_status = 0
         captured_stdout = StringIO()
         captured_stderr = StringIO()
-        with patch.object(common, 'invoke_grpc', side_effect=mock_invoke_grpc), \
+        with invoke_grpc_patch, \
              patch.object(sys, 'exit', side_effect=mock_exit), \
              patch.object(sys, 'argv', ['dstool']), \
              patch('sys.stdout', captured_stdout), \
@@ -167,6 +174,16 @@ class TestBase:
             results.extend(['===== stderr =====', captured_stderr])
         if with_grpc_calls:
             results.extend(['===== grpc_calls =====', '\n'.join(grpc_calls)])
+        if mock_base_config is not None:
+            results.extend([
+                '===== mock_base_config =====',
+                text_format.MessageToString(mock_base_config['BaseConfig'], as_one_line=False),
+            ])
+            for sp in mock_base_config['StoragePools']:
+                results.extend([
+                    '===== DefineStoragePool =====',
+                    text_format.MessageToString(sp, as_one_line=False),
+                ])
         return self._canonical_file('results.txt', '\n'.join(results))
 
 
@@ -243,6 +260,7 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'SlotSize',
             'TotalSize',
             'CapacityAlert',
             'GroupSizeInUnits',
@@ -254,59 +272,25 @@ class Test(TestBase):
             'VDiskRawUsage',
             'NormalizedOccupancy',
             'UsedSize',
+            'Limit',
             'TotalSize',
             'CapacityAlert',
         ]
 
-        ydb_cli = [yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")), "--endpoint", self.endpoint, "--database=/Root"]
-        group_id = 2181038080
-
-        initial_total_size = None
-
-        def check_vdisks_allocated_size_updated():
-            base_config = self.cluster.client.query_base_config().BaseConfig
-            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
-            assert len(vslots) == 8
-            for vslot in vslots[0:6]:
-                used_size = vslot.VDiskMetrics.AllocatedSize
-                assert used_size > 0
-                assert used_size == vslots[0].VDiskMetrics.AllocatedSize
-
-            nonlocal initial_total_size
-            initial_total_size = vslots[0].VDiskMetrics.AllocatedSize + vslots[0].VDiskMetrics.AvailableSize
-
-        def check_vdisks_total_size_doubled():
-            base_config = self.cluster.client.query_base_config().BaseConfig
-            vslots = [vslot for vslot in base_config.VSlot if vslot.GroupId == group_id]
-            assert len(vslots) == 8
-            for vslot in vslots[0:6]:
-                total_size = vslot.VDiskMetrics.AllocatedSize + vslot.VDiskMetrics.AvailableSize
-                assert total_size == 2 * initial_total_size
-
-        def wait_vdisks_total_size_doubled():
-            try:
-                retry_assertions(check_vdisks_total_size_doubled)
-            except AssertionError:
-                pass
-
         return [
-            self._trace('pdisk', 'stop', '--node-id', '7', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
-            self._trace('pdisk', 'stop', '--node-id', '8', '--pdisk-id', '1000', '--ignore-failure-model-group-check'),
             self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
             self._trace('group', 'list', '-H', '--columns', *group_columns),
-            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'init', '-w', '1'], wait=True).returncode,
-            yatest.common.execute([*ydb_cli, 'workload', 'tpcc', '-p', 'tpcc/1wh', 'import', '-w', '1'], wait=True).returncode,
-            retry_assertions(check_vdisks_allocated_size_updated),
-            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
-            self._trace('group', 'list', '--columns', *group_columns),
-            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
-            wait_vdisks_total_size_doubled(),
-            self._trace('vdisk', 'list', '-H', '--columns', *vdisk_columns),
-            self._trace('group', 'list', '--columns', *group_columns),
+            self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage'),
+        ]
 
+    def test_group_resize(self):
+        group_id = 2181038080
+        return [
+            self._trace('group', 'resize', '--size-in-units', '2', '--group-ids', str(group_id), with_grpc_calls=True),
+            self._trace('vdisk', 'list', '-H', '--columns', 'VDiskId', 'GroupSizeInUnits'),
+            self._trace('group', 'list', '-H', '--columns', 'GroupId', 'SizeInUnits'),
             # Errors:
             self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id+1), '--format', 'json'),
-            self._trace('group', 'resize', '--size-in-units', '1', '--group-ids', str(group_id), '--format', 'json'),
         ]
 
     def test_infer_pdisk_slot_count(self):
@@ -373,3 +357,42 @@ class Test(TestBase):
         trace2 = self._trace('pdisk', 'list', '-H', '--columns', *pdisk_columns)
 
         return [trace1, trace2]
+
+    def test_pdisk_check_leaked_slots(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
+        vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
+        return [
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
+            self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots'),
+        ]
+
+    def test_pool_estimated_usage(self):
+        builder = (
+            BaseConfigBuilder()
+            .add_node(node_id=1)
+            .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=16, enforced_dynamic_slot_size=int(200e9))  # 3.2 TB
+            .add_group(group_id=0x80000001, vslot_ids=[(1, 1001, 1000)])
+            .add_vslot(
+                node_id=1, pdisk_id=1001, vslot_id=1000, group_id=0x80000001,
+                allocated_size=int(40e9),
+                available_size=0,
+            )
+            .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+        )
+
+        def _trace_pool_list():
+            return self._trace('pool', 'list', '-H', '--format=json', '--show-vdisk-estimated-usage', mock_base_config=builder.build())
+
+        return [
+            _trace_pool_list(),
+
+            # Replace pdisk 3.2 -> 6.4 TB and markup SlotSizeInUnits = 2
+            builder.update_pdisk(node_id=1, pdisk_id=1001, slot_size_in_units=2, enforced_dynamic_slot_size=int(400e9)) and None,
+            builder.update_vslot(node_id=1, pdisk_id=1001, vslot_id=1000, available_size=int(360e9)) and None,
+            _trace_pool_list(),
+
+            # Change GroupSizeInUnits = 4
+            builder.update_group(group_id=0x80000001, group_size_in_units=4) and None,
+            _trace_pool_list(),
+        ]

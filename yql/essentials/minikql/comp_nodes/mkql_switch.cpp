@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/utils/cast.h>
+#include <yql/essentials/utils/runtime_dispatch.h>
 
 #include <util/string/cast.h>
 
@@ -248,7 +249,7 @@ public:
 
             return childRes.Release();
         }
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
 private:
@@ -996,26 +997,10 @@ IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryC
     if (type->IsFlow()) {
         const bool isInputVariant = AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType()->IsVariant();
         const auto kind = GetValueRepresentation(type);
-        if (isInputVariant && trackRss) {
-            return new TSwitchFlowWrapper<true, true>(ctx.Mutables, kind, stream, memLimit, std::move(handlers));
-        } else if (isInputVariant) {
-            return new TSwitchFlowWrapper<true, false>(ctx.Mutables, kind, stream, memLimit, std::move(handlers));
-        } else if (trackRss) {
-            return new TSwitchFlowWrapper<false, true>(ctx.Mutables, kind, stream, memLimit, std::move(handlers));
-        } else {
-            return new TSwitchFlowWrapper<false, false>(ctx.Mutables, kind, stream, memLimit, std::move(handlers));
-        }
+        return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TSwitchFlowWrapper, 2, isInputVariant, trackRss, ctx.Mutables, kind, stream, memLimit, std::move(handlers));
     } else if (type->IsStream()) {
         const bool isInputVariant = AS_TYPE(TStreamType, callable.GetInput(0))->GetItemType()->IsVariant();
-        if (isInputVariant && trackRss) {
-            return new TSwitchWrapper<true, true>(ctx.Mutables, stream, memLimit, std::move(handlers));
-        } else if (isInputVariant) {
-            return new TSwitchWrapper<true, false>(ctx.Mutables, stream, memLimit, std::move(handlers));
-        } else if (trackRss) {
-            return new TSwitchWrapper<false, true>(ctx.Mutables, stream, memLimit, std::move(handlers));
-        } else {
-            return new TSwitchWrapper<false, false>(ctx.Mutables, stream, memLimit, std::move(handlers));
-        }
+        return YQL_RUNTIME_DISPATCH_NEW(IComputationNode*, TSwitchWrapper, 2, isInputVariant, trackRss, ctx.Mutables, stream, memLimit, std::move(handlers));
     }
 
     THROW yexception() << "Expected flow or stream.";

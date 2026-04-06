@@ -33,8 +33,12 @@ public:
         Server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_METACACHE });
 
 
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, true, false, std::nullopt, {"user", "test-consumer"});
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--account--topic1", 1, true, true, std::nullopt, {"user", "test-consumer"});
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+            "/Root/LbCommunal/account/topic1-mirrored-from-dc2", 1, true, false, {}, {"user", "test-consumer"}, "account"
+        );
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+            "/Root/LbCommunal/account/topic1", 1, true, true, {}, {"user", "test-consumer"}, "account"
+        );
         Server->WaitInit("account/topic1");
 
         Server->AnnoyingClient->MkDir("/Root", "LbCommunal");

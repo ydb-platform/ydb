@@ -840,15 +840,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetGrpcPort(PortManager.GetPort(2135))
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
-                .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true)
-                .SetEnableTopicSplitMerge(true)
-                .SetEnableTopicAutopartitioningForCDC(true);
+                .SetEnablePgSyntax(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -3084,8 +3081,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnableTopicSplitMerge(topicAutoPartitioning)
-            .SetEnableTopicAutopartitioningForCDC(true)
         );
 
         auto& runtime = *server->GetRuntime();

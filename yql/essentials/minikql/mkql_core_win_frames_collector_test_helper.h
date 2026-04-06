@@ -29,7 +29,7 @@ struct TIntervalCheckOrEmpty: std::variant<TIntervalCheck, TEmptyInterval> {
         auto it = init.begin();
         i64 min = *it++;
         i64 max = *it;
-        *this = TIntervalCheck{min, max};
+        *this = TIntervalCheck{.ExpectedMin = min, .ExpectedMax = max};
     }
 };
 

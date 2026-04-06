@@ -18,7 +18,7 @@
 
 namespace NKikimr::NPQ {
 
-const static TString TOPIC_NAME = "rt3.dc1--topic";
+const static TString TOPIC_NAME = "/Root/LbCommunal/account/topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
 
@@ -318,7 +318,7 @@ Y_UNIT_TEST(TestPartitionTotalQuota) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
-        tc.Runtime->SetScheduledLimit(1000);
+        tc.Runtime->SetScheduledLimit(10000);
 
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);
         tc.Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetMaxParallelConsumersPerPartition(1); //total partition quota is equal to quota per consumer. Very low.

@@ -142,6 +142,8 @@ protected:
     std::string PipeFilename_;
     std::string PipeFilename2_;
 
+    static constexpr i64 DataSize = 1_MB;
+
     static TFile OpenPipe(const std::string& name, int flags)
     {
         auto pipe = TFile(DoSyscall(::open, name.c_str(), flags | O_NONBLOCK));
@@ -151,8 +153,7 @@ protected:
 
     static std::vector<ui8> MakeRandomData()
     {
-        constexpr i64 dataSize = 1_MB;
-        auto data = std::vector<ui8>(dataSize);
+        auto data = std::vector<ui8>(DataSize);
         for (ui8& elem : data) {
             elem = RandomNumber<ui8>();
         }
@@ -180,6 +181,14 @@ protected:
         EXPECT_EQ(file.Read(result.data(), result.size()), size_t{0});
         EXPECT_EQ(result, expected);
     }
+
+    static void WaitForSplice(TFuture<TSpliceResult> future)
+    {
+        auto result = NConcurrency::WaitForFast(future)
+            .ValueOrThrow();
+        EXPECT_EQ(result.BytesSpliced, DataSize);
+        EXPECT_TRUE(result.Error.IsOK());
+    }
 };
 
 TEST_F(TSpliceAsyncTest, TestReadFileSimple)
@@ -192,7 +201,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -200,8 +209,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileSimple)
         ReadExpectedByte(pipe, elem);
     }
 
-    NConcurrency::WaitForFast(future)
-        .ThrowOnError();
+    WaitForSplice(future);
 
     ui8 readElem = 0;
     EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
@@ -218,14 +226,14 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename2_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -243,8 +251,8 @@ TEST_F(TSpliceAsyncTest, TestReadFileConcurrent)
         }
     }
 
-    NConcurrency::WaitForFast(AllSucceeded<void>({future, future2}))
-        .ThrowOnError();
+    WaitForSplice(future);
+    WaitForSplice(future2);
 
     ui8 readElem = 0;
     EXPECT_EQ(pipe.Read(&readElem, 1), size_t{0});
@@ -261,7 +269,7 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
     auto future = SpliceAsync(
         TFile(Filename_.c_str(), RdOnly),
         OpenPipe(PipeFilename_, O_WRONLY),
-        /*pipeIsSrc=*/ false,
+        /*pipeIsSrc*/ false,
         Invoker_,
         Poller_);
 
@@ -273,10 +281,10 @@ TEST_F(TSpliceAsyncTest, TestReadFileBrokenPipe)
 
     pipe.Close();
 
-    EXPECT_THROW_WITH_SUBSTRING(
-        NConcurrency::WaitForFast(future)
-            .ThrowOnError(),
-        "Broken pipe");
+    auto result = NConcurrency::WaitForFast(future)
+        .ValueOrThrow();
+    EXPECT_GE(result.BytesSpliced, bytesBeforeClose);
+    EXPECT_THROW_WITH_SUBSTRING(result.Error.ThrowOnError(), "Broken pipe");
 }
 
 TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
@@ -288,23 +296,20 @@ TEST_F(TSpliceAsyncTest, TestWriteFileSimple)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
     for (ui8 elem : data) {
         pipeWrite.Write(&elem, 1);
         if (future.IsSet()) {
-            NConcurrency::WaitForFast(future)
-                .ThrowOnError();
             YT_ABORT();
         }
     }
 
     pipeWrite.Close();
 
-    NConcurrency::WaitForFast(future)
-        .ThrowOnError();
+    WaitForSplice(future);
 
     ReadExpectedFile(Filename_, data);
 }
@@ -322,14 +327,14 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
     auto future2 = SpliceAsync(
         pipeRead2,
         TFile(Filename2_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -350,8 +355,8 @@ TEST_F(TSpliceAsyncTest, TestWriteFileConcurrent)
     pipeWrite.Close();
     pipeWrite2.Close();
 
-    NConcurrency::WaitForFast(AllSucceeded<void>({future, future2}))
-        .ThrowOnError();
+    WaitForSplice(future);
+    WaitForSplice(future2);
 
     auto result = std::vector<ui8>(data.size());
 
@@ -369,7 +374,7 @@ TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
     auto future = SpliceAsync(
         pipeRead,
         TFile(Filename_.c_str(), CreateAlways | WrOnly),
-        /*pipeIsSrc=*/ true,
+        /*pipeIsSrc*/ true,
         Invoker_,
         Poller_);
 
@@ -379,10 +384,11 @@ TEST_F(TSpliceAsyncTest, TestWriteFileCancelFuture)
     }
 
     EXPECT_TRUE(future.Cancel({}));
-    EXPECT_THROW_WITH_SUBSTRING(
-        NConcurrency::WaitForFast(future)
-            .ThrowOnError(),
-        "Operation canceled");
+
+    auto result = NConcurrency::WaitForFast(future)
+        .ValueOrThrow();
+    EXPECT_LE(result.BytesSpliced, bytesBeforeCancel);
+    EXPECT_THROW_WITH_SUBSTRING(result.Error.ThrowOnError(), "Operation canceled");
 
     int bytesAfterCancel = 1_KB;
     for (int i = 0; i < bytesAfterCancel; ++i) {

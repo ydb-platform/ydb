@@ -2439,7 +2439,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingStart
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(ClientId, msg->PartitionId));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(topic->PipeClient, ClientId, msg->PartitionId));
 }
 
 template <bool UseMigrationProtocol>
@@ -2452,7 +2452,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadingFinis
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, ClientId, msg->PartitionId, AutoPartitioningSupport, msg->FirstMessage));
 
     TPartitionActorInfo* partitionInfo = nullptr;
     for (auto& [_, p] : Partitions) {

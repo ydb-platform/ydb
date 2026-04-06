@@ -122,6 +122,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
+    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -451,6 +452,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
+    REGISTER_SETTING(*this, OmitInaccessibleRows);
+    REGISTER_SETTING(*this, _EnableRLSTablesSupport);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _BinaryCacheFolder);
@@ -628,6 +631,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
     REGISTER_SETTING(*this, KeepWorldDepForFillOp);
     REGISTER_SETTING(*this, CostBasedOptimizerPartial);
+    REGISTER_SETTING(*this, _MinJobStateSizeToPassViaFile);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
@@ -662,7 +666,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

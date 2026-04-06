@@ -26,7 +26,7 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
 void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(initParameters.YandexCloudMode, initParameters.EnableMetering, initParameters.EnforceUserTokenRequirement);
+    InitKikimr(initParameters);
     InitAccessServiceService();
     InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic);
 }
@@ -293,7 +293,7 @@ THttpResult THttpProxyTestMock::SendPing() {
 NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode) {
     auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
     if (expectedHttpCode != 0) {
-        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, expectedHttpCode);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, expectedHttpCode, TStringBuilder() << "REQUEST: " << method << " " << request.GetStringRobust() << "\nRESPONSE: " << res.Body);
     }
     NJson::TJsonMap json;
     UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
@@ -318,6 +318,8 @@ void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, s
             {"AttributeNames", NJson::TJsonArray{"All"}}
         });
 
+        Cerr << (TStringBuilder() << "WaitQueueAttributes: " << json.GetStringRobust() << Endl);
+
         if (predicate(json)) {
             return;
         }
@@ -334,6 +336,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     TString endpoint = TStringBuilder() << "localhost:" << KikimrGrpcPort;
     auto driverConfig = NYdb::TDriverConfig()
         .SetEndpoint(endpoint)
+        .SetDatabase("/Root")
         .SetAuthToken("root@builtin")
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
     NYdb::TDriver driver(driverConfig);
@@ -359,7 +362,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement) {
+void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -370,18 +373,21 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
-    if (enforceUserTokenRequirement) {
+    if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (initParameters.EnforceUserTokenRequirement) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
     }
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
-    appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
+    appConfig.MutableSqsConfig()->SetYandexCloudMode(initParameters.YandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
 
         sqsConfig.SetMeteringFlushingIntervalMs(100);
@@ -427,12 +433,16 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
 
     ActorRuntime->SetLogPriority(NKikimrServices::GRPC_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::HTTP_PROXY, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(
             NSQS::MakeSqsMeteringServiceID(),
             ActorRuntime->Register(NSQS::CreateSqsMeteringService())
@@ -470,6 +480,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqName\"            Type: \"Utf8\"}"
         "Columns { Name: \"TablesFormat\"       Type: \"Uint32\"}"
         "Columns { Name: \"Tags\"               Type: \"Utf8\"}"
+        "Columns { Name: \"TopicCreated\"       Type: \"Bool\"}"
         "KeyColumnNames: [\"Account\", \"QueueName\"]",
         TDuration::Seconds(5000),
         "root@builtin"
@@ -616,6 +627,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
         "Columns { Name: \"DlqArn\"                        Type: \"Utf8\"}"
         "Columns { Name: \"MaxReceiveCount\"               Type: \"Uint64\"}"
         "Columns { Name: \"ShowDetailedCountersDeadline\"  Type: \"Uint64\"}"
+        "Columns { Name: \"TopicCreated\"                  Type: \"Bool\"}"
         "KeyColumnNames: [\"QueueIdNumberHash\", \"QueueIdNumber\"]";
     client.CreateTable("/Root/SQS/.STD",
         attributesTable,

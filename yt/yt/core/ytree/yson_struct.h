@@ -60,9 +60,9 @@ public:
     TYsonStructBase();
 
     TYsonStructBase(const TYsonStructBase& that) = default;
-    TYsonStructBase(TYsonStructBase&& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) noexcept = default;
     TYsonStructBase& operator=(const TYsonStructBase& that);
-    TYsonStructBase& operator=(TYsonStructBase&& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that) noexcept;
 
     virtual ~TYsonStructBase() = default;
 
@@ -206,8 +206,8 @@ public:
     TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
     TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
 
-    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
-    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
 
     bool IsSet(const std::string& key) const;
 

@@ -2,6 +2,7 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/storage_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/shred_helpers.h>
@@ -56,7 +57,7 @@ namespace {
         UNIT_ASSERT(BlobStorageContains(dsProxies, valueToDelete));
     }
 
-    void CheckShredStatus(TTestBasicRuntime& runtime, TActorId sender, TVector<TIntrusivePtr<NFake::TProxyDS>>& dsProxies, const TString& valueToDelete, bool completed) {
+    void CheckShredStatus(TTestBasicRuntime& runtime, TActorId sender, bool completed) {
         auto request = MakeHolder<TEvSchemeShard::TEvShredInfoRequest>();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
@@ -66,9 +67,16 @@ namespace {
         UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
         if (completed) {
             UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvShredInfoResponse::COMPLETED);
-            UNIT_ASSERT(!BlobStorageContains(dsProxies, valueToDelete));
         } else {
             UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvShredInfoResponse::IN_PROGRESS_TENANT);
+        }
+    }
+
+    void CheckShredStatus(TTestBasicRuntime& runtime, TActorId sender, TVector<TIntrusivePtr<NFake::TProxyDS>>& dsProxies, const TString& valueToDelete, bool completed) {
+        CheckShredStatus(runtime, sender, completed);
+        if (completed) {
+            UNIT_ASSERT(!BlobStorageContains(dsProxies, valueToDelete));
+        } else {
             UNIT_ASSERT(BlobStorageContains(dsProxies, valueToDelete));
         }
     }
@@ -86,8 +94,8 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
 
         auto sender = runtime.AllocateEdgeActor();
         ui64 txId = 100;
-        ui64 tenantSchemeSHard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
-        runtime.SendToPipe(tenantSchemeSHard, sender, new TEvSchemeShard::TEvTenantShredRequest(0), 0, GetPipeConfigWithRetries());
+        ui64 tenantSchemeShard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
+        runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(0), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvTenantShredResponse>(handle);
         UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 0, response->Record.GetGeneration());
@@ -105,7 +113,7 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
 
         auto sender = runtime.AllocateEdgeActor();
         ui64 txId = 100;
-        ui64 tenantSchemeSHard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
+        ui64 tenantSchemeShard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
 
         auto checkTenantShredResponseGen1 = [](IEventHandle& ev) -> bool {
             if (ev.GetTypeRewrite() != TEvSchemeShard::TEvTenantShredResponse::EventType) {
@@ -117,7 +125,7 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
             return true;
         };
 
-        runtime.SendToPipe(tenantSchemeSHard, sender, new TEvSchemeShard::TEvTenantShredRequest(1), 0, GetPipeConfigWithRetries());
+        runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(1), 0, GetPipeConfigWithRetries());
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(checkTenantShredResponseGen1, 1));
         runtime.DispatchEvents(options);
@@ -259,7 +267,7 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
         UNIT_ASSERT_EQUAL_C(response->Record.GetStatus(), NKikimrScheme::TEvTenantShredResponse::COMPLETED, static_cast<ui32>(response->Record.GetStatus()));
     }
 
-    Y_UNIT_TEST(HandleDomainSchemeShardDisconnect) {
+    Y_UNIT_TEST(HandleRootSchemeShardDisconnect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -270,43 +278,29 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
 
         auto sender = runtime.AllocateEdgeActor();
         ui64 txId = 100;
-        ui64 tenantSchemeSHard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
+        ui64 tenantSchemeShard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
 
-        auto checkTenantShredResponseGen1 = [](IEventHandle& ev) -> bool {
-            if (ev.GetTypeRewrite() != TEvSchemeShard::TEvTenantShredResponse::EventType) {
+        TActorId tenantActorId;
+        auto checkTenantShredResponseGen1 = [&](const TEvSchemeShard::TEvTenantShredResponse::TPtr& ev) -> bool {
+            if (ev->Get()->Record.GetGeneration() != 1) {
                 return false;
             }
-            TEventHandle<TEvSchemeShard::TEvTenantShredResponse>* response = reinterpret_cast<TEventHandle<TEvSchemeShard::TEvTenantShredResponse>*>(&ev);
-            if (response->Get()->Record.GetGeneration() != 1) {
-                return false;
-            }
-            UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetGeneration(), 1, response->Get()->Record.GetGeneration());
-            UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::TEvTenantShredResponse::COMPLETED, static_cast<ui32>(response->Get()->Record.GetStatus()));
+            UNIT_ASSERT_EQUAL_C(ev->Get()->Record.GetStatus(), NKikimrScheme::TEvTenantShredResponse::COMPLETED, static_cast<ui32>(ev->Get()->Record.GetStatus()));
+            tenantActorId = ev->Sender;
             return true;
         };
+        TWaitForFirstEvent<TEvSchemeShard::TEvTenantShredResponse> firstShredResponse(runtime, checkTenantShredResponseGen1);
 
-        runtime.SendToPipe(tenantSchemeSHard, sender, new TEvSchemeShard::TEvTenantShredRequest(1), 0, GetPipeConfigWithRetries());
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(checkTenantShredResponseGen1, 1));
-        runtime.DispatchEvents(options);
+        runtime.SendToPipe(tenantSchemeShard, sender, new TEvSchemeShard::TEvTenantShredRequest(1), 0, GetPipeConfigWithRetries());
+        firstShredResponse.Wait();
+        TActorId firstTenantActorId = tenantActorId;
+        firstShredResponse.Stop();
 
-        auto checkTenantShredResponseGen2 = [](IEventHandle& ev) -> bool {
-            if (ev.GetTypeRewrite() != TEvSchemeShard::TEvTenantShredResponse::EventType) {
-                return false;
-            }
-            TEventHandle<TEvSchemeShard::TEvTenantShredResponse>* response = reinterpret_cast<TEventHandle<TEvSchemeShard::TEvTenantShredResponse>*>(&ev);
-            if (response->Get()->Record.GetGeneration() != 2) {
-                return false;
-            }
-            UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetGeneration(), 2, response->Get()->Record.GetGeneration());
-            UNIT_ASSERT_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::TEvTenantShredResponse::COMPLETED, static_cast<ui32>(response->Get()->Record.GetStatus()));
-            return true;
-        };
-        options.FinalEvents.clear();
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(checkTenantShredResponseGen2, 1));
+        TWaitForFirstEvent<TEvSchemeShard::TEvTenantShredResponse> secondShredResponse(runtime, checkTenantShredResponseGen1);
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        runtime.SendToPipe(tenantSchemeSHard, sender, new TEvSchemeShard::TEvTenantShredRequest(2), 0, GetPipeConfigWithRetries());
-        runtime.DispatchEvents(options);
+        secondShredResponse.Wait();
+        secondShredResponse.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(firstTenantActorId, tenantActorId);
     }
 
     Y_UNIT_TEST(HandleShardDisconnect) {
@@ -369,6 +363,36 @@ Y_UNIT_TEST_SUITE(TenantShredTest) {
         collectGarbageReqs.Stop(); // don't unblock, just drop
         RebootTablet(runtime, tabletToDisconnect, sender);
         runtime.WaitFor("gen 2 completed", [&]{ return gen2completed; });
+    }
+
+    Y_UNIT_TEST(HandleTenantSchemeShardDisconnect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& shredConfig = runtime.GetAppData().ShredConfig;
+        shredConfig.SetDataErasureIntervalSeconds(0);
+        shredConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        ui64 txId = 100;
+        ui64 tenantSchemeShard = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
+
+        TBlockEvents<TEvDataShard::TEvVacuum> vacuumReqs(runtime);
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvTenantShredRequest> firstShredRequest(runtime);
+
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvShredManualStartupRequest(), 0, GetPipeConfigWithRetries());
+        firstShredRequest.Wait();
+
+        runtime.WaitFor("vacuum reqs", [&vacuumReqs]{ return vacuumReqs.size() >= 1; });
+        vacuumReqs.Stop().clear(); // drop EvVacuum requests, should be retried after reboot 
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvTenantShredRequest> secondShredRequest(runtime);
+        RebootTablet(runtime, tenantSchemeShard, sender);
+
+        secondShredRequest.Wait();
     }
 
     Y_UNIT_TEST(HandleTenantSchemeShardRestart) {
@@ -982,5 +1006,36 @@ Y_UNIT_TEST_SUITE(TestShred) {
 
         // now data cleanup should be finished
         CheckShredStatus(runtime, sender, dsProxies, valueToDelete, true);
+    }
+
+    Y_UNIT_TEST(ShredWhenDeletingTenant) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& shredConfig = runtime.GetAppData().ShredConfig;
+        shredConfig.SetDataErasureIntervalSeconds(0);
+        shredConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
+        shredConfig.SetInflightLimit(1);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            return new TFakeBSController(tablet, info);
+        });
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        ui64 txId = 100;
+        CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true});
+        CreateTestExtSubdomain(runtime, env, &txId, "Database2", {.Table = true});
+
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvShredManualStartupRequest(), 0, GetPipeConfigWithRetries());
+        TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "Database2");
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+        runtime.DispatchEvents(options);
+
+        CheckShredStatus(runtime, sender, true);
     }
 }

@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    events.cpp
+    global.cpp
     internal.cpp
 )
 
@@ -14,6 +14,11 @@ PEERDIR(
     ydb/core/tablet
     ydb/public/api/protos
     ydb/library/persqueue/topic_parser
+    ydb/core/persqueue/events/internal/protos
 )
 
 END()
+
+RECURSE(
+    internal/protos
+)

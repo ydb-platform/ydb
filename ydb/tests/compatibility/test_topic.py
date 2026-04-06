@@ -26,13 +26,19 @@ class Workload:
                 f"CREATE TOPIC {self.topic_name} (CONSUMER `test-consumer` {consumer_extra_options_str}) WITH (MIN_ACTIVE_PARTITIONS = {partition_count});"
             )
 
-    def write_to_topic(self):
+    def write_to_topic(self, topic_writer: ydb.TopicWriter | None = None):
         finished_at = time.time() + 5
 
-        with self.driver.topic_client.writer(self.topic_name, producer_id="producer-id") as writer:
+        def write_loop(writer):
             while time.time() < finished_at:
                 writer.write(ydb.TopicWriterMessage(f"message-{time.time()}"))
                 self.message_count += 1
+
+        if topic_writer is not None:
+            write_loop(topic_writer)
+        else:
+            with self.driver.topic_client.writer(self.topic_name, producer_id="producer-id") as writer:
+                write_loop(writer)
 
     def write_to_topic_in_transaction(self, partition_id, message_count):
         messages = []
@@ -50,7 +56,7 @@ class Workload:
 
         return messages
 
-    def read_from_topic(self):
+    def read_from_topic(self, topic_reader: ydb.TopicReader | None = None):
         iteration = 0
         while iteration < 5:
             iteration = iteration + 1
@@ -67,18 +73,11 @@ class Workload:
             if total_count != self.message_count:
                 raise Exception(f"all mesages wasn`t written: writen {total_count} messages but {self.message_count}")
 
-            with self.driver.topic_client.reader(self.topic_name, consumer='test-consumer') as reader:
-                while True:
-                    try:
-                        message = reader.receive_message(timeout=1)
-                    except TimeoutError:
-                        break
-
-                    reader.commit(message)
-                    self.processed_message_count += 1
-
-                    if self.processed_message_count == total_count:
-                        break
+            if topic_reader is not None:
+                self._read_from_topic(total_count, topic_reader)
+            else:
+                with self.driver.topic_client.reader(self.topic_name, consumer='test-consumer') as reader:
+                    self._read_from_topic(total_count, reader)
 
             if self.processed_message_count == total_count:
                 break
@@ -87,6 +86,19 @@ class Workload:
 
         if self.processed_message_count != total_count:
             raise Exception(f"Received {self.processed_message_count} messages but written {self.message_count}")
+
+    def _read_from_topic(self, total_count: int, reader: ydb.TopicReader):
+        while True:
+            try:
+                message = reader.receive_message(timeout=1)
+            except TimeoutError:
+                break
+
+            reader.commit(message)
+            self.processed_message_count += 1
+
+            if self.processed_message_count == total_count:
+                break
 
 
 class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
@@ -108,6 +120,32 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
             utils.write_to_topic()
 
         utils.read_from_topic()
+
+    def test_write_and_read_with_long_live_consumer(self):
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic()
+
+        with self.driver.topic_client.reader(utils.topic_name, consumer='test-consumer') as reader:
+            utils.write_to_topic()
+            for _ in self.roll():
+                utils.read_from_topic(topic_reader=reader)
+                utils.write_to_topic()
+
+            utils.read_from_topic(topic_reader=reader)
+
+    def test_write_and_read_with_long_live_producer(self):
+        utils = Workload(self.driver, self.endpoint)
+
+        utils.create_topic()
+
+        with self.driver.topic_client.writer(utils.topic_name, producer_id="producer-id") as writer:
+            utils.write_to_topic(topic_writer=writer)
+            for _ in self.roll():
+                utils.read_from_topic()
+                utils.write_to_topic(topic_writer=writer)
+
+            utils.read_from_topic()
 
 
 class TestTopicRollingDowngrade(RollingDowngradeAndUpgradeFixture):

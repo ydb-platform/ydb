@@ -148,7 +148,6 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     using namespace fmt::literals;
     const TString firstPart = fmt::format(R"sql(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("{table_path_prefix}");
         DECLARE $ts AS Timestamp;
         DECLARE $graph_id AS String;
@@ -239,7 +238,6 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
     // TODO: UPSERT VS UPDATE (especially with WHERE status = X)
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         DECLARE $graph_id AS String;
         DECLARE $coordinator_generation AS Uint64;
@@ -288,7 +286,6 @@ TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context
 
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         DECLARE $graph_desc_id AS String;
 
@@ -388,7 +385,6 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
 
     const TString query = fmt::format(R"sql(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("{table_path_prefix}");
         PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
@@ -477,7 +473,6 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
 
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         DECLARE $graph_id AS String;
         DECLARE $coordinator_generation AS Uint64;
@@ -942,7 +937,6 @@ TFuture<TIssues> TCheckpointStorage::DeleteGraph(const TString& graphId) {
             // TODO: use prepared queries
             auto query = Sprintf(R"(
                 --!syntax_v1
-                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
                 DECLARE $graph_id AS String;
 
@@ -1047,7 +1041,6 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
             using namespace fmt::literals;
             const TString query = fmt::format(R"sql(
                 --!syntax_v1
-                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("{table_path_prefix}");
                 DECLARE $graph_id AS String;
                 DECLARE $coordinator_generation AS Uint64;
@@ -1127,7 +1120,6 @@ TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStor
 
             auto query = Sprintf(R"(
                 --!syntax_v1
-                PRAGMA ydb.DqChannelVersion = "1";
                 PRAGMA TablePathPrefix("%s");
 
                 declare $graph_id as string;

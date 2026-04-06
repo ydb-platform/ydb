@@ -133,45 +133,45 @@ class TestSecretSchemeDescribe:
     secret_value_altered = "secret-updated-value-7b4d8e2a"
 
     @staticmethod
-    def _parse_secret_version_from_scheme_describe(stdout):
-        for line in stdout.splitlines():
+    def _parse_secret_version_from_scheme_describe(describe_result):
+        for line in describe_result.splitlines():
             line = line.strip()
             if line.startswith("Version:"):
                 parts = line.split()
                 return int(parts[1])
-        assert False, f"Version is missing: {stdout}"
+        raise AssertionError(f"Version is missing: {describe_result}")
 
     def _assert_scheme_describe_secret_default(
         self, ydb_cluster, ydb_database, secret_name, absent_substrings, expected_version
     ):
-        out = execute_ydb_cli_command(
+        describe_result = execute_ydb_cli_command(
             ydb_cluster.nodes[1],
             ydb_database,
             ["scheme", "describe", secret_name],
         )
         # type check
-        assert "<secret>" in out
+        assert "<secret>" in describe_result
         # secret value check: it should never be exposed
         for marker in absent_substrings:
-            assert marker not in out
+            assert marker not in describe_result
         # version check
-        version = self._parse_secret_version_from_scheme_describe(out)
+        version = self._parse_secret_version_from_scheme_describe(describe_result)
         assert version == expected_version, f"version: {version}"
 
     def _assert_scheme_describe_secret_proto_json_base64(
         self, ydb_cluster, ydb_database, secret_name, absent_substrings, expected_version
     ):
-        out = execute_ydb_cli_command(
+        describe_result = execute_ydb_cli_command(
             ydb_cluster.nodes[1],
             ydb_database,
             ["scheme", "describe", "--format", "proto-json-base64", secret_name],
         )
-        description = json.loads(out)
+        description = json.loads(describe_result)
         # type check
         assert description["self"]["type"] == "SECRET"
         # secret value check: it should never be exposed
         for marker in absent_substrings:
-            assert marker not in out  # need to assert the string in the output, not the JSON
+            assert marker not in describe_result  # raw CLI output, not only parsed JSON
         # version check
         if expected_version is None:
             # There's no assert on `version` value here: proto3 JSON omits default fields

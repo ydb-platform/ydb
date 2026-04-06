@@ -737,14 +737,12 @@ private:
         }
         for (const auto& [key, info] : Partitions) {
             if (!info.EndOffset) {                              // Not connected yet.
-                SRC_LOG_T("SessionId: " << GetSessionId() << ", CheckFinishedByOffsets 2");
                 return;
             }
             bool isPartitionFinished = 
                 *info.EndOffset == 0                            // No data in partition on start.
                 || (info.Offset && *info.EndOffset <= *info.Offset);
             if (!isPartitionFinished) {
-                SRC_LOG_T("SessionId: " << GetSessionId() << ", CheckFinishedByOffsets 3");
                 return;
             }
         }

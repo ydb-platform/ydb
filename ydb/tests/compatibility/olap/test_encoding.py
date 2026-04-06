@@ -13,6 +13,8 @@ class TestEncoding(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
+        self.skip_if_unsupported()
+
         self.table_name = "encoding_table"
         self.rows_count = 640
 

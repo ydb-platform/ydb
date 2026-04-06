@@ -54,6 +54,31 @@ def _validate_profile_id(profile_id: str) -> str:
 
 # ── YDB helpers ───────────────────────────────────────────────────────────────
 
+_DIGEST_QUEUE_DDL = """\
+CREATE TABLE IF NOT EXISTS `{table_path}` (
+    `profile_id`          Utf8      NOT NULL,
+    `github_issue_number` Uint64    NOT NULL,
+    `github_issue_url`    Utf8,
+    `github_issue_title`  Utf8,
+    `owner_team`          Utf8,
+    `branch`              Utf8,
+    `build_type`          Utf8,
+    `enqueued_at`         Timestamp NOT NULL,
+    `sent_at`             Timestamp,
+    PRIMARY KEY (profile_id, github_issue_number)
+)
+WITH (
+    STORE = COLUMN
+)
+"""
+
+
+def _ensure_digest_queue_table(w: YDBWrapper) -> None:
+    """Create digest_queue if missing (enqueue path also creates it; send may run first)."""
+    table_path = w.get_table_path("digest_queue")
+    print(f"> ensure table exists: {table_path}")
+    w.create_table(table_path, _DIGEST_QUEUE_DDL.format(table_path=table_path))
+
 
 def _fetch_closed_unsent(w: YDBWrapper, profile_id: str) -> list:
     """Return unsent queue rows whose issues have been closed (should be silently marked sent)."""
@@ -192,6 +217,8 @@ def run_digest(
     with YDBWrapper() as w:
         if not w.check_credentials():
             return False
+
+        _ensure_digest_queue_table(w)
 
         _mark_closed_as_sent(w, profile_id)
 

@@ -940,8 +940,7 @@ CREATE TABLE IF NOT EXISTS `{table_path}` (
     PRIMARY KEY (profile_id, github_issue_number)
 )
 WITH (
-    STORE = COLUMN,
-    TTL = Interval("P90D") ON enqueued_at
+    STORE = COLUMN
 )
 """
     ydb_wrapper.create_table(

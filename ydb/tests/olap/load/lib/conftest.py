@@ -14,7 +14,7 @@ from copy import deepcopy
 from datetime import datetime
 from pytz import timezone
 from time import time
-from typing import Optional, Union
+from typing import Optional, Union, Any
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
@@ -465,7 +465,7 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool, allure_table_strings: dict[str, any] = None):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool, allure_table_strings: Optional[dict[str, Any]] = None):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from datetime import datetime
 from copy import deepcopy
 from pytz import timezone
+from typing import Any, Optional
 import logging
 
 
@@ -842,7 +843,7 @@ def allure_test_description(
     test: str,
     start_time: float,
     end_time: float,
-    addition_table_strings: dict[str, any] = None,
+    addition_table_strings: Optional[dict[str, Any]] = None,
     attachments: tuple[str, str, allure.attachment_type] = None,
     refference_set: str = '',
     node_errors: list[NodeErrors] = None,

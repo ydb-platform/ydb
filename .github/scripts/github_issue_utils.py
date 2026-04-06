@@ -5,12 +5,130 @@ Shared utilities for working with GitHub issues and parsing test names from issu
 Used by both the muted test analytics and issue management scripts.
 """
 
+import datetime as dt
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
+
+
+def scan_to_utc_date(val) -> Optional[dt.date]:
+    """YDB scan value → UTC calendar date (TableClient native_date_in_result_sets)."""
+    if val is None:
+        return None
+    if isinstance(val, dt.datetime):
+        if val.tzinfo is not None:
+            return val.astimezone(dt.timezone.utc).date()
+        return val.date()
+    if isinstance(val, dt.date):
+        return val
+    return None
+
+
+def normalize_analytics_area(raw) -> str:
+    """Match YQL ``$normalize``: first two ``/`` segments, else full string; empty → ``area/-``."""
+    if raw is None:
+        return "area/-"
+    s = str(raw).strip()
+    if not s:
+        return "area/-"
+    parts = s.split("/")
+    if len(parts) >= 2:
+        return f"{parts[0]}/{parts[1]}"
+    return s
+
+
+def monitor_owner_to_team_key(owner) -> str:
+    """Lowercase slug like SQL ``Unicode::ToLower(ReplaceAll(owner, 'TEAM:@ydb-platform/', ''))``."""
+    if owner is None:
+        return ""
+    s = str(owner).replace("TEAM:@ydb-platform/", "").strip()
+    return s.lower()
+
+
+def resolve_team_by_longest_area_prefix(normalized_area: str, area_to_owner: Dict[str, str]) -> Optional[str]:
+    """Longest mapping key where area equals key or starts with key + '/'."""
+    best = None
+    best_len = -1
+    for m_area, team in area_to_owner.items():
+        if not m_area:
+            continue
+        if normalized_area == m_area or normalized_area.startswith(m_area + "/"):
+            if len(m_area) > best_len:
+                best = team
+                best_len = len(m_area)
+    return best
+
+
+def area_to_owner_map_from_rows(rows: List[dict]) -> Dict[str, str]:
+    """Normalized area → owner_team (last wins if duplicates)."""
+    out: Dict[str, str] = {}
+    for r in rows:
+        a, ot = r.get("area"), r.get("owner_team")
+        if not a or not ot:
+            continue
+        out[normalize_analytics_area(str(a))] = str(ot).strip()
+    return out
+
+
+def min_area_by_owner_team_from_rows(rows: List[dict]) -> Dict[str, str]:
+    """Lowercase owner_team → ``MIN(normalize(area))`` lexicographic (same as SQL mart fallback)."""
+    by_ot: Dict[str, List[str]] = defaultdict(list)
+    for r in rows:
+        a, ot = r.get("area"), r.get("owner_team")
+        if not a or not ot:
+            continue
+        by_ot[str(ot).strip().lower()].append(normalize_analytics_area(str(a)))
+    return {k: min(v) for k, v in by_ot.items() if v}
+
+
+def pick_effective_analytics_area(
+    area_override,
+    area_override_since,
+    date_window: dt.date,
+    owner_team_key: str,
+    min_area_by_owner: Dict[str, str],
+) -> str:
+    if area_override is not None and str(area_override).strip():
+        na = normalize_analytics_area(area_override)
+        if na:
+            since = scan_to_utc_date(area_override_since)
+            if since is None or date_window >= since:
+                return na
+    return min_area_by_owner.get(owner_team_key) or "area/-"
+
+
+def effective_owner_team_for_area(
+    effective_area: str, area_to_owner: Dict[str, str], owner_team_key: str
+) -> str:
+    mapped = resolve_team_by_longest_area_prefix(effective_area, area_to_owner)
+    return str(mapped).strip().lower() if mapped else owner_team_key
+
+
+def compute_effective_analytics_row(
+    row: dict,
+    gim_by_key: Dict[Tuple[str, str, str], dict],
+    area_to_owner: Dict[str, str],
+    min_area_by_owner: Dict[str, str],
+) -> Tuple[str, str]:
+    otk = monitor_owner_to_team_key(row.get("owner"))
+    key = (str(row["full_name"]), str(row["branch"]), str(row["build_type"]))
+    g = gim_by_key.get(key, {})
+    dw = row["date_window"]
+    if isinstance(dw, dt.datetime):
+        dw = dw.date()
+    eff_area = pick_effective_analytics_area(
+        g.get("area_override"),
+        g.get("area_override_since"),
+        dw,
+        otk,
+        min_area_by_owner,
+    )
+    eff_ot = effective_owner_team_for_area(eff_area, area_to_owner, otk)
+    return eff_area, eff_ot
 
 
 @dataclass

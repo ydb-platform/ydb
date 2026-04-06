@@ -4,20 +4,31 @@
 Create a mapping table between test names and GitHub issues.
 This table will be used by SQL queries to join muted test data with GitHub issue information.
 
-owner_override logic
---------------------
+area_override logic
+-------------------
 Each muted-test issue has a default owner (from TESTOWNERS via the ``Owner:`` line in the
-issue body).  A human can reassign responsibility by adding an ``area/xxx`` label to the
-issue.  If the team behind that area (looked up via ``area_to_owner_mapping``) differs from
-the default owner, we store it as ``owner_override``.
+issue body).  A human can add an ``area/...`` label (e.g. ``area/blobstorage``).  If the
+team behind that area (via ``area_to_owner_mapping``) **differs** from the default owner,
+we store the **area path string** in ``area_override``. ``tests_monitor.py`` reads this table
+(plus ``area_to_owner_mapping``) and fills ``effective_area`` / ``effective_owner_team`` on each
+row; downstream marts use those columns.
 
 Edge cases:
-  * No ``area/`` label → owner_override = NULL
-  * ``area/`` resolves to the same team as the default owner → owner_override = NULL
-  * ``area/`` label not found in mapping → owner_override = NULL
-  * Label changed multiple times → we always see the *current* set of labels
+  * No ``area`` in issue ``info`` → area_override = NULL
+  * Area resolves to the same team as the default owner → area_override = NULL
+  * Area not found in mapping → area_override = NULL
+  * Labels change → we always see the *current* ``info`` snapshot
+
+``area_override_since`` (Date)
+-------------------------------
+First ``date_window`` for which datamarts apply ``area_override``. Set from the issue's
+``updated_at`` (UTC date) when the override **value** changes vs the previous row in YDB;
+unchanged override keeps the stored date. ``NULL`` on ``area_override_since`` means there is
+no lower bound: override applies for every ``date_window`` in the mart query (same as omitting
+the check in SQL).
 """
 
+import datetime as dt
 import json
 import os
 import re
@@ -27,7 +38,11 @@ import sys
 from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import create_test_issue_mapping, DEFAULT_BUILD_TYPE
+from github_issue_utils import (
+    create_test_issue_mapping,
+    DEFAULT_BUILD_TYPE,
+    scan_to_utc_date,
+)
 
 
 def get_github_issues_data(ydb_wrapper):
@@ -58,6 +73,65 @@ def get_github_issues_data(ydb_wrapper):
         print(f"Warning: Could not fetch GitHub issues data: {e}")
         print("This might be because the github_data/issues table doesn't exist yet.")
         return []
+
+
+def _norm_area_override_value(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s if s else None
+
+
+def _fetch_existing_github_issue_mapping(ydb_wrapper, table_path: str) -> dict | None:
+    """Return dict keyed by (full_name, branch, build_type, github_issue_number), or None on failure."""
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            f"""
+            SELECT
+                full_name,
+                branch,
+                build_type,
+                github_issue_number,
+                area_override,
+                area_override_since
+            FROM `{table_path}`
+            """,
+            query_name="github_issue_mapping_read_existing_for_since",
+        )
+    except Exception as e:
+        print(
+            f"Error: cannot read `{table_path}` (add column area_override_since or migrate): {e}",
+            file=sys.stderr,
+        )
+        return None
+    out = {}
+    for r in rows:
+        key = (r["full_name"], r["branch"], r["build_type"], r["github_issue_number"])
+        out[key] = r
+    return out
+
+
+def merge_area_override_since(mapping_data: list, existing_by_key: dict, url_to_updated_at: dict) -> None:
+    """Set area_override_since on each row in place (mutates mapping_data)."""
+    today_utc = dt.datetime.now(dt.timezone.utc).date()
+    for row in mapping_data:
+        key = (
+            row["full_name"],
+            row["branch"],
+            row["build_type"],
+            row["github_issue_number"],
+        )
+        old = existing_by_key.get(key)
+        new_ao = _norm_area_override_value(row.get("area_override"))
+        old_ao = _norm_area_override_value(old.get("area_override")) if old else None
+        url = row.get("github_issue_url") or ""
+        since_from_issue = scan_to_utc_date(url_to_updated_at.get(url))
+        if new_ao is None:
+            row["area_override_since"] = None
+        elif old is None or old_ao != new_ao:
+            row["area_override_since"] = since_from_issue or today_utc
+        else:
+            row["area_override_since"] = scan_to_utc_date(old.get("area_override_since"))
 
 
 def get_area_to_owner_mapping(ydb_wrapper):
@@ -130,12 +204,12 @@ def _resolve_area_to_team(area_label: str, area_to_owner: dict) -> str:
     return best_team
 
 
-def resolve_owner_override(body: str, info_raw, area_to_owner: dict) -> str:
-    """Determine owner_override for an issue.
+def resolve_area_override(body: str, info_raw, area_to_owner: dict):
+    """If GitHub ``area/...`` implies a different team than ``Owner:``, return that area path.
 
-    Returns the overriding team name (lowercase) or None.
+    Stored value matches issue info (e.g. ``area/blobstorage``), not the resolved team slug.
     """
-    area_label = _extract_area_from_info(info_raw)
+    area_label = (_extract_area_from_info(info_raw) or "").strip()
     if not area_label:
         return None
 
@@ -148,7 +222,7 @@ def resolve_owner_override(body: str, info_raw, area_to_owner: dict) -> str:
     if resolved_team.lower() == default_owner.lower():
         return None
 
-    return resolved_team.lower()
+    return area_label
 
 
 def create_test_issue_mapping_table(ydb_wrapper, table_path):
@@ -165,6 +239,8 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path):
         `github_issue_number`     Uint64     NOT NULL,
         `github_issue_state`      Utf8,
         `github_issue_created_at` Timestamp,
+        `area_override`           Utf8,
+        `area_override_since`     Date,
         PRIMARY KEY (full_name, branch, build_type, github_issue_number)
     )
     PARTITION BY HASH(full_name)
@@ -194,7 +270,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
                     'github_issue_number': latest_issue['issue_number'],
                     'github_issue_state': latest_issue['state'],
                     'github_issue_created_at': latest_issue.get('created_at'),
-                    'owner_override': latest_issue.get('owner_override'),
+                    'area_override': latest_issue.get('area_override'),
                 })
 
     return table_data
@@ -213,7 +289,8 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     column_types.add_column('github_issue_number', ydb.PrimitiveType.Uint64)
     column_types.add_column('github_issue_state', ydb.OptionalType(ydb.PrimitiveType.Utf8))
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-    column_types.add_column('owner_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    column_types.add_column('area_override', ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    column_types.add_column('area_override_since', ydb.OptionalType(ydb.PrimitiveType.Date))
 
     ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")
@@ -239,12 +316,14 @@ def main():
 
             area_to_owner = get_area_to_owner_mapping(ydb_wrapper)
 
-            # Pre-compute owner_override per issue URL for O(1) lookup
-            url_to_override = {}
+            url_to_updated_at = {}
+            # Pre-compute area_override per issue URL for O(1) lookup
+            url_to_area_override = {}
             for issue in issues_data:
                 url = issue.get('url', '')
                 if url:
-                    url_to_override[url] = resolve_owner_override(
+                    url_to_updated_at[url] = issue.get("updated_at") or issue.get("created_at")
+                    url_to_area_override[url] = resolve_area_override(
                         issue.get('body', ''),
                         issue.get('info'),
                         area_to_owner,
@@ -257,18 +336,23 @@ def main():
             override_count = 0
             for issue_list in test_to_issue.values():
                 for issue_info in issue_list:
-                    override = url_to_override.get(issue_info['url'])
-                    issue_info['owner_override'] = override
-                    if override:
+                    ao = url_to_area_override.get(issue_info['url'])
+                    issue_info['area_override'] = ao
+                    if ao:
                         override_count += 1
 
             if override_count:
-                print(f"Resolved {override_count} owner_override(s) from area/ labels")
+                print(f"Resolved {override_count} area_override(s) from area labels")
 
             mapping_data = convert_mapping_to_table_data(test_to_issue)
             print(f"Converted to {len(mapping_data)} table records")
 
             create_test_issue_mapping_table(ydb_wrapper, table_path)
+
+            existing_by_key = _fetch_existing_github_issue_mapping(ydb_wrapper, table_path)
+            if existing_by_key is None:
+                return 1
+            merge_area_override_since(mapping_data, existing_by_key, url_to_updated_at)
 
             if mapping_data:
                 bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data)

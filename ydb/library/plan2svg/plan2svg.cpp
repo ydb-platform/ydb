@@ -355,6 +355,19 @@ void TMetricHistory::Load(std::vector<ui64>& times, std::vector<ui64>& values, u
     }
 }
 
+ui64 TMetricHistory::Integrate() {
+    ui64 result = 0;
+    for (ui32 i = 1; i < Values.size(); i++) {
+        result += (Values[i - 1].second + Values[i].second) / 2 * (Values[i].first - Values[i - 1].first);
+    }
+    return result;
+}
+
+ui64 TMetricHistory::Average() {
+    ui64 dt = Values.empty() ? 0 : Values.back().first - Values.front().first;
+    return dt ? Integrate() / dt : 0;
+}
+
 void Min0(ui64& m, ui64 v) {
     if (v) {
         m = m ? std::min(m, v) : v;
@@ -1967,6 +1980,63 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
     }
 }
 
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMetricHistory*, TString>> history, const TString& iconRef, const TString& iconColor, const TString& iconScale) {
+    ui32 x0 = viewLeft + INTERNAL_GAP_X;
+    ui32 width = viewWidth - INTERNAL_GAP_X * 2;
+    if (iconRef) {
+        x0 += INTERNAL_WIDTH;
+        width -= INTERNAL_WIDTH;
+    }
+    if (iconRef) {
+        background
+        << "<use href='" << iconRef << "' transform='translate(" << viewLeft << ' ' << y0 << ") scale(" << iconScale << ")' fill='" << iconColor << "'/>" << Endl;
+    }
+
+    ui64 scale = 0;
+    for (auto it = std::rbegin(history); it != std::rend(history); it++) {
+        auto itemScale = it->first->Average();
+        if (itemScale) {
+            if (scale == 0) {
+                scale = itemScale;
+            }
+            background
+            << "<rect x='" << x0 << "' y='" << y0 << "' width='" << width * itemScale / scale << "' height='" << h
+            << "' fill='" << it->second << "'/>" << Endl;
+        }
+    }
+
+    TStringBuilder builder;
+    ui64 lastScale = 0;
+    for (auto& item : history) {
+        auto itemScale = item.first->Average();
+        if (itemScale) {
+            if (lastScale) {
+                builder << " / ";
+            }
+            auto nextScale = itemScale;
+            itemScale -= lastScale;
+            lastScale = nextScale;
+            builder << FormatBytes(itemScale * 1_MB);
+        }
+    }
+    TString text = builder;
+
+    if (text) {
+        background
+        << "<rect x='" << x0 << "' y='" << y0 + (h - INTERNAL_TEXT_HEIGHT) / 2
+        << "' width='" << text.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+        << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
+        << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
+        << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (h - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << text << "</text>" << Endl;
+    }
+
+    Y_UNUSED(x0);
+    Y_UNUSED(width);
+    Y_UNUSED(h);
+    Y_UNUSED(history);
+}
+
+
 void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     OffsetY = offsetY;
 
@@ -2752,11 +2822,11 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         builder
             << "<svg data-stage='outer node' data-height='" << GAP_Y + node->Height << "' width='" << Config.Width << "' height='" << GAP_Y + node->Height << "' x='0' y='" << node->OffsetY << "'>" << Endl
             << "<svg data-stage='inner node' data-height='" << node->Height << "' width='" << Config.Width << "' height='" << node->Height << "' x='0' y='" << GAP_Y << "'>" << Endl
-            << SvgRect(Config.HeaderLeft + INDENT_X + GAP_X, 0, Config.HeaderWidth - (INDENT_X + GAP_X), "100%", "clone")
-            << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "clone")
-            << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "clone")
-            << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "clone")
-            << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "clone")
+            << SvgRect(Config.HeaderLeft + INDENT_X + GAP_X, 0, Config.HeaderWidth - (INDENT_X + GAP_X), "100%", "stage")
+            << SvgRect(Config.OperatorLeft, 0, Config.OperatorWidth, "100%", "stage")
+            << SvgRect(Config.SummaryLeft, 0, Config.SummaryWidth, "100%", "stage")
+            << SvgRect(Config.TaskLeft, 0, Config.TaskWidth, "100%", "stage")
+            << SvgRect(Config.TimelineLeft, 0, Config.TimelineWidth, "100%", "stage")
             << SvgTextS(Config.HeaderLeft + INTERNAL_GAP_X + INTERNAL_WIDTH * 2 + 2, INTERNAL_GAP_Y + (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, "NodeId = " + ToString(node->NodeId));
 
         ui32 y0 = INTERNAL_GAP_Y;
@@ -2771,17 +2841,23 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             PrintValues(builder, node->OutputBytes->History, px, y0, pw, INTERNAL_HEIGHT, "Max " + FormatBytes(node->OutputBytes->History.MaxValue), Config.Palette.OutputMedium, Config.Palette.OutputMedium);
             y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
         }
-*/
+
         if (node->MaxMemoryUsage) {
             TString tooltip;
             auto textSum = FormatTooltip(tooltip, "Memory", node->MaxMemoryUsage.get(), FormatBytes);
             PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, node->MaxMemoryUsage, Config.Palette.MemMedium, Config.Palette.MemLight, textSum, tooltip, 0, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
         }
-
+*/
         ui32 px = Config.TimelineLeft;
         ui32 pw = Config.TimelineWidth - timelineDelta;
 
         if (node->MemPhysicalUsage.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->MemSysFragmented, Config.Palette.MemMedium },
+                { &node->MemSysAllocated, Config.Palette.MemLight },
+                { &node->MemPhysicalUsage, "red" },
+            }, "#icon_memory", "red", "0.6 0.6");
+
             px += (TimeOffset + node->MemPhysicalUsage.MinTime) * pw / maxTime;
             pw = (node->MemPhysicalUsage.MaxTime - node->MemPhysicalUsage.MinTime) * pw / maxTime;
 
@@ -2806,6 +2882,12 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->MemArrowDefault.Values.size() || node->MemMkqlAllocated.Values.size() || node->MemMkqlFreeList.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->MemMkqlFreeList, Config.Palette.MemMedium },
+                { &node->MemMkqlAllocated, Config.Palette.MemLight },
+                { &node->MemArrowDefault, Config.Palette.BlockMedium },
+            }, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+
             auto maxValue = std::max(node->MemArrowDefault.MaxValue, node->MemMkqlAllocated.MaxValue);
             builder
                 << "<g><title>"
@@ -2813,7 +2895,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.MaxValue * 1_MB)
                 << ", Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.MaxValue * 1_MB)
                 << "</title>" << Endl;
-            PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.BlockMedium, Config.Palette.BlockMedium);
             PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
             PrintSeries(builder, node->MemMkqlFreeList.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
             builder << "</g>" << Endl;
@@ -2822,6 +2904,12 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
 
         if (node->OutputInflightBytes.Values.size() || node->LocalInflightBytes.Values.size() || node->InputInflightBytes.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->InputInflightBytes, Config.Palette.InputMedium },
+                { &node->LocalInflightBytes, Config.Palette.MemLight },
+                { &node->OutputInflightBytes, Config.Palette.OutputMedium },
+            }, "#icon_memory", Config.Palette.InputDark, "0.6 0.6");
+
             auto maxValue = node->OutputInflightBytes.MaxValue;
             builder
                 << "<g><title>"
@@ -2829,9 +2917,9 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 << ", Max Local " <<  FormatBytes(node->MaxLocalInflightBytes * 1_MB)
                 << ", Max Input " <<  FormatBytes(node->InputInflightBytes.MaxValue * 1_MB)
                 << "</title>" << Endl;
-            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputMedium);
             PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
-            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
+            PrintSeries(builder, node->InputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.InputMedium, Config.Palette.InputMedium);
             builder << "</g>" << Endl;
         }
 
@@ -2944,7 +3032,8 @@ TColorPalette::TColorPalette() {
     SpillingTimeMedium  = "var(--spill-medium, #FFC522)";
     SpillingTimeLight   = "var(--spill-light, #FFD766)";
 
-    BlockMedium = "var(--block-medium, #EACB68)";
+    BlockLight = "var(--block-light, #EACB68)";
+    BlockMedium = "var(--block-medium, #D9AE61)";
 }
 
 TPlanViewConfig::TPlanViewConfig() {

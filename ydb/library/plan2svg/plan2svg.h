@@ -61,6 +61,8 @@ struct TMetricHistory {
     void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // time + value
     void Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // value only
     void Load(std::vector<ui64>& times, std::vector<ui64>& values, ui64 explicitMinTime, ui64 explicitMaxTime); // explicit
+    ui64 Integrate();
+    ui64 Average();
 };
 
 class TSingleMetric {
@@ -282,6 +284,7 @@ struct TColorPalette {
     TString SpillingTimeDark;
     TString SpillingTimeMedium;
     TString SpillingTimeLight;
+    TString BlockLight;
     TString BlockMedium;
 };
 
@@ -359,6 +362,7 @@ public:
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMetricHistory*, TString>> history, const TString& iconRef, const TString& iconColor, const TString& iconScale);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);

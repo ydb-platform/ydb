@@ -1,4 +1,4 @@
-* Added the `direct-read` option to the `ydb topic workload` command
+* Added the `direct-read` option to the `ydb workload topic` command
 
 ## 2.30.0 ##
 * Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.

@@ -1,5 +1,6 @@
 #include "vector_data_generator.h"
 
+#include <ydb/library/workload/benchmark_base/state.h>
 #include <ydb/library/formats/arrow/csv/converter/csv_arrow.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
@@ -253,18 +254,19 @@ public:
 
 class TRandomDataGenerator final: public IBulkDataGenerator {
 private:
-    static constexpr size_t PORTION_SIZE = 8192;
-
     const TVectorWorkloadParams& Params;
     const NVector::TVectorOpts& VectorOpts;
     const size_t RowCount;
     const size_t PrefixCount;
+    TGeneratorStateProcessor* const StateProcessor;
+    const TString StateSource;
 
     std::mt19937 RandomGenerator;
     std::uniform_real_distribution<float> Distribution;
     TAdaptiveLock Lock;
 
     size_t DoneRows = 0;
+    bool SeekDone = false;
 
 private:
     template<typename T>
@@ -290,12 +292,14 @@ private:
     }
 
 public:
-    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const size_t prefixCount, const uint32_t randomSeed)
+    TRandomDataGenerator(const TVectorWorkloadParams& params, const NVector::TVectorOpts& vectorOpts, const size_t rowCount, const size_t prefixCount, const uint32_t randomSeed, TGeneratorStateProcessor* stateProcessor)
         : IBulkDataGenerator(params.TableOpts.Name, rowCount)
         , Params(params)
         , VectorOpts(vectorOpts)
         , RowCount(rowCount)
         , PrefixCount(prefixCount)
+        , StateProcessor(stateProcessor)
+        , StateSource(params.TableOpts.Name)
         , RandomGenerator(randomSeed)
         , Distribution(0.0f, 1.0f)
     { }
@@ -303,6 +307,25 @@ public:
     virtual TDataPortions GenerateDataPortion() override {
         // Sequential generation is required to ensure reproducibility for fixed seed value.
         with_lock(Lock) {
+            if (!SeekDone) {
+                SeekDone = true;
+                if (StateProcessor) {
+                    const auto& state = StateProcessor->GetState();
+                    const auto it = state.find(StateSource);
+                    if (it != state.end()) {
+                        const size_t toSkip = Min<size_t>(it->second.Position, RowCount);
+                        DoneRows = toSkip;
+                        if (toSkip > 0) {
+                            Cout << "Resuming generator from row " << toSkip << " / " << RowCount << Endl;
+                        }
+                    }
+                }
+            }
+
+            if (DoneRows >= RowCount) {
+                return {};
+            }
+
             std::vector<std::shared_ptr<arrow::Array>> resultColumns;
 
             arrow::UInt64Builder idsBuilder;
@@ -323,8 +346,9 @@ public:
             }
 
             const bool prefixed = Params.KmeansTreePrefixed;
+            const size_t portionStart = DoneRows;
             size_t currentBatchSize;
-            for (currentBatchSize = 0; currentBatchSize < PORTION_SIZE && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
+            for (currentBatchSize = 0; currentBatchSize < Params.BulkSize && DoneRows < RowCount; ++currentBatchSize, ++DoneRows) {
                 if (const auto status = idsBuilder.Append(static_cast<uint64_t>(DoneRows)); !status.ok()) {
                     ythrow yexception() << status.ToString();
                 }
@@ -383,7 +407,15 @@ public:
                 arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString()
             );
 
-            return {MakeIntrusive<TDataPortion>(Params.GetFullTableName(Params.TableOpts.Name.c_str()), std::move(arrowData), currentBatchSize)};
+            const TString tablePath = Params.GetFullTableName(Params.TableOpts.Name.c_str());
+            return {MakeIntrusive<TDataPortionWithState>(
+                StateProcessor,
+                tablePath,
+                StateSource,
+                std::move(arrowData),
+                portionStart,
+                currentBatchSize
+            )};
         }
     }
 };
@@ -557,7 +589,7 @@ void TWorkloadVectorGenerateDataInitializer::ConfigureOpts(NLastGetopt::TOpts& o
 
 TBulkDataGeneratorList TWorkloadVectorGenerateDataInitializer::DoGetBulkInitialData() {
     Cout << "Using random seed: " << RandomSeed << Endl;
-    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed)};
+    return {std::make_shared<TRandomDataGenerator>(VectorParams, VectorOpts, RowCount, PrefixCount, RandomSeed, StateProcessor.Get())};
 }
 
 } // namespace NYdbWorkload

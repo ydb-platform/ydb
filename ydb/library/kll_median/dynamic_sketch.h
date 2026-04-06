@@ -8,8 +8,6 @@
 
 namespace NKikimr::NKll {
 
-namespace {
-
 /** Bernoulli(weight / w0); requires 0 < weight < w0. */
 inline bool TryAcceptSmallWeight(ui64 weight, ui64 w0, std::mt19937_64& rng) {
     Y_ASSERT(w0 > 0);
@@ -18,8 +16,6 @@ inline bool TryAcceptSmallWeight(ui64 weight, ui64 w0, std::mt19937_64& rng) {
 
     return (static_cast<ui64>(rng()) & (w0 - 1)) < weight;
 }
-
-} // namespace
 
 template <class T>
 class TDynamicKllSketch {
@@ -34,7 +30,7 @@ public:
 
     void Add(const T& x, ui64 weight) {
         if (!weight) return;
-    
+
         for (ui32 p = 0; p < 64; ++p) {
             ui64 bit = 1ULL << p;
             if (bit > weight) break;
@@ -43,7 +39,7 @@ public:
             }
         }
     }
-    
+
     const TDeque<typename TKllSketch<T>::TLevel>& GetLevels() const {
         return Sketch_.Levels_;
     }
@@ -54,18 +50,18 @@ private:
     void AddPow2(const T& x, ui64 w) {
         ui64 minWeight = Sketch_.Levels_.empty() ? Sketch_.CurrentWeight_
                                                  : Sketch_.Levels_[0].Weight;
-    
+
         ui64 placementWeight = w;
         if (w < minWeight) {
             if (!TryAcceptSmallWeight(w, minWeight, Sketch_.Rng_)) return;
             placementWeight = minWeight;
         }
-    
+
         Sketch_.N_ += w;
         EnsureMaxWeightAtLeast(placementWeight);
         size_t level = FindSuitableLevel(placementWeight);
         Sketch_.AddToLevel(level, x);
-    
+
         while (Sketch_.Levels_.size() > MAX_LEVELS) {
             Sketch_.CompactLevel(0, true);
             Sketch_.Levels_.pop_front();

@@ -2,12 +2,14 @@ PY3TEST()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 TEST_SRCS(
-    test_query_cache.py
+    test_warmup.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
+
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
 DEPENDS(
@@ -20,7 +22,3 @@ PEERDIR(
 )
 
 END()
-
-RECURSE(
-    warmup
-)

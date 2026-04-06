@@ -13,6 +13,10 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
         , Request(ev)
     {}
 
+    TTxType GetTxType() const override {
+        return TXTYPE_CREATE_FORCED_COMPACTION;
+    }
+
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
         const auto& settings = request.GetSettings();
@@ -57,8 +61,15 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsTable()
-                .IsCommonSensePath()
                 .IsTheSameDomain(subdomainPath);
+
+            if (!checks) {
+                if (tablePath.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath();
+                } else {
+                    checks.IsCommonSensePath();
+                }
+            }
 
             if (!checks) {
                 return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, checks.GetError());
@@ -121,7 +132,7 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxCreate DoComplete");
+        LOG_N("TForcedCompaction::TTxCreate DoComplete " << Request->Get()->Record.ShortDebugString());
         Self->ProcessForcedCompactionQueues();
         SideEffects.ApplyOnComplete(Self, ctx);
     }

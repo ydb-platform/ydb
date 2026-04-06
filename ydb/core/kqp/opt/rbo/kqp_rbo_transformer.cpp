@@ -342,6 +342,12 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
         simplifiedPlanElement["Plans"] = simplifiedPlanList;
 
         planJson["SimplifiedPlan"] = simplifiedPlanElement;
+
+        auto meta = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+        meta["version"] = "0.2";
+        meta["type"] = "query";
+        planJson["meta"] = meta;
+        
         TransformCtx->PlanJson = planJson;
     }
 

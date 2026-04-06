@@ -788,6 +788,31 @@
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  Все сообщения записываются во внутренний буфер. Для отправки на сервер есть 3 механизма: два автоматических и один ручной. Ручной - это вызов метода `writer.flush` который возвращает последний seqno записанный на сервере. Автоматическая отправка происходит по условиям:
+  - Превышение размера внутреннего буфера `maxBufferBytes` (значение по умолчанию = 256MiB).
+  - По тику интервала периодической отправки `flushIntervalMs` (значение по умолчанию = 10ms).
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+    // Callback that is called when writer receives an acknowledgment for a message.
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
+    },
+  })
+
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Чтобы получить последний записанный seqNo на сервере.
+  await writer.flush();
+  ```
+
+>>>>>>> cc12ade59cd (DOCSUP-126591: Починить вторичные индексы. Проект в Аркадии (1 шт.) (#37351))
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -2167,7 +2192,17 @@
   }
   ```
 
+<<<<<<< HEAD
 {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+=======
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+>>>>>>> cc12ade59cd (DOCSUP-126591: Починить вторичные индексы. Проект в Аркадии (1 шт.) (#37351))
 
 {% endlist %}
 

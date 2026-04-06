@@ -32,20 +32,12 @@ namespace NKikimr::NPQ {
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {
         Update(timestamp);
-<<<<<<< HEAD
-        return AvailableSize >= (i64)MicroSecondsPerSecond; // a whole quota unit has become available
-=======
         return AvailableSize > 0;
->>>>>>> 67725c9df20 (Revert "Fixed topic partition quota wait time (#36114)")
     }
 
     void TQuotaTracker::Exaust(const ui64 size, const TInstant timestamp) {
         Update(timestamp);
-<<<<<<< HEAD
-        AvailableSize -= (i64)size * MicroSecondsPerSecond;
-=======
         AvailableSize -= (i64)size;
->>>>>>> 67725c9df20 (Revert "Fixed topic partition quota wait time (#36114)")
         Update(timestamp);
     }
 

@@ -73,6 +73,9 @@ namespace NActors::NDetail {
 
     std::coroutine_handle<> MakeBridgeCoroutine(IActor& actor, TActorRunnableItem& item) {
         TBridgeCoroutine* c = new TBridgeCoroutine(actor, item);
+        // coverity[leaked_storage]
+        // Ownership of c is transferred to the returned coroutine handle and is
+        // released via TBridgeCoroutine::OnDestroy/DoRun.
         return c->ToCoroutineHandle();
     }
 
@@ -159,6 +162,9 @@ namespace NActors::NDetail {
         IActor& actor, TActorRunnableItem& item1, TActorRunnableItem& item2)
     {
         TBridgeCoroutines* c = new TBridgeCoroutines(actor, item1, item2);
+        // coverity[leaked_storage]
+        // Ownership of c is transferred to the returned coroutine handles and is
+        // released when either handle is resumed or destroyed.
         return c->ToCoroutineHandles();
     }
 

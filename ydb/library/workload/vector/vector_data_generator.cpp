@@ -317,6 +317,9 @@ public:
                         DoneRows = toSkip;
                         if (toSkip > 0) {
                             Cout << "Resuming generator from row " << toSkip << " / " << RowCount << Endl;
+                            // Advance PRNG to match the state after generating toSkip rows,
+                            // preserving reproducibility for a fixed seed value.
+                            RandomGenerator.discard(toSkip * VectorOpts.VectorDimension);
                         }
                     }
                 }

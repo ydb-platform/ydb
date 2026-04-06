@@ -6,14 +6,15 @@ DATA(arcadia/ydb/core/external_sources/s3/ut/docker-compose.yml)
 ENV(COMPOSE_PROJECT_NAME=s3)
 ENV(TZ="UTC+13")
 
+# Split tests to chunks only when they're running on different machines with distbuild,
+# otherwise this directive will slow down local test execution.
+# Look through DEVTOOLSSUPPORT-39642 for more information.
+FORK_SUBTESTS()
+SPLIT_FACTOR(100)
+
 IF (AUTOCHECK) 
     # Temporarily disable these tests due to infrastructure incompatibility
-    SKIP_TEST("DEVTOOLSUPPORT-44637")
-
-    # Split tests to chunks only when they're running on different machines with distbuild,
-    # otherwise this directive will slow down local test execution.
-    # Look through DEVTOOLSSUPPORT-39642 for more information.
-    FORK_SUBTESTS()
+    SKIP_TEST("DEVTOOLSUPPORT-44637")  
 
     # TAG and REQUIREMENTS are copied from: https://docs.yandex-team.ru/devtools/test/environment#docker-compose
     TAG(

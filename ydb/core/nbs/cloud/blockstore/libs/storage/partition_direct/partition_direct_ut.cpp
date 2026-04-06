@@ -540,6 +540,47 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    Y_UNIT_TEST(ShouldCorrectlyAllocateDirectBlockGroups)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService =
+            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+
+        runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (ev->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                UNIT_ASSERT_VALUES_EQUAL(msg->Record.QueriesSize(), 32);
+                for (size_t i = 0; i < 32; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        msg->Record.GetQueries(i).GetDirectBlockGroupId(),
+                        i);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        msg->Record.GetQueries(i).GetTargetNumVChunks(),
+                        5);
+                }
+            }
+
+            return true;
+        };
+
+        CreatePartitionTablet(
+            env,
+            4 * BlocksPerRegion + 1   // blockCount
+        );
+    }
+
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
         BasicWriteRead(EWriteMode::PBufferReplication);

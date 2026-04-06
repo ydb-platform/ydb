@@ -167,9 +167,9 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
 }
 
 double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const {
-    Y_UNUSED(outputRows);
+    Y_UNUSED(outputByteSize);
     Y_UNUSED(joinAlgo);
-    return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
+    return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(

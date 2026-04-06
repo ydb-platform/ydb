@@ -25,7 +25,6 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
 
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         DECLARE $pk AS String;
 
@@ -133,7 +132,6 @@ TFuture<TStatus> SelectGenerationWithCheck(const TGenerationContextPtr& context)
 TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
         DECLARE $pk AS String;
         DECLARE $generation AS Uint64;

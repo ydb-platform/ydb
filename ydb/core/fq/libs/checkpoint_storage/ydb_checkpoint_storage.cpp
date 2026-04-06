@@ -104,7 +104,6 @@ TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& c
 
     auto query = Sprintf(R"(
         --!syntax_v1
-        PRAGMA ydb.DqChannelVersion = "1";
         PRAGMA TablePathPrefix("%s");
 
         SELECT *

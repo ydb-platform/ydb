@@ -871,7 +871,6 @@ public:
 protected:
     void ReadQueryInfo(const TTxControl& txControl) {
         const TString sql = fmt::format(R"(
-                PRAGMA ydb.DqChannelVersion = "1";
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;
 
@@ -1368,7 +1367,6 @@ public:
 
     void RemoveQuery() {
         const TString sql = fmt::format(R"(
-                PRAGMA ydb.DqChannelVersion = "1";
                 DECLARE $database_id AS Text;
                 DECLARE $query_path AS Text;
 

@@ -167,9 +167,9 @@ bool TBaseProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizer
 }
 
 double TBaseProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const {
-    Y_UNUSED(outputByteSize);
+    Y_UNUSED(outputRows);
     Y_UNUSED(joinAlgo);
-    return leftStats.Nrows + 2.0 * rightStats.Nrows + outputRows;
+    return leftStats.ByteSize + 2.0 * rightStats.ByteSize + outputByteSize;
 }
 
 TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
@@ -184,10 +184,10 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStatsV1(
     bool shuffleRightSide) const {
     auto stats = ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
     if (shuffleLeftSide) {
-        stats.Cost += 0.5 * leftStats.Nrows;
+        stats.Cost += 0.5 * leftStats.ByteSize;
     }
     if (shuffleRightSide) {
-        stats.Cost += 0.5 * rightStats.Nrows;
+        stats.Cost += 0.5 * rightStats.ByteSize;
     }
 
     return stats;
@@ -339,7 +339,6 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
     EStatisticsType outputType;
     bool leftKeyColumns = false;
     bool rightKeyColumns = false;
-    double cost{};
     double newCard{};
     double newByteSize{};
     double selectivity = 1.0;
@@ -422,9 +421,6 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
 
         newByteSize = ComputeBothSidesByteSize(newCard, leftStats, rightStats, commonJoinKeys);
         outputType = EStatisticsType::ManyManyJoin;
-
-        /* in case of cross join we broadcast the right part to the left */
-        cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
     } 
     else if (isAntiOrSemiJoin) {
         if (joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly) {
@@ -473,10 +469,15 @@ TOptimizerStatistics TBaseProviderContext::ComputeJoinStats(
         newCard = maybeHint->ApplyHint(newCard);
     }
 
-    double current_cost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
+    double currentCost = ComputeJoinCost(leftStats, rightStats, newCard, newByteSize, joinAlgo);
 
     // cost model is dominated by inputs (i.e. not output size). Also, double counting costs.
-    cost += current_cost + leftStats.Cost + rightStats.Cost;
+    double cost = currentCost + leftStats.Cost + rightStats.Cost;
+
+    if (isCrossJoin) {
+        /* in case of cross join we broadcast the right part to the left */
+        cost += ComputeOneSideByteSize(rightStats.Nrows * rightStats.Selectivity, rightStats);
+    }
 
     auto result = TOptimizerStatistics(outputType, newCard, newNCols, newByteSize, cost,
                                        leftKeyColumns ? leftStats.KeyColumns : (rightKeyColumns ? rightStats.KeyColumns : TIntrusivePtr<TOptimizerStatistics::TKeyColumns>()));

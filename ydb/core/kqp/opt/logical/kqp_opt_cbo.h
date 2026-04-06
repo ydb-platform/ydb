@@ -82,8 +82,8 @@ struct TKqpProviderContext : public NYql::TBaseProviderContext {
     int OptLevel;
 
     ui32 CONSTS_MAX_DEPTH = 3;
-    double CONSTS_SEL_MULT = 1.0;
-    double CONSTS_SEL_POW = 0.8;
+    double CONSTS_SEL_MULT = 0.5;
+    double CONSTS_SEL_POW = 0.5;
 
     double CONSTS_SHUFFLE_LEFT_SIDE_MULT = 0.5;
     double CONSTS_SHUFFLE_LEFT_SIDE_POW = 1.0;
@@ -91,20 +91,20 @@ struct TKqpProviderContext : public NYql::TBaseProviderContext {
     double CONSTS_SHUFFLE_RIGHT_SIDE_POW = 1.0;
 
     double CONSTS_INTERACTION_MULT = 0.5;
-    double CONSTS_INTERACTION_POW = 0.7;
+    double CONSTS_INTERACTION_POW = 0.5;
 
     double CONSTS_MAPJOIN_LEFT_SIDE_MULT = 1.0;
     double CONSTS_MAPJOIN_LEFT_SIDE_POW = 1.0;
     double CONSTS_MAPJOIN_RIGHT_SIDE_MULT = 1.8;
     double CONSTS_MAPJOIN_RIGHT_SIDE_POW = 1.0;
-    double CONSTS_MAPJOIN_OUTPUT_MULT = 1.0;
+    double CONSTS_MAPJOIN_OUTPUT_MULT = 0.5;
     double CONSTS_MAPJOIN_OUTPUT_POW = 1.0;
 
-    double CONSTS_GRACEJOIN_LEFT_SIDE_MULT = 1.0;
-    double CONSTS_GRACEJOIN_LEFT_SIDE_POW = 1.0;
-    double CONSTS_GRACEJOIN_RIGHT_SIDE_MULT = 2.0;
-    double CONSTS_GRACEJOIN_RIGHT_SIDE_POW = 1.0;
-    double CONSTS_GRACEJOIN_OUTPUT_MULT = 1.0;
+    double CONSTS_GRACEJOIN_LEFT_SIDE_MULT = 2.5;
+    double CONSTS_GRACEJOIN_LEFT_SIDE_POW = 1.2;
+    double CONSTS_GRACEJOIN_RIGHT_SIDE_MULT = 3.0;
+    double CONSTS_GRACEJOIN_RIGHT_SIDE_POW = 1.2;
+    double CONSTS_GRACEJOIN_OUTPUT_MULT = 0.5;
     double CONSTS_GRACEJOIN_OUTPUT_POW = 1.0;
     
 };

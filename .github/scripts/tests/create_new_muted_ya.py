@@ -862,7 +862,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
 
 
 def load_configured_digest_profile_ids():
-    """Profile IDs listed in telegram_notification_config.json (branch-build_type).
+    """Profile IDs listed in telegram_notification_config.json (branch:build_type).
 
     Only these may be written to digest_queue so unsent rows always match a send_digest profile.
     """

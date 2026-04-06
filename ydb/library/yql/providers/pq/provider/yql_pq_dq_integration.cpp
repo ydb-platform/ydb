@@ -784,7 +784,7 @@ public:
             .Value(ctx.NewList(pos, std::move(metadataFieldsList)))
             .Done());
 
-        // Like S3: UserSchemaColumns in formatSettings тАФ immutable userschema/file column order for csv CH parser (not projection Columns).
+        // Like S3: UserSchemaColumns in formatSettings — immutable userschema/file column order for csv CH parser (not projection Columns).
         TExprNode::TPtr formatSettingsNode = pqReadTopic.Settings().Ptr();
         if (pqReadTopic.Format().Ref().Content() == TStringBuf("csv")) {
             const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();

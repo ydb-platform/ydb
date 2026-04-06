@@ -81,23 +81,26 @@ void TWriteRequestExecutor::Run(
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
             SendWriteRequestToManyPBuffers(pbufferReplyTimeoutMicroseconds);
+            // We don't need to schedule requests to handoff persistent buffers
+            // after delay since we will send them in case of error. See
+            // OnWriteToManyPBuffersResponse.
             return;
         case EWriteMode::DirectPBuffersFilling:
             SendWriteRequest(ELocation::PBuffer0);
             SendWriteRequest(ELocation::PBuffer1);
             SendWriteRequest(ELocation::PBuffer2);
+
+            PartitionDirectService->ScheduleAfterDelay(
+                Executor,
+                WriteHandoffDelay,
+                [weakSelf = weak_from_this()]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->SendWriteRequestsToHandoffPBuffers();
+                    }
+                });
             return;
     }
-
-    PartitionDirectService->ScheduleAfterDelay(
-        Executor,
-        WriteHandoffDelay,
-        [weakSelf = weak_from_this()]()
-        {
-            if (auto self = weakSelf.lock()) {
-                self->SendWriteRequestsToHandoffPBuffers();
-            }
-        });
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>

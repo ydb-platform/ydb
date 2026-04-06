@@ -1,11 +1,11 @@
 #pragma once
 
+#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
-        class Entry;
         class ModifyPermissionsRequest;
         class Permissions;
     }
@@ -222,12 +222,14 @@ private:
 
 class TDescribeSecretResult : public TStatus {
 public:
-    TDescribeSecretResult(TStatus&& status, std::string name, uint64_t version);
-    const std::string& GetName() const { return Name_; }
+    TDescribeSecretResult(TStatus&& status, ::Ydb::Scheme::Entry&& self, uint64_t version);
+    TSchemeEntry GetEntry() const;
+    const ::Ydb::Scheme::Entry& GetSelfProto() const;
+    const std::string& GetName() const;
     uint64_t GetVersion() const { return Version_; }
 
 private:
-    std::string Name_;
+    ::Ydb::Scheme::Entry Self_;
     uint64_t Version_ = 0;
 };
 

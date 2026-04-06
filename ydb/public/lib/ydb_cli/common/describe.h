@@ -59,7 +59,8 @@ private:
     int DescribeSystemView(const TString& path, EDataFormat format);
     int PrintSystemViewResponsePretty(const NYdb::NTable::TSystemViewDescription& result) const;
 
-    int DescribeSecret(const TString& path, const TDescribeOptions& options, EDataFormat format, const NScheme::TDescribePathResult& result);
+    int DescribeSecret(const TString& path, EDataFormat format);
+    int PrintSecretResponsePretty(const NScheme::TDescribeSecretResult& result) const;
 
     int TryTopicConsumerDescribeOrFail(const TString& path, const NScheme::TDescribePathResult& result, const TDescribeOptions& options, EDataFormat format);
     std::pair<TString, TString> ParseTopicConsumer(const TString& path) const;

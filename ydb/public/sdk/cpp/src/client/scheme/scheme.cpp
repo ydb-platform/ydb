@@ -326,10 +326,10 @@ public:
             if (any) {
                 any->UnpackTo(&result);
             }
-            std::string name = result.self().name();
+            ::Ydb::Scheme::Entry self = result.self();
             promise.SetValue(TDescribeSecretResult(
                 TStatus(std::move(status)),
-                std::move(name),
+                std::move(self),
                 result.version()));
         };
 
@@ -367,11 +367,26 @@ void TDescribePathResult::Out(IOutputStream& out) const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDescribeSecretResult::TDescribeSecretResult(TStatus&& status, std::string name, uint64_t version)
+TDescribeSecretResult::TDescribeSecretResult(TStatus&& status, ::Ydb::Scheme::Entry&& self, uint64_t version)
     : TStatus(std::move(status))
-    , Name_(std::move(name))
+    , Self_(std::move(self))
     , Version_(version)
 {}
+
+TSchemeEntry TDescribeSecretResult::GetEntry() const {
+    CheckStatusOk("TDescribeSecretResult::GetEntry");
+    return TSchemeEntry(Self_);
+}
+
+const ::Ydb::Scheme::Entry& TDescribeSecretResult::GetSelfProto() const {
+    CheckStatusOk("TDescribeSecretResult::GetSelfProto");
+    return Self_;
+}
+
+const std::string& TDescribeSecretResult::GetName() const {
+    CheckStatusOk("TDescribeSecretResult::GetName");
+    return Self_.name();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

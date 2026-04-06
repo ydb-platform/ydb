@@ -2,24 +2,18 @@
 
 
 namespace NKikimr::NPQ {
-    namespace {
-        constexpr size_t MicroSecondsPerSecond = 1000000;
-    }
-
     TQuotaTracker::TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp)
-        : AvailableSize(maxBurst * MicroSecondsPerSecond)
-        , QuotaSpeed(speedPerSecond)
-        , MaxBurst(maxBurst * MicroSecondsPerSecond)
+        : AvailableSize(maxBurst)
+        , SpeedPerSecond(speedPerSecond)
         , LastUpdateTime(timestamp)
+        , MaxBurst(maxBurst)
     {}
 
     bool TQuotaTracker::UpdateConfigIfChanged(const ui64 maxBurst, const ui64 speedPerSecond) {
-        const auto newMaxBurst = maxBurst * MicroSecondsPerSecond;
-        const auto newQuotaSpeed = speedPerSecond;
-        if (newMaxBurst != MaxBurst || newQuotaSpeed != QuotaSpeed) {
-            AvailableSize = newMaxBurst;
-            QuotaSpeed = newQuotaSpeed;
-            MaxBurst = newMaxBurst;
+        if (maxBurst != MaxBurst || speedPerSecond != SpeedPerSecond) {
+            SpeedPerSecond = speedPerSecond;
+            MaxBurst = maxBurst;
+            AvailableSize = maxBurst;
             return true;
         }
         return false;
@@ -33,17 +27,25 @@ namespace NKikimr::NPQ {
             QuotedTime += diff;
         }
 
-        AvailableSize = Min<i64>(AvailableSize + static_cast<i64>(QuotaSpeed) * static_cast<i64>(diff.MicroSeconds()), MaxBurst);
+        AvailableSize = Min<i64>(AvailableSize + (ui64)SpeedPerSecond * diff.MicroSeconds() / 1000'000, MaxBurst);
     }
 
     bool TQuotaTracker::CanExaust(const TInstant timestamp) {
         Update(timestamp);
+<<<<<<< HEAD
         return AvailableSize >= (i64)MicroSecondsPerSecond; // a whole quota unit has become available
+=======
+        return AvailableSize > 0;
+>>>>>>> 67725c9df20 (Revert "Fixed topic partition quota wait time (#36114)")
     }
 
     void TQuotaTracker::Exaust(const ui64 size, const TInstant timestamp) {
         Update(timestamp);
+<<<<<<< HEAD
         AvailableSize -= (i64)size * MicroSecondsPerSecond;
+=======
+        AvailableSize -= (i64)size;
+>>>>>>> 67725c9df20 (Revert "Fixed topic partition quota wait time (#36114)")
         Update(timestamp);
     }
 
@@ -53,7 +55,7 @@ namespace NKikimr::NPQ {
     }
 
     ui64 TQuotaTracker::GetTotalSpeed() const {
-        return QuotaSpeed;
+        return SpeedPerSecond;
     }
 
 } // NKikimr::NPQ

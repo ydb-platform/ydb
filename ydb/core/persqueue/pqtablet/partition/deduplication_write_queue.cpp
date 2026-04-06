@@ -55,7 +55,7 @@ public:
         };
         const auto recentPartitionsIt = std::partition(ParentPartitions.begin(), ParentPartitions.end(), isRecentPartition);
         std::ranges::sort(ParentPartitions.begin(), recentPartitionsIt, std::greater<>{}, &TParentPartitionInfo::PartitionId); // oldest partitions at end
-        LOG_D("Partitions: " << JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt) << "; OldPartitions " << JoinRange(", ", recentPartitionsIt, ParentPartitions.end()) << "; DisableTimestamp " << DisableTimestamp);
+        LOG_D("Partitions: " << JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt) << "; OldPartitions " << JoinRange(", ", recentPartitionsIt, ParentPartitions.end()) << "; DisableTimestamp " << DisableTimestamp << "; InNSeconds=" << (DisableTimestamp - now).Seconds());
         ParentPartitions.erase(recentPartitionsIt, ParentPartitions.end());
     }
 
@@ -309,6 +309,7 @@ private:
                 evWrite.ExternalDeduplicationStatus = EWriteExternalDeduplicationStatus::Error;
             }
         }
+        DeduplicationInfo.erase(it);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -316,7 +317,7 @@ private:
         auto& tabletInfo = TabletInfo[record.TabletId];
         tabletInfo.Subscribed = false;
         tabletInfo.Generation += 1;
-        for (auto it = DeduplicationInfo.begin(); it != DeduplicationInfo.end(); ++it) {
+        for (auto it = DeduplicationInfo.begin(); it != DeduplicationInfo.end();) {
             auto& [messageDeduplicationId, deduplicationInfo] = *it;
             size_t affectedPartitions = 0;
             for (const ui32 partitionId : tabletInfo.Partitions) {
@@ -324,7 +325,9 @@ private:
             }
             if (affectedPartitions != 0) {
                 deduplicationInfo.PartitionErrors += affectedPartitions;
-                TryFinalizeDeduplicationInfo(it);
+                TryFinalizeDeduplicationInfo(it++);
+            } else {
+                ++it;
             }
         }
         ProcessQueue();
@@ -376,13 +379,14 @@ private:
     }
 
     void CancelQueue() {
-        for (auto it = DeduplicationInfo.begin(); it != DeduplicationInfo.end(); ++it) {
+        for (auto it = DeduplicationInfo.begin(); it != DeduplicationInfo.end();) {
             auto& [messageDeduplicationId, deduplicationInfo] = *it;
             deduplicationInfo.CancelIfNotReady();
-            TryFinalizeDeduplicationInfo(it);
+            TryFinalizeDeduplicationInfo(it++);
         }
         ProcessQueue();
         AFL_VERIFY_DEBUG(Queue.empty())("size", Queue.size());
+        AFL_VERIFY_DEBUG(DeduplicationInfo.empty())("size", DeduplicationInfo.size());
     }
 
     void PassAway() override {
@@ -402,6 +406,7 @@ private:
             case EBypassMode::Pending:
                 if (Queue.empty()) {
                     newMode = EBypassMode::Enabled;
+                    Y_ASSERT(DeduplicationInfo.empty());
                 }
                 break;
             case EBypassMode::Enabled:
@@ -411,7 +416,7 @@ private:
             return;
         }
         AFL_ENSURE(newMode != BypassMode)("BypassMode", BypassMode)("NewMode", newMode);
-        LOG_D("SwitchToBypassMode " << *newMode);
+        LOG_D("SwitchToBypassMode " << *newMode << "; Now=" << TAppData::TimeProvider->Now() << "; DisableTimestamp=" << DisableTimestamp << "; PassSeconds=" << (TAppData::TimeProvider->Now() - DisableTimestamp).Seconds());
         if (newMode == EBypassMode::Enabled) {
             Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }

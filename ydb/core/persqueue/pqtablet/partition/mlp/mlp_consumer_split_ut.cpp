@@ -7,9 +7,56 @@
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/iterator/iterate_values.h>
 #include <util/string/split.h>
+#include <atomic>
 #include <span>
 
 namespace NKikimr::NPQ::NMLP {
+
+namespace {
+
+    struct TLeapTimeProvider: public ITimeProvider {
+        TInstant Now() override {
+            TInstant r = TInstant::Now();
+            if (i64 offset = Offset.load(); offset >= 0) {
+                return r + TDuration::MicroSeconds(offset);
+            } else {
+                return r - TDuration::MicroSeconds(-offset);
+            }
+        }
+
+        void Add(TDuration duration) {
+            Offset.fetch_add(duration.MicroSeconds());
+        }
+
+        std::atomic<i64> Offset = 0;
+    };
+
+    class TBufferedCerr: TNonCopyable {
+    public:
+        TBufferedCerr()
+            : Out(Buffer)
+        {
+        }
+
+        ~TBufferedCerr() noexcept(false) {
+            Cerr << Buffer;
+        }
+
+        TString Buffer;
+        TStringOutput Out;
+    };
+    template <class T>
+    TBufferedCerr& operator<<(TBufferedCerr& os Y_LIFETIME_BOUND, const T& t) {
+        os.Out << t;
+        return os;
+    }
+    template <class T>
+    TBufferedCerr&& operator<<(TBufferedCerr&& os Y_LIFETIME_BOUND, const T& t) {
+        os.Out << t;
+        return std::move(os);
+    }
+#define ACerr (TBufferedCerr{})
+} // namespace
 
 static void CreateSetupFIFOTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName) {
     auto status = CreateTopic(setup, topicName, NYdb::NTopic::TCreateTopicSettings()
@@ -48,7 +95,7 @@ static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, 
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
 
         partitionCount = describeResult.GetTopicDescription().GetPartitions().size();
-        Cerr << ">>>>> Partition count: " << partitionCount << " (expected " << expectedCount << ")" << Endl;
+        ACerr << ">>>>> Partition count: " << partitionCount << " (expected " << expectedCount << ")" << Endl;
 
         if (partitionCount >= expectedCount) {
             break;
@@ -59,13 +106,63 @@ static size_t WaitForPartitionCount(std::shared_ptr<TTopicSdkTestSetup>& setup, 
     return partitionCount;
 }
 
+struct TLeafPartition {
+    ui32 Id;
+    unsigned char Lo;
+    unsigned char Hi;
+};
+
+class TPartitionSplitter {
+public:
+    TPartitionSplitter()
+        : Leaves_({{0, 0x00, 0xFF}})
+        , TotalPartitions_(1)
+    {}
+
+    size_t TotalPartitions() const { return TotalPartitions_; }
+    const std::vector<TLeafPartition>& Leaves() const { return Leaves_; }
+
+    void SplitAllPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic) {
+        std::map<ui32, TString> boundaries;
+        for (const auto& leaf : Leaves_) {
+            unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
+            boundaries[leaf.Id] = TString(1, (char)mid);
+            ACerr << ">>>>> split partition " << leaf.Id << " at 0x" << Hex((ui32)mid) << Endl;
+        }
+        NKikimr::NPQ::NTest::SplitPartitions(runtime, txId, dir, topic, boundaries);
+        AdvanceLeaves();
+    }
+
+    void SplitLeaf(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, ui32 leafId, TString boundary) {
+        NKikimr::NPQ::NTest::SplitPartition(runtime, txId, dir, topic, leafId, std::move(boundary));
+        AdvanceLeaves();
+    }
+
+private:
+    void AdvanceLeaves() {
+        std::vector<TLeafPartition> newLeaves;
+        for (size_t i = 0; i < Leaves_.size(); ++i) {
+            const auto& leaf = Leaves_[i];
+            unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
+            ui32 leftId = (ui32)(TotalPartitions_ + i * 2);
+            ui32 rightId = (ui32)(TotalPartitions_ + i * 2 + 1);
+            newLeaves.push_back({leftId, leaf.Lo, mid});
+            newLeaves.push_back({rightId, (unsigned char)(mid + 1), leaf.Hi});
+        }
+        TotalPartitions_ += Leaves_.size() * 2;
+        Leaves_ = std::move(newLeaves);
+    }
+
+    std::vector<TLeafPartition> Leaves_;
+    size_t TotalPartitions_;
+};
+
 Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplit) {
 
 static void DumpStorageState(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName, const TString& consumerName, const TSet<ui32>& partitions) {
     TStringStream output;
     Y_DEFER {
-        output << "\n";
-        Cerr << output.Str();
+        ACerr << output.Str() << "\n";
     };
     for (const ui32 partition : partitions) {
         auto result = GetConsumerState(setup, "/Root", topicName, consumerName, partition);
@@ -106,7 +203,7 @@ static TString JoinMessageIds(std::span<const TMessageId> messages) {
 }
 
 static auto Commit(NActors::TTestActorRuntime& runtime, const TString& topicName, const TString& consumer, const std::vector<TMessageId>& messagesToCommit) {
-    Cerr << "Commiting messages: " << JoinMessageIds(messagesToCommit) << "\n";
+    ACerr << "Commiting messages: " << JoinMessageIds(messagesToCommit) << "\n";
     CreateCommitterActor(runtime, {
                                       .DatabasePath = "/Root",
                                       .TopicName = topicName,
@@ -118,7 +215,7 @@ static auto Commit(NActors::TTestActorRuntime& runtime, const TString& topicName
 }
 
 static auto Unlock(NActors::TTestActorRuntime& runtime, const TString& topicName, const TString& consumer, const std::vector<TMessageId>& messagesToUnlock) {
-    Cerr << "Unlocking messages: " << JoinMessageIds(messagesToUnlock) << "\n";
+    ACerr << "Unlocking messages: " << JoinMessageIds(messagesToUnlock) << "\n";
     CreateUnlockerActor(runtime, {
                                       .DatabasePath = "/Root",
                                       .TopicName = topicName,
@@ -155,7 +252,7 @@ TMap<TString, TMessageId> ReadAndCommitFIFOExceptLast(
                 }
             }
             sb << "\n";
-            Cerr << sb << Endl;
+            ACerr << sb << Endl;
         }
         const size_t toRead = [&]() {
             size_t r = 0;
@@ -187,7 +284,7 @@ TMap<TString, TMessageId> ReadAndCommitFIFOExceptLast(
         std::vector<TMessageId> messagesToCommit;
         for (auto& msg : readResult->Messages) {
             const TString& groupId = msg.MessageGroupId;
-            Cerr << ">>>>> " << phase << " ReadAndCommitFIFOExceptLast read: " << msg.Data
+            ACerr << ">>>>> " << phase << " ReadAndCommitFIFOExceptLast read: " << msg.Data
                  << " group=" << groupId
                  << " partition=" << msg.MessageId.PartitionId
                  << " offset=" << msg.MessageId.Offset << Endl;
@@ -270,18 +367,18 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
 
-    Cerr << ">>>>> Phase 1: Create topic with autoscaling and shared consumer with KeepMessageOrder(true)" << Endl;
+    ACerr << ">>>>> Phase 1: Create topic with autoscaling and shared consumer with KeepMessageOrder(true)" << Endl;
 
-    Cerr << ">>>>> groups:\n";
+    ACerr << ">>>>> groups:\n";
     for (const auto& [g, desc] : groups) {
-        Cerr << "  " << g << ": "
+        ACerr << "  " << g << ": "
              << LabeledOutput(desc.SizeBeforeSplit, desc.SizeAfterSplit,
                               desc.ReadBeforeSplit.ReadCount, desc.ReadBeforeSplit.CommitLast) << "\n";
     }
-    Cerr << Endl;
+    ACerr << Endl;
     CreateSetupFIFOTopic(setup, "/Root/topic1");
 
-    Cerr << ">>>>> Phase 2: Write messages to parent partition (partition 0)" << Endl;
+    ACerr << ">>>>> Phase 2: Write messages to parent partition (partition 0)" << Endl;
 
     for (const auto& [groupId, desc] : groups) {
         if (desc.SizeBeforeSplit == 0) {
@@ -312,7 +409,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     }
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
 
-    Cerr << ">>>>> Phase 3: Read and commit/unlock messages before split" << Endl;
+    ACerr << ">>>>> Phase 3: Read and commit/unlock messages before split" << Endl;
 
     TMap<TString, TReadCommitCount> readBeforeSplit;
     for (const auto& [groupId, desc] : groups) {
@@ -323,19 +420,20 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     auto inflyMessages = ReadAndCommitFIFO(runtime, "/Root/topic1", "mlp-consumer", readBeforeSplit, "phase 3");
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
 
-    Cerr << ">>>>> Phase 4: Force partition split" << Endl;
+    ACerr << ">>>>> Phase 4: Force partition split" << Endl;
 
+    TPartitionSplitter splitter;
     ui64 txId = 1006;
-    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
 
-    Cerr << ">>>>> Phase 4b: Wait for child partitions to be created and verify partition count" << Endl;
+    ACerr << ">>>>> Phase 4b: Wait for child partitions to be created and verify partition count" << Endl;
 
-    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 3);
-    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 3, "Expected 3 partitions after split (1 parent + 2 children)");
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), "Expected " << splitter.TotalPartitions() << " partitions after split");
 
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
-    Cerr << ">>>>> Phase 5: Write messages to child partitions" << Endl;
+    ACerr << ">>>>> Phase 5: Write messages to child partitions" << Endl;
 
     for (const auto& [groupId, desc] : groups) {
         if (desc.SizeAfterSplit == 0) {
@@ -368,11 +466,11 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
     for (ui32 partitionId : partitionsToRestart) {
-        Cerr << ">>>>> Restart partition " << partitionId << Endl;
+        ACerr << ">>>>> Restart partition " << partitionId << Endl;
         ReloadPQTablet(setup, "/Root", "/Root/topic1", partitionId);
     }
 
-    Cerr << ">>>>> Phase 6: Verify that we cannot read any messages written to the child partitions, if not all messages from the parent partition was commited" << Endl;
+    ACerr << ">>>>> Phase 6: Verify that we cannot read any messages written to the child partitions, if not all messages from the parent partition was commited" << Endl;
 
     // Determine which groups have all parent messages committed.
     // A group is "fully committed in parent" if effective CommitCount >= SizeBeforeSplit.
@@ -392,8 +490,8 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
         }
     }
 
-    Cerr << ">>>>> Phase 6: groupsFullyCommittedInParent: " << JoinSeq(", ", groupsFullyCommittedInParent) << "\n";
-    Cerr << ">>>>> Phase 6: groupsWithUncommittedParent: " << JoinSeq(", ", groupsWithUncommittedParent) << "\n";
+    ACerr << ">>>>> Phase 6: groupsFullyCommittedInParent: " << JoinSeq(", ", groupsFullyCommittedInParent) << "\n";
+    ACerr << ">>>>> Phase 6: groupsWithUncommittedParent: " << JoinSeq(", ", groupsWithUncommittedParent) << "\n";
 
     // Probe read: attempt to read messages and verify FIFO invariant.
     // We do a single read with MaxNumberOfMessage=10 to see what's available.
@@ -423,7 +521,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
                 << " in single read response");
             seenGroups.insert(msg.MessageGroupId);
 
-            Cerr << ">>>>> Phase 6 read: " << msg.Data
+            ACerr << ">>>>> Phase 6 read: " << msg.Data
                  << " group=" << msg.MessageGroupId
                  << " partition=" << msg.MessageId.PartitionId
                  << " offset=" << msg.MessageId.Offset << Endl;
@@ -457,14 +555,14 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
 
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
-    Cerr << ">>>>> Phase 7: Commit all remaining messages from the parent partition" << Endl;
+    ACerr << ">>>>> Phase 7: Commit all remaining messages from the parent partition" << Endl;
 
     // First, commit any inflight messages from Phase 3
     if (!inflyMessages.empty()) {
         std::vector<TMessageId> messagesToCommit;
         for (const auto& [groupId, messageId] : inflyMessages) {
             messagesToCommit.push_back(messageId);
-            Cerr << ">>>>> Phase 7: Committing inflight message from Phase 3: group=" << groupId
+            ACerr << ">>>>> Phase 7: Committing inflight message from Phase 3: group=" << groupId
                  << " partition=" << messageId.PartitionId
                  << " offset=" << messageId.Offset << Endl;
         }
@@ -496,7 +594,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
 
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
-    Cerr << ">>>>> Phase 8: Verify that we can read all remaining messages from child partitions" << Endl;
+    ACerr << ">>>>> Phase 8: Verify that we can read all remaining messages from child partitions" << Endl;
 
     // Now all parent messages are committed. All child messages should be readable.
     {
@@ -531,7 +629,7 @@ void PartitionSplitWithMessageGroupOrdering(const TMap<TString, TGroupDescriptio
             "Expected no more messages, but got " << finalRead->Messages.size());
     }
 
-    Cerr << ">>>>> All phases completed successfully" << Endl;
+    ACerr << ">>>>> All phases completed successfully" << Endl;
 }
 
 // Case 1: All written messages committed before split.
@@ -745,7 +843,7 @@ static void WriteGroups(
     size_t phaseIndex,
     TMap<TString, size_t>& expectedCounts
 ) {
-    Cerr << "Phase " << phaseIndex << " Write " << groupCount << " groups x " << messagesPerGroup << "\n";
+    ACerr << "Phase " << phaseIndex << " Write " << groupCount << " groups x " << messagesPerGroup << "\n";
     for (size_t g = 0; g < groupCount; ++g) {
         TString groupId = TStringBuilder() << "group-" << g;
         std::vector<TWriterSettings::TMessage> messages;
@@ -803,7 +901,7 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
             for (auto& [g, n] : remainingReads) {
                 sb << "  " << g << ": remaining=" << n << Endl;
             }
-            Cerr << sb << Endl;
+            ACerr << sb << Endl;
         }
         if (TotalExpectedMessages(remainingReads) == 0) {
             break;
@@ -830,7 +928,7 @@ static std::vector<TCollectedMessage> ReadAllAndCommit(
         THashSet<TString> seenGroupsInBatch;
         std::vector<TMessageId> messagesToCommit;
         for (auto& msg : readResult->Messages) {
-            Cerr << ">>>>> " << phase << " batch=" << batchIndex
+            ACerr << ">>>>> " << phase << " batch=" << batchIndex
                  << " read: " << msg.Data
                  << " group=" << msg.MessageGroupId
                  << " partition=" << msg.MessageId.PartitionId
@@ -890,7 +988,7 @@ static std::vector<TCollectedMessage> ReadOnceAndCommit(
     std::vector<TMessageId> messagesToCommit;
 
     for (auto& msg : readResult->Messages) {
-        Cerr << ">>>>> " << phase << " ReadOnce: " << msg.Data
+        ACerr << ">>>>> " << phase << " ReadOnce: " << msg.Data
              << " group=" << msg.MessageGroupId
              << " partition=" << msg.MessageId.PartitionId
              << " offset=" << msg.MessageId.Offset << Endl;
@@ -949,35 +1047,36 @@ Y_UNIT_TEST(DoubleSplit_ReadCommitAtEnd) {
     CreateSetupFIFOTopic(setup, "/Root/topic1");
     auto& runtime = setup->GetRuntime();
 
+    TPartitionSplitter splitter;
     TMap<TString, size_t> expectedCounts;
-        Cerr << ">>>>> DoubleSplit Phase 1" << Endl;
+    ui64 txId = 1006;
+
+    ACerr << ">>>>> DoubleSplit Phase 1" << Endl;
     WriteGroups(runtime, "/Root/topic1", 5, 2, 1, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
 
-    Cerr << ">>>>> DoubleSplit Phase 2: Split partition 0 at 0x80" << Endl;
-    ui64 txId = 1006;
-    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
+    ACerr << ">>>>> DoubleSplit Phase 2: Split all leaves" << Endl;
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), "Expected " << splitter.TotalPartitions() << " partitions after first split");
 
-    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 3);
-    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 3, "Expected 3 partitions after first split");
-
-    Cerr << ">>>>> DoubleSplit Phase 2" << Endl;
+    ACerr << ">>>>> DoubleSplit Phase 2" << Endl;
     WriteGroups(runtime, "/Root/topic1", 10, 2, 2, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
-    Cerr << ">>>>> DoubleSplit Phase 3: Split partitions" << Endl;
-    NKikimr::NPQ::NTest::SplitPartitions(runtime, ++txId, "/Root", "topic1", {{1, "\x40"}, {2, "\xC0"}});
-    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 7);
-    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 7, "Expected 7 partitions after double split");
+    ACerr << ">>>>> DoubleSplit Phase 3: Split all leaves" << Endl;
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), "Expected " << splitter.TotalPartitions() << " partitions after double split");
 
-    Cerr << ">>>>> DoubleSplit Phase 4" << Endl;
+    ACerr << ">>>>> DoubleSplit Phase 4" << Endl;
     WriteGroups(runtime, "/Root/topic1", 15, 2, 3, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
 
-    Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Reading and committing all messages" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Reading and committing all messages" << Endl;
     auto allMessages = ReadAllAndCommit(runtime, "/Root/topic1", "mlp-consumer", expectedCounts, "DoubleSplit_ReadCommitAtEnd");
 
-    Cerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Verifying FIFO ordering" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadCommitAtEnd: Verifying FIFO ordering" << Endl;
     size_t expectedTotal = TotalExpectedMessages(expectedCounts);
     UNIT_ASSERT_VALUES_EQUAL_C(allMessages.size(), expectedTotal,
         "DoubleSplit_ReadCommitAtEnd: expected " << expectedTotal << " messages but got " << allMessages.size());
@@ -992,38 +1091,39 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
     CreateSetupFIFOTopic(setup, "/Root/topic1");
     auto& runtime = setup->GetRuntime();
 
+    TPartitionSplitter splitter;
     TMap<TString, size_t> expectedCounts;
+    ui64 txId = 1006;
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 1: Write 5 groups x 2 messages to partition 0" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 1: Write 5 groups x 2 messages to partition 0" << Endl;
     WriteGroups(runtime, "/Root/topic1", 5, 2, 1, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read + commit after first write" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read + commit after first write" << Endl;
     auto earlyMessages = ReadOnceAndCommit(runtime, "/Root/topic1", "mlp-consumer",
         "DoubleSplit_ReadAfterFirstWrite_early");
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read got " << earlyMessages.size() << " messages" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Early read got " << earlyMessages.size() << " messages" << Endl;
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0});
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Split partition 0 at 0x80" << Endl;
-    ui64 txId = 1006;
-    NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, "/Root", "topic1", 0, "\x80");
-    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 3);
-    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 3, "Expected 3 partitions after first split");
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Split all leaves" << Endl;
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+    auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), "Expected " << splitter.TotalPartitions() << " partitions after first split");
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Write 10 groups x 3 messages" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 2: Write 10 groups x 3 messages" << Endl;
     WriteGroups(runtime, "/Root/topic1", 10, 3, 2, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2});
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Split partitions" << Endl;
-    NKikimr::NPQ::NTest::SplitPartitions(runtime, ++txId, "/Root", "topic1", {{1, "\x40"}, {2, "\xC0"}});
-    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", 7);
-    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, 7, "Expected 7 partitions after double split");
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Split all leaves" << Endl;
+    splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+    partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+    UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), "Expected " << splitter.TotalPartitions() << " partitions after double split");
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Write 15 groups x 3 messages" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite Phase 3: Write 15 groups x 3 messages" << Endl;
     WriteGroups(runtime, "/Root/topic1", 15, 3, 3, expectedCounts);
     DumpStorageState(setup, "/Root/topic1", "mlp-consumer", {0, 1, 2, 3, 4, 5, 6});
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Reading and committing remaining messages" << Endl;
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Reading and committing remaining messages" << Endl;
     TMap<TString, size_t> remainingReads = expectedCounts;
     for (const auto& msg : earlyMessages) {
         remainingReads[msg.GroupId]--;
@@ -1034,7 +1134,7 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
     allMessages.insert(allMessages.end(), earlyMessages.begin(), earlyMessages.end());
     allMessages.insert(allMessages.end(), remainingMessages.begin(), remainingMessages.end());
 
-    Cerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Verifying FIFO ordering ("
+    ACerr << ">>>>> DoubleSplit_ReadAfterFirstWrite: Verifying FIFO ordering ("
          << earlyMessages.size() << " early + " << remainingMessages.size() << " remaining = "
          << allMessages.size() << " total)" << Endl;
 
@@ -1048,13 +1148,22 @@ Y_UNIT_TEST(DoubleSplit_ReadAfterFirstWrite) {
 
 }
 
-Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplitDedup) {
-
 struct TDedupWriteSpec {
     TString Body;
     std::optional<TString> DedupId;
     std::optional<TString> GroupId;
 };
+
+struct TWriteResult {
+    Ydb::StatusIds::StatusCode Status;
+    TMessageId MessageId;
+    size_t StageIdx = 0;
+    TDuration WriteTimestampOffset;
+};
+
+Y_UNIT_TEST_SUITE(TMLPConsumerFIFOWithSplitDedup) {
+
+static constexpr TDuration DEDUP_WINDOW = TDuration::Minutes(5);
 
 struct TDedupStage {
     std::vector<TDedupWriteSpec> Write;
@@ -1077,16 +1186,13 @@ static TMap<TString, TString> ComputeExpectedMessages(const std::vector<TDedupSt
     return expected;
 }
 
-struct TWriteResult {
-    Ydb::StatusIds::StatusCode Status;
-    TMessageId MessageId;
-};
-
 static TMap<TString, TWriteResult> WriteDedupStage(
     NActors::TTestActorRuntime& runtime,
     const TString& topicName,
     std::vector<TDedupWriteSpec> messages,
-    TStringBuf phase
+    TStringBuf phase,
+    size_t stage,
+    TDuration elapsed
 ) {
     TMap<TString, TWriteResult> bodyStatuses;
     for (int writeIteration = 0; !messages.empty(); ++writeIteration) {
@@ -1110,9 +1216,9 @@ static TMap<TString, TWriteResult> WriteDedupStage(
                 messagesNext.push_back(std::move(m));
             }
         }
-        Cerr << "Write iteration " << writeIteration << ": " << writerMessages.size() << " messages:" << Endl;
+        ACerr << "Write iteration " << writeIteration << ": " << writerMessages.size() << " messages:" << Endl;
         for (const auto& m : writerMessages) {
-            Cerr << "  " << LabeledOutput(m.Index, m.MessageBody, m.MessageGroupId, m.MessageDeduplicationId) << Endl;
+            ACerr << "  " << LabeledOutput(m.Index, m.MessageBody, m.MessageGroupId, m.MessageDeduplicationId) << Endl;
         }
 
         CreateWriterActor(runtime, {
@@ -1122,7 +1228,7 @@ static TMap<TString, TWriteResult> WriteDedupStage(
         });
         auto writeResp = GetWriteResponse(runtime);
         UNIT_ASSERT_C(writeResp, phase << ": write response timeout");
-        Cerr << "Write iteration " << writeIteration << " response: " << writeResp->Messages.size() << " messages:" << Endl;
+        ACerr << "Write iteration " << writeIteration << " response: " << writeResp->Messages.size() << " messages:" << Endl;
         for (size_t i = 0; i < writeResp->Messages.size(); ++i) {
             auto toString = [](const std::optional<TMessageId>& id) -> TString {
                 if (id.has_value()) {
@@ -1130,7 +1236,7 @@ static TMap<TString, TWriteResult> WriteDedupStage(
                 }
                 return "<none>";
             };
-            Cerr << "  " << LabeledOutput(i, writeResp->Messages[i].Index, writeResp->Messages[i].Status) << " " << toString(writeResp->Messages[i].MessageId) << Endl;
+            ACerr << "  " << LabeledOutput(i, writeResp->Messages[i].Index, writeResp->Messages[i].Status) << " " << toString(writeResp->Messages[i].MessageId) << Endl;
         }
         UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), writerMessages.size(), phase);
 
@@ -1143,7 +1249,7 @@ static TMap<TString, TWriteResult> WriteDedupStage(
                       << " for body=" << body);
             UNIT_ASSERT_C(!bodyStatuses.contains(body), phase << ": duplicate body in stage: " << body);
             UNIT_ASSERT_C(resp.MessageId.has_value(), phase << ": no message id for body=" << body);
-            bodyStatuses[body] = {.Status = resp.Status, .MessageId = resp.MessageId.value()};
+            bodyStatuses[body] = {.Status = resp.Status, .MessageId = resp.MessageId.value(), .StageIdx = stage, .WriteTimestampOffset = elapsed};
         }
 
         messagesNext.swap(messages);
@@ -1182,7 +1288,7 @@ static TMap<TString, TString> ReadAllDedupAndCommit(
 
         std::vector<TMessageId> toCommit;
         for (const auto& msg : readResult->Messages) {
-            Cerr << ">>>>> ReadAllDedupAndCommit: data=" << msg.Data
+            ACerr << ">>>>> ReadAllDedupAndCommit: data=" << msg.Data
                  << " dedupId=" << msg.MessageDeduplicationId
                  << " group=" << msg.MessageGroupId
                  << " partition=" << msg.MessageId.PartitionId
@@ -1210,7 +1316,6 @@ static void VerifyDedupResult(
     const TMap<TString, TString>& expectedMessages,
     TStringBuf testName
 ) {
-
     for (const auto& [body, dedupId] : readMessages) {
         const auto* expectedDedupId = expectedMessages.FindPtr(body);
         UNIT_ASSERT_C(expectedDedupId,
@@ -1226,94 +1331,83 @@ static void VerifyDedupResult(
 static void VerifyWriteStatuses(
     const TMap<TString, TWriteResult>& bodyStatuses,
     const std::vector<TDedupWriteSpec>& messages,
-    TMap<TString, TMessageId>& firstMessageIdByDedupId,  // in/out: first successful MessageId per dedupId
+    TMap<TString, TVector<TWriteResult>>& historyByDedupId,  // in/out: first successful MessageId per dedupId
     TStringBuf phase
 ) {
     for (const auto& spec : messages) {
         const auto* result = bodyStatuses.FindPtr(spec.Body);
         UNIT_ASSERT_C(result, phase << ": no write status recorded for body=" << spec.Body);
-        if (spec.DedupId && firstMessageIdByDedupId.contains(*spec.DedupId)) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::ALREADY_EXISTS,
-                phase << ": expected ALREADY_EXISTS for body=" << spec.Body
-                      << " dedupId=" << *spec.DedupId);
-            const auto* firstId = firstMessageIdByDedupId.FindPtr(*spec.DedupId);
-            UNIT_ASSERT_C(firstId, phase << ": no first MessageId recorded for dedupId=" << *spec.DedupId);
-            // TODO: fix the CalculateReplyOffset fn
-            // UNIT_ASSERT_VALUES_EQUAL_C(result->MessageId.PartitionId, firstId->PartitionId, phase << ": PartitionId mismatch for ALREADY_EXISTS body=" << spec.Body << " dedupId=" << *spec.DedupId);
-            // UNIT_ASSERT_VALUES_EQUAL_C(result->MessageId.Offset, firstId->Offset, phase << ": Offset mismatch for ALREADY_EXISTS body=" << spec.Body << " dedupId=" << *spec.DedupId);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS,
-                phase << ": expected SUCCESS for body=" << spec.Body
-                      << " dedupId=" << spec.DedupId.value_or("<none>"));
-            if (spec.DedupId) {
-                firstMessageIdByDedupId.try_emplace(*spec.DedupId, result->MessageId);
+        if (spec.DedupId) {
+            TBufferedCerr log;
+            log << "spec=" << spec << "\n";
+            log << "this=" << *result << "\n";
+            auto& history = historyByDedupId[*spec.DedupId];
+            log << "history=[" << JoinSeq(", ", history) << "]\n";
+            auto lastSuccessIt = std::ranges::find(history.rbegin(), history.rend(), Ydb::StatusIds::SUCCESS, &TWriteResult::Status);
+            bool firstWrite = (lastSuccessIt == history.rend());
+            TMaybe<TDuration> sinceLastSuccess = lastSuccessIt == history.rend() ? Nothing() : MakeMaybe(result->WriteTimestampOffset - lastSuccessIt->WriteTimestampOffset);
+            TMaybe<TDuration> sinceLastAttempt = history.empty() ? Nothing() : MakeMaybe(result->WriteTimestampOffset - history.back().WriteTimestampOffset);
+            bool lastSuccessExpired = sinceLastSuccess.Defined() && (*sinceLastSuccess > DEDUP_WINDOW);
+            bool lastAttemptRecent = sinceLastAttempt.Defined() && (*sinceLastAttempt <= DEDUP_WINDOW);
+            int indexFromLast = lastSuccessIt - history.rbegin();
+            // When last SUCCESS expired but there were recent ALREADY_EXISTS attempts, the outcome is ambiguous — skip assertion.
+            bool ambiguous = lastSuccessExpired && lastAttemptRecent;
+            log << LabeledOutput(firstWrite, lastSuccessExpired, lastAttemptRecent, ambiguous, indexFromLast) << "\n";
+            log << LabeledOutput(sinceLastSuccess, sinceLastAttempt) << "\n";
+            if (!ambiguous) {
+                bool expectedWrite = firstWrite || lastSuccessExpired;
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Status, (expectedWrite ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ALREADY_EXISTS), phase << ": unexpected status for body=" << spec.Body << " dedupId=" << *spec.DedupId << "\n" << log.Buffer);
             }
+            history.push_back(*result);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, phase << ": expected SUCCESS for body=" << spec.Body << " dedupId=" << spec.DedupId.value_or("<none>"));
         }
     }
 }
 
-struct TLeafPartition {
-    ui32 Id;
-    unsigned char Lo;
-    unsigned char Hi;
-};
-
-static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>& stages) {
+static void RunDedupTest(const TString& testName, const std::vector<TDedupStage>& stages, TDuration writeDuration = TDuration::Zero()) {
     UNIT_ASSERT_C(!stages.empty(), "RunDedupTest: no stages");
-
+    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
     auto setup = CreateSetup();
+    setup->GetServer().EnableLogs({
+            NKikimrServices::PERSQUEUE,
+        },
+        NActors::NLog::PRI_DEBUG
+    );
     auto& runtime = setup->GetRuntime();
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
+    }
     CreateSetupFIFOTopic(setup, "/Root/topic1");
-
-    const auto expectedMessages = ComputeExpectedMessages(stages);
-
-    std::vector<TLeafPartition> leaves = {{0, 0x00, 0xFF}};
-    size_t totalPartitions = 1;
-    TMap<TString, TMessageId> firstMessageIdByDedupId;
+    TPartitionSplitter splitter;
+    TMap<TString, TVector<TWriteResult>> messagesByDedupId;
+    TDuration elapsed;
     for (size_t stageIdx = 0; stageIdx < stages.size(); ++stageIdx) {
         TStringBuilder phase;
         phase << testName << " stage=" << stageIdx;
 
-        Cerr << ">>>>> " << phase << ": writing " << stages[stageIdx].Write.size() << " messages" << Endl;
-        auto bodyStatuses = WriteDedupStage(runtime, "/Root/topic1", stages[stageIdx].Write, phase);
-        VerifyWriteStatuses(bodyStatuses, stages[stageIdx].Write, firstMessageIdByDedupId, phase);
+        ACerr << ">>>>> " << phase << ": writing " << stages[stageIdx].Write.size() << " messages (elapsed=" << elapsed << ")" << Endl;
+        auto bodyStatuses = WriteDedupStage(runtime, "/Root/topic1", stages[stageIdx].Write, phase, stageIdx, elapsed);
+        VerifyWriteStatuses(bodyStatuses, stages[stageIdx].Write, messagesByDedupId, phase);
 
+        leapTimeProvider->Add(writeDuration);
+        elapsed += writeDuration;
 
         if (stageIdx + 1 < stages.size()) {
-            std::map<ui32, TString> splitBoundaries;
-            for (const auto& leaf : leaves) {
-                unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
-                splitBoundaries[leaf.Id] = TString(1, (char)mid);
-                Cerr << ">>>>> " << phase << ": split partition " << leaf.Id
-                     << " at 0x" << Hex((ui32)mid) << Endl;
-            }
-
             ui64 txId = 1006 + stageIdx;
-            NKikimr::NPQ::NTest::SplitPartitions(runtime, txId, "/Root", "topic1", splitBoundaries);
-
-            std::vector<TLeafPartition> newLeaves;
-            for (size_t i = 0; i < leaves.size(); ++i) {
-                const auto& leaf = leaves[i];
-                unsigned char mid = (unsigned char)(((unsigned)leaf.Lo + (unsigned)leaf.Hi) / 2);
-                ui32 leftId = (ui32)(totalPartitions + i * 2);
-                ui32 rightId = (ui32)(totalPartitions + i * 2 + 1);
-                newLeaves.push_back({leftId, leaf.Lo, mid});
-                newLeaves.push_back({rightId, (unsigned char)(mid + 1), leaf.Hi});
-            }
-            totalPartitions += leaves.size() * 2;
-            leaves = std::move(newLeaves);
-
-            auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", totalPartitions);
-            UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, totalPartitions,
-                phase << ": expected " << totalPartitions << " partitions after split");
+            splitter.SplitAllPartitions(runtime, txId, "/Root", "topic1");
+            auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+            UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), phase << ": expected " << splitter.TotalPartitions() << " partitions after split");
         }
     }
 
-    Cerr << ">>>>> " << testName << ": reading all messages" << Endl;
+    ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
     auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
-    VerifyDedupResult(readMessages, expectedMessages, testName);
-
-    Cerr << ">>>>> " << testName << ": done" << Endl;
+    if (writeDuration == TDuration::Zero()) {
+        const auto expectedMessages = ComputeExpectedMessages(stages);
+        VerifyDedupResult(readMessages, expectedMessages, testName);
+    }
+    ACerr << ">>>>> " << testName << ": done" << Endl;
 }
 
 Y_UNIT_TEST(Dedup_NoSplit_WithGroup) {
@@ -1494,6 +1588,72 @@ Y_UNIT_TEST(Dedup_DoubleSplit) {
     });
 }
 
+Y_UNIT_TEST(Dedup_DoubleSplit_3min) {
+    RunDedupTest("Dedup_DoubleSplit_3min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+        }},
+    }, TDuration::Minutes(3));
+}
+
+Y_UNIT_TEST(Dedup_DoubleSplit_6min) {
+    RunDedupTest("Dedup_DoubleSplit_6min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+        }},
+    }, TDuration::Minutes(6));
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_SameIds_3min) {
+    RunDedupTest("Dedup_WithGroup_SameIds_3min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+    }, TDuration::Minutes(3));
+}
+
+Y_UNIT_TEST(Dedup_WithGroup_SameIds_6min) {
+    RunDedupTest("Dedup_WithGroup_SameIds_6min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-X"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-X"},
+        }},
+    }, TDuration::Minutes(6));
+}
+
 Y_UNIT_TEST(Dedup_TripleSplit) {
     RunDedupTest("Dedup_TripleSplit", {
         {.Write = {
@@ -1524,7 +1684,171 @@ Y_UNIT_TEST(Dedup_TripleSplit) {
     });
 }
 
+Y_UNIT_TEST(Dedup_TripleSplit_3min) {
+    RunDedupTest("Dedup_TripleSplit_3min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+            {.Body = "s0-dedupI", .DedupId = "dedupI", .GroupId = "group-I"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s0-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+        }},
+        {.Write = {
+            {.Body = "s3-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s3-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s3-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s3-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+            {.Body = "s3-dedupH", .DedupId = "dedupH", .GroupId = "group-H"},
+        }},
+    }, TDuration::Minutes(3));
+}
+
+Y_UNIT_TEST(Dedup_TripleSplit_6min) {
+    RunDedupTest("Dedup_TripleSplit_6min", {
+        {.Write = {
+            {.Body = "s0-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s0-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+            {.Body = "s0-dedupI", .DedupId = "dedupI", .GroupId = "group-I"},
+        }},
+        {.Write = {
+            {.Body = "s1-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s1-dedupB", .DedupId = "dedupB", .GroupId = "group-B"},
+            {.Body = "s1-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s0-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+        }},
+        {.Write = {
+            {.Body = "s2-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s2-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s2-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s0-dedupC", .DedupId = "dedupC", .GroupId = "group-C"},
+        }},
+        {.Write = {
+            {.Body = "s3-dedupA", .DedupId = "dedupA", .GroupId = "group-A"},
+            {.Body = "s3-dedupE", .DedupId = "dedupE", .GroupId = "group-E"},
+            {.Body = "s3-dedupF", .DedupId = "dedupF", .GroupId = "group-F"},
+            {.Body = "s3-dedupG", .DedupId = "dedupG", .GroupId = "group-G"},
+            {.Body = "s3-dedupH", .DedupId = "dedupH", .GroupId = "group-H"},
+        }},
+    }, TDuration::Minutes(6));
+}
+
+struct TSplitSpec {
+    size_t Count = 1;
+    TDuration PauseBetween = TDuration::Zero();
+};
+
+static void RunRepeatedDedupWithSplits(TStringBuf testName, TDuration writePause, size_t numIterations, TSplitSpec splitSpec = {}) {
+    const TString groupId = "group-X";
+    const TString dedupId = "dedupA";
+
+    const auto leapTimeProvider = MakeIntrusive<TLeapTimeProvider>();
+    auto setup = CreateSetup();
+    setup->GetServer().EnableLogs({NKikimrServices::PERSQUEUE}, NActors::NLog::PRI_DEBUG);
+    auto& runtime = setup->GetRuntime();
+    for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
+        runtime.GetAppData(i).TimeProvider = leapTimeProvider;
+    }
+    CreateSetupFIFOTopic(setup, "/Root/topic1");
+
+    TPartitionSplitter splitter;
+    ui64 txId = 1006;
+    size_t bodyCounter = 0;
+    TDuration elapsed;
+
+    for (size_t iter = 0; iter < numIterations; ++iter) {
+        TStringBuilder phase;
+        phase << testName << " iteration=" << iter;
+        ACerr << ">>>>> " << phase << " start (elapsed=" << elapsed << ")" << Endl;
+
+        int gotSuccess = 0;
+        int gotAlreadyExists = 0;
+        while (!(gotSuccess == 1 && gotAlreadyExists >= 1)) {
+            TString body = TStringBuilder() << "body-" << bodyCounter++;
+            ACerr << ">>>>> " << phase << " write body=" << body << " elapsed=" << elapsed << Endl;
+
+            CreateWriterActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Messages = {{.Index = 0, .MessageBody = body, .MessageGroupId = groupId, .MessageDeduplicationId = dedupId}},
+            });
+            auto writeResp = GetWriteResponse(runtime);
+            UNIT_ASSERT_C(writeResp, phase << ": write response timeout");
+            UNIT_ASSERT_VALUES_EQUAL_C(writeResp->Messages.size(), 1u, phase);
+            auto status = writeResp->Messages[0].Status;
+            UNIT_ASSERT_C(status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS, phase << ": unexpected status " << Ydb::StatusIds::StatusCode_Name(status));
+            ACerr << ">>>>> " << phase << " body=" << body << " status=" << Ydb::StatusIds::StatusCode_Name(status) << Endl;
+
+            gotSuccess += (status == Ydb::StatusIds::SUCCESS);
+            gotAlreadyExists += (status == Ydb::StatusIds::ALREADY_EXISTS);
+            UNIT_ASSERT_LE_C(gotSuccess, 1, phase);
+            leapTimeProvider->Add(writePause);
+            elapsed += writePause;
+        }
+
+        if (iter + 1 < numIterations) {
+            for (size_t s = 0; s < splitSpec.Count; ++s) {
+                if (s > 0) {
+                    leapTimeProvider->Add(splitSpec.PauseBetween);
+                    elapsed += splitSpec.PauseBetween;
+                }
+                ACerr << ">>>>> " << phase << " split " << s << " (elapsed=" << elapsed << ")" << Endl;
+                splitter.SplitAllPartitions(runtime, ++txId, "/Root", "topic1");
+                auto partitionCount = WaitForPartitionCount(setup, "/Root/topic1", splitter.TotalPartitions());
+                UNIT_ASSERT_VALUES_EQUAL_C(partitionCount, splitter.TotalPartitions(), phase << ": partition count mismatch after split " << s);
+            }
+        }
+    }
+
+    ACerr << ">>>>> " << testName << ": reading all messages" << Endl;
+    auto readMessages = ReadAllDedupAndCommit(runtime, "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_C(!readMessages.empty(), testName << ": expected at least one message");
+    for (const auto& [body, readDedupId] : readMessages) {
+        UNIT_ASSERT_VALUES_EQUAL_C(readDedupId, dedupId, testName << ": dedupId mismatch for body=" << body);
+    }
+    ACerr << ">>>>> " << testName << ": done, read " << readMessages.size() << " messages" << Endl;
+    UNIT_ASSERT_VALUES_EQUAL(readMessages.size(), numIterations);
+}
+
+Y_UNIT_TEST(Dedup_RepeatedWriteUntilWindowCloses) {
+    RunRepeatedDedupWithSplits("Dedup_RepeatedWriteUntilWindowCloses", TDuration::Seconds(47), 4);
+}
+
+Y_UNIT_TEST(Dedup_RepeatedWriteUntilWindowCloses_DoubleSplit) {
+    RunRepeatedDedupWithSplits("Dedup_RepeatedWriteUntilWindowCloses_DoubleSplit", TDuration::Seconds(47), 4, {.Count = 2, .PauseBetween = TDuration::Seconds(80)});
+}
 
 }
 
 } // namespace NKikimr::NPQ::NMLP
+
+
+template <>
+void Out<NKikimr::NPQ::NMLP::TWriteResult>(IOutputStream& os, const NKikimr::NPQ::NMLP::TWriteResult& w) {
+    os << "{";
+    os << "Status=" << w.Status << ", ";
+    os << "MessageId=" << w.MessageId.PartitionId << "-" << w.MessageId.Offset << ", ";
+    os << "StageIdx=" << w.StageIdx << ", ";
+    os << "WriteTimestampOffset=" << w.WriteTimestampOffset;
+    os << "}";
+}
+
+template <>
+void Out<NKikimr::NPQ::NMLP::TDedupWriteSpec>(IOutputStream& os, const NKikimr::NPQ::NMLP::TDedupWriteSpec& w) {
+    os << "{";
+    os << "Body=" << w.Body << ", ";
+    os << "DedupId=" << w.DedupId << ", ";
+    os << "GroupId=" << w.GroupId;
+    os << "}";
+}

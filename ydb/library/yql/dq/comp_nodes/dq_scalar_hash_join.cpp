@@ -307,7 +307,9 @@ private:
                 }
             }
             for (int index = 0; index < expectedWidth; ++index) {
-                *output[index] = Buffer_->Buffer[BufferPos_ + index];
+                if (output[index]) {
+                    *output[index] = Buffer_->Buffer[BufferPos_ + index];
+                }
             }
             BufferPos_ += expectedWidth;
             if (BufferPos_ >= Buffer_->Buffer.size()) {

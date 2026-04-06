@@ -1016,7 +1016,7 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
         auto makeBlockStreamInput = [&](TExprNode::TPtr coreExpr, bool isBlock,
                                         const TStructExprType* structType,
                                         const TExprBase& originalInput,
-                                        const std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems) -> TExprNode::TPtr {
+                                        std::vector<std::pair<TString, const TTypeAnnotationNode*>>& convertedItems) -> TExprNode::TPtr {
             if (isBlock) {
                 // coreExpr is the block-wide stream (WideFromBlocks was peeled by tree walk).
                 return coreExpr;

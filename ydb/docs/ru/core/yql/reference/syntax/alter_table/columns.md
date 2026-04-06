@@ -65,7 +65,7 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 #### DROP
 
-Удалить параметр колонки
+Удалить параметр колонки. На текущий момент поддерживается только удаление `NOT NULL`.
 
 {% include [column_option_list.md](../_includes/column_option_list.md) %}
 

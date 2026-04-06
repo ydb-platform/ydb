@@ -89,7 +89,7 @@ ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
 ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 ```
 
-После сброса будет использоваться сжатие по умолчанию.
+После выполнения запроса для колонки снова действует алгоритм сжатия по умолчанию (см. описание опции `COMPRESSION` выше).
 
 
 ## DROP COLUMN

@@ -290,7 +290,7 @@ message TDomainsConfig {
 
         message TUser {
             optional string Name = 1;
-            optional string Password = 2;
+            optional string Password = 2 [(Ydb.sensitive) = true];
         }
 
         message TGroup {

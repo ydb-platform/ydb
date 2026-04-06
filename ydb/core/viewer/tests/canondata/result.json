@@ -2,7 +2,7 @@
     "test.TestViewer.test_async_replication_describe": {
         "create_result": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "describe_result": {
             "connection_params": {
@@ -1618,11 +1618,11 @@
         },
         "insert": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "update": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_transfer_describe": {
@@ -1720,15 +1720,15 @@
         },
         "table_result": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "topic_result": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "transfer_result": {
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_acl": {
@@ -7855,7 +7855,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7874,7 +7874,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/serverless_db": {
             "result": [
@@ -7893,7 +7893,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/shared_db": {
             "result": [
@@ -7912,7 +7912,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "no-database": {
             "result": [
@@ -7931,7 +7931,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_query_event_stream": {
@@ -7944,7 +7944,7 @@
                         "query_id": "text",
                         "session_id": "text"
                     },
-                    "version": 10
+                    "version": 11
                 },
                 "event": "SessionCreated"
             },
@@ -8023,7 +8023,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/serverless_db": {
             "result": [
@@ -8055,7 +8055,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/shared_db": {
             "result": [
@@ -8087,7 +8087,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_query_from_table_different_schemas": {
@@ -8131,7 +8131,7 @@
                 ]
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "multi": {
             "result": [
@@ -8163,7 +8163,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "ydb": {
             "result": [
@@ -8181,7 +8181,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "ydb2": {
             "result": [
@@ -8213,7 +8213,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_query_issue_13757": {
@@ -8237,7 +8237,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8259,7 +8259,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/serverless_db": {
             "result": [
@@ -8281,7 +8281,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/shared_db": {
             "result": [
@@ -8303,7 +8303,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "no-database": {
             "result": [
@@ -8325,7 +8325,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_query_issue_13945": {
@@ -8346,7 +8346,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8365,7 +8365,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/serverless_db": {
             "result": [
@@ -8384,7 +8384,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "/Root/shared_db": {
             "result": [
@@ -8403,7 +8403,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         },
         "no-database": {
             "result": [
@@ -8422,7 +8422,7 @@
                 }
             ],
             "status": "SUCCESS",
-            "version": 10
+            "version": 11
         }
     },
     "test.TestViewer.test_viewer_query_long": {
@@ -8457,7 +8457,7 @@
                     ]
                 }
             ],
-            "version": 10
+            "version": 11
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -8489,7 +8489,7 @@
                     ]
                 }
             ],
-            "version": 10
+            "version": 11
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -8522,7 +8522,7 @@
                     ]
                 }
             ],
-            "version": 10
+            "version": 11
         },
         "fetch_error_no_id": {
             "status_code": 400,

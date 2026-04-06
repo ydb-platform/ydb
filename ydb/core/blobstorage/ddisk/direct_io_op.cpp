@@ -16,6 +16,7 @@
 namespace NKikimr::NDDisk {
 
 static constexpr size_t MaxRwCount = 0x7ffff000ULL; // INT_MAX & PAGE_MASK on 4K pages, ~ 2 GiB
+static constexpr size_t MinBlockSize = 4096;
 
 using TReplyStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
 
@@ -103,9 +104,9 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " totalSize=" << GetTotalSize()
             << " iovLen=" << GetOperationBytes()
             << " bufAddr=0x" << Hex(bufAddr)
-            << " bufAligned4k=" << (int)(bufAddr % 4096 == 0)
-            << " offsetAligned4k=" << (int)(GetDiskOffset() % 4096 == 0)
-            << " sizeAligned4k=" << (int)(GetOperationBytes() % 4096 == 0)
+            << " bufAligned4k=" << (int)(bufAddr % MinBlockSize == 0)
+            << " offsetAligned4k=" << (int)(GetDiskOffset() % MinBlockSize == 0)
+            << " sizeAligned4k=" << (int)(GetOperationBytes() % MinBlockSize == 0)
             << " chunkIdx=" << ChunkIdx
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
@@ -172,9 +173,9 @@ void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChun
     Data.reset();
 
     // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
-    // TODO: should we check page size? And for large writes and huge pages should properly align?
     auto iter = data.Begin();
-    if (iter.ContiguousSize() == data.size()) {
+    if (iter.ContiguousSize() == data.size() &&
+        (reinterpret_cast<uintptr_t>(iter.ContiguousData()) & (MinBlockSize - 1)) == 0) {
         AlignedDataHolder = iter.GetChunk(); // zero-copy: ref-count bump
     } else {
         AlignedDataHolder = TRcBuf::UninitializedPageAligned(dataSize);

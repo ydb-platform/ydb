@@ -354,10 +354,11 @@ def generate_github_issue_title_and_body(test_data):
     ]
 
     # Title
+    bt_suffix = f' [{build_type}]' if build_type != DEFAULT_BUILD_TYPE else ''
     if len(test_full_names) > 1:
-        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}'
+        title = f'Mute {test_data[0]["suite_folder"]} {len(test_full_names)} tests in {branch}{bt_suffix}'
     else:
-        title = f'Mute {test_data[0]["full_name"]} in {branch}'
+        title = f'Mute {test_data[0]["full_name"]} in {branch}{bt_suffix}'
 
     # Преобразование списка тестов в строку и кодирование
     test_string = "\n".join(test_full_names)

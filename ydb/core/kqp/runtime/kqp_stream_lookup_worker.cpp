@@ -18,6 +18,27 @@ namespace NKqp {
 constexpr ui64 SEQNO_SPACE = 40;
 constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
+TStreamLookupShardReadResult::TStreamLookupShardReadResult(const ui64 shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>> readResult, NMiniKQL::TAllocState* alloc)
+    : ShardId(shardId)
+    , ReadResult(std::move(readResult))
+{
+    CalculatedSize = ReadResult->Get()->GetDataSizeEstimate();
+    if (CalculatedSize) {
+        alloc->OffloadAlloc(CalculatedSize);
+    }
+}
+
+void TStreamLookupShardReadResult::Untrack(NMiniKQL::TAllocState* alloc) {
+    if (CalculatedSize) {
+        alloc->OffloadFree(CalculatedSize);
+        CalculatedSize = 0;
+    }
+}
+
+TStreamLookupShardReadResult::~TStreamLookupShardReadResult() {
+    Y_ASSERT(CalculatedSize == 0);
+}
+
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
     const std::vector<NScheme::TTypeInfo>& keyColumnTypes, const TOwnedTableRange& range) {
@@ -146,7 +167,14 @@ public:
     {
     }
 
-    virtual ~TKqpLookupRows() {}
+    virtual ~TKqpLookupRows() {
+        auto guard = TypeEnv.BindAllocator();
+        auto alloc = &guard.GetMutex()->Ref();
+        while(!ReadResults.empty()) {
+            ReadResults.front().Untrack(alloc);
+            ReadResults.pop_front();
+        }
+    }
 
     void AddInputRow(NUdf::TUnboxedValue inputRow) final {
         NMiniKQL::TStringProviderBackend backend;
@@ -308,7 +336,7 @@ public:
         return !ReadResults.empty();
     }
 
-    void AddResult(TShardReadResult result) final {
+    void AddResult(TStreamLookupShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
@@ -380,6 +408,7 @@ public:
                     ReadStateByReadId.erase(it);
                 }
 
+                ReadResults.front().Untrack(&TypeEnv.GetAllocator().Ref());
                 ReadResults.pop_front();
             }
         }
@@ -413,6 +442,7 @@ public:
                     ReadStateByReadId.erase(it);
                 }
 
+                ReadResults.front().Untrack(&TypeEnv.GetAllocator().Ref());
                 ReadResults.pop_front();
             }
         }
@@ -494,7 +524,7 @@ private:
 private:
     std::deque<TOwnedTableRange> UnprocessedKeys;
     std::unordered_map<ui64, TReadState> ReadStateByReadId;
-    std::deque<TShardReadResult> ReadResults;
+    std::deque<TStreamLookupShardReadResult> ReadResults;
 };
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
@@ -816,8 +846,12 @@ public:
         return !FlushedResultRows.empty();
     }
 
-    void AddResult(TShardReadResult result) final {
+    void AddResult(TStreamLookupShardReadResult result) final {
         const auto& record = result.ReadResult->Get()->Record;
+        Y_DEFER {
+            result.Untrack(&TypeEnv.GetAllocator().Ref());
+        };
+
         YQL_ENSURE(record.GetStatus().GetCode() == Ydb::StatusIds::SUCCESS);
 
         auto pendingKeysIt = ReadStateByReadId.find(record.GetReadId());
@@ -866,6 +900,8 @@ public:
         if (record.GetFinished()) {
             ReadStateByReadId.erase(pendingKeysIt);
         }
+
+
     }
 
     bool AllRowsProcessed() final {

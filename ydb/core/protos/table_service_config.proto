@@ -492,4 +492,6 @@ message TTableServiceConfig {
     optional TCompileCacheWarmupConfig CompileCacheWarmupConfig = 122 [(InvalidateCompileCache) = false];
 
     optional bool EnableKqpSysViewSourceRead = 123 [default = false, (InvalidateCompileCache) = true];
+
+    optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000, (InvalidateCompileCache) = true];
 };

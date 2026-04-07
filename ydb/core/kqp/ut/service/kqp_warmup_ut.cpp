@@ -1218,7 +1218,76 @@ namespace {
                  << ", failed=" << warmupComplete->Get()->EntriesFailed
                  << Endl;
         }
-    }
+
+        Y_UNIT_TEST(WarmupParameterTypeParsing) {
+            TWarmupTestParams params;
+            params.UserSids = {};
+            params.FillCache = false;
+            params.FillImplicitParams = false;
+
+            TKikimrRunner kikimr(MakeWarmupTestSettings(params));
+            TWarmupTestEnv env = PrepareWarmupTest(kikimr, params);
+            auto db = kikimr.GetTableClient();
+
+            const TString explicitOptQuery =
+                "DECLARE $key AS Uint32?; "
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE $key IS NULL OR Key = $key;";
+
+            const TString implicitQuery =
+                "SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $implKey;";
+
+            {
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(
+                    explicitOptQuery,
+                    TTxControl::BeginTx().CommitTx(),
+                    TParamsBuilder().AddParam("$key").OptionalUint32(1).Build().Build(),
+                    TExecDataQuerySettings().KeepInQueryCache(true)
+                ).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            {
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(
+                    implicitQuery,
+                    TTxControl::BeginTx().CommitTx(),
+                    TParamsBuilder().AddParam("$implKey").Uint32(1).Build().Build(),
+                    TExecDataQuerySettings().KeepInQueryCache(true)
+                ).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            TKqpWarmupConfig warmupActorConfig;
+            auto warmupComplete = RunWarmup(env, warmupActorConfig, warmupActorConfig.HardDeadline);
+            UNIT_ASSERT_C(warmupComplete, "Warmup actor must complete");
+            UNIT_ASSERT_C(warmupComplete->Get()->Success,
+                "Warmup should succeed: " << warmupComplete->Get()->Message);
+            UNIT_ASSERT_C(warmupComplete->Get()->EntriesLoaded > 0,
+                "Warmup must compile at least one entry, loaded: " << warmupComplete->Get()->EntriesLoaded);
+
+
+            auto verifyFromCache = [&](const TString& query, const TParams& queryParams) {
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                TExecDataQuerySettings settings;
+                settings.KeepInQueryCache(true);
+                settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx().CommitTx(), queryParams, settings
+                ).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+                UNIT_ASSERT_C(stats.compilation().from_cache(),
+                    "Query must be served from cache after warmup "
+                    "(parameter types in Metadata JSON were not parsed correctly):\n" << query);
+            };
+
+            verifyFromCache(explicitOptQuery,
+                TParamsBuilder().AddParam("$key").OptionalUint32(1).Build().Build());
+            verifyFromCache(implicitQuery,
+                TParamsBuilder().AddParam("$implKey").Uint32(1).Build().Build());
+        }
+
+    } // Y_UNIT_TEST_SUITE(KqpWarmup)
 
 } // namespace NKikimr::NKqp
 

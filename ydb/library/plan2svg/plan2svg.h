@@ -57,6 +57,7 @@ struct TMetricHistory {
     ui64 MaxValue = 0;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
+    ui64 AvgValue = 0;
 
     void Load(const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // time + value
     void Load(std::vector<ui64>& times, const NJson::TJsonValue& node, ui64 explicitMinTime, ui64 explicitMaxTime); // value only
@@ -65,9 +66,7 @@ struct TMetricHistory {
     ui64 Average();
 };
 
-class TSingleMetric {
-
-public:
+struct TSingleMetric {
     TSingleMetric(std::shared_ptr<TSummaryMetric> summary, const NJson::TJsonValue& node,
         ui64 minTime = 0, ui64 maxTime = 0,
         const NJson::TJsonValue* firstMessageNode = nullptr,
@@ -88,12 +87,18 @@ public:
     bool MinMaxDistribution = true;
 };
 
-class TScalarMetric {
-public:
+struct TScalarMetric {
     TScalarMetric(std::shared_ptr<TSummaryMetric> summary, ui64 value);
 
     std::shared_ptr<TSummaryMetric> Summary;
     ui64 Value = 0;
+};
+
+struct TMutableMetric : public TMetricHistory {
+    TMutableMetric(const TString& title, bool isLine = false) : Title(title), IsLine(isLine) {}
+    const TString Title;
+    const bool IsLine;
+    ui64 DisplayMaxValue = 0;
 };
 
 class TConnection {
@@ -220,7 +225,12 @@ public:
 
 class TClusterNode {
 public:
-    TClusterNode(ui32 nodeId) : NodeId(nodeId) {}
+    TClusterNode(ui32 nodeId)
+        : NodeId(nodeId), MemPhysicalUsage("RSS", true), MemSysAllocated("Allocated"), MemSysFragmented("Fragmented")
+        , MemArrowDefault("Arrow"), MemMkqlAllocated("MKQL Allocated"), MemMkqlFreeList("MKQL FreeList")
+        , OutputInflightBytes("Output"), LocalInflightBytes("Local"), InputInflightBytes("Input")
+    {
+    }
     const ui32 NodeId;
     ui32 Tasks = 0;
     ui32 FinishedTasks = 0;
@@ -233,19 +243,15 @@ public:
     std::shared_ptr<TSingleMetric> InputBytes;
     std::shared_ptr<TSingleMetric> IngressBytes;
 
-    TMetricHistory MemPhysicalUsage;
-    TMetricHistory MemSysAllocated;
-    TMetricHistory MemSysFragmented;
-    TMetricHistory MemArrowDefault;
-    TMetricHistory MemMkqlAllocated;
-    TMetricHistory MemMkqlFreeList;
-    TMetricHistory OutputInflightBytes;
-    TMetricHistory LocalInflightBytes;
-    TMetricHistory InputInflightBytes;
-
-    ui64 MaxMemArrowDefault = 0;
-    ui64 MaxLocalInflightBytes = 0;
-    ui64 MaxOutputInflightBytes = 0;
+    TMutableMetric MemPhysicalUsage;
+    TMutableMetric MemSysAllocated;
+    TMutableMetric MemSysFragmented;
+    TMutableMetric MemArrowDefault;
+    TMutableMetric MemMkqlAllocated;
+    TMutableMetric MemMkqlFreeList;
+    TMutableMetric OutputInflightBytes;
+    TMutableMetric LocalInflightBytes;
+    TMutableMetric InputInflightBytes;
 };
 
 struct TColorPalette {
@@ -362,7 +368,7 @@ public:
     void PrintDeriv(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintValues(TStringBuilder& canvas, TMetricHistory& history, ui32 x, ui32 y, ui32 w, ui32 h, const TString& title, const TString& lineColor, const TString& fillColor = "");
     void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h, std::shared_ptr<TSingleMetric>& metric, const TString& mediumColor, const TString& lightColor, const TString& textSum, const TString& tooltip, ui32 taskCount, const TString& iconRef, const TString& iconColor, const TString& iconScale, bool backgroundRect = false, const TString& peerId = "", ui64 split = 0, const std::shared_ptr<TScalarMetric>& scalar = nullptr);
-    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMetricHistory*, TString>> history, const TString& iconRef, const TString& iconColor, const TString& iconScale);
+    void PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TString>> history, ui64 scale, const TString& iconRef, const TString& iconColor, const TString& iconScale);
     void PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY);
     void PrintSvg(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta);
     void PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c);

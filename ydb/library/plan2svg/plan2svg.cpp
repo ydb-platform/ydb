@@ -364,8 +364,11 @@ ui64 TMetricHistory::Integrate() {
 }
 
 ui64 TMetricHistory::Average() {
-    ui64 dt = Values.empty() ? 0 : Values.back().first - Values.front().first;
-    return dt ? Integrate() / dt : 0;
+    if (!AvgValue) {
+        ui64 dt = Values.empty() ? 0 : Values.back().first - Values.front().first;
+        AvgValue = dt ? Integrate() / dt : 0;
+    }
+    return AvgValue;
 }
 
 void Min0(ui64& m, ui64 v) {
@@ -632,21 +635,29 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
                     if (auto* inputBytes = globNode->GetValueByPath("InputInflightBytes")) {
                         clusterNode->InputInflightBytes.Load(times, *inputBytes, 0, 0);
                     }
-                    clusterNode->MaxMemArrowDefault = clusterNode->MemArrowDefault.MaxValue;
+                    clusterNode->MemPhysicalUsage.DisplayMaxValue = clusterNode->MemPhysicalUsage.MaxValue;
+                    clusterNode->MemSysAllocated.DisplayMaxValue = clusterNode->MemSysAllocated.MaxValue;
+                    clusterNode->MemSysFragmented.DisplayMaxValue = clusterNode->MemSysFragmented.MaxValue;
+
+                    clusterNode->MemArrowDefault.DisplayMaxValue = clusterNode->MemArrowDefault.MaxValue;
                     for (ui32 i = 0; i < std::min(clusterNode->MemArrowDefault.Values.size(), clusterNode->MemMkqlAllocated.Values.size()); i++) {
                         clusterNode->MemArrowDefault.Values[i].second += clusterNode->MemMkqlAllocated.Values[i].second;
                         clusterNode->MemArrowDefault.MaxValue = std::max(clusterNode->MemArrowDefault.MaxValue, clusterNode->MemArrowDefault.Values[i].second);
                     }
-                    clusterNode->MaxLocalInflightBytes = clusterNode->LocalInflightBytes.MaxValue;
+                    clusterNode->MemMkqlAllocated.DisplayMaxValue = clusterNode->MemMkqlAllocated.MaxValue;
+                    clusterNode->MemMkqlFreeList.DisplayMaxValue = clusterNode->MemMkqlFreeList.MaxValue;
+
+                    clusterNode->LocalInflightBytes.DisplayMaxValue = clusterNode->LocalInflightBytes.MaxValue;
                     for (ui32 i = 0; i < std::min(clusterNode->LocalInflightBytes.Values.size(), clusterNode->InputInflightBytes.Values.size()); i++) {
                         clusterNode->LocalInflightBytes.Values[i].second += clusterNode->InputInflightBytes.Values[i].second;
                         clusterNode->LocalInflightBytes.MaxValue = std::max(clusterNode->LocalInflightBytes.MaxValue, clusterNode->LocalInflightBytes.Values[i].second);
                     }
-                    clusterNode->MaxOutputInflightBytes = clusterNode->OutputInflightBytes.MaxValue;
+                    clusterNode->OutputInflightBytes.DisplayMaxValue = clusterNode->OutputInflightBytes.MaxValue;
                     for (ui32 i = 0; i < std::min(clusterNode->OutputInflightBytes.Values.size(), clusterNode->LocalInflightBytes.Values.size()); i++) {
                         clusterNode->OutputInflightBytes.Values[i].second += clusterNode->LocalInflightBytes.Values[i].second;
                         clusterNode->OutputInflightBytes.MaxValue = std::max(clusterNode->OutputInflightBytes.MaxValue, clusterNode->OutputInflightBytes.Values[i].second);
                     }
+                    clusterNode->InputInflightBytes.DisplayMaxValue = clusterNode->InputInflightBytes.MaxValue;
                 }
             }
 
@@ -1980,9 +1991,35 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
     }
 }
 
-void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMetricHistory*, TString>> history, const TString& iconRef, const TString& iconColor, const TString& iconScale) {
+void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 viewWidth, ui32 y0, ui32 h,  std::initializer_list<std::pair<TMutableMetric*, TString>> history, ui64 scale, const TString& iconRef, const TString& iconColor, const TString& iconScale) {
     ui32 x0 = viewLeft + INTERNAL_GAP_X;
     ui32 width = viewWidth - INTERNAL_GAP_X * 2;
+
+    TStringBuilder titleBuilder;
+    TStringBuilder textBuilder;
+
+    ui64 lastScale = 0;
+    bool firstItem = true;
+    for (auto& item : history) {
+        auto itemScale = item.first->Average();
+        if (itemScale) {
+            if (!firstItem) {
+                textBuilder << " / ";
+                titleBuilder << "; ";
+            }
+            if (!item.first->IsLine) {
+                auto nextScale = itemScale;
+                itemScale -= lastScale;
+                lastScale = nextScale;
+            }
+            textBuilder << FormatBytes(itemScale * 1_MB);
+            titleBuilder << item.first->Title << ": Avg=" << FormatBytes(itemScale * 1_MB) << ", Max=" << FormatBytes(item.first->DisplayMaxValue * 1_MB);
+            firstItem = false;
+        }
+    }
+
+    background << "<g><title>" << titleBuilder << "</title>" << Endl;
+
     if (iconRef) {
         x0 += INTERNAL_WIDTH;
         width -= INTERNAL_WIDTH;
@@ -1992,48 +2029,39 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         << "<use href='" << iconRef << "' transform='translate(" << viewLeft << ' ' << y0 << ") scale(" << iconScale << ")' fill='" << iconColor << "'/>" << Endl;
     }
 
-    ui64 scale = 0;
     for (auto it = std::rbegin(history); it != std::rend(history); it++) {
         auto itemScale = it->first->Average();
         if (itemScale) {
             if (scale == 0) {
                 scale = itemScale;
             }
+
+            auto x = x0;
+            auto w = width * itemScale / scale;
+
+            if (it->first->IsLine) {
+                x = x + w - 2;
+                w = 2;
+            }
+
             background
-            << "<rect x='" << x0 << "' y='" << y0 << "' width='" << width * itemScale / scale << "' height='" << h
+            << "<rect x='" << x << "' y='" << y0 << "' width='" << w << "' height='" << h
             << "' fill='" << it->second << "'/>" << Endl;
         }
     }
 
-    TStringBuilder builder;
-    ui64 lastScale = 0;
-    for (auto& item : history) {
-        auto itemScale = item.first->Average();
-        if (itemScale) {
-            if (lastScale) {
-                builder << " / ";
-            }
-            auto nextScale = itemScale;
-            itemScale -= lastScale;
-            lastScale = nextScale;
-            builder << FormatBytes(itemScale * 1_MB);
-        }
-    }
-    TString text = builder;
+    TString text = textBuilder;
 
     if (text) {
         background
         << "<rect x='" << x0 << "' y='" << y0 + (h - INTERNAL_TEXT_HEIGHT) / 2
-        << "' width='" << text.size() * INTERNAL_TEXT_HEIGHT * 7 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
+        << "' width='" << (text.size() + 1) * INTERNAL_TEXT_HEIGHT * 6 / 10 << "' height='" << INTERNAL_TEXT_HEIGHT + 1
         << "' stroke-width='0' opacity='0.5' fill='" << Config.Palette.StageMain << "'/>" << Endl
         << "<text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextSummary << "' x='" << x0
         << "' y='" << y0 + INTERNAL_TEXT_HEIGHT + (h - INTERNAL_TEXT_HEIGHT) / 2 << "'>" << text << "</text>" << Endl;
     }
 
-    Y_UNUSED(x0);
-    Y_UNUSED(width);
-    Y_UNUSED(h);
-    Y_UNUSED(history);
+    background << "</g>" << Endl;
 }
 
 
@@ -2818,6 +2846,18 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
 
     builder << "</svg>" << Endl;
 
+    ui64 physicalScale = 0;
+    ui64 memoryScale = 0;
+    ui64 dataScale = 0;
+
+    for (auto& node : Nodes) {
+        physicalScale = std::max(physicalScale, node->MemPhysicalUsage.Average());
+        physicalScale = std::max(physicalScale, node->MemSysAllocated.Average());
+        memoryScale = std::max(memoryScale, node->MemArrowDefault.Average());
+        memoryScale = std::max(memoryScale, node->MemMkqlAllocated.Average());
+        dataScale = std::max(dataScale, node->OutputInflightBytes.Average());
+    }
+
     for (auto& node : Nodes) {
         builder
             << "<svg data-stage='outer node' data-height='" << GAP_Y + node->Height << "' width='" << Config.Width << "' height='" << GAP_Y + node->Height << "' x='0' y='" << node->OffsetY << "'>" << Endl
@@ -2856,7 +2896,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 { &node->MemSysFragmented, Config.Palette.MemMedium },
                 { &node->MemSysAllocated, Config.Palette.MemLight },
                 { &node->MemPhysicalUsage, "red" },
-            }, "#icon_memory", "red", "0.6 0.6");
+            }, physicalScale, "#icon_memory", "red", "0.6 0.6");
 
             px += (TimeOffset + node->MemPhysicalUsage.MinTime) * pw / maxTime;
             pw = (node->MemPhysicalUsage.MaxTime - node->MemPhysicalUsage.MinTime) * pw / maxTime;
@@ -2864,9 +2904,9 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             auto maxValue = std::max(node->MemPhysicalUsage.MaxValue, node->MemSysAllocated.MaxValue);
             builder
                 << "<g><title>"
-                << "Max RSS " + FormatBytes(node->MemPhysicalUsage.MaxValue * 1_MB)
-                << ", Max Allocated " << FormatBytes(node->MemSysAllocated.MaxValue * 1_MB)
-                << ", Max Fragmented " << FormatBytes(node->MemSysFragmented.MaxValue * 1_MB)
+                << "Max Fragmented " << FormatBytes(node->MemSysFragmented.DisplayMaxValue * 1_MB)
+                << ", Max Allocated " << FormatBytes(node->MemSysAllocated.DisplayMaxValue * 1_MB)
+                << ", Max RSS " + FormatBytes(node->MemPhysicalUsage.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
             PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
             PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
@@ -2886,14 +2926,14 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 { &node->MemMkqlFreeList, Config.Palette.MemMedium },
                 { &node->MemMkqlAllocated, Config.Palette.MemLight },
                 { &node->MemArrowDefault, Config.Palette.BlockMedium },
-            }, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
+            }, memoryScale, "#icon_memory", Config.Palette.MemMedium, "0.6 0.6");
 
             auto maxValue = std::max(node->MemArrowDefault.MaxValue, node->MemMkqlAllocated.MaxValue);
             builder
                 << "<g><title>"
-                << "Max Arrow " << FormatBytes(node->MaxMemArrowDefault * 1_MB)
-                << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.MaxValue * 1_MB)
-                << ", Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.MaxValue * 1_MB)
+                << "Max MKQL FreeList " <<  FormatBytes(node->MemMkqlFreeList.DisplayMaxValue * 1_MB)
+                << ", Max MKQL Allocated " <<  FormatBytes(node->MemMkqlAllocated.DisplayMaxValue * 1_MB)
+                << ", Max Arrow " << FormatBytes(node->MemArrowDefault.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
             PrintSeries(builder, node->MemArrowDefault.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.BlockMedium, Config.Palette.BlockMedium);
             PrintSeries(builder, node->MemMkqlAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
@@ -2908,14 +2948,14 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
                 { &node->InputInflightBytes, Config.Palette.InputMedium },
                 { &node->LocalInflightBytes, Config.Palette.MemLight },
                 { &node->OutputInflightBytes, Config.Palette.OutputMedium },
-            }, "#icon_memory", Config.Palette.InputDark, "0.6 0.6");
+            }, dataScale, "#icon_memory", Config.Palette.InputDark, "0.6 0.6");
 
             auto maxValue = node->OutputInflightBytes.MaxValue;
             builder
                 << "<g><title>"
-                << "Max Output " << FormatBytes(node->MaxOutputInflightBytes * 1_MB)
-                << ", Max Local " <<  FormatBytes(node->MaxLocalInflightBytes * 1_MB)
-                << ", Max Input " <<  FormatBytes(node->InputInflightBytes.MaxValue * 1_MB)
+                << "Max Input " <<  FormatBytes(node->InputInflightBytes.DisplayMaxValue * 1_MB)
+                << ", Max Local " <<  FormatBytes(node->LocalInflightBytes.DisplayMaxValue * 1_MB)
+                << ", Max Output " << FormatBytes(node->OutputInflightBytes.DisplayMaxValue * 1_MB)
                 << "</title>" << Endl;
             PrintSeries(builder, node->OutputInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputMedium);
             PrintSeries(builder, node->LocalInflightBytes.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);

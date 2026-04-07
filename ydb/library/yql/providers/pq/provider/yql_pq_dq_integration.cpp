@@ -531,7 +531,7 @@ public:
         auto clusterConfiguration = GetClusterConfiguration(cluster);
 
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
-        bool useSharedReading = UseSharedReading(clusterConfiguration, format);
+        bool useSharedReading = UseSharedReading(clusterConfiguration, pqReadTopic, ctx);
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
         Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
@@ -692,13 +692,6 @@ public:
             ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Partitions balancing is not supported with table mode. Partitions balancing settings will be ignored"));
         }
 
-        if (!streamingTopicReadEnabled && useSharedReading) {
-            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
-            useSharedReading = false;
-            Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
-            // TODO/ not working ?
-        }
-
         if (State_->Configuration->MaxPartitionReadSkew.Get()) {
             Add(props, PartitionsBalancingIdleTimeoutUsSetting, ToString(watermarksIdleTimeoutUs.GetOrElse(TDuration::Minutes(1).MicroSeconds())), pos, ctx);
         }
@@ -776,7 +769,7 @@ public:
         }
 
         const auto clusterConfiguration = GetClusterConfiguration(pqReadTopic.DataSource().Cluster().StringValue());
-        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic.Format().Ref().Content())), pos, ctx);
+        Add(innerSettings, SharedReading, ToString(UseSharedReading(clusterConfiguration, pqReadTopic, ctx)), pos, ctx);
 
         if (!innerSettings.empty()) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
@@ -800,8 +793,26 @@ public:
         return clusterConfiguration;
     }
 
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+    bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, const TPqReadTopic& pqReadTopic, TExprContext& ctx) const {
+        std::string_view format = pqReadTopic.Format().Ref().Content();
+        const auto& settings = pqReadTopic.Settings();
+        bool streamingTopicReadEnabled = State_->StreamingTopicsReadByDefault;
+
+        for (const auto& setting : settings.Raw()->Children()) {
+            const auto settingName = setting->Child(0)->Content();
+            if ("streaming" != settingName) {
+                continue;
+            }
+            if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
+                streamingTopicReadEnabled = *parseResult;
+            }
+        }
+        bool useSharedReading = clusterConfiguration->SharedReading && (format == "json_each_row" || format == "raw");
+        if (!streamingTopicReadEnabled && useSharedReading) {
+            ctx.AddWarning(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Table topic reading is not supported with sharing reading mode. Reading without shared reading will be used."));
+            useSharedReading = false;
+        }
+        return useSharedReading;
     }
 
 private:

@@ -1,6 +1,8 @@
 // we define this to allow using sdk build info.
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -1251,6 +1253,90 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         UNIT_ASSERT(value);
         UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
 
+    }
+
+    Y_UNIT_TEST(CompileCacheCheckMetadata) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+        auto db = kikimr.GetTableClient();
+
+        // Case 1: explicit types via DECLARE — Uint64, Optional<Uint32>, Bool
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(
+                    DECLARE $uint64Param AS Uint64;
+                    DECLARE $optParam AS Uint32?;
+                    DECLARE $flag AS Bool;
+                    SELECT COUNT(*) FROM `/Root/EightShard`
+                    WHERE Key = $uint64Param AND $flag
+                      AND (CAST(Key AS Uint32) = $optParam OR $optParam IS NULL);
+                )",
+                TTxControl::BeginTx().CommitTx(),
+                TParamsBuilder()
+                    .AddParam("$uint64Param").Uint64(1).Build()
+                    .AddParam("$optParam").OptionalUint32(1).Build()
+                    .AddParam("$flag").Bool(true).Build()
+                    .Build(),
+                TExecDataQuerySettings().KeepInQueryCache(true)
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Case 2: implicit types — no DECLARE, types come purely from passed values (Uint32, String)
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(
+                R"(SELECT Key, Value FROM `/Root/KeyValue` WHERE Key = $implicitKey OR Value = $implicitValue;)",
+                TTxControl::BeginTx().CommitTx(),
+                TParamsBuilder()
+                    .AddParam("$implicitKey").Uint32(1).Build()
+                    .AddParam("$implicitValue").String("val").Build()
+                    .Build(),
+                TExecDataQuerySettings().KeepInQueryCache(true)
+            ).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Fetch sysview once, build map: query text → parameters JSON string.
+        // The exact JSON format below documents what users will see in compile_cache_queries.Metadata.
+        THashMap<TString, TString> paramsByQuery;
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto sysResult = session.ExecuteDataQuery(
+                R"(SELECT Query, Metadata FROM `/Root/.sys/compile_cache_queries` WHERE Metadata IS NOT NULL;)",
+                TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(sysResult.GetStatus(), EStatus::SUCCESS);
+
+            NYdb::TResultSetParser parser(sysResult.GetResultSet(0));
+            while (parser.TryNextRow()) {
+                auto q = parser.ColumnParser("Query").GetOptionalUtf8().value_or("");
+                auto m = parser.ColumnParser("Metadata").GetOptionalUtf8().value_or("");
+                NJson::TJsonValue json;
+                if (!m.empty() && NJson::ReadJsonTree(m, &json) && json.Has("parameters")) {
+                    paramsByQuery[q] = NJson::WriteJson(json["parameters"], /*formatOutput=*/false, /*sortKeys=*/true);
+                }
+            }
+        }
+
+        auto getParams = [&](const TString& marker) {
+            for (const auto& [query, params] : paramsByQuery) {
+                if (query.find(marker) != std::string::npos) {
+                    return params;
+                }
+            }
+            UNIT_FAIL("No metadata found for query containing: " << marker);
+            return TString{};
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            getParams("uint64Param"),
+            R"({"$flag":{"type_id":"BOOL"},"$optParam":{"optional_type":{"item":{"type_id":"UINT32"}}},"$uint64Param":{"type_id":"UINT64"}})");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            getParams("implicitKey"),
+            R"({"$implicitKey":{"type_id":"UINT32"},"$implicitValue":{"type_id":"STRING"}})");
     }
 
     Y_UNIT_TEST(CompileCacheCheckQueryType) {

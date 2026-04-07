@@ -464,7 +464,7 @@ class TestViewer(object):
 
     @classmethod
     def normalize_result(cls, result):
-        cls.delete_keys_recursively(result, {'Version', 
+        cls.delete_keys_recursively(result, {'Version',
                                              'version',
                                              'MemoryUsed',
                                              'WriteThroughput',

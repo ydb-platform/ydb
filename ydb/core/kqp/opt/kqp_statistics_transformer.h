@@ -33,7 +33,7 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusiv
     TKqpOptimizeContext& KqpCtx;
     TKqpStatsStore* KqpStats;
     const TKqpProviderContext& KqpPctx;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
+    [[maybe_unused]] const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
     THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;

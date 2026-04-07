@@ -89,6 +89,12 @@ void TBaseFixture::Init()
     };
 }
 
+TGuardedSgList TBaseFixture::MakeSgList() const
+{
+    return TGuardedSgList(
+        TSgList{TBlockDataRef{RangeData.data(), RangeData.size()}});
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

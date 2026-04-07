@@ -21,7 +21,8 @@ TString GenerateRandomString(size_t size);
 
 struct TBaseFixture: public NUnitTest::TBaseFixture
 {
-    const ui64 BlocksPerCopy = CopyRangeSize / DefaultBlockSize;
+    const ui32 BlockSize = DefaultBlockSize;
+    const ui64 BlocksPerCopy = CopyRangeSize / BlockSize;
     const ELocation FreshDDisk = ELocation::DDisk1;
     const TLocationMask DDiskMask =
         TLocationMask::MakeDDisk(true, true, true, true, false);
@@ -37,7 +38,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{DefaultBlockSize, VChunkSize / DefaultBlockSize};
+    TBlocksDirtyMap DirtyMap{BlockSize, VChunkSize / BlockSize};
 
     TBlockRange64 ExpectedRange;
     TString RangeData;
@@ -47,6 +48,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         NThreading::NewPromise<TDBGWriteBlocksResponse>();
 
     virtual void Init();
+
+    TGuardedSgList MakeSgList() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

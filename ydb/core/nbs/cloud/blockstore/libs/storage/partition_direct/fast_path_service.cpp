@@ -98,8 +98,7 @@ TFastPathService::TFastPathService(
           .BlockCount = blockCount,
           .BlocksPerStripe = storageConfig->GetStripeSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
-    , PBufferReplyTimeoutMicroseconds(
-          storageConfig->GetPBufferReplyTimeoutMicroseconds())
+    , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())
 {
     Y_UNUSED(ActorSystem);
 }
@@ -168,7 +167,7 @@ TFastPathService::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         WriteMode,
-        PBufferReplyTimeoutMicroseconds,
+        PBufferReplyTimeout,
         GenerateSequenceNumber(),
         span->GetTraceId());
 

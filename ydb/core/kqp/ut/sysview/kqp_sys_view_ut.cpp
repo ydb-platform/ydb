@@ -2,7 +2,7 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -1300,7 +1300,8 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // Fetch sysview once, build map: query text → parameters JSON string
+        // Fetch sysview once, build map: query text → parameters JSON string.
+        // The exact JSON format below documents what users will see in compile_cache_queries.Metadata.
         THashMap<TString, TString> paramsByQuery;
         {
             auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1316,7 +1317,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
                 auto m = parser.ColumnParser("Metadata").GetOptionalUtf8().value_or("");
                 NJson::TJsonValue json;
                 if (!m.empty() && NJson::ReadJsonTree(m, &json) && json.Has("parameters")) {
-                    paramsByQuery[q] = NJson::WriteJson(json["parameters"], /*format=*/false, /*sortKeys=*/true);
+                    paramsByQuery[q] = NJson::WriteJson(json["parameters"], /*formatOutput=*/false, /*sortKeys=*/true);
                 }
             }
         }
@@ -1331,12 +1332,10 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             return TString{};
         };
 
-        // Case 1: explicit DECLARE — keys sorted alphabetically, compact JSON
         UNIT_ASSERT_VALUES_EQUAL(
             getParams("uint64Param"),
             R"({"$flag":{"type_id":"BOOL"},"$optParam":{"optional_type":{"item":{"type_id":"UINT32"}}},"$uint64Param":{"type_id":"UINT64"}})");
 
-        // Case 2: implicit types inferred from passed values
         UNIT_ASSERT_VALUES_EQUAL(
             getParams("implicitKey"),
             R"({"$implicitKey":{"type_id":"UINT32"},"$implicitValue":{"type_id":"STRING"}})");

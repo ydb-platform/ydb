@@ -105,13 +105,13 @@ bool IsSelect(const TRule_expr& msg) {
 }
 
 bool IsOnlySubExpr(const TRule_select_subexpr& node) {
-    return node.GetBlock2().size() == 0 &&
-           node.GetRule_select_subexpr_intersect1().GetBlock2().size() == 0;
+    return node.GetBlock2().empty() &&
+           node.GetRule_select_subexpr_intersect1().GetBlock2().empty();
 }
 
 bool IsOnlySelect(const TRule_select_stmt& rule) {
-    return rule.GetBlock2().size() == 0 &&
-           rule.GetRule_select_stmt_intersect1().GetBlock2().size() == 0;
+    return rule.GetBlock2().empty() &&
+           rule.GetRule_select_stmt_intersect1().GetBlock2().empty();
 }
 
 const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {

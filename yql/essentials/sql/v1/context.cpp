@@ -773,7 +773,7 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 bool TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx_.Scoped->NamedNodes.find(name);
     Y_DEBUG_ABORT_UNLESS(mapIt != Ctx_.Scoped->NamedNodes.end());
-    Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
+    Y_DEBUG_ABORT_UNLESS(!mapIt->second.empty());
 
     Y_DEFER {
         mapIt->second.pop_front();

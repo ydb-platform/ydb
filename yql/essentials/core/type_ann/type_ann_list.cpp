@@ -6272,7 +6272,7 @@ namespace {
 
             const TTypeAnnotationNode* distinctColumnType = nullptr;
             if (child->ChildrenSize() == 3) {
-                if (suffix != "" && suffix != "Finalize") {
+                if (!suffix.empty() && suffix != "Finalize") {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "DISTINCT aggregation is not supported for mode: " << suffix));
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -6296,7 +6296,7 @@ namespace {
                 }
             }
 
-            if (suffix == "" || suffix.EndsWith("Finalize")) {
+            if (suffix.empty() || suffix.EndsWith("Finalize")) {
                 auto finishType = isAggApply ? child->Child(1)->GetTypeAnn() : child->Child(1)->Child(6)->GetTypeAnn();
                 bool isOptional = finishType->GetKind() == ETypeAnnotationKind::Optional;
                 if (child->Head().IsList()) {

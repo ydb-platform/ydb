@@ -4,6 +4,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/map.h>
 
+#include <array>
 #include <vector>
 
 namespace NKikimrConfig {
@@ -14,6 +15,32 @@ namespace NKikimrConfig {
 }
 
 namespace NKikimr::NAutoConfigInitializer {
+
+    enum class EPoolKind : ui8 {
+        System = 0,
+        User = 1,
+        Batch = 2,
+        IO = 3,
+        IC = 4,
+    };
+
+    struct TPoolConfig {
+        i16 ThreadCount = 0;
+        i16 MaxThreadCount = 0;
+    };
+
+    static constexpr size_t PoolKindsCount = 5;
+    static constexpr i16 MaxPreparedCpuCount = 30;
+
+    using TCpuTableRow = std::array<TPoolConfig, PoolKindsCount>;
+    using TCpuTable = std::array<TCpuTableRow, MaxPreparedCpuCount + 1>;
+
+    struct TAutoConfigOptions {
+        bool IsDynamicNode = false;
+        bool UseTinySchedulerConfig = false;
+        bool EnableTinyConfiguration = true;
+        const TCpuTable* CpuTable = nullptr;
+    };
 
     struct TASPools {
         static constexpr auto CommonPoolName = "Common";
@@ -80,7 +107,7 @@ namespace NKikimr::NAutoConfigInitializer {
 
     TMap<TString, ui32> GetServicePools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig);
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode);
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, const TAutoConfigOptions& options);
 
     void ApplyAutoConfig(NKikimrConfig::TGRpcConfig *config, const NKikimrConfig::TActorSystemConfig &asConfig);
 

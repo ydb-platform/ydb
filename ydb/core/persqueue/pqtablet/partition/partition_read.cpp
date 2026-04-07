@@ -431,10 +431,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
     AFL_ENSURE(end <= blobs.size());
 
     for (ui32 blobIdx = begin; blobIdx < end; ++blobIdx) {
-        if (blobIdx != begin && needStop && cnt < Count && !(LastOffset && Offset >= LastOffset)) {
-            needStop = false;
-        }
-
         AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
         AFL_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count)("l", Blobs[blobIdx].Count)("r", blobs[blobIdx].Count);
 
@@ -519,7 +515,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
-                    if (LastOffset && Offset >= LastOffset) {
+                    if (ReachedLastOffset()) {
                         needStop = true;
                         break;
                     }
@@ -661,7 +657,7 @@ TReadAnswer TReadInfo::FormAnswer(
             if (updateUsage(writeBlob)) {
                 break;
             }
-            if (LastOffset && Offset >= LastOffset) {
+            if (ReachedLastOffset()) {
                 break;
             }
         }

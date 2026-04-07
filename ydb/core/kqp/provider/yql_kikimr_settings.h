@@ -112,6 +112,33 @@ public:
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
 
+    /* Internal CBO constants for tuning */
+    NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
+    NCommon::TConfSetting<double, Static> OptCBOConstsSelMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsSelPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsShuffleRightSidePow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsInteractionsPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinRightSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinOutputMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsMapJoinOutputPow;
+
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinLeftSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinLeftSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinRightSideMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinRightSidePow;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinOutputMult;
+    NCommon::TConfSetting<double, Static> OptCBOConstsGraceJoinOutputPow;
+
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
 

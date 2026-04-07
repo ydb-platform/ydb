@@ -1477,6 +1477,9 @@ bool TKqpStatisticsTransformer::BeforeLambdas(const TExprNode::TPtr& input, TExp
     else if (TCoAggregateMergeFinalize::Match(input.Get())) {
         InferStatisticsForAggregateMergeFinalize(input, KqpStats);
     }
+    else if (TCoWideCombiner::Match(input.Get())) {
+        InferStatisticsForCombiner(input, KqpStats);
+    }
     else if (TCoAsList::Match(input.Get())) {
         InferStatisticsForAsList(input, KqpStats);
     }
@@ -1555,8 +1558,8 @@ bool TKqpStatisticsTransformer::AfterLambdas(const TExprNode::TPtr& input, TExpr
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
-    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx) {
-    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx));
+    TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, const TKqpProviderContext& pctx, const NMiniKQL::IFunctionRegistry& funcRegistry) {
+    return THolder<IGraphTransformer>(new TKqpStatisticsTransformer(kqpCtx, typeCtx, config, pctx, funcRegistry));
 }
 
 } // namespace NKikimr::NKqp

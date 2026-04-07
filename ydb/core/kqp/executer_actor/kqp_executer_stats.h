@@ -39,7 +39,7 @@ struct TMaxStats {
 struct TSumStats {
     std::vector<ui64> Values;
     ui64 Sum = 0;
-    ui64 Scale = 1;
+    ui64 Scale = 1; // TODO: convert to template
 
     void Resize(ui32 count);
     void SetNonZero(ui32 index, ui64 value);

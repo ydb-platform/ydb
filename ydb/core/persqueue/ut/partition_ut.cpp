@@ -16,8 +16,6 @@
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <deque>
-
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -25,6 +23,9 @@
 #include <util/system/types.h>
 
 #include "make_config.h"
+
+#include <deque>
+#include <functional>
 
 template<>
 void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
@@ -4001,7 +4002,6 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
 
 namespace {
 
-// обычное сообщение
 TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
     TString data(24, fill);
     const ui32 sz = data.size();
@@ -4018,7 +4018,6 @@ TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
     };
 }
 
-// часть большого сообщения. номер partNo, всего totalParts частей
 TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, ui32 bytesPerPart, char fill) {
     const ui32 totalSize = bytesPerPart * totalParts;
     TString data(bytesPerPart, fill);
@@ -4043,7 +4042,6 @@ TString SerializePackedBatchForReadBodyTest(TBatch batch) {
     return raw;
 }
 
-// актор помогает вызвать функцию внутри акторной системы. функции PersQueue ожидают ссылку на AppData в TLS
 class TAddBlobsFromBodyReadTestActor : public TActorBootstrapped<TAddBlobsFromBodyReadTestActor> {
 public:
     TAddBlobsFromBodyReadTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
@@ -4106,8 +4104,6 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
     blobs.push_back(std::move(blob1));
 
     auto probe = [&](const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-
         constexpr ui32 kReadMaxMessages = 100;
         constexpr ui32 kReadMaxBytes = static_cast<ui32>(1_MB);
 
@@ -4159,6 +4155,11 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
 
         UNIT_ASSERT(!early.Defined());
         UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetOffset(), 11u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(2).GetOffset(), 12u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(3).GetOffset(), 13u);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(4).GetOffset(), 13u);
     };
 
     Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));

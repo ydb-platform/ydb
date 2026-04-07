@@ -66,6 +66,8 @@ ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-26-1-1_to_prestable-26-2]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v1-client0]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v2-client0]
 ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario

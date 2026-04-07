@@ -64,6 +64,12 @@ public:
         return State_ == EState::Ready;
     }
 
+    void Reset() override {
+        auto guard = Guard(Lock_);
+        State_ = EState::None;
+        OperationFutures_.clear();
+    }
+
 private:
     enum class EState {
         None,

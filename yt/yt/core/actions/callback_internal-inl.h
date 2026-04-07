@@ -21,38 +21,38 @@ inline TBindStateBase::TBindStateBase(
 
 inline TCallbackBase::operator bool() const
 {
-    return static_cast<bool>(BindState);
+    return static_cast<bool>(BindState_);
 }
 
 inline void TCallbackBase::Reset()
 {
-    BindState = nullptr;
-    UntypedInvoke = nullptr;
+    BindState_ = nullptr;
+    UntypedInvoke_ = nullptr;
 }
 
 inline void* TCallbackBase::GetHandle() const
 {
-    return (void*)((size_t)(void*)BindState.Get() ^ (size_t)(void*)UntypedInvoke);
+    return (void*)((size_t)(void*)BindState_.Get() ^ (size_t)(void*)UntypedInvoke_);
 }
 
 inline void TCallbackBase::Swap(TCallbackBase& other) noexcept
 {
-    auto tempBindState = std::move(other.BindState);
-    auto tempUntypedInvoke = std::move(other.UntypedInvoke);
+    auto tempBindState = std::move(other.BindState_);
+    auto tempUntypedInvoke = other.UntypedInvoke_;
 
-    other.BindState = std::move(BindState);
-    other.UntypedInvoke = std::move(UntypedInvoke);
+    other.BindState_ = std::move(BindState_);
+    other.UntypedInvoke_ = UntypedInvoke_;
 
-    BindState = std::move(tempBindState);
-    UntypedInvoke = std::move(tempUntypedInvoke);
+    BindState_ = std::move(tempBindState);
+    UntypedInvoke_ = tempUntypedInvoke;
 }
 
 #ifndef __cpp_impl_three_way_comparison
 inline bool TCallbackBase::operator==(const TCallbackBase& other) const
 {
     return
-        BindState == other.BindState &&
-        UntypedInvoke == other.UntypedInvoke;
+        BindState_ == other.BindState_ &&
+        UntypedInvoke_ == other.UntypedInvoke_;
 }
 
 inline bool TCallbackBase::operator!=(const TCallbackBase& other) const
@@ -62,8 +62,8 @@ inline bool TCallbackBase::operator!=(const TCallbackBase& other) const
 #endif
 
 inline TCallbackBase::TCallbackBase(TIntrusivePtr<TBindStateBase>&& bindState) noexcept
-    : BindState(std::move(bindState))
-    , UntypedInvoke(nullptr)
+    : BindState_(std::move(bindState))
+    , UntypedInvoke_(nullptr)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

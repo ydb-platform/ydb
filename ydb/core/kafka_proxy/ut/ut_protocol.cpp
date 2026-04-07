@@ -6,6 +6,7 @@
 #include "kafka_test_client.h"
 #include "test_server.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -5214,6 +5215,82 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto record2 = fetchResponse1->Responses[0].Partitions[0].Records->Records[1];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
+    }
+
+    Y_UNIT_TEST(CheckReadOffsetMetricUpdateWhenCommit) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        // use random values to avoid parallel execution problems
+        TString topicName = TStringBuilder()
+                                << "topic-" << RandomNumber<ui64>();
+        TString consumerName = "my-consumer";
+        ui64 minActivePartitions = 1;
+
+        // create input and output topics
+        CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
+
+        // produce data to input topic (to commit offsets in further steps)
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topicName).ProducerId("12345").PartitionId(0);
+        auto writer = pqClient.CreateSimpleBlockingWriteSession(wsSettings);
+        NYdb::NTopic::TWriteMessage msg1("Data-12345");
+        NYdb::NTopic::TWriteMessage msg2("Data-67890");
+        NYdb::NTopic::TWriteMessage msg3("Data-38t54");
+        msg1.MessageMeta({{"__key", "key1"}});
+        msg2.MessageMeta({{"__key", "key2"}});
+        msg3.MessageMeta({{"__key", "key3"}});
+        writer->Write(std::move(msg1));
+        writer->Write(std::move(msg2));
+        writer->Write(std::move(msg3));
+        writer->Close();
+
+        // KikimrServer->AppData и там каунтеры. Посмотреть сколько нод
+        {
+            auto describeConsumerSettings = NTopic::TDescribeConsumerSettings().IncludeStats(true);
+            auto result =  pqClient.DescribeConsumer(topicName, consumerName, describeConsumerSettings).GetValueSync();
+            const auto& consumerDescription = result.GetConsumerDescription();
+            const auto& partition = consumerDescription.GetPartitions()[0];
+            UNIT_ASSERT(partition.GetActive());
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+            // auto& partitionStats = partition.GetPartitionStats();
+            i32 lastReadOffset = partition.GetPartitionConsumerStats()->GetLastReadOffset();
+            i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
+            // Cerr << "Here" << stats.size();
+            UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, 1);
+            UNIT_ASSERT_VALUES_EQUAL(committedOffset, 0);
+        }
+
+        std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+        std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        TString commitedMetaData = "additional-info";
+        for (ui64 i = 0; i < minActivePartitions; ++i) {
+            partitionsAndOffsets.emplace_back(i, 3, commitedMetaData);
+        }
+
+        offsets[topicName] = partitionsAndOffsets;
+        kafkaClient.OffsetCommit(consumerName, offsets);
+
+        {
+            auto describeConsumerSettings = NTopic::TDescribeConsumerSettings().IncludeStats(true);
+            // auto result = pqClient.DescribeTopic(topicName, describeTopicSettings).GetValueSync();
+            auto result =  pqClient.DescribeConsumer(topicName, consumerName, describeConsumerSettings).GetValueSync();
+            const auto& consumerDescription = result.GetConsumerDescription();
+            const auto& partition = consumerDescription.GetPartitions()[0];
+            UNIT_ASSERT(partition.GetActive());
+            UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+            // auto& partitionStats = partition.GetPartitionStats();
+            i32 lastReadOffset = partition.GetPartitionConsumerStats()->GetLastReadOffset();
+            i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
+            // Cerr << "Here" << stats.size();
+            UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, committedOffset);
+        }
+        auto counters = testServer.KikimrServer->GetRuntime()->GetAppData().Counters;
+        // UNIT_ASSERT(counters)
+        auto dbGroup = GetServiceCounters(counters, "pqproxy");
+        // TStringStream countersStr;
+        // dbGroup->OutputHtml(countersStr);
+        // Cerr << countersStr << Endl;
     }
 
     Y_UNIT_TEST(ProduceMetrics) {

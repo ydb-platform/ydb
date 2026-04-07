@@ -28,7 +28,7 @@ struct TLookupSettings {
 class TKqpStreamLookupWorker {
 public:
     using TReadList = std::vector<std::pair<ui64, THolder<TEvDataShard::TEvRead>>>;
-    using TPartitionInfo = std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>;
+    using TPartitionInfo = std::shared_ptr<const TPartitioning>;
 
     struct TShardReadResult {
         const ui64 ShardId;

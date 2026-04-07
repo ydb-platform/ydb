@@ -65,8 +65,8 @@ public:
     virtual void SetError(ui64 shardId) = 0;
     virtual void SetError() = 0;
 
-    virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
-    virtual std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const = 0;
+    virtual void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TPartitioning>& partitioning) = 0;
+    virtual std::shared_ptr<const TPartitioning> GetPartitioning(const TTableId tableId) const = 0;
 
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;

@@ -2205,9 +2205,6 @@ message TImmediateControlsConfig {
     optional TColumnShardControls ColumnShardControls = 17;
     optional TGroupMapperControls GroupMapperControls = 18;
     optional TBackupControls BackupControls = 19;
-<<<<<<< HEAD
-=======
-    optional TBootstrapperControls BootstrapperControls = 20;
 
     message TQuoterControls {
         optional uint64 ProxyProtocolVersion = 1 [(ControlOptions) = {
@@ -2216,8 +2213,7 @@ message TImmediateControlsConfig {
             MaxValue: 10,
             DefaultValue: 1 }];
     }
-    optional TQuoterControls QuoterControls = 21;
->>>>>>> dda5f91bae5 (Fix cross-database quota interference in Kesus quoter proxy (#36217))
+    optional TQuoterControls QuoterControls = 20;
 };
 
 message TMeteringConfig {

@@ -5,7 +5,6 @@ option java_package = "ru.yandex.kikimr.proto";
 import "ydb/library/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/library/actors/protos/actors.proto";
 import "ydb/core/protos/data_events.proto";
 
 message TLongTxId {
@@ -65,6 +64,22 @@ message TEvAttachColumnShardWritesResult {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
 }
+
+// Lock wait edges are uniquely identified by the (Owner, RequestId) tuple. Owner is the actor
+// reporting the wait (e.g. a DataShard), and RequestId is an id unique to the particular
+// Owner. These unique ids allow us to make the TEvUpdateLockWaitEdges message idempotent.
+message TLockWaitEdgeId {
+    optional NActorsProto.TActorId Owner = 1;
+    optional uint64 RequestId = 2;
+}
+
+message TLockWaitEdge {
+    optional TLockWaitEdgeId Id = 1;
+
+    optional uint64 BlockerLockId = 2;
+    optional uint32 BlockerLockNode = 3;
+}
+
 
 message TEvSubscribeLock {
     optional uint64 LockId = 1;

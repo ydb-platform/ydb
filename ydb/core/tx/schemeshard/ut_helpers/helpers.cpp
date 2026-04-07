@@ -1803,8 +1803,8 @@ namespace NSchemeShardUT_Private {
         return tableDescription;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain);
         transaction->SetWorkingDir(parentPath);
@@ -1812,9 +1812,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = UpgradeSubDomainRequest(schemeShard, txId, parentPath, name);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomain(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
@@ -1827,8 +1841,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision);
         transaction->SetWorkingDir(parentPath);
@@ -1837,9 +1851,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = UpgradeSubDomainDecisionRequest(schemeShard, txId, parentPath, name, decision);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomainDecision(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, decision);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {

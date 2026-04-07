@@ -1144,8 +1144,8 @@ public:
         KESUS_PROXY_LOG_INFO("Created kesus quoter proxy. Tablet id: " << GetKesusTabletId());
         Counters.Init(CanonizePath(Path));
         if (AppData()->Icb) {
-            TControlBoard::RegisterSharedControl(QuoterProxyProtocolVersion,
-                AppData()->Icb->QuoterControls.ProxyProtocolVersion);
+            AppData()->Icb->RegisterSharedControl(QuoterProxyProtocolVersion,
+                "QuoterControls.ProxyProtocolVersion");
         }
         Become(&TThis::StateFunc);
         ConnectToKesus(false);

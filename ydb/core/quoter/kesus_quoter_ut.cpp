@@ -1039,7 +1039,7 @@ Y_UNIT_TEST_SUITE(KesusProxyTest) {
         // Switch to V0 via ICB
         auto& icb = *setup.GetRuntime().GetAppData().Icb;
         TControlWrapper ctrl;
-        TControlBoard::RegisterSharedControl(ctrl, icb.QuoterControls.ProxyProtocolVersion);
+        icb.RegisterSharedControl(ctrl, "QuoterControls.ProxyProtocolVersion");
         ctrl = 0;
 
         // Trigger another AddResourceUpdate via consumption stats

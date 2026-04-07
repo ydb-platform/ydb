@@ -2226,7 +2226,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
         auto& appConfig = SetupAppConfig();
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesAuthMethodIam(true);
+        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourceAuthMethodIam(true);
         constexpr char cloudId[] =  ""; // TODO find a way create database with cloud_id
 
         constexpr char inputTopicName[] = "createExternalDataSourceAuthMethodIam";

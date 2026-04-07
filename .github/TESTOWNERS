@@ -6,6 +6,7 @@
 /ydb/library/yql/ @ydb-platform/yql
 /ydb/library/yql/dq @ydb-platform/yql @ydb-platform/qp
 /ydb/library/yql/yt @Krock21 @Krisha11 @zlobober @gritukan
+/yql
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
 /ydb/core/scheme @ydb-platform/datashard

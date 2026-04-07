@@ -23,7 +23,6 @@ public:
         : Settings_([]() {
             TTestEnvSettings s;
             s.EnableSVP = true;
-            s.TableServiceConfig.SetEnableOltpSink(true);
             return s;
         }())
         , Env_(1, 2, Settings_)

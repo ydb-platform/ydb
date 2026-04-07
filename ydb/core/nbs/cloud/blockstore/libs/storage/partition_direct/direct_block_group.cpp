@@ -1,6 +1,11 @@
 #include "direct_block_group.h"
 
+#include "restore_request.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -8,855 +13,873 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NThreading;
 
-
 namespace {
-
-struct TBlockMeta {
-    TVector<ui64> LsnByPersistentBufferIndex;
-    TVector<bool> IsFlushedToDDiskByPersistentBufferIndex;
-
-    explicit TBlockMeta(size_t persistentBufferCount)
-        : LsnByPersistentBufferIndex(persistentBufferCount, 0)
-        , IsFlushedToDDiskByPersistentBufferIndex(persistentBufferCount, false)
-    {}
-
-    void OnWriteCompleted(const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
-    {
-        LsnByPersistentBufferIndex[writeMeta.Index] = writeMeta.Lsn;
-        IsFlushedToDDiskByPersistentBufferIndex[writeMeta.Index] = false;
-    }
-
-    void OnFlushCompleted(size_t persistentBufferIndex, ui64 lsn)
-    {
-        if (LsnByPersistentBufferIndex[persistentBufferIndex] == lsn) {
-            LsnByPersistentBufferIndex[persistentBufferIndex] = 0;
-            IsFlushedToDDiskByPersistentBufferIndex[persistentBufferIndex] = true;
-        }
-    }
-
-    [[nodiscard]] bool IsWritten() const
-    {
-        return IsFlushedToDDisk() || LsnByPersistentBufferIndex[0] != 0;
-    }
-
-    [[nodiscard]] bool IsFlushedToDDisk() const
-    {
-        return IsFlushedToDDiskByPersistentBufferIndex[0];
-    }
-};
-
-} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDirectBlockGroup::TDirtyMap
+TListPBufferResponse MakeListPBufferResponse(
+    const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& response)
 {
-private:
-    // TODO позже удалить данные при flush'е
-    TVector<TBlockMeta> BlocksMeta;
+    TListPBufferResponse result;
+    result.Error =
+        response.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+            ? MakeError(S_OK)
+            : MakeError(E_FAIL, response.GetErrorReason());
 
-public:
-    TDirtyMap(ui64 blocksCount, size_t numberOfPersistentBuffers)
-        : BlocksMeta(blocksCount, TBlockMeta(numberOfPersistentBuffers))
-    {}
-
-    ui64 GetLsnByPersistentBufferIndex(ui64 blockIndex,
-                                       ui64 persistBufferIndex);
-    void TryUpdateLsnByPersistentBufferIndex(ui64 blockIndex, ui64 persistBufferIndex,
-                                       ui64 lsn);
-    [[nodiscard]] bool IsBlockWritten(ui64 blockIndex) const;
-    [[nodiscard]] bool IsBlockFlushedToDDisk(ui64 blockIndex) const;
-    void OnBlockWriteCompleted(
-        ui64 blockIndex,
-        const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta);
-    void OnBlockFlushCompleted(ui64 blockIndex, ui64 persistBufferIndex,
-                               ui64 lsn);
-};
-
-ui64 TDirectBlockGroup::TDirtyMap::GetLsnByPersistentBufferIndex(
-    ui64 blockIndex, ui64 persistBufferIndex)
-{
-    return BlocksMeta[blockIndex].LsnByPersistentBufferIndex[persistBufferIndex];
+    result.Meta.reserve(response.GetRecords().size());
+    for (const auto& segment: response.GetRecords()) {
+        ui64 lsn = segment.GetLsn();
+        ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
+        auto range = TBlockRange64::WithLength(
+            segment.GetSelector().GetOffsetInBytes() / DefaultBlockSize,
+            segment.GetSelector().GetSize() / DefaultBlockSize);
+        result.Meta.push_back(
+            {.VChunkIndex = vChunkIndex, .Lsn = lsn, .Range = range});
+    }
+    return result;
 }
 
-void TDirectBlockGroup::TDirtyMap::TryUpdateLsnByPersistentBufferIndex(
-    ui64 blockIndex, ui64 persistBufferIndex, ui64 lsn)
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TDBGWriteBlocksToManyPBuffersResponse
+TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+    EWellKnownResultCodes code,
+    TString reason)
 {
-    auto &curLsn = BlocksMeta[blockIndex].LsnByPersistentBufferIndex[persistBufferIndex];
-    curLsn = std::max(curLsn, lsn);
+    TDBGWriteBlocksToManyPBuffersResponse result;
+    result.OverallError = MakeError(code, std::move(reason));
+    return result;
 }
 
-bool TDirectBlockGroup::TDirtyMap::IsBlockWritten(ui64 blockIndex) const
+////////////////////////////////////////////////////////////////////////////////
+
+bool TDDiskIdLess::operator()(const TDDiskId& lh, const TDDiskId& rh) const
 {
-    return BlocksMeta[blockIndex].IsWritten();
+    auto makeTuple = [](const TDDiskId& item)
+    {
+        return std::make_tuple(
+            item.GetNodeId(),
+            item.GetPDiskId(),
+            item.GetDDiskSlotId());
+    };
+    return makeTuple(lh) < makeTuple(rh);
 }
 
-bool TDirectBlockGroup::TDirtyMap::IsBlockFlushedToDDisk(ui64 blockIndex) const
+const TFuture<NProto::TError>&
+TDirectBlockGroup::TDDiskConnection::GetFuture() const
 {
-    return BlocksMeta[blockIndex].IsFlushedToDDisk();
-}
-
-void TDirectBlockGroup::TDirtyMap::OnBlockWriteCompleted(
-    ui64 blockIndex,
-    const TWriteRequestHandler::TPersistentBufferWriteMeta& writeMeta)
-{
-    BlocksMeta[blockIndex].OnWriteCompleted(writeMeta);
-}
-
-void TDirectBlockGroup::TDirtyMap::OnBlockFlushCompleted(
-    ui64 blockIndex, ui64 persistBufferIndex, ui64 lsn)
-{
-    BlocksMeta[blockIndex].OnFlushCompleted(persistBufferIndex, lsn);
+    return ConnectFuture;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
+    TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
-    ui32 index,
-    TVector<NBsController::TDDiskId> ddisksIds,
-    TVector<NBsController::TDDiskId> persistentBufferDDiskIds,
-    ui32 blockSize,
-    ui64 blocksCount,
-    ui32 syncRequestsBatchSize)
+    const TVector<NBsController::TDDiskId>& ddisksIds,
+    const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
+    , Executor(std::move(executor))
     , TabletId(tabletId)
-    , Generation(generation)
-    , BlockSize(blockSize)
-    , BlocksCount(blocksCount)
-    , SyncRequestsBatchSize(syncRequestsBatchSize)
-    , SyncRequestsByDDiskId(ddisksIds.size(), nullptr)
     , StorageTransport(
           std::make_unique<NTransport::TICStorageTransport>(actorSystem))
 {
-    Executor = TExecutor::Create(
-        TStringBuilder() << "DirectBlockGroup_" << TabletId << "_" << Generation
-                         << "_" << index);
-    Executor->Start();
+    Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
+    Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
 
-    Y_UNUSED(TabletId);
-    Y_UNUSED(Generation);
-    Y_UNUSED(BlockSize);
-    Y_UNUSED(BlocksCount);
-    Y_UNUSED(StorageRequestId);
-
-    DirtyMap = std::make_unique<TDirtyMap>(TDirtyMap(BlocksCount, persistentBufferDDiskIds.size()));
-
-    auto addDDiskConnections = [&](TVector<NBsController::TDDiskId> ddisksIds,
-                                   TVector<TDDiskConnection>& ddiskConnections,
-                                   bool fromPersistentBuffer)
+    auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
+                                   TVector<TDDiskConnection>& connections,
+                                   EConnectionType type)
     {
-        for (const auto& ddiskId: ddisksIds) {
-            ddiskConnections.emplace_back(
-                ddiskId,
-                NDDisk::TQueryCredentials(
-                    tabletId,
-                    generation,
-                    std::nullopt,
-                    fromPersistentBuffer));
+        for (ui8 i = 0; i < ids.size(); ++i) {
+            const auto& ddiskId = ids[i];
+            connections.push_back(TDDiskConnection{
+                .HostConnection = NTransport::THostConnection{
+                    .ConnectionType = type,
+                    .DDiskId = ddiskId,
+                    .Credentials = NDDisk::TQueryCredentials(
+                        TabletId,
+                        generation,
+                        std::nullopt,
+                        type == EConnectionType::PBuffer)}});
+
+            if (type == EConnectionType::PBuffer) {
+                NKikimrBlobStorage::NDDisk::TDDiskId pbufferId;
+                ddiskId.Serialize(&pbufferId);
+                PBufferIdToHostIndex.insert({pbufferId, i});
+            }
         }
     };
 
-    // Now we assume that ddisksIds and persistentBufferDDiskIds have the same
-    // size since we flush each persistent buffer to ddisk with the same index
-    Y_ABORT_UNLESS(ddisksIds.size() == persistentBufferDDiskIds.size());
-
-    addDDiskConnections(std::move(ddisksIds), DDiskConnections, false);
+    addDDiskConnections(ddisksIds, DDiskConnections, EConnectionType::DDisk);
     addDDiskConnections(
-        std::move(persistentBufferDDiskIds),
-        PersistentBufferConnections,
-        true);
+        pbufferIds,
+        PBufferConnections,
+        EConnectionType::PBuffer);
 }
 
-TDirectBlockGroup::~TDirectBlockGroup()
+TExecutorPtr TDirectBlockGroup::GetExecutor()
 {
-    if (Executor) {
-        Executor->Stop();
-    }
+    return Executor;
 }
 
-
-void TDirectBlockGroup::EstablishConnections(NWilson::TTraceId traceId)
+void TDirectBlockGroup::EstablishConnections()
 {
-    auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
-        ActorSystem,
-        std::move(traceId),
-        "NbsPartition.EstablishConnections",
-        TabletId,
-        PersistentBufferConnections.size());
-    for (size_t i = 0; i < PersistentBufferConnections.size(); i++) {
-        Executor->ExecuteSimple(
-            [weakSelf = weak_from_this(), i, requestHandler = requestHandler]()
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->DoEstablishPersistentBufferConnection(i, requestHandler);
-                }
-            });
-    }
-
-    for (size_t i = 0; i < DDiskConnections.size(); i++) {
-        Executor->ExecuteSimple(
-            [weakSelf = weak_from_this(), i]()
-            {
-                if (auto self = weakSelf.lock()) {
-                    self->DoEstablishDDiskConnection(i);
-                }
-            });
-    }
-}
-
-void TDirectBlockGroup::DoEstablishPersistentBufferConnection(
-    size_t i, std::shared_ptr<TOverallAckRequestHandler> requestHandler)
-{
-    auto future =
-        StorageTransport->Connect(PersistentBufferConnections[i].GetServiceId(),
-                                  PersistentBufferConnections[i].Credentials);
-
-    const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!HasError(resultOrError)) {
-        HandlePersistentBufferConnected(i, resultOrError.GetResult(), requestHandler);
-    }
-    // TODO: add error handling
-}
-
-void TDirectBlockGroup::DoEstablishDDiskConnection(size_t i)
-{
-    auto future = StorageTransport->Connect(
-        DDiskConnections[i].GetServiceId(),
-        DDiskConnections[i].Credentials);
-
-    const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!HasError(resultOrError)) {
-        HandleDDiskBufferConnected(i, resultOrError.GetResult());
-    }
-    // TODO: add error handling
-}
-
-void TDirectBlockGroup::HandlePersistentBufferConnected(
-    size_t index,
-    const NKikimrBlobStorage::NDDisk::TEvConnectResult& result,
-    std::shared_ptr<TOverallAckRequestHandler> requestHandler)
-{
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        PersistentBufferConnections[index].Credentials.DDiskInstanceGuid =
-            result.GetDDiskInstanceGuid();
-
-        requestHandler->RegisterCompetedRequest();
-    } else {
-        Y_ABORT("TDirectBlockGroup::HandlePersistentBufferConnected: connection failed - unhandled error");
-    }
-
-    if (requestHandler->IsCompleted()) {
-        LOG_DEBUG_S(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TDirectBlockGroup::HandlePersistentBufferConnected finished");
-        RestoreFromPersistentBuffer(requestHandler->Span.GetTraceId());
-    }
-}
-
-void TDirectBlockGroup::RestoreFromPersistentBuffer(NWilson::TTraceId traceId)
-{
-    auto requestHandler = std::make_shared<TOverallAckRequestHandler>(
-        ActorSystem,
-        std::move(traceId),
-        "NbsPartition.RestoreFromPersistentBuffer",
-        TabletId,
-        PersistentBufferConnections.size()
-    );
-
     Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), requestHandler]()
+        [weakSelf = weak_from_this()]   //
+        ()
         {
             if (auto self = weakSelf.lock()) {
-                self->DoRestoreFromPersistentBuffer(requestHandler);
+                self->DoEstablishConnections();
             }
         });
 }
 
-// TODO заблокировать IO до полного восстановления (где-то раньше)
-void TDirectBlockGroup::DoRestoreFromPersistentBuffer(
-    std::shared_ptr<TOverallAckRequestHandler> requestHandler
-)
+NThreading::TFuture<TDBGReadBlocksResponse>
+TDirectBlockGroup::ReadBlocksFromDDisk(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    TBlockRange64 range,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvReadResultFuture =
+        TFuture<NKikimrBlobStorage::NDDisk::TEvReadResult>;
+
+    if (!Initialized) {
+        return MakeFuture<TDBGReadBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "Connections are not established")});
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.ReadBlocks.ReadDDisk",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGReadBlocksResponse>();
+    auto result = promise.GetFuture();
+    auto future = StorageTransport->ReadFromDDisk(
+        DDiskConnections[hostIndex].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        NKikimr::NDDisk::TReadInstruction(true),
+        guardedSglist,
+        childSpan);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TEvReadResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise), threadChecker, f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    const auto& response = f.GetValue();
+                    NProto::TError error =
+                        response.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, response.GetErrorReason());
+
+                    promise.SetValue(
+                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                });
+        });
+    return result;
+}
+
+NThreading::TFuture<TDBGReadBlocksResponse>
+TDirectBlockGroup::ReadBlocksFromPBuffer(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    ui64 lsn,
+    TBlockRange64 range,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvReadPersistentBufferResultFuture =
+        TFuture<NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult>;
+
+    if (!Initialized) {
+        return MakeFuture<TDBGReadBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "Connections are not established")});
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.ReadBlocks.ReadPBuffer",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGReadBlocksResponse>();
+    auto result = promise.GetFuture();
+    auto future = StorageTransport->ReadFromPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        lsn,
+        NKikimr::NDDisk::TReadInstruction(true),
+        guardedSglist,
+        childSpan);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TEvReadPersistentBufferResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise), threadChecker, f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    const auto& response = f.GetValue();
+                    NProto::TError error =
+                        response.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, response.GetErrorReason());
+
+                    promise.SetValue(
+                        TDBGReadBlocksResponse{.Error = std::move(error)});
+                });
+        });
+    return result;
+}
+
+NThreading::TFuture<TDBGWriteBlocksResponse>
+TDirectBlockGroup::WriteBlocksToDDisk(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    TBlockRange64 range,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvWriterResultFuture =
+        NThreading::TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>;
+
+    if (!Initialized) {
+        return MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "Connections are not established")});
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.WriteBlocks.WriteDDisk",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGWriteBlocksResponse>();
+    auto result = promise.GetFuture();
+    auto future = StorageTransport->WriteToDDisk(
+        DDiskConnections[hostIndex].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        NKikimr::NDDisk::TWriteInstruction(0),
+        guardedSglist,
+        childSpan);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TEvWriterResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise), threadChecker, f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    const auto& response = f.GetValue();
+                    NProto::TError error =
+                        response.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, response.GetErrorReason());
+
+                    promise.SetValue(
+                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                });
+        });
+    return result;
+}
+
+NThreading::TFuture<TDBGWriteBlocksResponse>
+TDirectBlockGroup::WriteBlocksToPBuffer(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    ui64 lsn,
+    TBlockRange64 range,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvWritePersistentBufferResultFuture = NThreading::TFuture<
+        NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
+
+    if (!Initialized) {
+        return MakeFuture<TDBGWriteBlocksResponse>(
+            {.Error =
+                 MakeError(E_REJECTED, "Connections are not established")});
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.WriteBlocks.WritePBuffer",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGWriteBlocksResponse>();
+    auto result = promise.GetFuture();
+    auto future = StorageTransport->WriteToPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        lsn,
+        NKikimr::NDDisk::TWriteInstruction(0),
+        guardedSglist,
+        childSpan);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TEvWritePersistentBufferResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise), threadChecker, f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    const auto& response = f.GetValue();
+                    NProto::TError error =
+                        response.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, response.GetErrorReason());
+
+                    promise.SetValue(
+                        TDBGWriteBlocksResponse{.Error = std::move(error)});
+                });
+        });
+    return result;
+}
+
+NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+TDirectBlockGroup::WriteBlocksToManyPBuffers(
+    ui32 vChunkIndex,
+    std::vector<ui8> hostIndexes,
+    ui64 lsn,
+    TBlockRange64 range,
+    ui32 replyTimeoutMicroseconds,
+    const TGuardedSgList& guardedSglist,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(hostIndexes.size() > 0);
+
+    using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
+        NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
+
+    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds(hostIndexes.size());
+    for (auto hostIndex: hostIndexes) {
+        const auto& ddiskId =
+            PBufferConnections[hostIndex].HostConnection.DDiskId;
+
+        disksIds.push_back({});
+        ddiskId.Serialize(&disksIds.back());
+    }
+
+    if (!Initialized) {
+        return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(
+            TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
+                E_REJECTED,
+                "Connections are not established"));
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.WriteBlocks.WritePBuffers",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto promise = NewPromise<TDBGWriteBlocksToManyPBuffersResponse>();
+    auto result = promise.GetFuture();
+
+    auto future = StorageTransport->WriteToManyPBuffers(
+        PBufferConnections[hostIndexes[0]].HostConnection,
+        NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            range.Start * DefaultBlockSize,
+            range.Size() * DefaultBlockSize),
+        lsn,
+        NKikimr::NDDisk::TWriteInstruction(0),
+        std::move(disksIds),
+        replyTimeoutMicroseconds,
+        guardedSglist,
+        childSpan);
+
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         weakSelf = weak_from_this()](
+            const TEvWriteToManyPersistentBuffersResultFuture& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise),
+                 threadChecker,
+                 f,
+                 weakSelf = std::move(weakSelf)]() mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+                    if (auto self = weakSelf.lock()) {
+                        self->OnWriteBlocksToManyPBuffersResponse(
+                            f.GetValue(),
+                            std::move(promise));
+                    } else {
+                        promise.SetValue(
+                            TDBGWriteBlocksToManyPBuffersResponse::
+                                MakeOverallError(
+                                    E_FAIL,
+                                    "WriteBlocksToManyPBuffersResponse: DBG is "
+                                    "destroyed already."));
+                    }
+                });
+        });
+    return result;
+}
+
+void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
+    const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
+    TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise)
+{
+    TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
+    for (const auto& singlePBufferResponse: response.GetResult()) {
+        auto hostIndex = PBufferIdToHostIndex.find(
+            singlePBufferResponse.GetPersistentBufferId());
+        if (hostIndex == PBufferIdToHostIndex.end()) {
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "TDBGWriteBlocksToManyPBuffersResponse: unexpected "
+                "pbufferDiskId: %s",
+                singlePBufferResponse.GetPersistentBufferId()
+                    .ShortUtf8DebugString()
+                    .c_str());
+            continue;
+        }
+        Y_ABORT_UNLESS(
+            PBufferConnections[hostIndex->second].HostConnection.DDiskId ==
+            singlePBufferResponse.GetPersistentBufferId());
+
+        NProto::TError error =
+            singlePBufferResponse.GetResult().GetStatus() ==
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                ? MakeError(S_OK)
+                : MakeError(
+                      E_FAIL,
+                      singlePBufferResponse.GetResult().GetErrorReason());
+
+        dbgResponse.Responses.push_back(
+            {.HostId = hostIndex->second, .Error = std::move(error)});
+    }
+    promise.SetValue(std::move(dbgResponse));
+}
+
+NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
+    ui32 vChunkIndex,
+    ui8 pbufferHostIndex,
+    ui8 ddiskHostIndex,
+    const TVector<TPBufferSegment>& segments,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvSyncWithPersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+
+    TVector<NKikimr::NDDisk::TBlockSelector> selectors;
+    TVector<ui64> lsns;
+    for (const auto& segment: segments) {
+        selectors.push_back(NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            segment.Range.Start * DefaultBlockSize,
+            segment.Range.Size() * DefaultBlockSize));
+        lsns.push_back(segment.Lsn);
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.Flush.SyncWithPBuffer",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto future = StorageTransport->SyncWithPBuffer(
+        PBufferConnections[pbufferHostIndex].HostConnection,
+        DDiskConnections[ddiskHostIndex].HostConnection,
+        std::move(selectors),
+        std::move(lsns),
+        childSpan);
+
+    auto promise = NewPromise<TDBGFlushResponse>();
+    auto result = promise.GetFuture();
+
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         segmentCount = segments.size()]   //
+        (const TFuture<TEvSyncWithPersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+
+            const TEvSyncWithPersistentBufferResult& response = f.GetValue();
+            TDBGFlushResponse result;
+            for (size_t i = 0; i < segmentCount; ++i) {
+                const auto& segmentResult = response.GetSegmentResults(i);
+                const bool ok =
+                    segmentResult.GetStatus() ==
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OK ||
+                    segmentResult.GetStatus() ==
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED;
+                result.Errors.push_back(MakeError(
+                    ok ? S_OK : E_FAIL,
+                    ok ? "" : segmentResult.GetErrorReason()));
+            }
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise),
+                 result = std::move(result),
+                 threadChecker]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    promise.SetValue(std::move(result));
+                });
+        });
+
+    return result;
+}
+
+NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::EraseFromPBuffer(
+    ui32 vChunkIndex,
+    ui8 hostIndex,
+    const TVector<TPBufferSegment>& segments,
+    NWilson::TTraceId traceId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvErasePersistentBufferResult =
+        NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
+
+    TVector<NKikimr::NDDisk::TBlockSelector> selectors;
+    TVector<ui64> lsns;
+    for (const auto& segment: segments) {
+        selectors.push_back(NKikimr::NDDisk::TBlockSelector(
+            vChunkIndex,
+            segment.Range.Start * DefaultBlockSize,
+            segment.Range.Size() * DefaultBlockSize));
+        lsns.push_back(segment.Lsn);
+    }
+
+    auto childSpan = NWilson::TSpan(
+        NKikimr::TWilsonNbs::NbsBasic,
+        std::move(traceId),
+        "NbsPartition.Erase.ErasePBuffers",
+        NWilson::EFlags::NONE,
+        ActorSystem);
+
+    auto future = StorageTransport->EraseFromPBuffer(
+        PBufferConnections[hostIndex].HostConnection,
+        std::move(selectors),
+        std::move(lsns),
+        childSpan);
+
+    auto promise = NewPromise<TDBGEraseResponse>();
+    auto result = promise.GetFuture();
+
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         segmentCount = segments.size()]   //
+        (const TFuture<TEvErasePersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+
+            executor->ExecuteSimple(
+                [promise = std::move(promise),
+                 threadChecker,
+                 result = UnsafeExtractValue(f)]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
+
+                    NProto::TError error =
+                        result.GetStatus() ==
+                                NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+                            ? MakeError(S_OK)
+                            : MakeError(E_FAIL, result.GetErrorReason());
+                    promise.SetValue(
+                        TDBGEraseResponse{.Error = std::move(error)});
+                });
+        });
+
+    return result;
+}
+
+NThreading::TFuture<TDBGRestoreResponse> TDirectBlockGroup::RestoreDBGPBuffers(
+    ui32 vChunkIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto promise = NewPromise<TDBGRestoreResponse>();
+    auto result = promise.GetFuture();
+
+    RestoredPBuffersPromise.GetFuture().Subscribe(
+        [weakSelf = weak_from_this(),
+         promise = std::move(promise),
+         threadChecker = ExecutorThreadChecker.CreateDelegate(),
+         vChunkIndex]   //
+        (const TFuture<void>&) mutable
+        {
+            Y_ABORT_UNLESS(threadChecker.Check());
+
+            if (auto self = weakSelf.lock()) {
+                self->DoRestore(std::move(promise), vChunkIndex);
+            } else {
+                promise.SetValue(
+                    TDBGRestoreResponse{.Error = MakeError(E_CANCELLED)});
+            }
+        });
+
+    return result;
+}
+
+NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
+    ui8 hostIndex)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (hostIndex >= PBufferConnections.size()) {
+        return MakeFuture(TListPBufferResponse{.Error = MakeError(E_FAIL)});
+    }
+
+    const auto& connection = PBufferConnections[hostIndex];
+    // Switch co-routine context if needed.
+    const NProto::TError& connectError =
+        Executor->WaitFor(connection.GetFuture());
+    if (HasError(connectError)) {
+        return MakeFuture(TListPBufferResponse{.Error = connectError});
+    }
+
+    auto promise = NewPromise<TListPBufferResponse>();
+    auto result = promise.GetFuture();
+
     using TEvListPersistentBufferResult =
-        TFuture<NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult>;
+        NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult;
 
-    TVector<TEvListPersistentBufferResult> futures;
-    TVector<ui64> storageRequestIds;
+    auto future =
+        StorageTransport->ListPBufferEntries(connection.HostConnection);
 
-    for (size_t i = 0; i < requestHandler->GetRequiredAckCount(); i++) {
-        const auto& ddiskConnection = PersistentBufferConnections[i];
-        ++StorageRequestId;
-        storageRequestIds.push_back(StorageRequestId);
+    future.Subscribe(
+        [promise = std::move(promise),
+         executor = Executor,
+         threadChecker = ExecutorThreadChecker.CreateDelegate()]   //
+        (const TFuture<TEvListPersistentBufferResult>& f) mutable
+        {
+            // ActorSystem thread
+            executor->ExecuteSimple(
+                [promise = std::move(promise),
+                 threadChecker,
+                 f]   //
+                () mutable
+                {
+                    Y_ABORT_UNLESS(threadChecker.Check());
 
-        auto future = StorageTransport->ListPersistentBuffer(
-            ddiskConnection.GetServiceId(), ddiskConnection.Credentials,
-            StorageRequestId);
+                    promise.SetValue(MakeListPBufferResponse(f.GetValue()));
+                });
+        });
 
-        futures.push_back(std::move(future));
-    }
-
-    for (size_t i = 0; i < requestHandler->GetRequiredAckCount(); i++) {
-        const auto& resultOrError =
-            Executor->ResultOrError(std::move(futures[i]));
-
-        if (!HasError(resultOrError)) {
-            HandleListPersistentBufferResultOnRestore(
-                storageRequestIds[i],
-                resultOrError.GetResult(),
-                i,
-                requestHandler);
-        } else {
-            Y_ABORT("TDirectBlockGroup::DoRestoreFromPersistentBuffer: connection failed - unhandled error");
-        }
-    }
+    return result;
 }
 
-void TDirectBlockGroup::HandleListPersistentBufferResultOnRestore(
-    ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvListPersistentBufferResult& result,
-    size_t persistentBufferIndex,
-    std::shared_ptr<TOverallAckRequestHandler> requestHandler)
+void TDirectBlockGroup::DoEstablishConnections()
 {
-    LOG_DEBUG_S(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TDirectBlockGroup::HandleListPersistentBufferResultOnRestore " << persistentBufferIndex
-    );
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    Y_UNUSED(storageRequestId);
-    requestHandler->RegisterCompetedRequest();
-
-    Y_ABORT_UNLESS(result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-
-    // Despite the fact, that this method can be invoked from different threads, we don't need locks.
-    // The reason is each thread accesses strictly own its data and doesn't modify common memory.
-
-    const auto& records = result.GetRecords();
-    for (const auto& record: records) {
-        const NKikimrBlobStorage::NDDisk::TBlockSelector& selector = record.GetSelector();
-        const size_t startIndex = selector.GetOffsetInBytes() / BlockSize;
-        const size_t blocksNumber = selector.GetSize() / BlockSize;
-
-        for (size_t i = startIndex; i < startIndex + blocksNumber; ++i) {
-            DirtyMap->TryUpdateLsnByPersistentBufferIndex(
-                i, persistentBufferIndex, record.GetLsn());
-        }
+    for (size_t i = 0; i < DDiskConnections.size(); ++i) {
+        DoEstablishConnection(i, DDiskConnections[i]);
     }
 
-    if (requestHandler->IsCompleted()) {
-        RestoreFromPersistentBufferFinised(); // finish actor bootstrap
+    for (size_t i = 0; i < PBufferConnections.size(); ++i) {
+        DoEstablishConnection(i, PBufferConnections[i]);
     }
+
+    DoListPBuffers();
 }
 
-void TDirectBlockGroup::RestoreFromPersistentBufferFinised()
+void TDirectBlockGroup::DoEstablishConnection(
+    size_t index,
+    const TDDiskConnection& connection)
 {
-    // function's body will be writen a bit later
-    LOG_DEBUG_S(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "TDirectBlockGroup::RestoreFromPersistentBufferFinised"
-    );
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
+
+    auto future = StorageTransport->Connect(connection.HostConnection);
+
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor,
+         connectionType = connection.HostConnection.ConnectionType,
+         index]   //
+        (const TFuture<TEvConnectResult>& f) mutable
+        {
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf), connectionType, index, f]   //
+                () mutable
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnConnectionEstablished(
+                            connectionType,
+                            index,
+                            f.GetValue());
+                    }
+                });
+        });
 }
 
-void TDirectBlockGroup::HandleDDiskBufferConnected(
+void TDirectBlockGroup::OnConnectionEstablished(
+    EConnectionType connectionType,
     size_t index,
     const NKikimrBlobStorage::NDDisk::TEvConnectResult& result)
 {
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        DDiskConnections[index].Credentials.DDiskInstanceGuid =
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TDDiskConnection& connection = connectionType == EConnectionType::DDisk
+                                       ? DDiskConnections[index]
+                                       : PBufferConnections[index];
+
+    NProto::TError error =
+        result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
+            ? MakeError(S_OK)
+            : MakeError(E_FAIL, result.GetErrorReason());
+    if (!HasError(error)) {
+        connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
+    } else {
+        Y_ABORT(
+            "TDirectBlockGroup::HandlePersistentBufferConnected: connection "
+            "failed - unhandled error");
+    }
+    connection.ConnectPromise.SetValue(error);
+
+    const bool allDDiskConnected = AllOf(
+        DDiskConnections,
+        [](const TDDiskConnection& c)
+        { return c.HostConnection.IsConnected(); });
+    const bool allPBufferConnected = AllOf(
+        PBufferConnections,
+        [](const TDDiskConnection& c)
+        { return c.HostConnection.IsConnected(); });
+
+    if (allDDiskConnected && allPBufferConnected) {
+        Initialized = true;
+        ConnectionEstablishedPromise.SetValue();
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-NThreading::TFuture<TWriteBlocksLocalResponse>
-TDirectBlockGroup::WriteBlocksLocal(
-    ui32 vChunkIndex,
-    TCallContextPtr callContext,
-    std::shared_ptr<TWriteBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+void TDirectBlockGroup::DoListPBuffers()
 {
-    Y_UNUSED(callContext);
-
-    auto requestHandler = std::make_shared<TWriteRequestHandler>(
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    auto restoreExecutor = std::make_shared<TRestoreRequestExecutor>(
         ActorSystem,
-        vChunkIndex,
-        std::move(request),
-        std::move(traceId),
-        TabletId);
+        shared_from_this());
 
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), requestHandler]()
+    auto future = restoreExecutor->GetFuture();
+    future.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const NThreading::TFuture<TAggregatedListPBufferResponse>& f) mutable
         {
+            // Executor thread
             if (auto self = weakSelf.lock()) {
-                self->DoWriteBlocksLocal(requestHandler);
+                self->OnPBuffersListed(f.GetValue());
             }
         });
 
-    return requestHandler->GetFuture();
+    restoreExecutor->Run();
 }
 
-void TDirectBlockGroup::DoWriteBlocksLocal(
-    std::shared_ptr<TWriteRequestHandler> requestHandler)
+void TDirectBlockGroup::OnPBuffersListed(
+    const TAggregatedListPBufferResponse& response)
 {
-    using TEvWritePersistentBufferResultFuture =
-        TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.PBWrite.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    const auto requestRange = TBlockRange64::WithLength(
-        requestHandler->GetStartIndex(),
-        requestHandler->GetSize());
-
-    if (requestRange.Start >= BlocksCount) {
-        const auto partRange = TBlockRange64::WithLength(0, BlocksCount);
-
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TDirectBlockGroup::DoWriteBlocksLocal request %s out of range %s",
-            requestRange.Print().c_str(),
-            partRange.Print().c_str());
-
-        requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
-
-        execSpan.EndError("out of range");
-        return;
-    }
-
-    TVector<TEvWritePersistentBufferResultFuture> futures;
-    TVector<ui64> storageRequestIds;
-    futures.reserve(3);
-    storageRequestIds.reserve(3);
-
-    for (size_t i = 0; i < 3; i++) {
-        execSpan.Event("PB request start");
-        const ui64 storageRequestId = ++StorageRequestId;
-        const auto& ddiskConnection = PersistentBufferConnections[i];
-
-        auto& childSpan = requestHandler->GetChildSpan(storageRequestId, i);
-        auto future = StorageTransport->WritePersistentBuffer(
-            ddiskConnection.GetServiceId(),
-            ddiskConnection.Credentials,
-            NKikimr::NDDisk::TBlockSelector(
-                requestHandler->GetVChunkIndex(),
-                requestHandler->GetStartOffset(),
-                requestHandler->GetSize()),
-            storageRequestId,   // lsn
-            NKikimr::NDDisk::TWriteInstruction(0),
-            requestHandler->GetData(),
-            childSpan);
-
-        requestHandler->OnWriteRequested(storageRequestId, i, storageRequestId);
-
-        execSpan.Event("PB request end");
-
-        futures.push_back(std::move(future));
-        storageRequestIds.push_back(storageRequestId);
-    }
-
-    execSpan.EndOk();
-
-    for (size_t i = 0; i < 3; i++) {
-        const auto& resultOrError =
-            Executor->ResultOrError(std::move(futures[i]));
-
-        if (!HasError(resultOrError)) {
-            HandleWritePersistentBufferResult(
-                requestHandler,
-                storageRequestIds[i],
-                resultOrError.GetResult());
-        }
-        // TODO: add error handling
-    }
-}
-
-void TDirectBlockGroup::HandleWritePersistentBufferResult(
-    std::shared_ptr<TWriteRequestHandler> requestHandler,
-    ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult& result)
-{
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.HandlePBWriteResult.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        requestHandler->ChildSpanEndOk(storageRequestId);
-
-        if (requestHandler->IsCompleted(storageRequestId)) {
-            // TODO fix this. blockMeta is different for each meta in writesMeta
-            execSpan.Event("Start update meta");
-            const auto& writesMeta = requestHandler->GetWritesMeta();
-            for (const auto& meta: writesMeta) {
-                DirtyMap->OnBlockWriteCompleted(requestHandler->GetStartIndex(), meta);
+    for (const auto& [hostIndex, metaVector]: response.Meta) {
+        for (const auto& meta: metaVector) {
+            auto& restoredPBuffer = RestoredPBuffers[meta.VChunkIndex];
+            if (HasError(response.Error)) {
+                restoredPBuffer.Error = response.Error;
             }
-
-            execSpan.Event("Start SetResponse");
-            requestHandler->SetResponse(MakeError(S_OK));
-            execSpan.Event("Finish SetResponse");
-
-            execSpan.Event("Start RequestBlockFlush");
-            RequestBlockFlush(*requestHandler);
-
-            requestHandler->Span.EndOk();
-        }
-    } else {
-        // TODO: add error handling
-        requestHandler->ChildSpanEndError(
-            storageRequestId,
-            "HandleWritePersistentBufferResult failed");
-        requestHandler->Span.EndError(
-            "HandleWritePersistentBufferResult failed");
-
-        requestHandler->SetResponse(MakeError(E_FAIL, result.GetErrorReason()));
-    }
-
-    execSpan.EndOk();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDirectBlockGroup::RequestBlockFlush(
-    const TWriteRequestHandler& requestHandler)
-{
-    for (size_t i = 0; i < 3; i++) {
-        if (SyncRequestsByDDiskId[i] == nullptr) {
-            SyncRequestsByDDiskId[i] = std::make_shared<TSyncRequestHandler>(
-                ActorSystem,
-                requestHandler.GetVChunkIndex(),
-                i,   // persistentBufferIndex
-                requestHandler.Span.GetTraceId(),
-                TabletId);
-        }
-
-        auto count = SyncRequestsByDDiskId[i]->OnSyncRequested(
-            requestHandler.GetStartIndex(),
-            DirtyMap->GetLsnByPersistentBufferIndex(requestHandler.GetStartIndex(), i));
-
-        if (count >= SyncRequestsBatchSize) {
-            ProcessSyncQueue(i);
+            restoredPBuffer.Meta.push_back(
+                {.Lsn = meta.Lsn, .Range = meta.Range, .HostIndex = hostIndex});
         }
     }
+    RestoredPBuffersPromise.SetValue();
 }
 
-void TDirectBlockGroup::ProcessSyncQueue(size_t ddiskId)
+void TDirectBlockGroup::DoRestore(
+    NThreading::TPromise<TDBGRestoreResponse> promise,
+    ui32 vChunkIndex)
 {
-    auto requestHandler = std::move(SyncRequestsByDDiskId[ddiskId]);
-    SyncRequestsByDDiskId[ddiskId] = nullptr;
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.Sync.ProcessSyncQueue.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    auto persistentBufferIndex = requestHandler->GetPersistentBufferIndex();
-    const auto& ddiskConnection = DDiskConnections[persistentBufferIndex];
-    const auto& persistentBufferConnection =
-        PersistentBufferConnections[persistentBufferIndex];
-
-    const ui64 storageRequestId = ++StorageRequestId;
-    auto& childSpan = requestHandler->GetChildSpan(storageRequestId);
-    auto future = StorageTransport->SyncWithPersistentBuffer(
-        ddiskConnection.GetServiceId(),
-        ddiskConnection.Credentials,
-        requestHandler->GetBlockSelectors(),
-        requestHandler->GetLsns(),
-        std::make_tuple(
-            persistentBufferConnection.DDiskId.NodeId,
-            persistentBufferConnection.DDiskId.PDiskId,
-            persistentBufferConnection.DDiskId.DDiskSlotId),
-        persistentBufferConnection.Credentials.DDiskInstanceGuid.value(),
-        childSpan);
-
-    const auto& resultOrError =
-        Executor->ResultOrError(std::move(future));
-    if (!HasError(resultOrError)) {
-        HandleSyncWithPersistentBufferResult(
-            std::move(requestHandler),
-            storageRequestId,
-            resultOrError.GetResult());
-    }
-    // TODO: add error handling
-
-    execSpan.EndOk();
-}
-
-void TDirectBlockGroup::HandleSyncWithPersistentBufferResult(
-    std::shared_ptr<TSyncRequestHandler> requestHandler,
-    ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult& result)
-{
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.HandleSyncWithPersistentBufferResult.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        requestHandler->ChildSpanEndOk(storageRequestId);
-
-        const auto& syncRequests = requestHandler->GetSyncRequests();
-        for (const auto& syncRequest: syncRequests) {
-            DirtyMap->OnBlockFlushCompleted(
-                syncRequest.StartIndex,
-                requestHandler->GetPersistentBufferIndex(),
-                syncRequest.Lsn);
-        }
-
-        requestHandler->Span.EndOk();
-
-        RequestBlockErase(std::move(requestHandler));
-    } else {
-        // TODO: add error handling
-        requestHandler->ChildSpanEndError(storageRequestId, "HandleSyncResult failed");
-        requestHandler->Span.EndError("HandleSyncResult failed");
-    }
-
-    execSpan.EndOk();
-}
-
-void TDirectBlockGroup::RequestBlockErase(
-    std::shared_ptr<TSyncRequestHandler> requestHandler)
-{
-    auto eraseRequestHandler = std::make_shared<TEraseRequestHandler>(
-        ActorSystem,
-        requestHandler);
-
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(eraseRequestHandler->Span.GetTraceId()),
-        "NbsPartition.Sync.RequestBlockErase.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    const ui64 storageRequestId = ++StorageRequestId;
-    auto& childSpan = eraseRequestHandler->GetChildSpan(storageRequestId);
-    auto future = StorageTransport->ErasePersistentBuffer(
-        PersistentBufferConnections[eraseRequestHandler->GetPersistentBufferIndex()]
-            .GetServiceId(),
-        PersistentBufferConnections[eraseRequestHandler->GetPersistentBufferIndex()]
-            .Credentials,
-        eraseRequestHandler->GetBlockSelectors(),
-        eraseRequestHandler->GetLsns(),
-        childSpan);
-
-    const auto& resultOrError = Executor->ResultOrError(std::move(future));
-    if (!HasError(resultOrError)) {
-        HandleErasePersistentBufferResult(
-            std::move(eraseRequestHandler),
-            storageRequestId,
-            resultOrError.GetResult());
-    }
-    // TODO: add error handling
-
-    execSpan.EndOk();
-}
-
-void TDirectBlockGroup::HandleErasePersistentBufferResult(
-    std::shared_ptr<TEraseRequestHandler> requestHandler,
-    ui64 storageRequestId,
-    const NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult& result)
-{
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.WriteBlocks.HandleErasePersistentBufferResult.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        requestHandler->ChildSpanEndOk(storageRequestId);
-        requestHandler->Span.EndOk();
-    } else {
-        // TODO: add error handling
-        requestHandler->ChildSpanEndError(storageRequestId, "HandleEraseResult failed");
-        requestHandler->Span.EndError("HandleEraseResult failed");
-    }
-
-    execSpan.EndOk();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-NThreading::TFuture<TReadBlocksLocalResponse>
-TDirectBlockGroup::ReadBlocksLocal(
-    ui32 vChunkIndex,
-    TCallContextPtr callContext,
-    std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
-{
-    Y_UNUSED(callContext);
-
-    auto requestHandler = std::make_shared<TReadRequestHandler>(
-        ActorSystem,
-        vChunkIndex,
-        std::move(request),
-        std::move(traceId),
-        TabletId);
-
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(), requestHandler]()
-        {
-            if (auto self = weakSelf.lock()) {
-                self->DoReadBlocksLocal(requestHandler);
-            }
-        });
-
-    return requestHandler->GetFuture();
-}
-
-void TDirectBlockGroup::DoReadBlocksLocal(
-    std::shared_ptr<TReadRequestHandler> requestHandler)
-{
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.ReadBlocks.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    const auto requestRange = TBlockRange64::WithLength(
-        requestHandler->GetStartIndex(),
-        requestHandler->GetSize());
-
-    if (requestRange.Start >= BlocksCount) {
-        const auto partRange = TBlockRange64::WithLength(0, BlocksCount);
-
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TDirectBlockGroup::DoReadBlocksLocal request %s out of range %s",
-            requestRange.Print().c_str(),
-            partRange.Print().c_str());
-
-        requestHandler->SetResponse(MakeError(E_FAIL, "out of range"));
-
-        execSpan.EndError("out of range");
-        return;
-    }
-
-    // Block is not written
-    if (!DirtyMap->IsBlockWritten(requestRange.Start)) {
-        auto data = requestHandler->GetData();
-        if (auto guard = data.Acquire()) {
-            const auto& sglist = guard.Get();
-            const auto& block = sglist[0];
-            memset(const_cast<char*>(block.Data()), 0, block.Size());
-        } else {
-            Y_ABORT_UNLESS(false);
-        }
-
-        requestHandler->SetResponse(MakeError(S_OK));
-
-        requestHandler->Span.EndOk();
-        execSpan.EndOk();
-        return;
-    }
-
-    const ui64 storageRequestId = ++StorageRequestId;
-
-    if (!DirtyMap->IsBlockFlushedToDDisk(requestRange.Start)) {
-        const auto& ddiskConnection = PersistentBufferConnections[0];
-
-        auto& childSpan = requestHandler->GetChildSpan(storageRequestId, true);
-        auto future = StorageTransport->ReadPersistentBuffer(
-            ddiskConnection.GetServiceId(),
-            ddiskConnection.Credentials,
-            NKikimr::NDDisk::TBlockSelector(
-                requestHandler->GetVChunkIndex(),
-                requestHandler->GetStartOffset(),
-                requestHandler->GetSize()),
-            DirtyMap->GetLsnByPersistentBufferIndex(requestRange.Start, 0),
-            NKikimr::NDDisk::TReadInstruction(true),
-            requestHandler->GetData(),
-            childSpan);
-
-        execSpan.EndOk();
-
-        const auto& resultOrError = Executor->ResultOrError(std::move(future));
-        if (!HasError(resultOrError)) {
-            HandleReadResult(
-                std::move(requestHandler),
-                storageRequestId,
-                resultOrError.GetResult());
-        }
-        // TODO: add error handling
-    } else {
-        const auto& ddiskConnection = DDiskConnections[0];
-
-        auto& childSpan = requestHandler->GetChildSpan(storageRequestId, false);
-        auto future = StorageTransport->Read(
-            ddiskConnection.GetServiceId(),
-            ddiskConnection.Credentials,
-            NKikimr::NDDisk::TBlockSelector(
-                requestHandler->GetVChunkIndex(),
-                requestHandler->GetStartOffset(),
-                requestHandler->GetSize()),
-            NKikimr::NDDisk::TReadInstruction(true),
-            requestHandler->GetData(),
-            childSpan);
-
-        execSpan.EndOk();
-
-        const auto& resultOrError = Executor->ResultOrError(std::move(future));
-        if (!HasError(resultOrError)) {
-            HandleReadResult(
-                std::move(requestHandler),
-                storageRequestId,
-                resultOrError.GetResult());
-        }
-        // TODO: add error handling
-    }
-}
-
-template <typename TEvent>
-void TDirectBlockGroup::HandleReadResult(
-    std::shared_ptr<TReadRequestHandler> requestHandler,
-    ui64 storageRequestId,
-    const TEvent& result)
-{
-    auto execSpan = NWilson::TSpan(
-        NKikimr::TWilsonNbs::NbsBasic,
-        std::move(requestHandler->Span.GetTraceId()),
-        "NbsPartition.ReadBlocks.HandleReadResult.Exec",
-        NWilson::EFlags::NONE,
-        ActorSystem);
-
-    if (result.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        requestHandler->ChildSpanEndOk(storageRequestId);
-
-        if (requestHandler->IsCompleted(storageRequestId)) {
-            requestHandler->SetResponse(MakeError(S_OK));
-
-            requestHandler->Span.EndOk();
-        }
-    } else {
-        // TODO: add error handling
-        requestHandler->ChildSpanEndError(
-            storageRequestId,
-            "HandleReadResult failed");
-        requestHandler->Span.EndError("HandleReadResult failed");
-
-        requestHandler->SetResponse(MakeError(E_FAIL, result.GetErrorReason()));
-    }
-
-    execSpan.EndOk();
+    promise.SetValue(std::move(RestoredPBuffers[vChunkIndex]));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

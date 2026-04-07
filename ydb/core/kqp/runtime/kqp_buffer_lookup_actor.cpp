@@ -85,6 +85,7 @@ public:
 
     void PassAway() final {
         Settings.Counters->StreamLookupActorsCount->Dec();
+
         AFL_ENSURE(Settings.Alloc);
         {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
@@ -97,8 +98,9 @@ public:
             cancel->Record.SetReadId(readId);
             Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
         }
+        ReadIdToState.clear();
 
-        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Unlink();
 
         TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
 
@@ -107,6 +109,15 @@ public:
 
     void Terminate() override {
         PassAway();
+    }
+
+    void Unlink() override {
+        AFL_ENSURE(ReadIdToState.empty());
+
+        for (auto& [_, state] : ShardToState) {
+            state.HasPipe = false;
+        }
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
     }
 
     STFUNC(StateFunc) {
@@ -548,9 +559,9 @@ public:
 
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
-            lookupState.Worker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-            });
+            lookupState.Worker->AddResult(TStreamLookupShardReadResult(
+                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+            ));
         }
 
         Settings.Callbacks->OnLookupTaskFinished();
@@ -609,6 +620,7 @@ public:
             return false;
         }
 
+        ++failedRead.RetryAttempts;
         auto delay = CalcDelay(failedRead.RetryAttempts, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             DoRetryTableRead(failedReadId, lookupState, failedRead);
@@ -630,7 +642,7 @@ public:
             const ui64 newReadId = request->Record.GetReadId();
             ++lookupState.ReadsInflight;
             StartTableRead(failedRead.LookupCookie, failedRead.ShardId, failedRead.IsUniqueCheck, failedRead.FailOnUniqueCheck, std::move(request));
-            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts + 1;
+            ReadIdToState.at(newReadId).RetryAttempts = failedRead.RetryAttempts;
         }
         ReadIdToState.erase(failedReadId);
     }

@@ -121,22 +121,23 @@ TTabletInfoPtr TTableMountInfo::GetTabletForRow(TVersionedRow row) const
     return GetTabletForKey(row.Keys());
 }
 
-int TTableMountInfo::GetRandomMountedTabletIndex() const
+TErrorOr<TTabletInfoPtr> TTableMountInfo::GetRandomMountedTablet() const
 {
     ValidateTabletOwner();
 
     if (MountedTablets.empty()) {
-        THROW_ERROR_EXCEPTION(NTabletClient::EErrorCode::TabletNotMounted,
+        auto error = TError(NTabletClient::EErrorCode::TabletNotMounted,
             "Table %v has no mounted tablets",
             Path);
+        if (!Tablets.empty()) {
+            // NB: For cache invalidation.
+            error <<= TErrorAttribute("tablet_id", Tablets[0]->TabletId);
+        }
+
+        return error;
     }
 
-    return RandomNumber(MountedTablets.size());
-}
-
-TTabletInfoPtr TTableMountInfo::GetRandomMountedTablet() const
-{
-    return MountedTablets[GetRandomMountedTabletIndex()];
+    return MountedTablets[RandomNumber(MountedTablets.size())];
 }
 
 void TTableMountInfo::ValidateTabletOwner() const

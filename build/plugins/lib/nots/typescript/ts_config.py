@@ -6,7 +6,6 @@ from .ts_errors import TsError, TsValidationError
 from .ts_glob import ts_glob, TsGlobConfig
 from ..package_manager import utils
 
-
 DEFAULT_TS_CONFIG_FILE = "tsconfig.json"
 
 

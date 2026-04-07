@@ -33,7 +33,7 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(const
         ythrow TContractViolation("Reading from local database not supported, use specific database");
     }
     DatabasesToReadFrom.clear();
-    DatabasesToReadFrom.insert(std::move(database));
+    DatabasesToReadFrom.insert(database);
     ReadMirroredEnabled = true;
     return *this;
 }

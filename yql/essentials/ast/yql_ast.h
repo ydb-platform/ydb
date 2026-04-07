@@ -12,6 +12,8 @@
 #include <util/memory/pool.h>
 #include <util/generic/array_ref.h>
 
+#include <utility>
+
 namespace NYql {
 
 struct TNodeFlags {
@@ -194,7 +196,7 @@ struct TAstNode {
 
 private:
     inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(Atom)
         , ListCount_(0)
     {
@@ -204,7 +206,7 @@ private:
     }
 
     inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
-        : Position_(position)
+        : Position_(std::move(position))
         , Type_(List)
         , ListCount_(childrenCount)
     {

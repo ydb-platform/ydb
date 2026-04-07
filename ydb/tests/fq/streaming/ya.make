@@ -18,12 +18,15 @@ PY_SRCS(
     conftest.py
 )
 
+
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:20)
 ELSE()
     SIZE(MEDIUM)
+    FORK_SUBTESTS()
 ENDIF()
 
 PEERDIR(

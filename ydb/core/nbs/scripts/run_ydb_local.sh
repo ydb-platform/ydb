@@ -244,6 +244,10 @@ case "$ACTION" in
         create_ddisk_pool
         create_partition
         ;;
+    fast_start)
+        start_ydbd
+        start_compute_node
+        ;;
     *)
         echo "Usage: $0 [start|stop] [--port PORT] [--mon-port PORT]"
         echo "  start [--port PORT] [--mon-port PORT] - Stop any existing ydbd process and start a new one (default)"

@@ -190,6 +190,14 @@ public:
             for (auto id : ColumnTagsRequested) {
                 sketchesByColumns.emplace(id, TCountMinSketch::Create());
             }
+            
+            if (result.HasErrors()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "Data accessor result with errors " + result.GetErrorMessage());
+            }
+            
+            if (result.HasRemovedData()) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("error", TStringBuilder{} << "Data accessor result with removed data, " << result.GetRemovedData().size());
+            }
 
             THashMap<ui32, THashMap<TString, THashSet<NOlap::TBlobRange>>> rangesByColumn;
             THashMap<ui32, ui32> indexIdToColumnId;

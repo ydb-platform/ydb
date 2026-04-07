@@ -21,7 +21,9 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <map>
+#include <set>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace NKikimr::NMiniKQL {
@@ -160,12 +162,13 @@ private:
 
 class IArrowKernelComputationNode;
 class IComputationExternalNode;
+class TComputationExternalNodeInvalidator;
 using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
 public:
-    typedef TIntrusivePtr<IComputationNode> TPtr;
-    typedef std::map<ui32, EValueRepresentation> TIndexesMap;
+    using TPtr = TIntrusivePtr<IComputationNode>;
+    using TIndexesMap = std::map<ui32, EValueRepresentation>;
 
     virtual ~IComputationNode() {
     }
@@ -231,6 +234,10 @@ public:
     using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>;
     virtual void SetGetter(TGetter&& getter) = 0;
     virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
+
+private:
+    friend class TComputationExternalNodeInvalidator;
+    virtual void CollectInvalidationIndexes(std::set<ui32>& out) const = 0;
 };
 
 enum class EFetchResult: i32 {
@@ -338,8 +345,8 @@ public:
 };
 
 class TNodeFactory;
-typedef std::function<IComputationNode*(TNode* node, bool pop)> TNodeLocator;
-typedef std::function<void(IComputationNode*)> TNodePushBack;
+using TNodeLocator = std::function<IComputationNode*(TNode* node, bool pop)>;
+using TNodePushBack = std::function<void(IComputationNode*)>;
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
@@ -361,7 +368,7 @@ struct TComputationNodeFactoryContext {
     const TNodePushBack NodePushBack;
 
     TComputationNodeFactoryContext(
-        const TNodeLocator& nodeLocator,
+        TNodeLocator nodeLocator,
         const IFunctionRegistry& functionRegistry,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
@@ -378,10 +385,10 @@ struct TComputationNodeFactoryContext {
         TComputationMutables& mutables,
         TComputationNodeOnNodeMap& elementsCache,
         TNodePushBack&& nodePushBack)
-        : NodeLocator(nodeLocator)
+        : NodeLocator(std::move(nodeLocator))
         , FunctionRegistry(functionRegistry)
         , Env(env)
-        , TypeInfoHelper(typeInfoHelper)
+        , TypeInfoHelper(std::move(typeInfoHelper))
         , CountersProvider(countersProvider)
         , SecureParamsProvider(secureParamsProvider)
         , LogProvider(logProvider)
@@ -418,7 +425,7 @@ struct TComputationPatternOpts {
         const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode,
         NUdf::EValidatePolicy validatePolicy,
-        const TString& optLLVM,
+        TString optLLVM,
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr,
@@ -427,11 +434,11 @@ struct TComputationPatternOpts {
         NYql::TLangVersion langver = NYql::UnknownLangVersion)
         : AllocState(allocState)
         , Env(env)
-        , Factory(factory)
+        , Factory(std::move(factory))
         , FunctionRegistry(functionRegistry)
         , ValidateMode(validateMode)
         , ValidatePolicy(validatePolicy)
-        , OptLLVM(optLLVM)
+        , OptLLVM(std::move(optLLVM))
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)
@@ -491,7 +498,7 @@ struct TComputationPatternOpts {
 
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
-    typedef TIntrusivePtr<IComputationPattern> TPtr;
+    using TPtr = TIntrusivePtr<IComputationPattern>;
 
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;

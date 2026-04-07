@@ -42,15 +42,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         return {runtime, server, sender};
     }
 
-    Y_UNIT_TEST_TWIN(ExecSQLUpsertImmediate, EvWrite) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+    Y_UNIT_TEST(ExecSQLUpsertImmediate) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -678,15 +675,12 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
-    Y_UNIT_TEST_QUAD(ExecSQLUpsertPrepared, EvWrite, Volatile) {
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
+    Y_UNIT_TEST_TWIN(ExecSQLUpsertPrepared, Volatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2444,13 +2438,10 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(DoubleWriteUncommittedThenDoubleReadWithCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2593,12 +2584,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteCommitVersion) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2688,12 +2676,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateBeforeCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2752,12 +2737,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(WriteUniqueRowsInsertDuplicateAtCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2829,12 +2811,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertReadSetWithoutLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -2942,12 +2921,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertWithoutLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3055,12 +3031,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST_TWIN(DistributedInsertDuplicateWithLocks, Volatile) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3235,12 +3208,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(VolatileAndNonVolatileWritePlanStepCommitFailure) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3480,12 +3450,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockMissingRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3587,12 +3554,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockNewRowAboveSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3695,12 +3659,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockDeletedRowAboveSnapshot) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3802,12 +3763,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockUncommittedNewRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -3926,12 +3884,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(UncommittedUpdateLockUncommittedDeleteRow) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 
@@ -4157,12 +4112,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
 
     Y_UNIT_TEST(ImmediateWriteVolatileTxIdOnPageFault) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false)
-            .SetAppConfig(app);
+            .SetUseRealThreads(false);
 
         auto [runtime, server, sender] = TestCreateServer(serverSettings);
 

@@ -1,3 +1,5 @@
 items:
 - name: Vector index - quick start
   href: vector-index-quickstart.md
+- name: Vector index with a prepared external dataset
+  href: vector-index-with-prepared-dataset.md

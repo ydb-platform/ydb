@@ -57,6 +57,7 @@ using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
 using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
+using TSegmentId = std::tuple<TSubDomainKey, TBridgePileId>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 

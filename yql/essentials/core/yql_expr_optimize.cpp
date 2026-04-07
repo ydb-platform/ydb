@@ -9,6 +9,8 @@
 #include <util/generic/scope.h>
 #include <util/generic/hash.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -25,7 +27,7 @@ namespace {
         TMaybe<TFunctionStack> FunctionStack;
 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(optimizer)
+            : Optimizer(std::move(optimizer))
             , Expr(expr)
             , Settings(settings)
             , Replaces(replaces)

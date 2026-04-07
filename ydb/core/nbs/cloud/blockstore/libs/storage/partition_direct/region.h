@@ -1,11 +1,12 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/vchunk.h>
+#include "direct_block_group.h"
+#include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/library/actors/wilson/wilson_span.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -15,22 +16,32 @@ class TRegion
 {
 public:
     TRegion(
-        TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr> directBlockGroups);
+        NActors::TActorSystem* actorSystem,
+        IPartitionDirectService* partitionDirectService,
+        ui32 regionIndex,
+        TVector<IDirectBlockGroupPtr> directBlockGroups,
+        ui32 syncRequestsBatchSize,
+        TDuration writeHandoffDelay,
+        TDuration traceSamplePeriod);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        EWriteMode writeMode,
+        ui32 pbufferReplyTimeoutMicroseconds,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
-    TVector<TVChunk> VChunks;
-
-    size_t GetVChunkIndex(ui64 blockIndex) const;
+    NActors::TActorSystem* const ActorSystem;
+    TVector<std::shared_ptr<TVChunk>> VChunks;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -110,9 +110,9 @@ public:
             BranchInst::Create(loop, block);
             block = loop;
 
-            const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, itemPtr);
-
+            const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+                return CallBoxedValueNext(iter, ctx, block, itemPtr);
+            });
             BranchInst::Create(good, stop, status, block);
             block = good;
 

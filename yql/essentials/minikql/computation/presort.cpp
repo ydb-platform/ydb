@@ -11,6 +11,8 @@
 #include <util/system/unaligned_mem.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace NDetail {
@@ -311,9 +313,9 @@ struct TDictItem {
     TString KeyBuffer;
     NUdf::TUnboxedValue Payload;
 
-    TDictItem(const TString& keyBuffer, const NUdf::TUnboxedValue& payload)
-        : KeyBuffer(keyBuffer)
-        , Payload(payload)
+    TDictItem(TString keyBuffer, NUdf::TUnboxedValue payload)
+        : KeyBuffer(std::move(keyBuffer))
+        , Payload(std::move(payload))
     {
     }
 

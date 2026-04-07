@@ -37,7 +37,7 @@ public:
             try {
                 YQL_CLOG(TRACE, FastMapReduce) << "Calling YT API GetTablePartitions with DataWeightPerPartition="
                 << settings.MaxDataWeightPerPart << ", MaxParts=" << settings.MaxParts
-                << ", AdjustDataWeightPerPartition=true";
+                << ", AdjustDataWeightPerPartition=false";
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);
 
                 YQL_CLOG(TRACE, FastMapReduce) << "YT API returned " << partitions.Partitions.size()

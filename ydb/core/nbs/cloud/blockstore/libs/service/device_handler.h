@@ -40,6 +40,8 @@ struct TDeviceHandlerParams
     TString DiskId;
     TString ClientId;
     ui32 BlockSize = 0;
+    ui64 BlockCount = 0;
+    ui64 BlocksPerStripeCount = 0;
     ui32 MaxZeroBlocksSubRequestSize = 0;
     bool UnalignedRequestsDisabled = false;
     NProto::EStorageMediaKind StorageMediaKind = NProto::STORAGE_MEDIA_DEFAULT;

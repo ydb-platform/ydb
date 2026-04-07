@@ -832,7 +832,7 @@ NApi::TFileWriterOptions SerializeOptionsForWriteFile(
             result.Config->UploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
         }
         if (writerOptions->MinUploadReplicationFactor_) {
-            result.Config->MinUploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
+            result.Config->MinUploadReplicationFactor = *writerOptions->MinUploadReplicationFactor_;
         }
         if (writerOptions->DesiredChunkSize_) {
             result.Config->DesiredChunkSize = *writerOptions->DesiredChunkSize_;

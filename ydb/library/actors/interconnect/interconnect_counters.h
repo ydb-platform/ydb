@@ -26,6 +26,7 @@ public:
     virtual void SetConnected(ui32 value) = 0;
     virtual void IncSubscribersCount() = 0;
     virtual void SubSubscribersCount(ui32 value) = 0;
+    virtual void AddSubscribersByActivity(ui32 activityIndex, i64 value) = 0;
     virtual void SubOutputBuffersTotalSize(ui64 value) = 0;
     virtual void AddOutputBuffersTotalSize(ui64 value) = 0;
     virtual ui64 GetOutputBuffersTotalSize() const = 0;
@@ -37,9 +38,10 @@ public:
     virtual void IncDisconnectByReason(const TString& s) = 0;
     virtual void IncUsefulReadWakeups() = 0;
     virtual void IncSpuriousReadWakeups() = 0;
-    virtual void SetPeerInfo(ui32 nodeId, const TString& name, const TString& dataCenterId) = 0;
+    virtual void SetPeerInfo(const TString& name, const TString& dataCenterId, const TString& peerLabel) = 0;
     virtual void AddInputChannelsIncomingTraffic(ui16 channel, ui64 incomingTraffic) = 0;
     virtual void IncInputChannelsIncomingEvents(ui16 channel) = 0;
+    virtual void IncScopeErrors() = 0;
     virtual void IncRecvSyscalls(ui64 ns) = 0;
     virtual void AddTotalBytesRead(ui64 value) = 0;
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;

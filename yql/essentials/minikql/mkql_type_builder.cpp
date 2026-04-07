@@ -16,6 +16,7 @@
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 #include <array>
+#include <utility>
 
 #include <arrow/c/bridge.h>
 
@@ -29,9 +30,9 @@ static const TString UdfName("UDF");
 
 class TPrefixLogger: public NUdf::ILogger {
 public:
-    TPrefixLogger(const TString& moduleName, const NUdf::TLoggerPtr& inner)
-        : ModuleName_(moduleName)
-        , Inner_(inner)
+    TPrefixLogger(TString moduleName, NUdf::TLoggerPtr inner)
+        : ModuleName_(std::move(moduleName))
+        , Inner_(std::move(inner))
     {
     }
 
@@ -1733,7 +1734,7 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
     , UserType_(Env_.GetTypeOfVoidLazy())
-    , TypeInfoHelper_(typeInfoHelper)
+    , TypeInfoHelper_(std::move(typeInfoHelper))
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)

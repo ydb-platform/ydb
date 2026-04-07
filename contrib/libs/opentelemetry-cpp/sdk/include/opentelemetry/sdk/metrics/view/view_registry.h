@@ -68,7 +68,7 @@ public:
 
       if (aggregation_type == AggregationType::kDefault)
       {
-        bool is_monotonic;
+        bool is_monotonic{false};
         aggregation_type = DefaultAggregation::GetDefaultAggregationType(
             instrument_selector->GetInstrumentType(), is_monotonic);
       }
@@ -139,7 +139,13 @@ public:
     return true;
   }
 
-  ViewRegistry()  = default;
+  ViewRegistry() = default;
+
+  ViewRegistry(const ViewRegistry &)            = delete;
+  ViewRegistry(ViewRegistry &&)                 = delete;
+  ViewRegistry &operator=(const ViewRegistry &) = delete;
+  ViewRegistry &operator=(ViewRegistry &&)      = delete;
+
   ~ViewRegistry() = default;
 
 private:

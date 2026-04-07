@@ -16,23 +16,28 @@ Y_UNIT_TEST_SUITE(TCallContext)
         TRequestTime requestTimeAnswer)
     {
         auto requestTime = context->CalcRequestTime(cycles);
-        UNIT_ASSERT_VALUES_EQUAL(requestTimeAnswer.ExecutionTime,
+        UNIT_ASSERT_VALUES_EQUAL(
+            requestTimeAnswer.ExecutionTime,
             requestTime.ExecutionTime);
-        UNIT_ASSERT_VALUES_EQUAL(requestTimeAnswer.TotalTime,
+        UNIT_ASSERT_VALUES_EQUAL(
+            requestTimeAnswer.TotalTime,
             requestTime.TotalTime);
     }
 
     Y_UNIT_TEST(CheckCalcRequestTime)
     {
-        auto callContext = MakeIntrusive<TCallContextBase>(static_cast<ui64>(0));
+        auto callContext =
+            MakeIntrusive<TCallContextBase>(static_cast<ui64>(0));
         callContext->SetRequestStartedCycles(5);
         CheckCalcRequestTime(
-            3, callContext, {TDuration::Zero(), TDuration::Zero()});
+            3,
+            callContext,
+            {TDuration::Zero(), TDuration::Zero()});
 
         CheckCalcRequestTime(
             20,
             callContext,
-            TRequestTime {
+            TRequestTime{
                 .TotalTime = CyclesToDurationSafe(15),
                 .ExecutionTime = CyclesToDurationSafe(15)});
 
@@ -41,7 +46,7 @@ Y_UNIT_TEST_SUITE(TCallContext)
         CheckCalcRequestTime(
             20,
             callContext,
-            TRequestTime {
+            TRequestTime{
                 .TotalTime = CyclesToDurationSafe(15),
                 .ExecutionTime = CyclesToDurationSafe(7)});
 
@@ -50,7 +55,7 @@ Y_UNIT_TEST_SUITE(TCallContext)
         CheckCalcRequestTime(
             20,
             callContext,
-            TRequestTime {
+            TRequestTime{
                 .TotalTime = CyclesToDurationSafe(15),
                 .ExecutionTime = CyclesToDurationSafe(2)});
     }

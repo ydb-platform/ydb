@@ -39,11 +39,11 @@ protected:
 TEST_F(TBoundedConcurrencyInvokerTest, WaitFor1)
 {
     auto invoker = CreateBoundedConcurrencyInvoker(Queue1->GetInvoker(), 1);
-    BIND([&] {
+    WaitForFast(BIND([&] {
         for (int i = 0; i < 10; ++i) {
             TDelayedExecutor::WaitForDuration(SleepQuantum);
         }
-    }).AsyncVia(invoker).Run().Get().ThrowOnError();
+    }).AsyncVia(invoker).Run()).ThrowOnError();
 }
 
 TEST_F(TBoundedConcurrencyInvokerTest, WaitFor2)
@@ -63,7 +63,7 @@ TEST_F(TBoundedConcurrencyInvokerTest, WaitFor2)
             .ThrowOnError();
     });
 
-    a2.AsyncVia(invoker).Run().Get().ThrowOnError();
+    WaitForFast(a2.AsyncVia(invoker).Run()).ThrowOnError();
 }
 
 TEST_F(TBoundedConcurrencyInvokerTest, WaitFor3)
@@ -267,13 +267,11 @@ TEST_F(TBoundedConcurrencyInvokerTest, ReconfigureBeforeFirstInvocation)
 
     auto promise = NewPromise<void>();
 
-    BIND([&] {
+    WaitForFast(BIND([&] {
         promise.Set();
     })
         .AsyncVia(invoker)
-        .Run()
-        .Get()
-        .ThrowOnError();
+        .Run()).ThrowOnError();
 
     EXPECT_TRUE(promise.IsSet());
 }

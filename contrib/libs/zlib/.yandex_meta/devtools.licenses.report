@@ -40,7 +40,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        FAQ [166:166]
+        FAQ [170:170]
 
 KEEP     Zlib                 9da18d33aab75b89ffd4d0c2250c8aba
 BELONGS ya.make

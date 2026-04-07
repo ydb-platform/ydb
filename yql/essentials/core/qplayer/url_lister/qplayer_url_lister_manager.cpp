@@ -5,6 +5,8 @@
 #include <util/string/builder.h>
 #include <openssl/sha.h>
 
+#include <utility>
+
 namespace {
 
 using namespace NYql;
@@ -46,7 +48,7 @@ TVector<TUrlListEntry> DeserializeResult(const TString& inp) {
 class TQPlayerUrlListerManager: public IUrlListerManager {
 public:
     TQPlayerUrlListerManager(IUrlListerManagerPtr underlying, TQContext qContext)
-        : Underlying_(underlying)
+        : Underlying_(std::move(underlying))
         , QContext_(qContext)
     {
     }
@@ -63,7 +65,7 @@ public:
                 NYT::NYson::EYsonFormat::Binary));
         }
         if (QContext_.CanRead()) {
-            auto val = QContext_.GetReader()->Get({UrlListerManager_ListUrl, *key}).GetValueSync();
+            auto val = QContext_.GetReader()->Get({.Component = UrlListerManager_ListUrl, .Label = *key}).GetValueSync();
             if (!val) {
                 ythrow yexception() << "Missing replay data";
             }
@@ -71,7 +73,7 @@ public:
         }
         auto result = Underlying_->ListUrl(url, tokenName);
         if (QContext_.CanWrite()) {
-            QContext_.GetWriter()->Put({UrlListerManager_ListUrl, *key}, SerializeResult(result));
+            QContext_.GetWriter()->Put({.Component = UrlListerManager_ListUrl, .Label = *key}, SerializeResult(result));
         }
         return result;
     }
@@ -90,7 +92,7 @@ public:
                 NYT::NYson::EYsonFormat::Binary));
         }
         if (QContext_.CanRead()) {
-            auto val = QContext_.GetReader()->Get({UrlListerManager_ListUrlRecursive, *key}).GetValueSync();
+            auto val = QContext_.GetReader()->Get({.Component = UrlListerManager_ListUrlRecursive, .Label = *key}).GetValueSync();
             if (!val) {
                 ythrow yexception() << "Missing replay data";
             }
@@ -98,7 +100,7 @@ public:
         }
         auto result = Underlying_->ListUrlRecursive(url, tokenName, separator, foldersLimit);
         if (QContext_.CanWrite()) {
-            QContext_.GetWriter()->Put({UrlListerManager_ListUrlRecursive, *key}, SerializeResult(result));
+            QContext_.GetWriter()->Put({.Component = UrlListerManager_ListUrlRecursive, .Label = *key}, SerializeResult(result));
         }
         return result;
     }

@@ -477,7 +477,12 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        if (!GetDispatcher()->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        auto normalizedValue = value;
+        if (name == "DisableBlockExecution" && !normalizedValue) {
+            normalizedValue = "true";
+        }
+
+        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
             return false;
         }
 

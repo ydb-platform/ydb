@@ -22,8 +22,8 @@ from pytz.tzfile import build_tzinfo
 
 
 # The IANA (nee Olson) database is updated several times a year.
-OLSON_VERSION = '2025b'
-VERSION = '2025.2'  # pip compatible version number.
+OLSON_VERSION = '2026a'
+VERSION = '2026.1.post1'  # pip compatible version number.
 __version__ = VERSION
 
 OLSEN_VERSION = OLSON_VERSION  # Old releases had this misspelling
@@ -95,6 +95,16 @@ def open_resource(name):
         filename = os.path.join(os.path.dirname(__file__),
                                 'zoneinfo', *name_parts)
         if not os.path.exists(filename):
+            # pkg_resources is deprecated, try with importlib first
+            try:
+                from importlib.resources import files
+            except ImportError:
+                files = None
+
+            if files is not None:
+                # retrieve the zoneinfo file Path object and return its file handle
+                return files(__name__).joinpath('zoneinfo', *name_parts).open('rb')
+
             # http://bugs.launchpad.net/bugs/383171 - we avoid using this
             # unless absolutely necessary to help when a broken version of
             # pkg_resources is installed.

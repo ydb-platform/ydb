@@ -7,6 +7,8 @@
 #include <util/generic/vector.h>
 #include <util/system/execpath.h>
 
+#include <utility>
+
 namespace {
 
 #if PY_MAJOR_VERSION >= 3
@@ -49,8 +51,8 @@ void InitArcadiaPythonRuntime()
 //////////////////////////////////////////////////////////////////////////////
 class TPythonModule: public IUdfModule {
 public:
-    TPythonModule(const TString& resourceName, EPythonFlavor pythonFlavor, bool standalone = true)
-        : ResourceName_(resourceName)
+    TPythonModule(TString resourceName, EPythonFlavor pythonFlavor, bool standalone = true)
+        : ResourceName_(std::move(resourceName))
         , Standalone_(standalone)
     {
         if (Standalone_) {

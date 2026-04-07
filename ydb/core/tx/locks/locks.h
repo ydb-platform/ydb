@@ -7,6 +7,8 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
+#include <ydb/library/actors/async/event.h>
+
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/list.h>
@@ -224,6 +226,7 @@ enum class ELockFlags : ui64 {
     WholeShard = 2,
     Persistent = 4,
     Removed = 8,
+    Pessimistic = 16,
     PersistentMask = Frozen,
 };
 
@@ -293,14 +296,6 @@ struct TLockInfoBrokenPersistentListTag {};
 struct TLockInfoExpireListTag {};
 struct TLockInfoRangesListTag {};
 
-class TLockCallback : public TIntrusiveListItem<TLockCallback> {
-public:
-    virtual void Run() = 0;
-
-protected:
-    ~TLockCallback() = default;
-};
-
 /// Aggregates shard, point and range locks
 class TLockInfo
     : public TSimpleRefCount<TLockInfo>
@@ -327,6 +322,7 @@ public:
     bool Empty() const {
         return !(
             IsPersistent() ||
+            IsPessimistic() ||
             !ReadTables.empty() ||
             !WriteTables.empty() ||
             IsBroken());
@@ -443,14 +439,13 @@ public:
     bool IsFrozen() const { return !!(Flags & ELockFlags::Frozen); }
     void SetFrozen(ILocksDb* db = nullptr);
 
+    bool IsPessimistic() const { return !!(Flags & ELockFlags::Pessimistic); }
+    void SetPessimistic() { Flags |= ELockFlags::Pessimistic; }
+
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
-
-    void AddOnRemovedCallback(TLockCallback& callback) {
-        OnRemovedCallbacks.PushBack(&callback);
-    }
 
 private:
     void MakeShardLock();
@@ -498,7 +493,9 @@ private:
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
 
-    TIntrusiveList<TLockCallback> OnRemovedCallbacks;
+public:
+    TAsyncEvent OnBrokenEvent;
+    TAsyncEvent OnRemovedEvent;
 };
 
 struct TTableLocksReadListTag {};
@@ -600,7 +597,15 @@ public:
 
 public:
     class TRuntimeLockHolder;
-    using TRuntimeLockHolderList = TIntrusiveList<TRuntimeLockHolder>;
+    class TRuntimeLockHolderList : public TIntrusiveList<TRuntimeLockHolder> {
+        friend TTableLocks;
+
+    public:
+        ~TRuntimeLockHolderList();
+
+    private:
+        THashMap<TLockInfo::TPtr, TRuntimeLockHolder*> LockTails;
+    };
 
 private:
     class TRuntimeLockKeyComparator {
@@ -650,11 +655,15 @@ public:
         TRuntimeLockHolder(TRuntimeLockHolder&& rhs) noexcept
             : Self(rhs.Self)
             , Key(rhs.Key)
-            , ActivationCallbacks(std::move(rhs.ActivationCallbacks))
+            , Lock(std::move(rhs.Lock))
         {
             LinkBefore(&rhs);
             rhs.Unlink();
             rhs.Self = nullptr;
+            rhs.Lock = nullptr;
+            if (Self) {
+                Self->MovedRuntimeLock(Key, this, &rhs);
+            }
         }
 
         TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
@@ -662,10 +671,14 @@ public:
                 Reset();
                 Self = rhs.Self;
                 Key = rhs.Key;
-                ActivationCallbacks = std::move(rhs.ActivationCallbacks);
+                Lock = std::move(rhs.Lock);
                 LinkBefore(&rhs);
                 rhs.Unlink();
                 rhs.Self = nullptr;
+                rhs.Lock = nullptr;
+                if (Self) {
+                    Self->MovedRuntimeLock(Key, this, &rhs);
+                }
             }
             return *this;
         }
@@ -688,38 +701,38 @@ public:
                 Self->RemoveRuntimeLock(Key, this);
             }
             Self = nullptr;
-            while (!ActivationCallbacks.Empty()) {
-                ActivationCallbacks.PopFront();
-            }
         }
 
-        void AddActivationCallback(TLockCallback& callback) {
-            ActivationCallbacks.PushBack(&callback);
+        const TRuntimeLockHolder& Predecessor() const {
+            Y_ENSURE(IsValid());
+            Y_ENSURE(!IsOwner());
+            return *Prev()->Node();
         }
 
-    private:
-        void Activate() {
-            while (!ActivationCallbacks.Empty()) {
-                auto* callback = ActivationCallbacks.PopFront();
-                callback->Run();
-            }
+        const TLockInfo::TPtr& GetLock() const {
+            return Lock;
         }
 
     private:
-        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key)
+        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key, TLockInfo::TPtr lock)
             : Self(self)
             , Key(key)
+            , Lock(std::move(lock))
         {}
 
     private:
         TTableLocks* Self;
         TRuntimeLocks::iterator Key;
-        TIntrusiveList<TLockCallback> ActivationCallbacks;
+        TLockInfo::TPtr Lock;
+
+    public:
+        TAsyncEvent OnChangedEvent;
     };
 
-    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key);
+    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock);
 
 private:
+    void MovedRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder, TRuntimeLockHolder* was);
     void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
 
 private:

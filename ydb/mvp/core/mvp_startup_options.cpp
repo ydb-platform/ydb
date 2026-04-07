@@ -53,6 +53,15 @@ void MergeRepeatedByName(google::protobuf::RepeatedPtrField<TMessage>* dst,
     MergeRepeatedByName(dst, src, [](TMessage*) {});
 }
 
+void EnsureAccessServiceTypeMatch(const std::optional<NMvp::EAccessServiceType>& left,
+                                  const std::optional<NMvp::EAccessServiceType>& right,
+                                  TStringBuf message)
+{
+    if (left && right && *left != *right) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX << message;
+    }
+}
+
 } // namespace
 
 TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
@@ -61,8 +70,12 @@ TMvpStartupOptions TMvpStartupOptions::Build(int argc, const char* argv[]) {
     NLastGetopt::TOptsParseResult parsedArgs = startupOptions.ParseArgs(argc, argv);
     startupOptions.LoadConfig(parsedArgs);
     startupOptions.SetPorts();
-    startupOptions.LoadTokens();
-    startupOptions.OverrideTokensConfig();
+    startupOptions.LoadTokensFromTokenFile();
+    startupOptions.OverrideTokensFromConfig();
+    startupOptions.MergeAccessServiceType();
+    startupOptions.MigrateJwtInfoToOAuth2Exchange();
+    startupOptions.ValidateOAuth2ExchangeTokenNames(startupOptions.Tokens.GetOAuth2Exchange(), "token file config");
+    startupOptions.ValidateOAuth2ExchangeTokenEndpointScheme(startupOptions.Tokens.GetOAuth2Exchange(), "token file config");
     startupOptions.ValidateTokensConfig();
     startupOptions.LoadCertificates();
 
@@ -115,7 +128,7 @@ void TMvpStartupOptions::LoadConfig(const NLastGetopt::TOptsParseResult& parsedA
 
 void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOptsParseResult& parsedArgs, const NMvp::TGenericConfig& generic) {
     if (generic.HasAccessServiceType()) {
-        AccessServiceType = generic.GetAccessServiceType();
+        AccessServiceTypeFromConfig = generic.GetAccessServiceType();
     }
 
     if (generic.HasLogging()
@@ -136,8 +149,17 @@ void TMvpStartupOptions::TryGetStartupOptionsFromConfig(const NLastGetopt::TOpts
         }
 
         if (auth.HasTokens()) {
-            ValidateTokensOverrideConfig(auth.GetTokens());
-            TokensOverrideConfig = auth.GetTokens();
+            const auto& tokensFromConfig = auth.GetTokens();
+            if (tokensFromConfig.HasAccessServiceType()) {
+                EnsureAccessServiceTypeMatch(
+                    AccessServiceTypeFromConfig,
+                    std::make_optional(tokensFromConfig.GetAccessServiceType()),
+                    "auth.tokens.access_service_type must match access_service_type");
+                AccessServiceTypeFromConfig = tokensFromConfig.GetAccessServiceType();
+            }
+
+            ValidateTokensFromConfig(tokensFromConfig);
+            TokensFromConfig = tokensFromConfig;
         }
     }
 
@@ -183,46 +205,47 @@ TString TMvpStartupOptions::AddSchemeToUserToken(const TString& token, const TSt
     return scheme + " " + token;
 }
 
-void TMvpStartupOptions::LoadTokens() {
-    Tokens.SetAccessServiceType(AccessServiceType);
-
-    if (YdbTokenFile.empty()) {
-        return;
-    }
-
-    if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
-        MigrateJwtInfoToOAuth2Exchange();
-        ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "token file config");
-        ValidateOAuth2ExchangeTokenEndpointScheme(Tokens.GetOAuth2Exchange(), "token file config");
-        if (Tokens.HasStaffApiUserTokenInfo()) {
-            UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
-        } else if (Tokens.HasStaffApiUserToken()) {
-            UserToken = Tokens.GetStaffApiUserToken();
+void TMvpStartupOptions::LoadTokensFromTokenFile() {
+    if (!YdbTokenFile.empty()) {
+        if (google::protobuf::TextFormat::ParseFromString(TUnbufferedFileInput(YdbTokenFile).ReadAll(), &Tokens)) {
+            if (Tokens.HasAccessServiceType()) {
+                AccessServiceTypeFromTokenFile = Tokens.GetAccessServiceType();
+            }
+            if (Tokens.HasStaffApiUserTokenInfo()) {
+                UserToken = Tokens.GetStaffApiUserTokenInfo().GetToken();
+            } else if (Tokens.HasStaffApiUserToken()) {
+                UserToken = Tokens.GetStaffApiUserToken();
+            }
+            UserToken = AddSchemeToUserToken(UserToken, "OAuth");
+        } else {
+            ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
         }
-        UserToken = AddSchemeToUserToken(UserToken, "OAuth");
-    } else {
-        ythrow yexception() << CONFIG_ERROR_PREFIX << "Invalid ydb token file format";
     }
 }
 
-void TMvpStartupOptions::OverrideTokensConfig() {
-    if (!TokensOverrideConfig.has_value()) {
+void TMvpStartupOptions::MergeAccessServiceType() {
+    EnsureAccessServiceTypeMatch(AccessServiceTypeFromConfig,
+                                 AccessServiceTypeFromTokenFile,
+                                 "token file access_service_type must match access_service_type");
+
+    AccessServiceType = AccessServiceTypeFromConfig.value_or(
+        AccessServiceTypeFromTokenFile.value_or(NMvp::yandex_v2));
+
+    Tokens.SetAccessServiceType(AccessServiceType);
+}
+
+void TMvpStartupOptions::OverrideTokensFromConfig() {
+    if (!TokensFromConfig.has_value()) {
         return;
     }
 
-    const auto& override = *TokensOverrideConfig;
+    const auto& override = *TokensFromConfig;
 
     if (override.HasStaffApiUserToken()) {
         Tokens.SetStaffApiUserToken(override.GetStaffApiUserToken());
     }
     if (override.HasStaffApiUserTokenInfo()) {
         Tokens.MutableStaffApiUserTokenInfo()->MergeFrom(override.GetStaffApiUserTokenInfo());
-    }
-    if (override.HasAccessServiceType()) {
-        if (override.GetAccessServiceType() != AccessServiceType) {
-            ythrow yexception() << CONFIG_ERROR_PREFIX
-                                << "auth.tokens.access_service_type must match access_service_type";
-        }
     }
 
     MergeRepeatedByName(Tokens.MutableJwtInfo(), override.GetJwtInfo());
@@ -231,9 +254,6 @@ void TMvpStartupOptions::OverrideTokensConfig() {
     MergeRepeatedByName(Tokens.MutableMetadataTokenInfo(), override.GetMetadataTokenInfo());
     MergeRepeatedByName(Tokens.MutableStaticCredentialsInfo(), override.GetStaticCredentialsInfo());
     MergeRepeatedByName(Tokens.MutableOAuth2Exchange(), override.GetOAuth2Exchange());
-    MigrateJwtInfoToOAuth2Exchange();
-    ValidateOAuth2ExchangeTokenNames(Tokens.GetOAuth2Exchange(), "merged oauth2_exchange token config");
-    Tokens.SetAccessServiceType(AccessServiceType);
 }
 
 void TMvpStartupOptions::LoadCertificates() {

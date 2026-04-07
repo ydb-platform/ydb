@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -111,7 +112,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (initializeHttpGateway) {
             httpGateway = MakeHttpGateway(queryServiceConfig.GetHttpGateway(), settings.CountersRoot);
         }
-        auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig());
+
+        NYdb::TDriverConfig cfg;
+        cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+        cfg.SetMaxQueuedRequests(std::numeric_limits<i64>::max());
+        auto driver = std::make_shared<NYdb::TDriver>(cfg);
 
         const auto& s3Config = queryServiceConfig.GetS3();
         const auto& solomonConfig = queryServiceConfig.GetSolomon();
@@ -125,12 +130,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             queryServiceConfig.GetYt(),
             nullptr,
             solomonConfig,
-            NYql::CreateSolomonGateway(solomonConfig),
             nullptr,
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver),
+            options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
             nullptr,
             driver);
 

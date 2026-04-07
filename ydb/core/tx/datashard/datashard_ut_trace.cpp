@@ -48,12 +48,9 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(tablets.size() == 2);
     }
 
-    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<bool> useSink = std::nullopt) {
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
         NKikimrConfig::TAppConfig appConfig;
-        if (useSink) {
-            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
-        }
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
@@ -208,8 +205,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(count, unitSpans.size());
     }
 
-    Y_UNIT_TEST_TWIN(TestTraceDistributedUpsert, UseSink) {
-        auto [runtime, server, sender] = TestCreateServer(UseSink);
+    Y_UNIT_TEST(TestTraceDistributedUpsert) {
+        auto [runtime, server, sender] = TestCreateServer();
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
@@ -238,36 +235,41 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         Cerr << "Trace: " << trace.ToString() << Endl;
 
-        if (!UseSink) {
-            auto deSpan = trace.Root.BFSFindOne("DataExecuter");
-            UNIT_ASSERT(deSpan);
-            auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
-            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
+        
+        auto commitSpan = trace.Root.BFSFindOne("Commit");
+        UNIT_ASSERT(commitSpan);
+        auto dsTxSpans = commitSpan->get().FindAll("Datashard.WriteTransaction");
+        UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
-            for (auto dsTxSpan : dsTxSpans) {
-                auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_VALUES_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
+        for (auto dsTxSpan : dsTxSpans) {
+            auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
+            UNIT_ASSERT_VALUES_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
 
-                auto propose = tabletTxs[0];
-                // Note: when volatile transactions are enabled propose doesn't persist anything
-                if (!usesVolatileTxs) {
-                    CheckTxHasWriteLog(propose);
-                }
-                CheckTxHasDatashardUnits(propose, 3);
-
-                auto progress = tabletTxs[1];
-                CheckTxHasWriteLog(progress);
-                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
+            auto propose = tabletTxs[0];
+            // Note: when volatile transactions are enabled propose doesn't persist anything
+            if (!usesVolatileTxs) {
+                CheckTxHasWriteLog(propose);
             }
+            CheckTxHasDatashardUnits(propose, 3);
 
-            std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
-                ExpectedSpan("CompileService", "CompileActor"),
-                "LiteralExecuter",
-                ExpectedSpan("DataExecuter",
-                    "WaitForTableResolve",
-                    "RunTasks",
+            auto progress = tabletTxs[1];
+            CheckTxHasWriteLog(progress);
+            CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
+        }
+
+        std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
+            ExpectedSpan("CompileService", "CompileActor"),
+            ExpectedSpan("DataExecuter",
+                "WaitForTableResolve",
+                ExpectedSpan("ComputeActor",
+                    Repeat(("ForwardWriteActor"), 1)),
+                "RunTasks",
+                ExpectedSpan(
+                    "WaitTasks"),
+                ExpectedSpan(
+                    "Commit",
                     Repeat(
-                        ExpectedSpan("Datashard.Transaction",
+                        ExpectedSpan("Datashard.WriteTransaction",
                             ExpectedSpan("Tablet.Transaction",
                                 ExpectedSpan("Tablet.Transaction.Execute",
                                     Repeat("Datashard.Unit", 3)),
@@ -281,65 +283,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                                 ExpectedSpan("Tablet.WriteLog",
                                     "Tablet.WriteLog.LogEntry"),
                                 "Tablet.Transaction.Complete"),
-                            "Datashard.SendResult"),
-                        2)))
-                .ToString();
+                            "Datashard.SendWriteResult"),
+                        2))))
+            .ToString();
 
-            UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
-        } else {
-            auto commitSpan = trace.Root.BFSFindOne("Commit");
-            UNIT_ASSERT(commitSpan);
-            auto dsTxSpans = commitSpan->get().FindAll("Datashard.WriteTransaction");
-            UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
-
-            for (auto dsTxSpan : dsTxSpans) {
-                auto tabletTxs = dsTxSpan.get().FindAll("Tablet.Transaction");
-                UNIT_ASSERT_VALUES_EQUAL(2, tabletTxs.size()); // Each shard executes a proposal tablet tx and a progress tablet tx.
-
-                auto propose = tabletTxs[0];
-                // Note: when volatile transactions are enabled propose doesn't persist anything
-                if (!usesVolatileTxs) {
-                    CheckTxHasWriteLog(propose);
-                }
-                CheckTxHasDatashardUnits(propose, 3);
-
-                auto progress = tabletTxs[1];
-                CheckTxHasWriteLog(progress);
-                CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
-            }
-
-            std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
-                ExpectedSpan("CompileService", "CompileActor"),
-                ExpectedSpan("DataExecuter",
-                    "WaitForTableResolve",
-                    ExpectedSpan("ComputeActor",
-                        Repeat(("ForwardWriteActor"), 1)),
-                    "RunTasks",
-                    ExpectedSpan(
-                        "WaitTasks"),
-                    ExpectedSpan(
-                        "Commit",
-                        Repeat(
-                            ExpectedSpan("Datashard.WriteTransaction",
-                                ExpectedSpan("Tablet.Transaction",
-                                    ExpectedSpan("Tablet.Transaction.Execute",
-                                        Repeat("Datashard.Unit", 3)),
-                                    Conditional(!usesVolatileTxs,
-                                        ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry")),
-                                    "Tablet.Transaction.Complete"),
-                                Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
-                                ExpectedSpan("Tablet.Transaction",
-                                    ExpectedSpan("Tablet.Transaction.Execute",
-                                        Repeat("Datashard.Unit", usesVolatileTxs ? 7 : 12)),
-                                    ExpectedSpan("Tablet.WriteLog",
-                                        "Tablet.WriteLog.LogEntry"),
-                                    "Tablet.Transaction.Complete"),
-                                "Datashard.SendWriteResult"),
-                            2))))
-                .ToString();
-
-            UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
     }
 
     Y_UNIT_TEST(TestTraceDistributedSelect) {

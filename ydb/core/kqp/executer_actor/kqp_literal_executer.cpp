@@ -84,7 +84,7 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
-        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr)
+        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, Counters, {}, nullptr)
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
@@ -141,25 +141,11 @@ public:
             (transactions_count, Request.Transactions.size()),
             (trace_id, TraceId()));
 
+        TasksGraph.BuildLiteralTasks();
+
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions.at(txIdx);
-
-            for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
-                auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
-                KQP_STLOG_D(KQPLIT, "Stage AST",
-                    (stage_id, stageInfo.Id),
-                    (ast, stage.GetProgramAst()),
-                    (trace_id, TraceId()));
-
-                YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
-                YQL_ENSURE(stageInfo.InputsCount == 0);
-
-                TasksGraph.AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
-            }
-
             ResponseEv->InitTxResult(tx.Body);
-            TasksGraph.BuildKqpTaskGraphResultChannels(tx.Body, txIdx);
         }
 
         if (TerminateIfTimeout()) {
@@ -303,7 +289,7 @@ public:
 private:
     TString TraceId() const {
         if (LiteralExecuterSpan) {
-            return LiteralExecuterSpan.GetTraceId().GetHexTraceId();
+            return LiteralExecuterSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }

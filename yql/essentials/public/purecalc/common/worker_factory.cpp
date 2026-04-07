@@ -193,6 +193,13 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->Initialize(ExprContext_);
     typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
 
+    if (BlockEngineMode_ != EBlockEngineMode::Disable) {
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ExpandLMapOrShuffleByKeysViaBlock")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
+    }
+
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
         modules->SetUseCanonicalLibrarySuffix(true);
@@ -237,7 +244,6 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.EmitReadsForExists = true;
         settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;

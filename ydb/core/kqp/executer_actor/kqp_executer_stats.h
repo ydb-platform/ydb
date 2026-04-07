@@ -327,6 +327,15 @@ struct TQueryTableStats {
     void Resize(ui32 taskCount);
 };
 
+struct TAggExecStat {
+    ui64 CpuTimeMs = 0;
+    ui64 DurationSeconds = 0;
+    ui64 MemoryUsageBytes = 0;
+    ui64 TasksCount = 0;
+    ui64 InputBytes = 0;
+    ui64 OutputBytes = 0;
+};
+
 struct TQueryExecutionStats {
 private:
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
@@ -421,6 +430,7 @@ public:
     void FillStageDurationUs(NYql::NDqProto::TDqStageStats& stats);
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
+    void ExportAggExecStats(TAggExecStat* metrics);
 };
 
 struct TTableStat {

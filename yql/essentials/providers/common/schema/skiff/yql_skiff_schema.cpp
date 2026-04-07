@@ -31,7 +31,7 @@ TStringBuf GetTzPayloadWireType(NUdf::EDataSlot slot) {
 } // namespace
 
 struct TSkiffTypeLoader {
-    typedef NYT::TNode TType;
+    using TType = NYT::TNode;
 
     explicit TSkiffTypeLoader(ui64 nativeYTTypesFlags)
         : NativeYTTypesFlags(nativeYTTypesFlags)

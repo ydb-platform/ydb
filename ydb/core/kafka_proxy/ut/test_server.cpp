@@ -108,12 +108,11 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     TString location = TStringBuilder() << "localhost:" << grpc;
     auto driverConfig = TDriverConfig()
         .SetEndpoint(location)
+        .SetDatabase("/Root")
         .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
     if (secure) {
-        driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
+        driverConfig.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt());
         driverConfig.SetAuthToken("root@builtin");
-    } else {
-        driverConfig.SetDatabase("/Root/");
     }
 
     Driver = std::make_unique<TDriver>(std::move(driverConfig));

@@ -276,14 +276,9 @@ class ExceptionTrap:
         Wrap func and replace the result with the truth
         value of the trap (True if an exception occurred).
 
-        First, give the decorator an alias to support Python 3.8
-        Syntax.
+        Decorate a function that always fails.
 
-        >>> raises = ExceptionTrap(ValueError).raises
-
-        Now decorate a function that always fails.
-
-        >>> @raises
+        >>> @ExceptionTrap(ValueError).raises
         ... def fail():
         ...     raise ValueError('failed')
         >>> fail()
@@ -303,14 +298,9 @@ class ExceptionTrap:
         Wrap func and replace the result with the truth
         value of the trap (True if no exception).
 
-        First, give the decorator an alias to support Python 3.8
-        Syntax.
+        Decorate a function that always fails.
 
-        >>> passes = ExceptionTrap(ValueError).passes
-
-        Now decorate a function that always fails.
-
-        >>> @passes
+        >>> @ExceptionTrap(ValueError).passes
         ... def fail():
         ...     raise ValueError('failed')
 

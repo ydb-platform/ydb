@@ -1,16 +1,19 @@
 #include "ydb_benchmark.h"
 #include "benchmark_utils.h"
 
-#include <util/generic/serialized_enum.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/duration.h>
+
 #include <library/cpp/json/json_writer.h>
+
+#include <util/folder/path.h>
+#include <util/generic/serialized_enum.h>
+#include <util/random/shuffle.h>
 #include <util/stream/null.h>
 #include <util/string/printf.h>
-#include <util/folder/path.h>
-#include <util/random/shuffle.h>
+#include <util/thread/pool.h>
 
 namespace NYdb::NConsoleClient {
     TWorkloadCommandBenchmark::TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload)

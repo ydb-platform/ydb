@@ -2,6 +2,7 @@
 #include "executor_pool_basic.h"
 #include "hfunc.h"
 #include "scheduler_basic.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/util/should_continue.h>
 
@@ -272,7 +273,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         TVector<TExecutorThreadStats> stats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats);
         // Sum all per-thread counters into the 0th element
         for (ui32 idx = 1; idx < stats.size(); ++idx) {
             stats[0].Aggregate(stats[idx]);

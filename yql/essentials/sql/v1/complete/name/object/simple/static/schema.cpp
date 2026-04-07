@@ -32,12 +32,12 @@ public:
     TSplittedPath Split(TStringBuf path) const override {
         size_t pos = path.find_last_of('/');
         if (pos == TString::npos) {
-            return {"", path};
+            return {.Path = "", .NameHint = path};
         }
 
         TStringBuf head, tail;
         TStringBuf(path).SplitAt(pos + 1, head, tail);
-        return {head, tail};
+        return {.Path = head, .NameHint = tail};
     }
 
     NThreading::TFuture<TVector<TFolderEntry>> List(TString cluster, TString folder) const override {

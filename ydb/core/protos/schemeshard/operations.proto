@@ -195,8 +195,7 @@ enum EOperationType {
     // Long Incremental Backup
     ESchemeOpCreateLongIncrementalBackupOp = 124;
 
-    // Alter Table Alter Column Set
-    ESchemeOpCreateSetConstraintInitiate = 126;
+    reserved 126;
 
     // Secret
     ESchemeOpCreateSecret = 127;
@@ -210,6 +209,9 @@ enum EOperationType {
 
     // Truncate table
     ESchemeOpTruncateTable = 133;
+
+    // Publish shadow data and take snapshot in one step
+    ESchemeOpPrepareIndexValidation = 134;
 
     // Some entries are grouped by semantics, so are out of order
 }

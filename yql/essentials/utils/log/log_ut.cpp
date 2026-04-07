@@ -561,7 +561,7 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Profiling) {
         UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-        std::regex re("Execution of \\[scope1\\] took [0-9\\.]+us");
+        std::regex re(R"(Execution of \[scope1\] took [0-9\.]+us)");
         bool isMatch = std::regex_match(logRow.Message.c_str(), re);
         UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
     }
@@ -570,7 +570,7 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Profiling) {
         UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-        std::regex re("Execution of \\[block1\\] took [0-9\\.]+ms");
+        std::regex re(R"(Execution of \[block1\] took [0-9\.]+ms)");
         bool isMatch = std::regex_match(logRow.Message.c_str(), re);
         UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
     }
@@ -579,7 +579,7 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(Profiling) {
         UNIT_ASSERT_EQUAL(logRow.Level, ELevel::ERROR);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
         UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-        std::regex re("Execution of \\[block2\\] took [0-9\\.]+s");
+        std::regex re(R"(Execution of \[block2\] took [0-9\.]+s)");
         bool isMatch = std::regex_match(logRow.Message.c_str(), re);
         UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
     }
@@ -613,7 +613,7 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ProfilingFuncs) {
 #ifdef _win_
         std::regex re("Execution of \\[[NTestSuiteTLogTest::Func1\\] took [0-9\\.]+us");
 #else
-        std::regex re("Execution of \\[Func1\\] took [0-9\\.]+us");
+        std::regex re(R"(Execution of \[Func1\] took [0-9\.]+us)");
 #endif
         bool isMatch = std::regex_match(logRow.Message.c_str(), re);
         UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
@@ -626,7 +626,7 @@ Y_UNIT_TEST_ON_EACH_LOG_FORMAT(ProfilingFuncs) {
 #ifdef _win_
         std::regex re("Execution of \\[int __cdecl NTestSuiteTLogTest::Func2\\(int, char\\)\\] took [0-9\\.]+us");
 #else
-        std::regex re("Execution of \\[int NTestSuiteTLogTest::Func2\\(int, char\\)\\] took [0-9\\.]+us");
+        std::regex re(R"(Execution of \[int NTestSuiteTLogTest::Func2\(int, char\)\] took [0-9\.]+us)");
 #endif
         bool isMatch = std::regex_match(logRow.Message.c_str(), re);
         UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);

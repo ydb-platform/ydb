@@ -1,6 +1,6 @@
 #pragma once
 
-#include "global.h"
+#include "events.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
@@ -12,6 +12,8 @@
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/write_id.h>
+#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -19,8 +21,12 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
+
+#include <ydb/core/persqueue/events/internal/protos/events.pb.h>
+
 #include <util/generic/maybe.h>
 #include <expected>
 
@@ -104,7 +110,7 @@ namespace NPQ {
 
 struct TEvPQ {
     enum EEv {
-        EvWrite = TEvPersQueue::EvInternalEvents,
+        EvWrite = InternalEventSpaceBegin(NPQ::NEvents::EServices::INTERNAL),
         EvRead,
         EvDie,
         EvMonRequest,
@@ -227,6 +233,9 @@ struct TEvPQ {
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
         EvEnd,
     };
 
@@ -254,6 +263,7 @@ struct TEvPQ {
             ui32 UncompressedSize;
             TString PartitionKey;
             TString ExplicitHashKey;
+            TString ChoosePartitionKey;
             bool External;
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
@@ -404,7 +414,9 @@ struct TEvPQ {
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
                             ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false,
-                            const std::optional<TString>& сommittedMetadata = std::nullopt)
+                            const std::optional<TString>& сommittedMetadata = std::nullopt,
+                            bool mlpRequest = false
+                        )
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -415,6 +427,7 @@ struct TEvPQ {
         , Type(type)
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
+        , MLPRequest(mlpRequest)
         , PipeClient(pipeClient)
         , CommittedMetadata(сommittedMetadata)
         {
@@ -430,6 +443,7 @@ struct TEvPQ {
         ESetClientInfoType Type;
         ui64 ReadRuleGeneration;
         bool Strict;
+        bool MLPRequest;
         TActorId PipeClient;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
@@ -906,6 +920,9 @@ struct TEvPQ {
             Operations.push_back(std::move(operation));
         }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+        void SetSkipSrcIdInfo(bool value) { SkipSrcIdInfo = value; }
+
         ui64 Step;
         ui64 TxId;
         TVector<NKikimrPQ::TPartitionOperation> Operations;
@@ -913,6 +930,9 @@ struct TEvPQ {
         bool ForcePredicateFalse = false;
 
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvTxCalcPredicateResult : public TEventLocal<TEvTxCalcPredicateResult, EvTxCalcPredicateResult> {
@@ -1175,9 +1195,18 @@ struct TEvPQ {
     };
 
     struct TEvGetWriteInfoRequest : public TEventLocal<TEvGetWriteInfoRequest, EvGetWriteInfoRequest> {
-        TActorId OriginalPartition;
+        explicit TEvGetWriteInfoRequest(bool skipSrcIdInfo = false) :
+            SkipSrcIdInfo(skipSrcIdInfo)
+        {
+        }
 
+        bool GetSkipSrcIdInfo() const { return SkipSrcIdInfo; }
+
+        TActorId OriginalPartition;
         NWilson::TSpan Span;
+
+    private:
+        bool SkipSrcIdInfo = false;
     };
 
     struct TEvGetWriteInfoResponse : public TEventLocal<TEvGetWriteInfoResponse, EvGetWriteInfoResponse> {
@@ -1719,11 +1748,61 @@ struct TEvPQ {
     struct TEvMLPConsumerStatus : TEventPB<TEvMLPConsumerStatus, NKikimrPQ::TEvMLPConsumerStatus, EvMLPConsumerStatus> {
         TEvMLPConsumerStatus() = default;
 
-        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, ui64 messages, bool useForReading) {
+        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, bool useForReading) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
+        }
+    };
+
+    struct TEvMLPUpdateExternalLockedMessageGroupsId : TEventPB<TEvMLPUpdateExternalLockedMessageGroupsId, NKikimrPQ::TEvMLPUpdateExternalLockedMessageGroupsId, EvMLPUpdateExternalLockedMessageGroupsId> {
+        TEvMLPUpdateExternalLockedMessageGroupsId() = default;
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+
+        ui32 GetPartitionId() const {
+            return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesRequest : TEventPB<TEvMLPGetRuntimeAttributesRequest, NKikimrPQ::TEvMLPGetRuntimeAttributesRequest, EvMLPGetRuntimeAttributesRequest> {
+        TEvMLPGetRuntimeAttributesRequest() = default;
+
+        TEvMLPGetRuntimeAttributesRequest(const TString& topic, const TString& consumer) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+    };
+    
+    struct TEvMLPGetRuntimeAttributesResponse : TEventPB<TEvMLPGetRuntimeAttributesResponse, NKikimrPQ::TEvMLPGetRuntimeAttributesResponse, EvMLPGetRuntimeAttributesResponse> {
+        TEvMLPGetRuntimeAttributesResponse() = default;
+
+        TEvMLPGetRuntimeAttributesResponse(ui64 messageCount, ui64 delayedMessageCount, ui64 lockedMessageCount) {
+            Record.SetApproximateMessageCount(messageCount);
+            Record.SetApproximateDelayedMessageCount(delayedMessageCount);
+            Record.SetApproximateLockedMessageCount(lockedMessageCount);
+        }
+
+        ui64 GetApproximateMessageCount() const {
+            return Record.GetApproximateMessageCount();
+        }
+
+        ui64 GetApproximateDelayedMessageCount() const {
+            return Record.GetApproximateDelayedMessageCount();
+        }
+
+        ui64 GetApproximateLockedMessageCount() const {
+            return Record.GetApproximateLockedMessageCount();
         }
     };
 };

@@ -210,6 +210,7 @@ namespace NKikimr::NBlobDepot {
         BarrierServer->OnDataLoaded();
         S3Manager->OnDataLoaded();
         StartGroupAssimilator();
+        StartGroupRecommissioner();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADED] = 1;
     }

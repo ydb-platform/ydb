@@ -8,6 +8,8 @@
 
 #include <util/string/printf.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -223,8 +225,8 @@ private:
 
 class TStorage: public IQStorage {
 public:
-    explicit TStorage(const TYdbQStorageSettings& settings)
-        : Settings_(settings)
+    explicit TStorage(TYdbQStorageSettings settings)
+        : Settings_(std::move(settings))
     {
     }
 

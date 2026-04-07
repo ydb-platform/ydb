@@ -1498,6 +1498,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     resp->UserExists = true;
     resp->QueueExists = true;
     resp->Fifo = IsFifoQueue_;
+    resp->TopicCreated = TopicCreated_;
     resp->SchemeCache = SchemeCache_;
     resp->QueueLeader = SelfId();
     resp->QuoterResources = QuoterResources_;
@@ -1565,6 +1566,7 @@ void TQueueLeader::OnQueueConfiguration(const TSqsEvents::TEvExecuted::TRecord& 
                 TablesFormat_ = ui32(data["TablesFormat"]);
             }
             IsFifoQueue_ = bool(data["FifoQueue"]);
+            TopicCreated_ = bool(data["TopicCreated"]);
             Shards_.resize(ShardsCount_);
             const auto& cfg = Cfg();
             if (IsFifoQueue_) {

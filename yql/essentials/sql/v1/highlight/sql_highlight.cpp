@@ -91,11 +91,11 @@ TUnit MakeUnit<EUnitKind::QuotedIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::QuotedIdentifier,
         .RangePatterns = {
-            {R"(`)", R"(`)", R"re(\\.)re"},
+            {.BeginPlain = R"(`)", .EndPlain = R"(`)", .EscapeRegex = R"re(\\.)re"},
         },
         .Patterns = {
-            {s.Get("ID_QUOTED")},
-            {s.Concat({"COMMAT", "ID_PLAIN"})},
+            {.Body = s.Get("ID_QUOTED")},
+            {.Body = s.Concat({"COMMAT", "ID_PLAIN"})},
         },
         .IsPlain = false,
     };
@@ -106,7 +106,7 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::BindParameterIdentifier,
         .Patterns = {
-            {s.Concat({"DOLLAR", "ID_PLAIN"})},
+            {.Body = s.Concat({"DOLLAR", "ID_PLAIN"})},
         },
         .IsPlain = false,
     };
@@ -137,7 +137,7 @@ TUnit MakeUnit<EUnitKind::TypeIdentifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::TypeIdentifier,
         .Patterns = {
-            {s.Get("ID_PLAIN"), s.Get("LESS")},
+            {.Body = s.Get("ID_PLAIN"), .After = s.Get("LESS")},
             {.Body = "DECIMAL", .IsCaseInsensitive = true},
             {Merged(std::move(types))},
         },
@@ -148,7 +148,7 @@ TUnit MakeUnitUDF(TSyntax& s) {
     return {
         .Kind = EUnitKind::FunctionIdentifier,
         .Patterns = {
-            {s.Concat({"ID_PLAIN", "NAMESPACE", "ID_PLAIN"})},
+            {.Body = s.Concat({"ID_PLAIN", "NAMESPACE", "ID_PLAIN"})},
         },
     };
 }
@@ -157,7 +157,7 @@ TUnit MakeUnitBuiltin(TSyntax& s) {
     return {
         .Kind = EUnitKind::FunctionIdentifier,
         .Patterns = {
-            {s.Get("ID_PLAIN"), s.Get("LPAREN")},
+            {.Body = s.Get("ID_PLAIN"), .After = s.Get("LPAREN")},
         },
     };
 }
@@ -167,7 +167,7 @@ TUnit MakeUnit<EUnitKind::Identifier>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Identifier,
         .Patterns = {
-            {s.Get("ID_PLAIN")},
+            {.Body = s.Get("ID_PLAIN")},
         },
     };
 }
@@ -177,9 +177,9 @@ TUnit MakeUnit<EUnitKind::Literal>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Literal,
         .Patterns = {
-            {s.Get("REAL")},
-            {s.Get("INTEGER_VALUE")},
-            {s.Get("DIGITS")},
+            {.Body = s.Get("REAL")},
+            {.Body = s.Get("INTEGER_VALUE")},
+            {.Body = s.Get("DIGITS")},
             {.Body = "TRUE", .IsCaseInsensitive = true},
             {.Body = "FALSE", .IsCaseInsensitive = true},
         },
@@ -191,15 +191,15 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
-            {R"(')", R"(')", R"re(\\.)re"},
-            {R"(")", R"(")", R"re(\\.)re"},
-            {TRangePattern::EmbeddedPythonBegin, R"(@@)", R"re(\@\@\@\@)re"},
-            {TRangePattern::EmbeddedJavaScriptBegin, R"(@@)", R"re(\@\@\@\@)re"},
-            {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
+            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re"},
+            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re"},
+            {.BeginPlain = TRangePattern::EmbeddedPythonBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
+            {.BeginPlain = TRangePattern::EmbeddedJavaScriptBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
+            {.BeginPlain = R"(@@)", .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
         },
-        .Patterns = {{s.Get("STRING_VALUE")}},
+        .Patterns = {{.Body = s.Get("STRING_VALUE")}},
         .PatternsANSI = TVector<TRegexPattern>{
-            TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
+            TRegexPattern{.Body = s.Get("STRING_VALUE", /* ansi = */ true)},
         },
         .IsPlain = false,
     };
@@ -209,8 +209,8 @@ template <>
 TUnit MakeUnit<EUnitKind::Comment>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Comment,
-        .RangePatterns = {{R"(/*)", R"(*/)"}},
-        .Patterns = {{s.Get("COMMENT")}},
+        .RangePatterns = {{.BeginPlain = R"(/*)", .EndPlain = R"(*/)"}},
+        .Patterns = {{.Body = s.Get("COMMENT")}},
         .PatternsANSI = Nothing(),
         .IsPlain = false,
     };
@@ -221,7 +221,7 @@ TUnit MakeUnit<EUnitKind::Whitespace>(TSyntax& s) {
     return {
         .Kind = EUnitKind::Whitespace,
         .Patterns = {
-            {s.Get("WS")},
+            {.Body = s.Get("WS")},
         },
         .IsPlain = false,
         .IsCodeGenExcluded = true,

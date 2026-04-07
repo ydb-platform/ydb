@@ -32,8 +32,8 @@ class TestMixedCompression(object):
 
         cls.test_dir = f"{cls.ydb_client.database}/{cls.test_name}"
 
-    def test_create_with_mixed_compression(self):
-        table_path = f"{self.test_dir}/create_mixed_table"
+    def test_create_with_mixed_value_compression(self):
+        table_path = f"{self.test_dir}/create_mixed_value_table"
 
         self.ydb_client.query(
             f"""
@@ -80,3 +80,47 @@ class TestMixedCompression(object):
         assert row['vStr'] == '42'
         assert 3.19 < row['vFlt'] < 3.21
         assert (now + timedelta(seconds=41)) < row['vTs'] < (now + timedelta(seconds=43))
+
+    def test_create_with_mixed_key_compression(self):
+        table_path = f"{self.test_dir}/create_mixed_key_table"
+
+        self.ydb_client.query(
+            f"""
+                CREATE TABLE `{table_path}` (
+                    key1 Uint16 NOT NULL COMPRESSION(algorithm=off),
+                    key2 Uint16 NOT NULL COMPRESSION(algorithm=lz4),
+                    key3 Uint16 NOT NULL COMPRESSION(algorithm=zstd),
+                    val Int32,
+                    PRIMARY KEY(key1, key2, key3),
+                )
+                WITH (
+                    STORE = COLUMN
+                )
+            """
+        )
+
+        data = []
+        for i in range(100):
+            data.append({
+                'key1': i,
+                'key2': i + 5,
+                'key3': i * 3,
+                'val': i + 7,
+            })
+
+        column_types = ydb.BulkUpsertColumns()
+        column_types.add_column("key1", ydb.PrimitiveType.Uint16)
+        column_types.add_column("key2", ydb.PrimitiveType.Uint16)
+        column_types.add_column("key3", ydb.PrimitiveType.Uint16)
+        column_types.add_column("val", ydb.PrimitiveType.Int32)
+
+        self.ydb_client.bulk_upsert(table_path, column_types, data)
+
+        result_sets = self.ydb_client.query(f"SELECT * FROM `{table_path}` WHERE key1 = 10")
+
+        assert len(result_sets[0].rows) == 1
+        row = result_sets[0].rows[0]
+        assert row['key1'] == 10
+        assert row['key2'] == 15
+        assert row['key3'] == 30
+        assert row['val'] == 17

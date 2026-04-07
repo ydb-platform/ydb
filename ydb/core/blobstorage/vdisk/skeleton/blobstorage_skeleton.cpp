@@ -30,6 +30,7 @@
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 #include <ydb/core/blobstorage/vdisk/query/assimilation.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_actor.h>
+#include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_ctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
@@ -117,7 +118,7 @@ namespace NKikimr {
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
                          enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
             // repeat later
-            ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
+            ctx.Schedule(Config->StatsUpdateInterval, new TEvTimeToUpdateStats());
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -1569,6 +1570,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS24");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
             if (!SelfVDiskId.SameDisk(record.GetTargetVDiskID())) {
                 auto protoVDisk = VDiskIDFromVDiskID(record.GetTargetVDiskID());
@@ -1577,6 +1579,7 @@ namespace NKikimr {
                         << " Self# " << SelfVDiskId << " Source# " << protoVDisk
                         << " Marker# BSVS25");
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
+                return;
             }
 
             ctx.Send(ev->Forward(Db->SyncerID));
@@ -1994,7 +1997,8 @@ namespace NKikimr {
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
             // run chunk keeper actor
-            IActor* chunkKeeperActor = CreateChunkKeeperActor(logCtx, std::move(ev->Get()->ChunkKeeperData));
+            IActor* chunkKeeperActor = CreateChunkKeeperActor(TChunkKeeperCtx{logCtx, Db->SkeletonID},
+                    std::move(ev->Get()->ChunkKeeperData), Config->EnableChunkKeeper, Config->BaseInfo.ReadOnly);
             Db->ChunkKeeperActorID.Set(ctx.Register(chunkKeeperActor));
             ActiveActors.Insert(Db->ChunkKeeperActorID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 
@@ -2687,7 +2691,8 @@ namespace NKikimr {
 
             const TMonotonic now = ctx.Monotonic();
             TSnapshotExpirationMap::iterator it;
-            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && now <= it->first; ++it) {
+            // Erase snapshots that have expired (expiration time <= now)
+            for (it = SnapshotExpirationMap.begin(); it != SnapshotExpirationMap.end() && it->first <= now; ++it) {
                 Snapshots.erase(TString(it->second->SnapshotId));
             }
             SnapshotExpirationMap.erase(SnapshotExpirationMap.begin(), it);
@@ -2810,6 +2815,7 @@ namespace NKikimr {
                 .HugeKeeperId = Db->HugeKeeperID,
                 .DefragId = DefragId,
                 .SyncLogId = Db->SyncLogID,
+                .ChunkKeeperId = Db->ChunkKeeperActorID,
             });
 
             const TActorContext& ctx = TActivationContext::AsActorContext();
@@ -2888,7 +2894,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvLocalRecoveryDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
@@ -2941,7 +2947,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3014,7 +3020,7 @@ namespace NKikimr {
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
@@ -3048,7 +3054,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvVDiskStatRequest, Handle)
-            CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
+            CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
@@ -3108,7 +3114,7 @@ namespace NKikimr {
         {
             auto cpuGroup = VCtx->VDiskCounters->GetSubgroup("subsystem", "cpu");
             SkeletonBusyTimeUs = cpuGroup->GetCounter("skeletonBusyTimeUs");
-            ActorQueueLight.Initialize(cpuGroup, "Queue");
+            ActorQueueLight.Initialize(cpuGroup, TLightCounterConfig::WithDefaultLightSet("Queue"));
         }
 
         virtual ~TSkeleton() {

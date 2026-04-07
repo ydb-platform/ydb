@@ -36,6 +36,8 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
+static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
     THashMap<TString, ECodec<UseMigrationProtocol>> codecsByName;
@@ -1168,14 +1170,6 @@ template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&& ev, const TActorContext& ctx) {
     const auto& writeRequest = ev->Request.write_request();
 
-    if constexpr (!UseMigrationProtocol) {
-        if (writeRequest.has_tx() && !AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-            CloseSession("Disabled transaction support for TopicService.",
-                         PersQueue::ErrorCode::ERROR, ctx);
-            return;
-        }
-    }
-
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (!UseMigrationProtocol) {
@@ -1237,6 +1231,9 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
         ui64 currMetadataSize = 0;
         for (const auto& metaItem : msg.metadata_items()) {
+            if (metaItem.key() == PARTITION_KEY_META_KEY) {
+                w->SetChoosePartitionKey(metaItem.value());
+            }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }
         maxMessageMetadataSize = std::max(maxMessageMetadataSize, currMetadataSize);
@@ -1254,12 +1251,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
 
     pendingRequest->UserWriteRequests.emplace_back(std::move(ev));
     pendingRequest->ByteSize = request.ByteSize();
-
-    auto msgMetaEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicMessageMeta();
-    if (!msgMetaEnabled && maxMessageMetadataSize > 0) {
-        CloseSession("Message level metadata support is disabled on server size", PersQueue::ErrorCode::BAD_REQUEST, ctx);
-        return;
-    }
 
     if (maxMessageMetadataSize > MAX_METADATA_SIZE_PER_MESSAGE) {
         CloseSession(

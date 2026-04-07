@@ -1023,7 +1023,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
                 Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                    << ": S3 error: " << error.GetMessage().c_str());
+                    << ": S3 error: " << error);
             } else {
                 Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                     << ": " << error);

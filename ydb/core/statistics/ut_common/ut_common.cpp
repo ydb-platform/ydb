@@ -41,6 +41,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsSendIntervalSecondsServerless(6);
     Settings->AppConfig->MutableStatisticsConfig()->SetBaseStatsPropagateIntervalSecondsServerless(6);
 
+    // With LLVM enabled, scan queries calculating column statistics are very slow for some reason
+    // (10s of seconds), so we disable it.
+    Settings->AppConfig->MutableTableServiceConfig()->SetEnableKqpScanQueryUseLlvm(false);
+
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);

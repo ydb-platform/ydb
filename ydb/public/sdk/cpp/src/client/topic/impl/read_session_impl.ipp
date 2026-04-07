@@ -237,7 +237,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     }
 
     deferred.DeferDestroyDecompressionInfos(std::move(infos));
-    accumulator.OnUserRetrievedEvent();
+    deferred.DeferOnUserRetrievedEvent(std::move(accumulator));
 
     swap(ready, NotReady);
 }
@@ -2253,13 +2253,22 @@ inline void TSingleClusterReadSessionImpl<false>::ConfirmPartitionStreamEnd(TPar
         std::lock_guard guard(HierarchyDataLock);
         ReadingFinishedData.insert(partitionStream->GetPartitionSessionId());
     }
-    for (auto& [_, s] : PartitionStreams) {
-        for (auto partitionId : childIds) {
-            if (s->GetPartitionId() == partitionId) {
-                EventsQueue->SignalReadyEvents(s);
-                break;
+
+    std::vector<TIntrusivePtr<TPartitionStreamImpl<false>>> partitionStreams;
+    {
+        std::lock_guard guard(Lock);
+        for (auto& [_, s] : PartitionStreams) {
+            for (auto partitionId : childIds) {
+                if (s->GetPartitionId() == partitionId) {
+                    partitionStreams.push_back(s);
+                    break;
+                }
             }
         }
+    }
+
+    for (auto& s : partitionStreams) {
+        EventsQueue->SignalReadyEvents(s);
     }
 }
 
@@ -2847,11 +2856,14 @@ void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
 
     ui64 sourceSize = 0;
     ui64 messagesCount = 0;
-    while (!Tasks.empty()) {
-        const auto& task = Tasks.front();
-        sourceSize += task.AddedDataSize();
-        messagesCount += task.AddedMessagesCount();
-        Tasks.pop_front();
+    {
+        std::lock_guard lock(session->Lock);
+        while (!Tasks.empty()) {
+            const auto& task = Tasks.front();
+            sourceSize += task.AddedDataSize();
+            messagesCount += task.AddedMessagesCount();
+            Tasks.pop_front();
+        }
     }
 
     OnTaskCanceled(sourceSize, messagesCount);
@@ -3367,6 +3379,11 @@ void TDeferredActions<UseMigrationProtocol>::DeferSignalWaiter(TWaiter&& waiter)
 }
 
 template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::DeferOnUserRetrievedEvent(TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& accumulator) {
+    UserRetrievedEventsInfoAccumulator.push_back(std::move(accumulator));
+}
+
+template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos)
 {
     DecompressionInfos.insert(DecompressionInfos.end(), infos.begin(), infos.end());
@@ -3383,6 +3400,7 @@ void TDeferredActions<UseMigrationProtocol>::DoActions() {
     Reconnect();
     SignalWaiters();
     StartSessions();
+    OnUserRetrievedEvent();
     DestroyDecompressionInfos();
 }
 
@@ -3466,6 +3484,13 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::SignalWaiters() {
     for (auto& w : Waiters) {
         w.Signal();
+    }
+}
+
+template<bool UseMigrationProtocol>
+void TDeferredActions<UseMigrationProtocol>::OnUserRetrievedEvent() {
+    for (auto& accumulator : UserRetrievedEventsInfoAccumulator) {
+        accumulator.OnUserRetrievedEvent();
     }
 }
 

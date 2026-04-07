@@ -55,7 +55,7 @@ struct TMkqlBuildContext {
 
 class IMkqlCallableCompiler: public TThrRefBase {
 public:
-    typedef std::function<NKikimr::NMiniKQL::TRuntimeNode(const TExprNode&, TMkqlBuildContext&)> TCompiler;
+    using TCompiler = std::function<NKikimr::NMiniKQL::TRuntimeNode(const TExprNode&, TMkqlBuildContext&)>;
     virtual bool HasCallable(const std::string_view& name) const = 0;
     virtual TCompiler FindCallable(const std::string_view& name) const = 0;
     virtual TCompiler GetCallable(const std::string_view& name) const = 0;

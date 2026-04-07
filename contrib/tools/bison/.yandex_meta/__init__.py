@@ -5,7 +5,6 @@ from devtools.yamaker.modules import GLOBAL, Linkable, Switch
 from devtools.yamaker import pathutil
 from devtools.yamaker.project import NixProject
 
-
 WINDOWS_SRCS = [
     "alloca.h",
     "close.c",

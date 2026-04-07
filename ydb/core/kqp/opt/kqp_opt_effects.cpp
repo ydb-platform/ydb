@@ -448,7 +448,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .Done();
         }
 
-        if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
                     .Stage(stageInput.Cast().Ptr())
@@ -637,7 +637,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Done();
         }
 
-        if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
                     .Stage(stageInput.Cast().Ptr())

@@ -88,7 +88,7 @@ namespace NPage {
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
         ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */
-        bool ByKeyFilter = false;       /* Per-part bloom filter        */
+        TVector<ui32> ByKeyFilterPrefixes; /* Bloom filters on PK prefixes of these lengths */
         ui64 MaxRows = 0;               /* Used to set up bloom filter size */
         ui64 SliceSize = Max<ui64>();   /* Data size for slice creation */
         ui64 MainPageCollectionEdge = Max<ui64>();

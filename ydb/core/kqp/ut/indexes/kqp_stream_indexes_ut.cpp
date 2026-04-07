@@ -22,7 +22,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
                 bool cover = false,
                 bool indexDefault = false) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -357,7 +356,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST(SecondaryIsPrimaryPrefix) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -416,7 +414,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST(SecondaryNullDelete) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -493,7 +490,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST(SecondaryUniqueCheckTwoRows) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -549,7 +545,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST_TWIN(SecondaryAndReturning, WithIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -661,7 +656,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST_TWIN(SecondaryAndReturningInteractive, WithIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -716,7 +710,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST(TpccPaymentReturning) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
 
         TKikimrRunner kikimr(settings);
@@ -842,7 +835,6 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
     Y_UNIT_TEST_TWIN(SecondaryIndexInsertDuplicates, StreamIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
 
         TKikimrRunner kikimr(settings);

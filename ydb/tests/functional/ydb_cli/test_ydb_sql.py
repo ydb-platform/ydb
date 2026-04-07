@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.canonical import set_canondata_root
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -64,10 +65,23 @@ class BaseTestSql(object):
 
 class BaseTestSqlWithDatabase(BaseTestSql):
     @classmethod
+    def get_cluster_configurator(cls):
+        """Override in subclasses to use a custom cluster config (e.g. extra feature flags)."""
+        return None
+
+    @classmethod
     def setup_class(cls):
         set_canondata_root('ydb/tests/functional/ydb_cli/canondata')
 
-        cls.cluster = KiKiMR()
+        configurator = cls.get_cluster_configurator()
+        if configurator is None:
+            configurator = KikimrConfigGenerator()
+        logger.info(
+            "setup_class cls=%s feature_flags.enable_pg_syntax=%s",
+            cls.__name__,
+            configurator.yaml_config.get("feature_flags", {}).get("enable_pg_syntax"),
+        )
+        cls.cluster = KiKiMR(configurator)
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -94,7 +108,7 @@ class BaseTestSqlWithDatabase(BaseTestSql):
 class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -139,7 +153,7 @@ class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -174,7 +188,7 @@ class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -202,7 +216,7 @@ class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
 class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -624,7 +638,7 @@ class TestExecuteSqlWithStdinDetection(BaseTestSqlWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -860,7 +874,7 @@ class TestExecuteSqlWithParameterEdgeCases(BaseTestSqlWithDatabase):
 
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -1009,7 +1023,7 @@ def create_wide_table_with_data(session, path):
 class TestExecuteSqlFromStdinWithWideOutput(BaseTestSqlWithDatabase):
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
 
     @pytest.fixture(autouse=True, scope='function')
@@ -1025,10 +1039,22 @@ class TestExecuteSqlFromStdinWithWideOutput(BaseTestSqlWithDatabase):
 
 
 class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
+    """Cluster with EnablePgSyntax via get_cluster_configurator()."""
+
+    @classmethod
+    def get_cluster_configurator(cls):
+        return KikimrConfigGenerator(extra_feature_flags=["enable_pg_syntax"])
+
     @classmethod
     def setup_class(cls):
-        BaseTestSqlWithDatabase.setup_class()
+        BaseTestSqlWithDatabase.setup_class.__func__(cls)
         cls.session = cls.driver.table_client.session().create()
+
+    @classmethod
+    def teardown_class(cls):
+        if hasattr(cls, 'driver') and cls.driver is not None:
+            cls.driver.stop()
+        BaseTestSqlWithDatabase.teardown_class.__func__(cls)
 
     @pytest.fixture(autouse=True, scope='function')
     def init_test(self, tmp_path):
@@ -1036,7 +1062,6 @@ class TestExecuteSqlWithPgSyntax(BaseTestSqlWithDatabase):
         self.table_path = self.tmp_path.name
         create_table_with_data(self.session, self.root_dir + "/" + self.table_path)
 
-    @pytest.mark.skip(reason="pg syntax disabled")
     def test_pg_syntax(self):
         script = "SELECT * FROM \"{}\" WHERE key = 1;".format(self.table_path)
         output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--syntax", "pg"])

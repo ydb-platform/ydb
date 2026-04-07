@@ -142,18 +142,16 @@ TAutoPtr<IGraphTransformer> CreateKqpCheckPhysicalQueryTransformer(const TIntrus
                         }
                     }
 
-                    if (!kqpCtx->Config->GetEnableIndexStreamWrite()) {
-                        if (const auto outputs = stage.Outputs()) {
-                            for (const auto& output : outputs.Cast()) {
-                                const auto outputIndex = FromString<ui32>(output.Index().Value());
-                                if (usedOutputs.Test(outputIndex)) {
-                                    hasMultipleConsumers = true;
-                                    YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
-                                        << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
-                                    return false;
-                                }
-                                usedOutputs.Set(outputIndex);
+                    if (const auto outputs = stage.Outputs()) {
+                        for (const auto& output : outputs.Cast()) {
+                            const auto outputIndex = FromString<ui32>(output.Index().Value());
+                            if (usedOutputs.Test(outputIndex) && !kqpCtx->Config->GetEnableIndexStreamWrite()) {
+                                hasMultipleConsumers = true;
+                                YQL_CLOG(ERROR, ProviderKqp) << "Stage #" << node.Ref().UniqueId()
+                                    << ", output " << outputIndex << " has multiple consumers (output used by channel and sink)";
+                                return false;
                             }
+                            usedOutputs.Set(outputIndex);
                         }
                     }
 

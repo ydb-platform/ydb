@@ -129,6 +129,17 @@ i64 GetDirectorySize(
     bool deduplicateByINodes = false,
     bool checkDeviceId = false);
 
+//! Recursively calculates size of all regular files inside given directories.
+//! If #deduplicateByINodes is set multiple directories are processed with shared
+//! inode deduplication.
+//! If #checkDeviceId is set all seed directories must come from the same device.
+//! Only files that reside on the seed device are considered during traversal.
+i64 GetDirectoriesSize(
+    const std::vector<std::string>& paths,
+    bool ignoreUnavailableFiles = true,
+    bool deduplicateByINodes = false,
+    bool checkDeviceId = false);
+
 //! Sets the access and modification times to now.
 void Touch(const std::string& path);
 
@@ -196,45 +207,28 @@ void SendfileChunkedCopy(
     const TFile& destination,
     i64 chunkSize);
 
-TFuture<void> ReadBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize);
-
-TFuture<void> WriteBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize,
-    int readSize);
-
-TFuture<void> ReadWriteCopyAsync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize);
-
-TFuture<void> ReadWriteCopyAsync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize);
-
-void ReadWriteCopySync(
-    const std::string& existingPath,
-    const std::string& newPath,
-    i64 chunkSize);
-
-void ReadWriteCopySync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize);
-
 //! Copies file chunk after chunk via splice syscall,
 //! releasing thread between chunks.
 void Splice(
     const TFile& source,
     const TFile& destination,
     i64 chunkSize);
+
+struct TSpliceResult
+{
+    i64 BytesSpliced;
+    TError Error;
+};
+
+//! Asynchronously copies data via splice syscall,
+//! releasing invoker thread when pipe is blocked.
+TFuture<TSpliceResult> SpliceAsync(
+    const TFile& src,
+    const TFile& dst,
+    bool pipeIsSrc,
+    const IInvokerPtr& ioInvoker,
+    const NConcurrency::IPollerPtr& poller,
+    i64 chunkSize = 16_MB);
 
 TError AttachLsofOutput(TError error, const std::string& path);
 TError AttachFindOutput(TError error, const std::string& path);

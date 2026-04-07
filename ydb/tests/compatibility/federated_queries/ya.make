@@ -8,12 +8,14 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_external_data_source.py
+    test_external_data_source_secret.py
 )
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+TAG(ya:manual)
 
 
 DEPENDS(

@@ -50,7 +50,9 @@
 #include "opentelemetry/sdk/configuration/log_record_exporter_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_limits_configuration.h"
 #include "opentelemetry/sdk/configuration/log_record_processor_configuration.h"
+#include "opentelemetry/sdk/configuration/logger_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/logger_provider_configuration.h"
+#include "opentelemetry/sdk/configuration/meter_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/meter_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_producer_configuration.h"
 #include "opentelemetry/sdk/configuration/metric_reader_configuration.h"
@@ -86,6 +88,7 @@
 #include "opentelemetry/sdk/configuration/sum_aggregation_configuration.h"
 #include "opentelemetry/sdk/configuration/temporality_preference.h"
 #include "opentelemetry/sdk/configuration/trace_id_ratio_based_sampler_configuration.h"
+#include "opentelemetry/sdk/configuration/tracer_configurator_configuration.h"
 #include "opentelemetry/sdk/configuration/tracer_provider_configuration.h"
 #include "opentelemetry/sdk/configuration/translation_strategy.h"
 #include "opentelemetry/sdk/configuration/view_configuration.h"
@@ -162,6 +165,15 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<LoggerProviderConfiguration> ParseLoggerProviderConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  LoggerConfigConfiguration ParseLoggerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  LoggerMatcherAndConfigConfiguration ParseLoggerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<LoggerConfiguratorConfiguration> ParseLoggerConfiguratorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   DefaultHistogramAggregation ParseDefaultHistogramAggregation(
@@ -266,6 +278,15 @@ public:
   std::unique_ptr<MeterProviderConfiguration> ParseMeterProviderConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
+  MeterConfigConfiguration ParseMeterConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  MeterMatcherAndConfigConfiguration ParseMeterMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<MeterConfiguratorConfiguration> ParseMeterConfiguratorConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
   std::unique_ptr<PropagatorConfiguration> ParsePropagatorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
@@ -334,6 +355,15 @@ public:
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<TracerProviderConfiguration> ParseTracerProviderConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  TracerConfigConfiguration ParseTracerConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  TracerMatcherAndConfigConfiguration ParseTracerMatcherAndConfigConfiguration(
+      const std::unique_ptr<DocumentNode> &node) const;
+
+  std::unique_ptr<TracerConfiguratorConfiguration> ParseTracerConfiguratorConfiguration(
       const std::unique_ptr<DocumentNode> &node) const;
 
   std::unique_ptr<StringAttributeValueConfiguration> ParseStringAttributeValueConfiguration(

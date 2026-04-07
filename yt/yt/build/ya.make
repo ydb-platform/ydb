@@ -34,6 +34,10 @@ ELSE()
     SET(YT_VERSION_TYPE "os")
 ENDIF()
 
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    INCLUDE(${ARCADIA_ROOT}/yt/yt/build/yt_custom_internal/yt_custom_internal.inc)
+ENDIF()
+
 SRCS(
   config.h.in
   build.cpp.in

@@ -425,7 +425,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx, SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx, std::move(SplittedExprs.at(NextSplittedExpr)));
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {
@@ -472,6 +472,10 @@ void TKqpQueryState::FillTopicOperations() {
     }
 
     TopicOperations = NTopic::TTopicOperations();
+
+    bool trackProducerId = !operations.HasTrackProducerId() || operations.GetTrackProducerId();
+    TopicOperations.SetTrackProducerId(trackProducerId);
+
     for (auto& topic : operations.GetTopics()) {
         auto path = CanonizePath(NPersQueue::GetFullTopicPath(GetDatabase(), topic.path()));
 

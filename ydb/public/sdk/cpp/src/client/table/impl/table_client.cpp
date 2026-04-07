@@ -32,7 +32,7 @@ TTableClient::TImpl::TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, 
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        Drain().Wait();
+        Drain().Wait(DRAIN_TIMEOUT);
     }
 }
 

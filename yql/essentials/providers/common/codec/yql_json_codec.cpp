@@ -341,13 +341,12 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
             auto builder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
             // is Set<>
             if (dictType->GetPayloadType()->GetKind() == TType::EKind::Void) {
-                for (ui32 i = 0, e = array.size(); i < e; i++) {
-                    auto value = ReadJsonValue(array[i], dictType->GetKeyType(), holderFactory);
+                for (auto& it : array) {
+                    auto value = ReadJsonValue(it, dictType->GetKeyType(), holderFactory);
                     builder->Add(std::move(value), NKikimr::NUdf::TUnboxedValuePod());
                 }
             } else {
-                for (ui32 i = 0, e = array.size(); i < e; i++) {
-                    auto tuple = array[i];
+                for (auto tuple : array) {
                     YQL_ENSURE(tuple.IsArray() && tuple.GetArray().size() == 2,
                                "Unexpected json type (expected array with 2 elements, but got " << tuple.GetType() << ")");
 
@@ -392,8 +391,8 @@ NKikimr::NUdf::TUnboxedValue ReadJsonValue(TJsonValue& json, NKikimr::NMiniKQL::
             auto listType = AS_TYPE(TListType, type);
             TDefaultListRepresentation items;
             auto array = json.GetArray();
-            for (ui32 i = 0, e = array.size(); i < e; i++) {
-                items = items.Append(ReadJsonValue(array[i], listType->GetItemType(), holderFactory));
+            for (auto& it : array) {
+                items = items.Append(ReadJsonValue(it, listType->GetItemType(), holderFactory));
             }
             return holderFactory.CreateDirectListHolder(std::move(items));
         }

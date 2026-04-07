@@ -58,7 +58,6 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     if (options.IsSql) {
         NSQLTranslation::TTranslationSettings settings;
         FillSettings(settings, options);
-        settings.EmitReadsForExists = true;
         if (options.IsLibrary) {
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         }

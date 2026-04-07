@@ -1,0 +1,18 @@
+generic:
+  access_service_type: "nebius_v1"
+  auth:
+    token_file: ydb/mvp/core/examples/token_file.pb.txt
+
+oidc:
+  # OIDC client identifier.
+  client_id: "oidc-proxy-ex"
+  # Name of secret for signing. It must match one of SecretInfo names.
+  secret_name: "secret-name"
+  # Token must be defined in generic.auth.tokens.oauth2_exchange (see core/examples/federated_config.yaml).
+  session_service_token_name: "federated-token"
+  # Authorization server base URL.
+  authorization_server_address: "https://auth-preprod.cloud.ru"
+  # Hosts that proxy is allowed to forward user requests to.
+  allowed_proxy_hosts:
+    - "*.host.net"
+    - "*.host-team.ru"

@@ -2014,6 +2014,62 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         });
     }
 
+    Y_UNIT_TEST(RacyAlterStreamAndBackup) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableChangefeedInitialScan(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blockedAlterStream(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterCdcStream) {
+                txId = record.GetTxId();
+                return true;
+            }
+            return false;
+        });
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.WaitFor("AlterCdcStream", [&]{ return blockedAlterStream.size(); });
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> blockedPropose(runtime);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Table"
+            IsBackup: true
+        )");
+
+        runtime.WaitFor("ProposeTransaction", [&]{ return blockedPropose.size(); });
+        blockedAlterStream.Stop().Unblock();
+        blockedPropose.Stop().Unblock();
+        env.TestWaitNotification(runtime, txId);
+
+        NKikimrSchemeOp::ECdcStreamState state;
+        do {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            state = DescribePrivatePath(runtime, "/MyRoot/Table/Stream")
+                .GetPathDescription().GetCdcStreamDescription().GetState();
+        } while (state != NKikimrSchemeOp::ECdcStreamStateReady);
+    }
+
     void Metering(bool serverless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()

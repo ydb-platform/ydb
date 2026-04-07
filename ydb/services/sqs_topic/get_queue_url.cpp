@@ -50,8 +50,9 @@ namespace NKikimr::NSqsTopic::V1 {
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
 
-    class TGetQueueUrlActor:
-        public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>
+    class TGetQueueUrlActor
+        : public TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>
+        , public TCdcStreamCompatible
     {
     protected:
         using TBase = TGrpcActorBase<TGetQueueUrlActor, TEvSqsTopicGetQueueUrlRequest>;
@@ -79,7 +80,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
-            if (auto check = ValidateQueueName(QueueName); !check.has_value()) {
+            if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
             SendDescribeProposeRequest(ctx);
@@ -99,6 +100,11 @@ namespace NKikimr::NSqsTopic::V1 {
             Y_ABORT_UNLESS(result->ResultSet.size() == 1);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (ProcessCdc(response)) {
+                        return;
+                    }
+                }
                 if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
                     return ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
                 }

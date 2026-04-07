@@ -48,8 +48,6 @@ struct TEvKqpExecuter {
         };
         TVector<TDeferredBreakerInfo> DeferredBreakers;  // Breaker info for deferred lock scenarios
 
-        THashSet<ui32> ParticipantNodes;
-
         // For BATCH operations only
         TVector<TSerializedCellVec> BatchOperationMaxKeys;
         TVector<ui32> BatchOperationKeyIds;
@@ -139,12 +137,10 @@ struct TKqpFederatedQuerySetup;
 
 struct TExecuterMutableConfig : public TAtomicRefCount<TExecuterMutableConfig>{
     std::atomic<bool> EnableRowsDuplicationCheck = false;
-    std::atomic<bool> VerboseMemoryLimitException = false;
     std::atomic<i32> RuntimeParameterSizeLimit = 0;
 
     void ApplyFromTableServiceConfig(const NKikimrConfig::TTableServiceConfig& tableServiceConfig) {
         EnableRowsDuplicationCheck.store(tableServiceConfig.GetEnableRowsDuplicationCheck());
-        VerboseMemoryLimitException.store(tableServiceConfig.GetResourceManager().GetVerboseMemoryLimitException());
         RuntimeParameterSizeLimit.store(tableServiceConfig.GetExtractPredicateParameterListSizeLimit());
     }
 };
@@ -162,6 +158,13 @@ struct TExecuterConfig : TNonCopyable {
         , TableServiceConfig(tableServiceConfig)
         , TliConfig(tliConfig)
     {}
+
+    NKikimrConfig::TTableServiceConfig::EBlockTrackingMode GetBlockTrackingMode() const {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+        return NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY;
+#endif
+        return TableServiceConfig.GetBlockTrackingMode();
+    }
 };
 
 IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
@@ -177,7 +180,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 IActor* CreateKqpSchemeExecuter(
-    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,

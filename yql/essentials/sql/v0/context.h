@@ -18,7 +18,7 @@
 
 namespace NSQLTranslationV0 {
 
-    typedef TMap<TString, TNodePtr> TNamedNodesMap;
+    using TNamedNodesMap = TMap<TString, TNodePtr>;
 
     class TContext {
     public:
@@ -171,7 +171,7 @@ namespace NSQLTranslationV0 {
 
     class TTranslation {
     protected:
-        typedef TSet<ui32> TSetType;
+        using TSetType = TSet<ui32>;
 
     protected:
         explicit TTranslation(TContext& ctx);

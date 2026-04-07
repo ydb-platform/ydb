@@ -603,7 +603,8 @@ namespace NKikimr {
 
                 NGcOpt::TKeepFlagStat keepFlagStat;
                 if (IsFresh) {
-                    keepFlagStat.Needed = true;
+                    // we need this record only if it does contain DoNotKeep flag and there is Keep flag somewhere else
+                    keepFlagStat.Needed = subsDoNotKeep != 0 && subsKeep < wholeKeep;
                 } else {
                     keepFlagStat = {subsKeep, subsDoNotKeep, wholeKeep, wholeDoNotKeep};
                 }
@@ -690,8 +691,9 @@ namespace NKikimr {
                     // ensure preallocated location has correct size
                     Y_DEBUG_ABORT_UNLESS(preallocatedLocation.ChunkIdx && preallocatedLocation.Size == MemRec->DataSize());
                     // producing inline blob with data here
-                    for (const auto& [location, partIdx] : collectTask.Reads) {
-                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location});
+                    for (const auto& [location, partIdx, isHugeBlob] : collectTask.Reads) {
+                        ReadBatcher.AddReadItem(location, {NextDeferredItemId, partIdx, blobId, location},
+                            isHugeBlob ? TLogoBlobID(blobId, partIdx + 1) : TLogoBlobID());
                     }
                     if (!collectTask.Reads.empty() || WriterHasPendingOperations) { // defer this blob
                         DeferredItems.Put(NextDeferredItemId++, collectTask.Reads.size(), preallocatedLocation,
@@ -713,7 +715,8 @@ namespace NKikimr {
                 }
 
                 for (const auto& [partIdx, from, to] : dataMerger.GetHugeBlobMoves()) {
-                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from});
+                    ReadBatcher.AddReadItem(from, {NextDeferredItemId, partIdx, blobId, from},
+                        TLogoBlobID(blobId, partIdx + 1));
                     DeferredItems.Put(NextDeferredItemId++, 1, to, TDiskBlobMerger(), blobId, false);
                 }
             }

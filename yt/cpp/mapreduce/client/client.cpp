@@ -78,9 +78,21 @@ void ApplyProxyUrlAliasingRules(
     }
 }
 
-bool IsCrossCellDisabledError(const TErrorResponse& e)
+/// NB(@achains): May be expected when performing cross-cell copy.
+bool IsCrossCellError(const TErrorResponse& e)
 {
     return e.GetError().ContainsErrorCode(NClusterErrorCodes::NObjectClient::CrossCellAdditionalPath);
+}
+
+/// NB(@achains): May be expected when trying to ping a transaction that has already been aborted or commited.
+bool IsNoSuchTransactionError(const TErrorResponse& e)
+{
+    return e.GetError().ContainsErrorCode(NClusterErrorCodes::NTransactionClient::NoSuchTransaction);
+}
+
+bool IsResolveError(const TErrorResponse& e)
+{
+    return e.GetError().ContainsErrorCode(NClusterErrorCodes::NYTree::ResolveError);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -215,7 +227,7 @@ TNodeId TClientBase::Copy(
     const TYPath& destinationPath,
     const TCopyOptions& options)
 {
-    TExpectedErrorGuard guard(IsCrossCellDisabledError);
+    TExpectedErrorGuard guard(IsCrossCellError);
 
     try {
         return RequestWithRetry<TNodeId>(
@@ -224,7 +236,7 @@ TNodeId TClientBase::Copy(
                 return RawClient_->CopyInsideMasterCell(mutationId, TransactionId_, sourcePath, destinationPath, options);
             });
     } catch (const TErrorResponse& e) {
-        if (IsCrossCellDisabledError(e)) {
+        if (IsCrossCellError(e)) {
             // Do transaction for cross cell copying.
             return RequestWithRetry<TNodeId>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
@@ -1185,6 +1197,7 @@ void TTransaction::Abort()
 
 void TTransaction::Ping()
 {
+    TExpectedErrorGuard guard(IsNoSuchTransactionError);
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this] (TMutationId /*mutationId*/) {
@@ -1681,7 +1694,7 @@ ITransactionPingerPtr TClient::GetTransactionPinger()
 {
     auto g = Guard(Lock_);
     if (!TransactionPinger_) {
-        TransactionPinger_ = CreateTransactionPinger(Context_.Config, Context_.UseTLS);
+        TransactionPinger_ = CreateTransactionPinger(Context_.Config);
     }
     return TransactionPinger_;
 }
@@ -1725,7 +1738,8 @@ const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configPro
             configProfile);
 
         try {
-            clusterConfigNode = Get(clusterConfigPath, TGetOptions());
+            TExpectedErrorGuard guard(IsResolveError);
+            clusterConfigNode = Get(clusterConfigPath, TGetOptions().ReadFrom(EMasterReadKind::Cache));
         } catch (const TErrorResponse& error) {
             if (!error.IsResolveError()) {
                 throw;

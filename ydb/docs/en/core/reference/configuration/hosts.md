@@ -45,6 +45,19 @@ hosts:
     rack: '1'
 ```
 
+### Bridge mode specifics {#hosts-bridge}
+
+In bridge mode, each host must be bound to one of the piles declared in [`bridge_config`](bridge_config.md). To do this, specify the `bridge_pile_name` field with the pile name in the `location` section. Example:
+
+```yaml
+hosts:
+- host: hostname1
+  host_config_id: 1
+  location:
+    ...
+    bridge_pile_name: 'pile_1'
+```
+
 ## Kubernetes-Specific Details {#hosts-k8s}
 
 When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `hosts` section is generated automatically, replacing any user-specified content in the configuration passed to the operator. All Storage nodes use `host_config_id` = `1`, for which the [correct configuration](host_configs.md#host-configs-k8s) must be specified.

@@ -77,8 +77,9 @@ ui16 GetTag(const std::string_view& columnName, const std::vector<TColumnDesc>& 
 
 TTableInfo PrepareTable(
         TTestEnv& env, const TString& databaseName, const TString& tableName,
-        const std::vector<TColumnDesc>& columns = GetColumns()) {
-    auto info = CreateColumnTable(env, databaseName, tableName, 4, columns);
+        const std::vector<TColumnDesc>& columns = GetColumns(),
+        size_t shardCount = 4) {
+    auto info = CreateColumnTable(env, databaseName, tableName, shardCount, columns);
     InsertDataIntoTable(env, databaseName, tableName, ColumnTableRowsNumber, columns);
     return info;
 }
@@ -148,6 +149,17 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
 
         ValidateCountMinSketch(runtime, table1.PathId);
         ValidateCountMinSketch(runtime, table2.PathId);
+    }
+
+    Y_UNIT_TEST(CountMinSketchManyNodes) {
+        TTestEnv env(1, 3);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database", 3);
+        const auto tableInfo = PrepareTable(env, "Database", "Table1", GetColumns(), /*shardCount=*/8);
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        ValidateCountMinSketch(runtime, tableInfo.PathId);
     }
 
     Y_UNIT_TEST(SimpleColumnStatistics) {

@@ -7,6 +7,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <utility>
+
 namespace NKikimr::NMiniKQL {
 
 namespace {
@@ -124,14 +126,14 @@ struct TMakeTypeArgs<NYql::ETypeAnnotationKind::DynamicLinear> {
 
 template <NYql::ETypeAnnotationKind Kind>
 class TMakeTypeWrapper: public TMutableComputationNode<TMakeTypeWrapper<Kind>> {
-    typedef TMutableComputationNode<TMakeTypeWrapper<Kind>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TMakeTypeWrapper<Kind>>;
 
 public:
     TMakeTypeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 

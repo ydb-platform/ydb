@@ -920,6 +920,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return NSchemeCache::ETableKind::KindVectorIndexTable;
             case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
                 return NSchemeCache::ETableKind::KindFulltextIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
+                return NSchemeCache::ETableKind::KindJsonIndexTable;
             default:
                 return NSchemeCache::ETableKind::KindRegularTable;
             }
@@ -933,6 +935,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
                     return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
@@ -1396,7 +1399,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             });
         }
 
-        const TSubscriber& GetSubcriber() const {
+        const TSubscriber& GetSubscriber() const {
             return Subscriber;
         }
 
@@ -2460,7 +2463,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     TCacheItem* SwapSubscriberAndUpsert(TCacheItem* byPath, const TPathId& notifyPathId, const TString& notifyPath) {
-        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubcriber().DomainOwnerId);
+        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubscriber().DomainOwnerId);
         byPath->SwapSubscriber(subscriber);
 
         TCacheItem newItem(this, subscriber, false);
@@ -2487,7 +2490,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!byPath) {
-            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubcriber().DomainOwnerId);
+            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubscriber().DomainOwnerId);
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, subscriber, false));
         }
 
@@ -2556,7 +2559,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                 << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
@@ -2572,7 +2575,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return byPathId;
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update owerrides GSS by path"
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update overrides GSS by path"
                 << ": self# " << SelfId()
                 << ", path# " << notify.Path
                 << ", pathId# " << notify.PathId);
@@ -2581,7 +2584,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         if (byPath->GetDomainId() == notify.PathId) { //Update from GSS, TSS->GSS
             if (abandonedSchemeShardIds.contains(byPath->GetPathId().OwnerId)) { //GSS reverts TSS
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update owerrides TSS by path, GSS implicilty reverts that TSS"
+                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update overrides TSS by path, GSS implicitly reverts that TSS"
                     << ": self# " << SelfId()
                     << ", path# " << notify.Path
                     << ", pathId# " << notify.PathId);
@@ -2596,7 +2599,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update us ignored, TSS is prefered"
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred"
                 << ": self# " << SelfId()
                 << ", path# " << notify.Path
                 << ", pathId# " << notify.PathId);
@@ -2611,7 +2614,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                       << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                       << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 

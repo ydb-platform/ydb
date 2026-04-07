@@ -554,7 +554,7 @@ rollup_list: ROLLUP LPAREN ordinary_grouping_set_list RPAREN;
 cube_list: CUBE LPAREN ordinary_grouping_set_list RPAREN;
 
 /// SQL2003 grouping_set_list == grouping_element_list
-grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list RPAREN;
+grouping_sets_specification: GROUPING SETS LPAREN grouping_element_list COMMA? RPAREN;
 
 hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr RPAREN;
 
@@ -795,6 +795,7 @@ alter_table_action:
   | alter_table_compact
   | alter_table_alter_column_set_default
   | alter_table_alter_column_drop_default
+  | alter_table_alter_column_set_encoding
 ;
 
 alter_external_table_stmt: ALTER EXTERNAL TABLE simple_table_ref alter_external_table_action (COMMA alter_external_table_action)*;
@@ -833,6 +834,7 @@ alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;
 alter_table_alter_index: ALTER INDEX an_id alter_table_alter_index_action;
 alter_table_compact: COMPACT with_compact_settings?;
+alter_table_alter_column_set_encoding: ALTER COLUMN an_id SET encoding;
 
 column_schema: an_id_schema type_name_or_bind column_option_list;
 alter_table_alter_column_set_default: ALTER COLUMN an_id SET default_value;
@@ -847,6 +849,7 @@ column_option:
     | nullability
     | default_value
     | compression
+    | encoding
     ;
 
 compression: COMPRESSION LPAREN (compression_setting_entry (COMMA compression_setting_entry)*)? COMMA? RPAREN;
@@ -856,6 +859,11 @@ compression_setting_value: integer | id;
 family_relation: FAMILY an_id;
 nullability: NOT? NULL;
 default_value: DEFAULT expr;
+encoding: ENCODING LPAREN (encoding_config (COMMA encoding_config)*)? COMMA? RPAREN;
+encoding_config: encoding_config_name (LPAREN (encoding_setting_entry (COMMA encoding_setting_entry)*)? COMMA? RPAREN)?;
+encoding_config_name: an_id_or_type;
+encoding_setting_entry: an_id EQUALS encoding_setting_value;
+encoding_setting_value: integer | id;
 
 column_order_by_specification: an_id (ASC | DESC)?;
 
@@ -1217,11 +1225,7 @@ create_secret_stmt: CREATE SECRET object_ref
 ;
 with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
 secret_setting_entry: an_id EQUALS secret_setting_value;
-secret_setting_value:
-      STRING_VALUE
-    | bool_value
-    | bind_parameter
-;
+secret_setting_value: expr;
 
 alter_secret_stmt: ALTER SECRET object_ref
     with_secret_settings
@@ -1539,6 +1543,7 @@ keyword_as_compat:
   | LINEAR
   | LOCAL
   | LOGIN
+  | ENCODING
   | MANAGE
   | MATCH
   | MATCHES
@@ -1775,6 +1780,7 @@ keyword_compat: (
   | LINEAR
   | LOCAL
   | LOGIN
+  | ENCODING
   | MANAGE
   | MATCH
   | MATCHES
@@ -2146,6 +2152,7 @@ LINEAR: L I N E A R;
 LIST: L I S T;
 LOCAL: L O C A L;
 LOGIN: L O G I N;
+ENCODING: E N C O D I N G;
 MANAGE: M A N A G E;
 MATCH: M A T C H;
 MATCHES: M A T C H E S;

@@ -36,7 +36,7 @@ TNodeResult TSqlExpression::BuildSourceOrNode(const TRule_expr& node) {
             return Wrap(TypeNode(node.GetAlt_expr2().GetRule_type_name_composite1()));
         }
         case TRule_expr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -45,13 +45,9 @@ TNodeResult TSqlExpression::Build(const TRule_tuple_or_expr& node) {
 }
 
 TNodeResult TSqlExpression::Build(const TRule_expr& node) {
-    const bool prevIsSourceAllowed = IsSourceAllowed_;
-    Y_DEFER {
-        IsSourceAllowed_ = prevIsSourceAllowed;
-    };
-
-    IsSourceAllowed_ = false;
-    return BuildSourceOrNode(node);
+    TSqlExpression child(*this);
+    child.IsSourceAllowed_ = false;
+    return child.BuildSourceOrNode(node);
 }
 
 TNodeResult TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
@@ -76,7 +72,7 @@ TNodeResult TSqlExpression::Build(const TRule_lambda_or_parameter& node) {
             return TNonNull(std::move(namedNode));
         }
         case TRule_lambda_or_parameter::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -140,8 +136,6 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
         auto& block = node.GetBlock3();
         switch (block.Alt_case()) {
             case TRule_neq_subexpr::TBlock3::kAlt1: {
-                TSqlExpression altExpr(Ctx_, Mode_);
-                altExpr.SetPure(IsPure_);
                 TNodeResult altResult = SubExpr(block.GetAlt1().GetRule_neq_subexpr2(), {});
                 if (!altResult) {
                     return std::unexpected(altResult.error());
@@ -156,7 +150,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_neq_subexpr& node, const TTraili
                 break; // It is handled higher
             }
             case TRule_neq_subexpr::TBlock3::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
     return result;
@@ -233,6 +227,12 @@ bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlEx
             return false;
         }
         settings.UserSIDs = exprNode;
+    } else if (to_lower(id.Name) == "trace_ids") {
+        if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
+            ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;
+            return false;
+        }
+        settings.TraceIds = exprNode;
     } else if (to_lower(id.Name) == "virtual_timestamps") {
         if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "Bool") {
             ctx.Context().Error() << "Literal of Bool type is expected for " << id.Name;
@@ -521,7 +521,7 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             break;
         }
         case TRule_literal_value::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     if (!result.Expr) {
         return {};
@@ -621,7 +621,7 @@ TSQLStatus TSqlExpression::AddJsonVariable(const TRule_json_variable& node, TVec
             break;
         }
         case TRule_json_variable_name::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     TNodePtr nameExpr = BuildQuotedAtom(namePos, rawName, nameFlags);
@@ -711,7 +711,7 @@ TNodePtr TSqlExpression::JsonValueCaseHandler(const TRule_json_case_handler& nod
             mode = EJsonValueHandlerMode::DefaultValue;
             return Unwrap(Build(node.GetAlt_json_case_handler3().GetRule_expr2())); // FIXME(YQL-20436): Use TSQLV1Result!
         case TRule_json_case_handler::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -897,7 +897,7 @@ EJsonQueryHandler TSqlExpression::JsonQueryHandler(const TRule_json_query_handle
         case TRule_json_query_handler::kAltJsonQueryHandler4:
             return EJsonQueryHandler::EmptyObject;
         case TRule_json_query_handler::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -969,7 +969,7 @@ TNodeResult TSqlExpression::JsonApiExpr(const TRule_json_api_expr& node) {
             break;
         }
         case TRule_json_api_expr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     return result;
@@ -993,18 +993,18 @@ TNodePtr TSqlExpression::RowPatternVarAccess(TString var, const TRule_unary_sube
                         case TRule_id_or_type::kAltIdOrType2:
                             break;
                         case TRule_id_or_type::ALT_NOT_SET:
-                            Y_UNREACHABLE();
+                            YQL_ENSURE(false, "Unreachable");
                     }
                     break;
                 }
                 case TRule_an_id_or_type::kAltAnIdOrType2:
                     break;
                 case TRule_an_id_or_type::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
             break;
         case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return {};
 }
@@ -1063,7 +1063,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
             break;
         }
         case TUnaryCasualExprRule::TBlock1::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     // bool onlyDots = true;
@@ -1102,7 +1102,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                 break;
             }
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         isFirstElem = false;
@@ -1180,8 +1180,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
             }
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                 // invoke_expr - cannot be a column, function name
-                TSqlCallExpr call(Ctx_, Mode_);
-                call.SetYqlSelectProduced(IsYqlSelectProduced_);
+                TSqlCallExpr call(*this);
                 if (isFirstElem && !name.empty()) {
                     call.AllowDistinct();
                     call.InitName(name);
@@ -1248,7 +1247,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                         break;
                     }
                     case TRule_unary_subexpr_suffix_TBlock1_TBlock1_TAlt3_TBlock2::ALT_NOT_SET:
-                        Y_UNREACHABLE();
+                        YQL_ENSURE(false, "Unreachable");
                 }
 
                 if (lastExpr) {
@@ -1259,7 +1258,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                 break;
             }
             case TRule_unary_subexpr_suffix::TBlock1::TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         isFirstElem = false;
@@ -1317,8 +1316,7 @@ TNodeResult TSqlExpression::LambdaRule(const TRule_lambda& rule) {
     {
         // we allow column reference here to postpone error and report it with better description in SqlLambdaParams
         TColumnRefScope scope(Ctx_, EColumnRefState::Allow);
-        TSqlExpression expr(Ctx_, Mode_);
-        expr.SetPure(IsPure_);
+        TSqlExpression expr(*this);
         expr.SetSmartParenthesisMode(ESmartParenthesis::SqlLambdaParams);
         parenthesis = Unwrap(expr.SmartParenthesis(alt.GetRule_smart_parenthesis1()));
     }
@@ -1373,9 +1371,7 @@ TNodeResult TSqlExpression::CastRule(const TRule_cast_expr& rule) {
     Token(alt.GetToken1());
     TPosition pos(Ctx_.Pos());
 
-    TSqlExpression expr(Ctx_, Mode_);
-    expr.SetPure(IsPure_);
-    expr.SetYqlSelectProduced(IsYqlSelectProduced_);
+    TSqlExpression expr(*this);
     TNodeResult exprNode = expr.Build(rule.GetRule_expr3());
     if (!exprNode) {
         return std::unexpected(exprNode.error());
@@ -1394,8 +1390,7 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
     const auto& alt = rule;
     Token(alt.GetToken1());
     TPosition pos(Ctx_.Pos());
-    TSqlExpression expr(Ctx_, Mode_);
-    expr.SetPure(IsPure_);
+    TSqlExpression expr(*this);
     auto exprNode = Unwrap(expr.Build(rule.GetRule_expr3()));
     if (!exprNode) {
         return {};
@@ -1409,7 +1404,7 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
 
 TNodeResult TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     if (IsYqlSelectProduced_) {
-        return BuildYqlExists(Ctx_, Mode_, rule);
+        return BuildYqlExists(*this, rule);
     }
 
     Ctx_.IncrementMonCounter("sql_features", "Exists");
@@ -1420,18 +1415,18 @@ TNodeResult TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     switch (rule.GetBlock3().Alt_case()) {
         case TRule_exists_expr::TBlock3::kAlt1: {
             const auto& alt = rule.GetBlock3().GetAlt1().GetRule_select_stmt1();
-            TSqlSelect select(Ctx_, Mode_);
+            TSqlSelect select(*this);
             source = select.Build(alt, pos);
             break;
         }
         case TRule_exists_expr::TBlock3::kAlt2: {
             const auto& alt = rule.GetBlock3().GetAlt2().GetRule_values_stmt1();
-            TSqlValues values(Ctx_, Mode_);
+            TSqlValues values(*this);
             source = values.Build(alt, pos);
             break;
         }
         case TRule_exists_expr::TBlock3::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     if (!source) {
@@ -1440,7 +1435,7 @@ TNodeResult TSqlExpression::ExistsRule(const TRule_exists_expr& rule) {
     }
 
     const bool checkExist = true;
-    auto select = BuildSourceNode(Ctx_.Pos(), source, checkExist, Ctx_.Settings.EmitReadsForExists);
+    auto select = BuildSourceNode(Ctx_.Pos(), source, checkExist);
     return BuildBuiltinFunc(Ctx_, Ctx_.Pos(), "ListHasItems", {select},
                             /*isYqlSelect=*/IsYqlSelectProduced_);
 }
@@ -1460,17 +1455,13 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
 
     Token(alt.GetBlock4().GetToken1());
     TNodeResult elseExpr = [&] {
-        TSqlExpression expr(Ctx_, Mode_);
-        expr.SetPure(IsPure_);
-        expr.SetYqlSelectProduced(IsYqlSelectProduced_);
+        TSqlExpression expr(*this);
         return expr.Build(alt.GetBlock4().GetRule_expr2());
     }();
 
     TNodePtr caseExpr;
     if (alt.HasBlock2()) {
-        TSqlExpression expr(Ctx_, Mode_);
-        expr.SetPure(IsPure_);
-        expr.SetYqlSelectProduced(IsYqlSelectProduced_);
+        TSqlExpression expr(*this);
         if (auto result = expr.Build(alt.GetBlock2().GetRule_expr1())) {
             caseExpr = std::move(*result);
         } else {
@@ -1484,9 +1475,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
         const auto& block = alt.GetBlock3(i).GetRule_when_expr1();
 
         Token(block.GetToken1());
-        TSqlExpression condExpr(Ctx_, Mode_);
-        condExpr.SetPure(IsPure_);
-        condExpr.SetYqlSelectProduced(IsYqlSelectProduced_);
+        TSqlExpression condExpr(*this);
         if (auto result = condExpr.Build(block.GetRule_expr2())) {
             branches.back().Pred = std::move(*result);
         } else {
@@ -1501,9 +1490,7 @@ TNodeResult TSqlExpression::CaseRule(const TRule_case_expr& rule) {
         }
 
         Token(block.GetToken3());
-        TSqlExpression thenExpr(Ctx_, Mode_);
-        thenExpr.SetPure(IsPure_);
-        thenExpr.SetYqlSelectProduced(IsYqlSelectProduced_);
+        TSqlExpression thenExpr(*this);
         if (auto result = thenExpr.Build(block.GetRule_expr4())) {
             branches.back().Value = std::move(*result);
         } else {
@@ -1604,7 +1591,7 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
                     break;
                 }
                 case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -1626,7 +1613,7 @@ TSQLResult<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, c
             result.Expr = StructLiteral(node.GetAlt_atom_expr12().GetRule_struct_literal1());
             break;
         case TRule_atom_expr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     if (!result.Expr) {
         return std::unexpected(ESQLError::Basic);
@@ -1705,7 +1692,7 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
                     break;
                 }
                 case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
             result.Expr = BuildCallable(pos, module, name, {});
             break;
@@ -1727,7 +1714,7 @@ TSQLResult<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& no
             result.Expr = StructLiteral(node.GetAlt_in_atom_expr11().GetRule_struct_literal1());
             break;
         case TRule_in_atom_expr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     if (!result.Expr) {
         return std::unexpected(ESQLError::Basic);
@@ -1763,14 +1750,15 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
             Ctx_.Error(argPtr->GetPos()) << "Duplicate lambda argument parametr: '" << *contentPtr << "'.";
             return false;
         }
-        args.push_back(TSymbolNameWithPos{*contentPtr, argPtr->GetPos()});
+        args.push_back(TSymbolNameWithPos{.Name = *contentPtr, .Pos = argPtr->GetPos()});
     }
     return true;
 }
 
 bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq) {
-    TSqlExpression expr(ctx, ctx.Settings.Mode);
-    expr.SetPure(IsPure_);
+    Y_UNUSED(ctx);
+
+    TSqlExpression expr(*this);
     TNodePtr nodeExpr = Unwrap(expr.Build(node));
     if (!nodeExpr) {
         return false;
@@ -1780,7 +1768,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TV
 }
 
 bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq) {
-    TSqlExpression expr(ctx, ctx.Settings.Mode);
+    TSqlExpression expr(*this);
     expr.SetPure(true);
     TVector<TString> localNames;
     bool hasError = false;
@@ -1825,7 +1813,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
                 break;
             }
             case TRule_lambda_stmt::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -1853,6 +1841,9 @@ TNodeResult TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTraili
         case TRule_con_subexpr::kAltConSubexpr1:
             return UnaryExpr(node.GetAlt_con_subexpr1().GetRule_unary_subexpr1(), tail);
         case TRule_con_subexpr::kAltConSubexpr2: {
+            TSqlExpression child(*this);
+            child.IsSourceAllowed_ = false;
+
             MaybeUnnamedSmartParenOnTop_ = false;
             Ctx_.IncrementMonCounter("sql_features", "UnaryOperation");
             TString opName;
@@ -1874,14 +1865,14 @@ TNodeResult TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTraili
                 return std::unexpected(ESQLError::Basic);
             }
             Ctx_.IncrementMonCounter("sql_unary_operations", opName);
-            if (auto result = UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2(), tail)) {
+            if (auto result = child.UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2(), tail)) {
                 return Wrap((*result)->ApplyUnaryOp(Ctx_, pos, opName));
             } else {
                 return std::unexpected(result.error());
             }
         }
         case TRule_con_subexpr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return std::unexpected(ESQLError::Basic);
 }
@@ -2125,8 +2116,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
                     auto sizeHint = BuildTuple(pos, {BuildQuotedAtom(pos, "isCompact", NYql::TNodeFlags::Default)});
                     hints = BuildTuple(pos, {sizeHint});
                 }
-                TSqlExpression inSubexpr(Ctx_, Mode_);
-                inSubexpr.SetPure(IsPure_);
+                TSqlExpression inSubexpr(*this);
                 auto inRight = inSubexpr.SqlInExpr(altInExpr.GetRule_in_expr4(), tail);
                 auto isIn = Unwrap(BuildBuiltinFunc(Ctx_, pos, "In", {*res, inRight, hints}, /*isYqlSelect=*/false));
                 Ctx_.IncrementMonCounter("sql_features", notIn ? "NotIn" : "In");
@@ -2220,7 +2210,7 @@ TNodeResult TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTraili
                 return BinOpList(node.GetRule_eq_subexpr1(), getNode, alt.GetBlock1().begin(), alt.GetBlock1().end(), tail);
             }
             case TRule_cond_expr::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
     return res;
@@ -2247,9 +2237,8 @@ TNodeResult TSqlExpression::YqlXorSubExpr(
     }
 
     TNodeResult rhs = [&]() {
-        TSqlExpression expr(Ctx_, Mode_);
-        expr.SetPure(IsPure_);
-        expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
+        TSqlExpression expr(*this);
+        expr.SetSmartParenthesisMode(ESmartParenthesis::InStatement);
         expr.SetYqlSelectProduced(true);
 
         return expr.UnaryExpr(alt.GetRule_in_expr4().GetRule_in_unary_subexpr1(), tail);
@@ -2343,7 +2332,8 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
         return SubExpr(node, tail);
     }
 
-    IsSourceAllowed_ = false;
+    TSqlExpression child(*this);
+    child.IsSourceAllowed_ = false;
 
     // can't have top level smart_parenthesis node if any binary operation is present
     MaybeUnnamedSmartParenOnTop_ = false;
@@ -2352,7 +2342,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
     TVector<TNodePtr> nodes;
     nodes.reserve(1 + listSize);
 
-    if (auto result = SubExpr(node, {});
+    if (auto result = child.SubExpr(node, {});
         result || result.error() == ESQLError::Basic) {
         nodes.push_back(Unwrap(std::move(result)));
     } else {
@@ -2360,7 +2350,7 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
     }
 
     for (; begin != end; ++begin) {
-        if (auto result = SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{});
+        if (auto result = child.SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{});
             result || result.error() == ESQLError::Basic)
         {
             nodes.push_back(Unwrap(std::move(result)));
@@ -2368,16 +2358,19 @@ TNodeResult TSqlExpression::BinOper(const TString& opName, const TNode& node, TG
             return std::unexpected(result.error());
         }
     }
-    return Wrap(BinOperList(opName, nodes.begin(), nodes.end()));
+    return Wrap(child.BinOperList(opName, nodes.begin(), nodes.end()));
 }
 
 template <typename TNode, typename TGetNode, typename TIter>
 TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
     MaybeUnnamedSmartParenOnTop_ = MaybeUnnamedSmartParenOnTop_ && (begin == end);
-    TNodeResult partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
-    while (begin != end) {
-        IsSourceAllowed_ = false;
 
+    TSqlExpression child(*this);
+    child.IsSourceAllowed_ = (begin != end) ? false : IsSourceAllowed_;
+
+    TNodeResult partialResult = child.SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
+
+    while (begin != end) {
         Ctx_.IncrementMonCounter("sql_features", "BinaryOperation");
         Token(begin->GetToken1());
         TPosition pos(Ctx_.Pos());
@@ -2422,7 +2415,7 @@ TNodeResult TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter
         }
 
         TNodeResult lhs = std::move(partialResult);
-        TNodeResult rhs = SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{});
+        TNodeResult rhs = child.SubExpr(getNode(*begin), (begin + 1 == end) ? tail : TTrailingQuestions{});
 
         if (!lhs && lhs.error() != ESQLError::Basic) {
             return std::unexpected(lhs.error());
@@ -2512,7 +2505,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode ge
                 break;
             }
             case TRule_neq_subexpr_TBlock2_TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         TPosition pos = Ctx_.Pos();
@@ -2593,7 +2586,7 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
                 break;
             }
             case TRule_cond_expr::TAlt5::TBlock1::TBlock1::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
 
         TPosition pos = Ctx_.Pos();
@@ -2616,9 +2609,9 @@ TNodeResult TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode get
 }
 
 TNodePtr TSqlExpression::SqlInExpr(const TRule_in_expr& node, const TTrailingQuestions& tail) {
-    TSqlExpression expr(Ctx_, Mode_);
-    expr.SetPure(IsPure_);
-    expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::InStatement);
+    TSqlExpression expr(*this);
+    expr.IsSourceAllowed_ = true;
+    expr.SetSmartParenthesisMode(ESmartParenthesis::InStatement);
     TNodePtr result = Unwrap(expr.UnaryExpr(node.GetRule_in_unary_subexpr1(), tail));
 
     if (TSourcePtr source = MoveOutIfSource(result)) {
@@ -2661,14 +2654,17 @@ TNodePtr TSqlExpression::ToSubSelectNode(TSourcePtr source) {
         source->GetPos(),
         source,
         /*checkExist=*/false,
-        /*withTables=*/false,
         /*isInlineScalar=*/true,
         /*isPure=*/IsPure_);
 }
 
 TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
     if (IsYqlSelectProduced_) {
-        return BuildYqlSelectSubExpr(Ctx_, Mode_, node, Ctx_.GetColumnReferenceState());
+        return BuildYqlSelectSubExpr(
+            *this,
+            node,
+            Ctx_.GetColumnReferenceState(),
+            SmartParenthesisMode_);
     }
 
     TNodeResult result = std::unexpected(ESQLError::Basic);
@@ -2676,7 +2672,7 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
-        result = Wrap(TSqlSelect(Ctx_, Mode_).BuildSubSelect(node));
+        result = Wrap(TSqlSelect(*this).BuildSubSelect(node));
     }
 
     if (!result) {
@@ -2698,13 +2694,12 @@ TNodeResult TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
     switch (node.Alt_case()) {
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr1: {
             const auto& select_kind = node.GetAlt_select_or_expr1().GetRule_select_kind_partial1();
-            TSourcePtr source = TSqlSelect(Ctx_, Mode_).BuildSubSelect(select_kind);
-            return Wrap(std::move(source));
+            return Wrap(TSqlSelect(*this).BuildSubSelect(select_kind));
         }
         case NSQLv1Generated::TRule_select_or_expr::kAltSelectOrExpr2:
             return TupleOrExpr(node.GetAlt_select_or_expr2().GetRule_tuple_or_expr1());
         case NSQLv1Generated::TRule_select_or_expr::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -2727,7 +2722,9 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
 
         bool isDefinitelyTuple = isTuple || expectTuple || !node.GetBlock3().empty();
         if ((!headName && !isDefinitelyTuple) || IsSelect(head)) {
-            return BuildSourceOrNode(head);
+            TSqlExpression expr(*this);
+            expr.SetSmartParenthesisMode(ToSmartParenthesis(mode));
+            return expr.BuildSourceOrNode(head);
         }
 
         if (auto result = NamedExpr(head, headName, mode)) {
@@ -2759,6 +2756,7 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
             return std::unexpected(ESQLError::Basic);
         }
     }
+
     if (IsTopLevelGroupBy()) {
         if (isTuple) {
             Ctx_.IncrementMonCounter("sql_errors", "SimpleTupleInGroupBy");
@@ -2766,9 +2764,11 @@ TNodeResult TSqlExpression::TupleOrExpr(const TRule_tuple_or_expr& node) {
             Ctx_.Error() << "Unexpected trailing comma in grouping elements list";
             return std::unexpected(ESQLError::Basic);
         }
+
         Ctx_.IncrementMonCounter("sql_features", "ListOfNamedNode");
         return Wrap(BuildListOfNamedNodes(pos, std::move(exprs)));
     }
+
     Ctx_.IncrementMonCounter("sql_features", hasUnnamed ? "SimpleTuple" : "SimpleStruct");
     return (hasUnnamed || expectTuple || exprs.size() == 0)
                ? Wrap(BuildTuple(pos, exprs))
@@ -2791,7 +2791,7 @@ TNodeResult TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node
         case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::kAlt2:
             return TNonNull(EmptyTuple());
         case NSQLv1Generated::TRule_smart_parenthesis_TBlock2::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 

@@ -26,6 +26,14 @@ TString TableContent_3 = "{\"key\"=\"9\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                         "{\"key\"=\"11\";\"subkey\"=\"3\";\"value\"=\"q\"};\n"
                         "{\"key\"=\"12\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n";
 
+TString UnsortedTableContent_3 =
+                        "{\"key\"=\"12\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
+                        "{\"key\"=\"10\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n"
+                        "{\"key\"=\"9\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
+                        "{\"key\"=\"11\";\"subkey\"=\"3\";\"value\"=\"q\"};\n";
+
+// TODO - refactor all of the tests in this file, create setup class.
+
 Y_UNIT_TEST_SUITE(FmrJobTests) {
     Y_UNIT_TEST(DownloadTable) {
         auto richPath = NYT::TRichYPath("test_path").Cluster("test_cluster");
@@ -299,6 +307,51 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
 
         TString resultTableContent = GetTextYson(*resultTableContentMaybe);
         TString expected = TableContent_1 + TableContent_2 + TableContent_3;
+        UNIT_ASSERT_VALUES_EQUAL(resultTableContent.size(), expected.size());
+        TString line;
+        TStringStream resultStream(resultTableContent);
+        while (resultStream.ReadLine(line)) {
+            UNIT_ASSERT(expected.Contains(line));
+        }
+    }
+    Y_UNIT_TEST(LocalSort) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+        TTempFileHandle file;
+        SetupTableDataServiceDiscovery(file, port);
+        auto tableDataServiceClient = MakeTableDataServiceClient(port);
+        auto tableDataServiceServer = MakeTableDataServiceServer(port);
+
+        NYql::NFmr::IYtJobService::TPtr ytJobService = MakeFileYtJobService();
+        std::shared_ptr<std::atomic<bool>> cancelFlag = std::make_shared<std::atomic<bool>>(false);
+
+        TString tableId = "test_table_id", partId = "test_part_id", outputTableId = "output_table_id";
+        std::vector<TTableRange> ranges = {{partId}};
+        TTaskTableRef input = TFmrTableInputRef{.TableId = tableId, .TableRanges = ranges};
+        TSortingColumns sortingColumns{
+            .Columns = {"key"},
+            .SortOrders = {ESortOrder::Ascending}
+        };
+        TFmrTableOutputRef output = TFmrTableOutputRef(outputTableId, partId);
+        output.SortingColumns = sortingColumns;
+
+        auto params = TLocalSortTaskParams{.Input = TTaskTableInputRef{.Inputs = {input}}, .Output = output};
+        TString tableDataServiceExpectedOutputGroup = GetTableDataServiceGroup(output.TableId, output.PartId);
+        TString chunk = "0";
+
+        TTask::TPtr task = MakeTask(ETaskType::LocalSort, "test_task_id", params, "test_session_id", {{TFmrTableId("test_cluster", "test_path"), TClusterConnection()}});
+
+        auto inputGroup = GetTableDataServiceGroup(tableId, partId);
+        tableDataServiceClient->Put(inputGroup, chunk, GetBinaryYson(UnsortedTableContent_3));
+        auto jobLauncher = MakeIntrusive<TFmrUserJobLauncher>(TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
+        ETaskStatus status = RunJob(task, file.Name(), ytJobService, jobLauncher, cancelFlag).TaskStatus;
+
+        UNIT_ASSERT_EQUAL(status, ETaskStatus::Completed);
+        auto resultTableContentMaybe = tableDataServiceClient->Get(tableDataServiceExpectedOutputGroup, chunk).GetValueSync();
+        UNIT_ASSERT_C(resultTableContentMaybe, "Result table content is empty");
+
+        TString resultTableContent = GetTextYson(*resultTableContentMaybe);
+        TString expected = TableContent_3;
         UNIT_ASSERT_VALUES_EQUAL(resultTableContent.size(), expected.size());
         TString line;
         TStringStream resultStream(resultTableContent);

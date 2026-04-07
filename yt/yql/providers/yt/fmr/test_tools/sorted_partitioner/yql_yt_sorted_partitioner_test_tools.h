@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_sorted_partitioner.h>
+#include <yt/yql/providers/yt/fmr/coordinator/partitioner/yql_yt_sorted_partitioner.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 
 #include <util/generic/hash.h>

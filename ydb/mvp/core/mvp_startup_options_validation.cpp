@@ -4,6 +4,8 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/strip.h>
+#include <util/stream/file.h>
 
 namespace NMVP {
 namespace {
@@ -25,6 +27,44 @@ NMvp::TOAuth2Exchange::TCredentials::EType InferCredsType(const NMvp::TOAuth2Exc
     return TCreds::TYPE_UNSPECIFIED;
 }
 
+void NormalizeSecretInfo(NMvp::TSecretInfo* secretInfo) {
+    secretInfo->SetSecret(StripString(secretInfo->GetSecret()));
+    const bool hasSecret = !secretInfo->GetSecret().empty();
+    const bool hasSecretFile = !secretInfo->GetSecretFile().empty();
+
+    if (hasSecret && hasSecretFile) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX
+                            << "secret_info '" << secretInfo->GetName()
+                            << "' must not set both secret and secret_file.";
+    }
+
+    if (!hasSecret && !hasSecretFile) {
+        ythrow yexception() << CONFIG_ERROR_PREFIX
+                            << "secret_info '" << secretInfo->GetName()
+                            << "' requires either secret or secret_file.";
+    }
+
+    if (hasSecretFile) {
+        TString secret;
+        try {
+            secret = StripString(TFileInput(secretInfo->GetSecretFile()).ReadAll());
+        } catch (const std::exception& e) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "unable to read secret_file for secret_info '" << secretInfo->GetName()
+                                << "': " << e.what();
+        }
+
+        if (secret.empty()) {
+            ythrow yexception() << CONFIG_ERROR_PREFIX
+                                << "secret_file for secret_info '" << secretInfo->GetName()
+                                << "' resolved to empty secret.";
+        }
+
+        secretInfo->SetSecret(std::move(secret));
+        secretInfo->ClearSecretFile();
+    }
+}
+
 } // namespace
 
 void TMvpStartupOptions::ValidateOAuth2ExchangeTokenEndpointScheme(
@@ -42,8 +82,8 @@ void TMvpStartupOptions::ValidateOAuth2ExchangeTokenEndpointScheme(
     }
 }
 
-void TMvpStartupOptions::ValidateTokensOverrideConfig(const NMvp::TTokensConfig& tokensOverride) {
-    if (AccessServiceType != NMvp::nebius_v1) {
+void TMvpStartupOptions::ValidateTokensFromConfig(const NMvp::TTokensConfig& tokensOverride) {
+    if (AccessServiceTypeFromConfig && *AccessServiceTypeFromConfig != NMvp::nebius_v1) {
         ythrow yexception() << CONFIG_ERROR_PREFIX << "auth.tokens overrides are only supported for Nebius access service type";
     }
     ValidateOAuth2ExchangeTokenNames(tokensOverride.GetOAuth2Exchange(), "'auth.tokens.oauth2_exchange'");
@@ -101,6 +141,10 @@ void TMvpStartupOptions::ValidateOAuth2CredentialsFields(
 }
 
 void TMvpStartupOptions::ValidateTokensConfig() {
+    for (auto& secretInfo : *Tokens.MutableSecretInfo()) {
+        NormalizeSecretInfo(&secretInfo);
+    }
+
     for (const auto& tokenExchangeInfo : Tokens.GetOAuth2Exchange()) {
         RequireNonEmptyField(tokenExchangeInfo.GetTokenEndpoint(), "'token_endpoint'", "in oauth2_exchange token config");
         if (!tokenExchangeInfo.HasSubjectCredentials()) {

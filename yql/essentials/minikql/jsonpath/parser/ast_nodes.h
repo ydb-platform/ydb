@@ -111,7 +111,7 @@ public:
 
 class TVariableNode: public TAstNode {
 public:
-    TVariableNode(TPosition pos, const TString& name);
+    TVariableNode(TPosition pos, TString name);
 
     const TString& GetName() const;
 
@@ -142,7 +142,7 @@ private:
 
 class TMemberAccessNode: public TAstNode {
 public:
-    TMemberAccessNode(TPosition pos, const TString& member, TAstNodePtr input);
+    TMemberAccessNode(TPosition pos, TString member, TAstNodePtr input);
 
     const TStringBuf GetMember() const;
 
@@ -279,7 +279,7 @@ public:
 
 class TStringLiteralNode: public TAstNode {
 public:
-    TStringLiteralNode(TPosition pos, const TString& value);
+    TStringLiteralNode(TPosition pos, TString value);
 
     const TString& GetValue() const;
 

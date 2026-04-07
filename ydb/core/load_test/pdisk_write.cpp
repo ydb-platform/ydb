@@ -1,5 +1,6 @@
 #include <util/random/shuffle.h>
 #include "service_actor.h"
+#include "util.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
@@ -17,13 +18,6 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
         ui32 NumSlots;
         ui32 SlotSizeBlocks;
         ui32 Weight;
-        ui64 AccumWeight;
-
-        struct TFindByWeight {
-            bool operator ()(ui64 left, const TChunkInfo& right) const {
-                return left < right.AccumWeight;
-            }
-        };
     };
 
     struct TParts : public NPDisk::TEvChunkWrite::IParts {
@@ -183,7 +177,6 @@ public:
                     chunk.GetSlots(),
                     0,
                     chunk.GetWeight(),
-                    0,
                 });
         }
 
@@ -400,24 +393,23 @@ public:
                 IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
-            // Prepare to send request
-            ui64 accumWeight = 0;
-            for (TChunkInfo& chunkInfo : Chunks) {
-                chunkInfo.AccumWeight = accumWeight;
-                if (!chunkInfo.WriteQueue.empty()) {
-                    accumWeight += chunkInfo.Weight;
+            // Prepare to send request.
+            TWeightedIndices weightedIndices;
+            TVector<ui32> chunkIndices;
+            chunkIndices.reserve(Chunks.size());
+            for (ui32 i = 0; i < Chunks.size(); ++i) {
+                if (!Chunks[i].WriteQueue.empty()) {
+                    weightedIndices.AddWeight(Chunks[i].Weight);
+                    chunkIndices.push_back(i);
                 }
             }
-            if (!accumWeight) {
+            if (weightedIndices.Empty()) {
                 break;
             }
 
-            ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight;
-            auto it = std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight());
-            if (it == Chunks.end()) {
-                it = std::prev(Chunks.end());
-            }
-            TChunkInfo& chunkInfo = *it;
+            const ui32 selectedIdx = weightedIndices.GetRandomIndex();
+            Y_ABORT_UNLESS(selectedIdx < chunkIndices.size());
+            TChunkInfo& chunkInfo = Chunks[chunkIndices[selectedIdx]];
 
             Y_ABORT_UNLESS(!chunkInfo.WriteQueue.empty());
 

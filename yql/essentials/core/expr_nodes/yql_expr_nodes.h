@@ -66,6 +66,8 @@ public:
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.defs.inl.h>
 
+#include <utility>
+
 template <typename TParent>
 class TNodeBuilder<TParent, TCoWorld>: public NGenerated::TCoWorldBuilder<TParent> {
 public:
@@ -277,13 +279,13 @@ public:
 template <typename TParent>
 class TNodeBuilder<TParent, TExprApplier>: TNodeBuilderBase {
 public:
-    typedef std::function<TParent&(const TExprApplier&)> BuildFuncType;
-    typedef std::function<TExprBase(const TStringBuf& arg)> GetArgFuncType;
-    typedef TExprApplier ResultType;
+    using BuildFuncType = std::function<TParent&(const TExprApplier&)>;
+    using GetArgFuncType = std::function<TExprBase(const TStringBuf& arg)>;
+    using ResultType = TExprApplier;
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 

@@ -6,6 +6,8 @@
 #include <yql/essentials/core/sql_types/sort_order.h>
 #include <yql/essentials/core/yql_expr_node_core_win_frame_collector_bounds.h>
 
+#include <utility>
+
 namespace NYql {
 
 enum EFrameType {
@@ -40,7 +42,7 @@ public:
         using TBoundType = NYql::NWindow::TNumberAndDirection<TExprNode::TPtr>;
 
         TRangeFrame(std::pair<TBoundType, TBoundType> frame, bool isNumeric, ESortOrder sortOrder, bool isRightCurrentRow)
-            : Frame_(frame)
+            : Frame_(std::move(frame))
             , IsNumeric_(isNumeric)
             , SortOrder_(sortOrder)
             , IsRightCurrentRow_(isRightCurrentRow)
@@ -78,7 +80,7 @@ public:
 
     using TFrame = std::variant<TRowFrame, TRangeFrame, TGroupsFrame>;
 
-    TWindowFrameSettings(const TFrame& frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty);
+    TWindowFrameSettings(TFrame frameBounds, bool neverEmpty, bool compact, bool isAlwaysEmpty);
 
     static TWindowFrameSettings Parse(const TExprNode& node, TExprContext& ctx);
     static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx, bool& isUniversal);

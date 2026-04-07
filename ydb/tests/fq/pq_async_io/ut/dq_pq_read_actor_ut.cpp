@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         InitSource(topicName);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         bool failed = false;
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);

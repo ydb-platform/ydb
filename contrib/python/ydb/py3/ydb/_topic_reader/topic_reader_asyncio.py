@@ -727,6 +727,11 @@ class ReaderStream:
                     logger.exception("unexpected message in stream reader: %s" % e)
 
                 self._state_changed.set()
+        except asyncio.CancelledError as e:
+            logger.debug("reader stream %s error: %s", self._id, e)
+            if not self._closed:
+                self._set_first_error(issues.ConnectionLost("gRPC stream cancelled"))
+            raise
         except Exception as e:
             logger.debug("reader stream %s error: %s", self._id, e)
             self._set_first_error(e)

@@ -16,14 +16,13 @@ void Test(const TString& name) {
     TSimpleTimer timer;
     for (ui32 i = 0; i < 100000000; ++i) {
         std::array<void*, 10> strs;
-        for (ui32 j = 0; j < strs.size(); ++j) {
+        for (void*& str : strs) {
             void* p = Alloc(32);
             *((volatile char*)p) = 0xff;
-            strs[j] = p;
+            str = p;
         }
 
-        for (ui32 j = 0; j < strs.size(); ++j) {
-            void* p = strs[j];
+        for (void* p : strs) {
             Free(p, 32);
         }
     }

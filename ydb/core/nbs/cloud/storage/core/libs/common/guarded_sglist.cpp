@@ -160,8 +160,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TGuardedSgList::TGuard::TGuard(TIntrusivePtr<IGuardedObject> guardedObject,
-                               const TSgList& sglist)
+TGuardedSgList::TGuard::TGuard(
+    TIntrusivePtr<IGuardedObject> guardedObject,
+    const TSgList& sglist)
     : Sglist(sglist)
 {
     if (guardedObject->Acquire()) {
@@ -227,8 +228,9 @@ TGuardedSgList::TGuardedSgList(TSgList sglist)
     , Sglist(std::move(sglist))
 {}
 
-TGuardedSgList::TGuardedSgList(TIntrusivePtr<IGuardedObject> guardedObject,
-                               TSgList sglist)
+TGuardedSgList::TGuardedSgList(
+    TIntrusivePtr<IGuardedObject> guardedObject,
+    TSgList sglist)
     : GuardedObject(std::move(guardedObject))
     , Sglist(std::move(sglist))
 {}
@@ -241,15 +243,17 @@ bool TGuardedSgList::Empty() const
 TGuardedSgList TGuardedSgList::CreateDepender() const
 {
     Y_ABORT_UNLESS(GuardedObject);
-    return TGuardedSgList(MakeIntrusive<TDependentGuardedObject>(GuardedObject),
-                          Sglist);
+    return TGuardedSgList(
+        MakeIntrusive<TDependentGuardedObject>(GuardedObject),
+        Sglist);
 }
 
 TGuardedSgList TGuardedSgList::CreateDepender(TSgList sglist) const
 {
     Y_ABORT_UNLESS(GuardedObject);
-    return TGuardedSgList(MakeIntrusive<TDependentGuardedObject>(GuardedObject),
-                          std::move(sglist));
+    return TGuardedSgList(
+        MakeIntrusive<TDependentGuardedObject>(GuardedObject),
+        std::move(sglist));
 }
 
 TGuardedSgList TGuardedSgList::Create(TSgList sglist) const

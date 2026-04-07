@@ -18,14 +18,17 @@ namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NProto::TError MakeKikimrError(NKikimrProto::EReplyStatus status,
-                               TString errorReason = {});
-NProto::TError MakeSchemeShardError(NKikimrScheme::EStatus status,
-                                    TString errorReason = {});
+NProto::TError MakeKikimrError(
+    NKikimrProto::EReplyStatus status,
+    TString errorReason = {});
+NProto::TError MakeSchemeShardError(
+    NKikimrScheme::EStatus status,
+    TString errorReason = {});
 
-inline void PipeSend(const NActors::TActorContext& ctx,
-                     const NActors::TActorId& pipe,
-                     std::unique_ptr<NActors::IEventHandle>&& event)
+inline void PipeSend(
+    const NActors::TActorContext& ctx,
+    const NActors::TActorId& pipe,
+    std::unique_ptr<NActors::IEventHandle>&& event)
 {
     // see pipe client code for details
     event->Rewrite(NKikimr::TEvTabletPipe::EvSend, pipe);

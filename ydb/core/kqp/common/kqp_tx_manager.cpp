@@ -118,10 +118,18 @@ public:
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
 
             if (broken && isInvalidated) {
-                // For broken locks from shard: use effectiveVictimSpanId (from shard's determination).
-                // For comparison-based invalidation: use the original lock setter's SpanId.
-                ui64 victimSpanId = (isError && effectiveVictimSpanId != 0)
-                    ? effectiveVictimSpanId : lockPtr->VictimQuerySpanId;
+                // Prefer the lock's original VictimQuerySpanId (set when the lock was first created
+                // during the read that established it). This matches what the DataShard recorded.
+                // Only use effectiveVictimSpanId when the shard explicitly provided a deferred victim
+                // (deferredVictimQuerySpanId != 0), or as a fallback when the lock has no SpanId.
+                // Without this, commit-phase AddLock would use the write's querySpanId, breaking
+                // the linkage between SessionActor and DataShard TLI records.
+                ui64 victimSpanId = lockPtr->VictimQuerySpanId;
+                if (isError && deferredVictimQuerySpanId != 0) {
+                    victimSpanId = effectiveVictimSpanId;
+                } else if (victimSpanId == 0 && isError && effectiveVictimSpanId != 0) {
+                    victimSpanId = effectiveVictimSpanId;
+                }
                 SetVictimQuerySpanId(victimSpanId);
             }
         } else {
@@ -204,7 +212,9 @@ public:
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
+        AFL_ENSURE(TopicOperations.GetSize() == 0);
         TopicOperations = std::move(topicOperations);
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     const NTopic::TTopicOperations& GetTopicOperations() const override {
@@ -221,6 +231,11 @@ public:
 
     bool HasTopics() const override {
         return GetTopicOperations().GetSize() != 0;
+    }
+
+    void SetSkipTopicsConflictCheck(bool skipConflictCheck) override {
+        SkipTopicsConflictCheck = skipConflictCheck;
+        TopicOperations.SetSkipConflictCheck(SkipTopicsConflictCheck);
     }
 
     TVector<NKikimrDataEvents::TLock> GetLocks() const override {
@@ -681,6 +696,7 @@ private:
     THashSet<ui64> ShardsToWait;
 
     NTopic::TTopicOperations TopicOperations;
+    bool SkipTopicsConflictCheck = false;
 
     ui64 MinStep = 0;
     ui64 MaxStep = 0;

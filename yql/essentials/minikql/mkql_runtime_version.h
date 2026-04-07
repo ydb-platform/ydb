@@ -1,6 +1,10 @@
 #pragma once
 
+#include <util/generic/yexception.h>
 #include <util/system/types.h>
+#include <util/system/yassert.h>
+
+#include <compare>
 
 namespace NKikimr::NMiniKQL {
 
@@ -23,12 +27,38 @@ namespace NKikimr::NMiniKQL {
 // 1. Bump this version every time incompatible runtime nodes are introduced.
 // 2. Make sure you provide runtime node generation for previous runtime versions.
 #ifndef MKQL_RUNTIME_VERSION
-    #define MKQL_RUNTIME_VERSION 73U
+    #define MKQL_RUNTIME_VERSION 75U
 #endif
 
-// History:
-// v4  is the version supported by kikimr-19-6
-// v14 is the version supported by kikimr-20-2
-constexpr ui32 RuntimeVersion = MKQL_RUNTIME_VERSION;
+class TRuntimeVersion {
+public:
+    constexpr explicit TRuntimeVersion(ui32 version)
+        : Version_(version)
+    {
+    }
+
+    constexpr ui32 Value() const {
+        return Version_;
+    }
+
+    constexpr std::strong_ordering operator<=>(ui32 other) const {
+        if (other < MinSupportedRuntimeVersion) {
+            throw yexception() << "Runtime version must be >= " << MinSupportedRuntimeVersion << ", but got " << other;
+        }
+        return Version_ <=> other;
+    }
+
+    // History:
+    // releases/ydb/stable-25-4: 67U
+    // releases/ydb/stable-26-1: 67U
+    static constexpr ui32 MinSupportedRuntimeVersion = 67U;
+
+private:
+    ui32 Version_;
+};
+
+inline constexpr TRuntimeVersion RuntimeVersion{MKQL_RUNTIME_VERSION};
+
+static_assert(RuntimeVersion >= TRuntimeVersion::MinSupportedRuntimeVersion);
 
 } // namespace NKikimr::NMiniKQL

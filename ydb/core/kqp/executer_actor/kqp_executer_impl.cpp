@@ -123,7 +123,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             return CreateKqpScanExecuter(
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
-                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService
+                statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService,
+                txManager
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:

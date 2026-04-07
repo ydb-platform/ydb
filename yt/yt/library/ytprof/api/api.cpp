@@ -66,13 +66,13 @@ TCpuProfilerTagGuard::~TCpuProfilerTagGuard()
     }
 }
 
-TCpuProfilerTagGuard::TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other)
+TCpuProfilerTagGuard::TCpuProfilerTagGuard(TCpuProfilerTagGuard&& other) noexcept
     : TagIndex_(other.TagIndex_)
 {
     other.TagIndex_ = -1;
 }
 
-TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator=(TCpuProfilerTagGuard&& other)
+TCpuProfilerTagGuard& TCpuProfilerTagGuard::operator=(TCpuProfilerTagGuard&& other) noexcept
 {
     if (this == &other) {
         return *this;

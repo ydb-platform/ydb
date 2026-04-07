@@ -107,12 +107,6 @@ public:
                 .AllowedSIDs = databaseAllowedSIDs,
             });
             mon->RegisterActorPage({
-                .RelPath = "viewer/capabilities",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
-                .AuthMode = TMon::EAuthMode::Disabled,
-            });
-            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
@@ -135,10 +129,9 @@ public:
             });
             // For healthcheck, always extract token if enforce_user_token_requirement is enabled, so access can be checked in handler.
             const bool enforceUserToken = KikimrRunConfig.AppConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement();
-            mon->RegisterActorPage({
-                .RelPath = "healthcheck",
-                .ActorSystem = ctx.ActorSystem(),
-                .ActorId = ctx.SelfID,
+            mon->RegisterActorHandler({
+                .Path = "/healthcheck",
+                .Handler = ctx.SelfID,
                 .AuthMode = enforceUserToken ? TMon::EAuthMode::ExtractOnly : TMon::EAuthMode::Disabled,
                 // No need to set AllowedSIDs since the SIDs will be checked in handler if required.
             });
@@ -220,12 +213,21 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    mon->RegisterActorHandler({
-                        .Path = name,
-                        .Handler = ctx.SelfID,
-                        .AuthMode = TMon::EAuthMode::Enforce,
-                        .AllowedSIDs = databaseAllowedSIDs,
-                    });
+                    if (name == "/viewer/capabilities") {
+                        // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Disabled,
+                        });
+                    } else {
+                        mon->RegisterActorHandler({
+                            .Path = name,
+                            .Handler = ctx.SelfID,
+                            .AuthMode = TMon::EAuthMode::Enforce,
+                            .AllowedSIDs = databaseAllowedSIDs,
+                        });
+                    }
                 }
             }
         }
@@ -609,6 +611,9 @@ private:
             }
             lastModified = GetCompileTime().ToRfc822String();
         }
+        if (type.empty()) {
+            type = "text/html";
+        }
         if (!blob.empty()) {
             if (name == "/index.html" || name == "/v2/index.html") { // we send root's index in such format that it could be embedded into existing web interface
                 Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(static_cast<const char*>(blob.data()), blob.size())));
@@ -689,10 +694,6 @@ private:
         }
         if (path.StartsWith("/counters/hosts")) {
             Register(new TCountersHostsList(this, ev));
-            return;
-        }
-        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
-            Register(new TJsonHealthCheck(this, ev));
             return;
         }
         // TODO: check path validity
@@ -778,6 +779,10 @@ private:
                 Send(sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseBadRequest()));
                 return;
             }
+        }
+        if (path.StartsWith("/healthcheck")) { // healthcheck no auth scrapping
+            Register(new TJsonHealthCheck(this, ev));
+            return;
         }
         Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(GetHTTPNOTFOUND(ev->Get()))));
     }

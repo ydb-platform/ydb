@@ -1,55 +1,83 @@
 #include "region.h"
 
+#include "range_translate.h"
+#include "ydb/core/nbs/cloud/blockstore/libs/common/constants.h"
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+size_t VChunkIndexFromHeaders(const TRequestHeaders& headers)
+{
+    return GetVChunkIndex(
+        *headers.VolumeConfig,
+        TranslateToRegion(*headers.VolumeConfig, headers.Range));
+}
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
-    TVector<NStorage::NPartitionDirect::IDirectBlockGroupPtr> directBlockGroups)
+    NActors::TActorSystem* actorSystem,
+    IPartitionDirectService* partitionDirectService,
+    ui32 regionIndex,
+    TVector<IDirectBlockGroupPtr> directBlockGroups,
+    ui32 syncRequestsBatchSize,
+    TDuration writeHandoffDelay,
+    TDuration traceSamplePeriod)
+    : ActorSystem(actorSystem)
 {
-    for (size_t i = 0; i < directBlockGroups.size(); i++) {
-        VChunks.emplace_back(i, std::move(directBlockGroups[i]));
+    for (size_t i = 0; i < VChunksPerRegionCount; i++) {
+        const size_t vChunkIndex =
+            (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
+        const size_t dbgIndex = i % directBlockGroups.size();
+
+        auto vChunk = std::make_shared<TVChunk>(
+            ActorSystem,
+            partitionDirectService,
+            TVChunkConfig::Make(vChunkIndex),
+            directBlockGroups[dbgIndex],
+            syncRequestsBatchSize,
+            writeHandoffDelay,
+            traceSamplePeriod);
+        vChunk->Start();
+        VChunks.push_back(std::move(vChunk));
     }
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        request->Range.Start - vChunkIndex * VChunkBlocksCount,
-        request->Range.Size());
+    const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
-    return VChunks[vChunkIndex].ReadBlocksLocal(
+    return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
-        std::move(traceId));
+        traceId);
 }
 
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    EWriteMode writeMode,
+    ui32 pbufferReplyTimeoutMicroseconds,
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
 {
-    auto vChunkIndex = GetVChunkIndex(request->Range.Start);
-    request->Range = TBlockRange64::WithLength(
-        request->Range.Start - vChunkIndex * VChunkBlocksCount,
-        request->Range.Size());
+    const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
-    return VChunks[vChunkIndex].WriteBlocksLocal(
+    return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        std::move(traceId));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-size_t TRegion::GetVChunkIndex(ui64 blockIndex) const
-{
-    // TODO: remove hardcode
-    return blockIndex * 4096 / (128 * 1024 * 1024);
+        writeMode,
+        pbufferReplyTimeoutMicroseconds,
+        lsn,
+        traceId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

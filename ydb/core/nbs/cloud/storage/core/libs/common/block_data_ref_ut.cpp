@@ -26,7 +26,8 @@ Y_UNIT_TEST_SUITE(TBlockDataRefTest)
     Y_UNIT_TEST(ConstructZeroBlock)
     {
         UNIT_ASSERT_VALUES_EQUAL(
-            "", TBlockDataRef::CreateZeroBlock(4096).AsStringBuf());
+            "",
+            TBlockDataRef::CreateZeroBlock(4096).AsStringBuf());
     }
 
     Y_UNIT_TEST(CompareZeroBlocks)

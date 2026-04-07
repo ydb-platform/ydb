@@ -25,6 +25,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/actors/helpers/future_callback.h>
 #include <library/cpp/build_info/build_info.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -605,7 +606,7 @@ namespace NYql::NDqs {
 
             TExecutorThreadStats stat;
             TVector<TExecutorThreadStats> stats;
-            ActorSystem.GetPoolStats(0, poolStats, stats);
+            GetActorSystemStats(ActorSystem).GetPoolStats(0, poolStats, stats);
 
             for (const auto& s : stats) {
                 stat.Aggregate(s);

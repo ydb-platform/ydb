@@ -21,13 +21,16 @@ class TRangeAllocator
         double Cdf;
         TBlockRange64 Range;
     };
+
     TVector<TSubRange> SubRanges;
+
     struct TRequestSize
     {
         double Cdf;
         ui32 MinSize;
         ui32 MaxSize;
     };
+
     TVector<TRequestSize> RequestSizes;
 
     ui64 CurrentBlock;

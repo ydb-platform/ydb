@@ -259,4 +259,59 @@ Y_UNIT_TEST_SUITE(TSequenceReboots) {
         });
     }
 
+    // Issue #33764: ConsistentCopyTables + DropTable with sequences and reboots
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ConsistentCopyThenDropTableWithSequenceAndReboots, 8, 1, false) {
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Uint64" DefaultFromSequence: "myseq" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                        Name: "ValueIndex"
+                        KeyColumnNames: ["value"]
+                    }
+                    SequenceDescription {
+                        Name: "myseq"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime,
+                ConsistentCopyTablesRequest(++t.TxId, "/", R"(
+                    CopyTableDescriptions {
+                        SrcPath: "/MyRoot/Table"
+                        DstPath: "/MyRoot/TableCopy"
+                    }
+                )"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            t.TestEnv->ReliablePropose(runtime,
+                DropTableRequest(++t.TxId, "/MyRoot", "Table"),
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications,
+                 NKikimrScheme::StatusPathDoesNotExist});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
+                                   {NLs::PathExist});
+                TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/TableCopy/ValueIndex"),
+                                   {NLs::PathExist});
+                TestLs(runtime, "/MyRoot/TableCopy/myseq",
+                    TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+                TestLs(runtime, "/MyRoot/Table", false, NLs::PathNotExist);
+            }
+        });
+    }
+
 } // Y_UNIT_TEST_SUITE(TSequenceReboots)

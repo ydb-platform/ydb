@@ -415,7 +415,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
     Y_UNIT_TEST(CopyWithRebootsAtCommit) {
         TTestWithReboots t(true);
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
             {
@@ -441,7 +440,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(3)});
+                                   {NLs::ChildrenCount(4)});
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
                                    {NLs::Finished, NLs::IsColumnTable});

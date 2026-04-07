@@ -48,7 +48,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TString& runner);
+        TString runner);
 
     void SetIssueReportTarget(const TString& reportTarget);
     void SetLanguageVersion(TLangVersion version);
@@ -71,16 +71,14 @@ public:
     TProgramPtr Create(
         const TFile& file,
         const TString& sessionId = TString(),
-        const TQContext& qContext = {},
-        TMaybe<TString> gatewaysForMerge = {});
+        const TQContext& qContext = {});
 
     TProgramPtr Create(
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId = TString(),
         EHiddenMode hiddenMode = EHiddenMode::Disable,
-        const TQContext& qContext = {},
-        TMaybe<TString> gatewaysForMerge = {});
+        const TQContext& qContext = {});
 
     void UnrepeatableRandom();
 
@@ -365,36 +363,43 @@ public:
         EnableLineage_ = true;
     }
 
+    void SetFuzzUntypedLambda() {
+        FuzzUntypedLambda_ = true;
+    }
+
+    void SetFuzzUniversal() {
+        FuzzUniversal_ = true;
+    }
+
 private:
     TProgram(
-        const TString& issueReportTarget,
+        TString issueReportTarget,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TIntrusivePtr<IRandomProvider> randomProvider,
-        const TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider,
+        TIntrusivePtr<ITimeProvider> timeProvider,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         TLangVersion langVer,
         TLangVersion maxLangVer,
         bool volatileResults,
-        const TUserDataTable& userDataTable,
+        TUserDataTable userDataTable,
         const TCredentials::TPtr& credentials,
-        const IModuleResolver::TPtr& modules,
-        const IUrlListerManagerPtr& urlListerManager,
+        IModuleResolver::TPtr modules,
+        IUrlListerManagerPtr urlListerManager,
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
-        const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
+        TUdfIndexPackageSet::TPtr udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const IUrlPreprocessing::TPtr& urlPreprocessing,
         const TGatewaysConfig* gatewaysConfig,
-        const TString& filename,
-        const TString& sourceCode,
-        const TString& sessionId,
+        TString filename,
+        TString sourceCode,
+        TString sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
-        const IArrowResolver::TPtr& arrowResolver,
+        IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,
-        TMaybe<TString> gatewaysForMerge,
         THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
@@ -424,8 +429,7 @@ private:
 private:
     std::optional<bool> CheckFallbackIssues(const TIssues& issues);
     void HandleSourceCode();
-    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
-                                   NSQLTranslation::TTranslationSettings*& currentSettings);
+    void HandleTranslationSettings(NSQLTranslation::TTranslationSettings& settings);
 
     const TString IssueReportTarget_;
 
@@ -458,7 +462,6 @@ private:
     TUserDataTable SavedUserDataTable_;
     TUserDataStorage::TPtr UserDataStorage_;
     const TGatewaysConfig* GatewaysConfig_;
-    TGatewaysConfig LoadedGatewaysConfig_;
     TString Filename_;
     TString SourceCode_;
     ESourceSyntax SourceSyntax_;
@@ -498,14 +501,16 @@ private:
     TMaybe<TString> LineageStr_;
 
     TQContext QContext_;
-    TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
     bool EnableLineage_ = false;
+    bool FuzzUntypedLambda_ = false;
+    bool FuzzUniversal_ = false;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
 };
 
 TGatewaySQLFlags SQLFlagsFromQContext(const TQContext& context);
+THolder<TGatewaysConfig> GatewaysConfigFromQContext(const TQContext& context);
 
 bool HasFullCapture(const IQReaderPtr& reader);
 

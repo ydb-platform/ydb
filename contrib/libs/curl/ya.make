@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(8.16.0)
+VERSION(8.17.0)
 
-ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_16_0/curl-8.16.0.tar.bz2)
+ORIGINAL_SOURCE(https://github.com/curl/curl/releases/download/curl-8_17_0/curl-8.17.0.tar.bz2)
 
 PEERDIR(
     contrib/libs/brotli/c/dec
@@ -85,9 +85,9 @@ SRCS(
     lib/cookie.c
     lib/cshutdn.c
     lib/curl_addrinfo.c
-    lib/curl_des.c
     lib/curl_endian.c
     lib/curl_fnmatch.c
+    lib/curl_fopen.c
     lib/curl_get_line.c
     lib/curl_gethostname.c
     lib/curl_gssapi.c
@@ -102,10 +102,12 @@ SRCS(
     lib/curl_trc.c
     lib/curlx/base64.c
     lib/curlx/dynbuf.c
+    lib/curlx/fopen.c
     lib/curlx/inet_ntop.c
     lib/curlx/inet_pton.c
     lib/curlx/multibyte.c
     lib/curlx/nonblock.c
+    lib/curlx/strerr.c
     lib/curlx/strparse.c
     lib/curlx/timediff.c
     lib/curlx/timeval.c
@@ -125,7 +127,6 @@ SRCS(
     lib/fake_addrinfo.c
     lib/file.c
     lib/fileinfo.c
-    lib/fopen.c
     lib/formdata.c
     lib/ftp.c
     lib/ftplistparser.c
@@ -152,7 +153,6 @@ SRCS(
     lib/idn.c
     lib/if2ip.c
     lib/imap.c
-    lib/krb5.c
     lib/ldap.c
     lib/llist.c
     lib/macos.c
@@ -164,6 +164,7 @@ SRCS(
     lib/mqtt.c
     lib/multi.c
     lib/multi_ev.c
+    lib/multi_ntfy.c
     lib/netrc.c
     lib/noproxy.c
     lib/openldap.c
@@ -226,7 +227,7 @@ SRCS(
     lib/vssh/curl_path.c
     lib/vssh/libssh.c
     lib/vssh/libssh2.c
-    lib/vssh/wolfssh.c
+    lib/vtls/apple.c
     lib/vtls/cipher_suite.c
     lib/vtls/hostcheck.c
     lib/vtls/keylog.c

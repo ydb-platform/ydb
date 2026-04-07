@@ -293,18 +293,18 @@ public:
 
         promise
             .ToFuture()
-            .Get()
+            .BlockingGet()
             .ThrowOnError();
 
         EXPECT_THROW({
             response->GetAttachmentsStream()->Write(TSharedMutableRef::Allocate(100))
-                .Get()
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 
         EXPECT_THROW({
             request->GetAttachmentsStream()->Read()
-                .Get()
+                .BlockingGet()
                 .ThrowOnError();
         }, TErrorException);
 

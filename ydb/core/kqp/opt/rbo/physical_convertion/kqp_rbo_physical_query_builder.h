@@ -41,6 +41,9 @@ private:
     bool IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const;
     TExprNode::TPtr TypeAnnotateProgram(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType);
     void TypeAnnotate(TExprNode::TPtr& input);
+    TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
+    TKqpPhyTxSettings GetPhysicalTxSettings() const;
+    TExprNode::TPtr GetFinalStage(const TExprNode::TPtr& stage) const;
 
     TOpRoot& Root;
     TStageGraph Graph;

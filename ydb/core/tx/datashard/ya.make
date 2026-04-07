@@ -180,11 +180,14 @@ SRCS(
     memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
+    multi_txids.cpp
+    multi_txids.h
     operation.cpp
     operation.h
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
+    prepare_index_validation_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     prepare_write_tx_in_rs_unit.cpp
@@ -218,6 +221,7 @@ SRCS(
     truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
+    validate_row_condition.cpp
     volatile_tx.cpp
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
@@ -275,6 +279,7 @@ PEERDIR(
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -355,6 +360,7 @@ RECURSE_FOR_TESTS(
     ut_truncate
     ut_upload_rows
     ut_vacuum
+    ut_validate_row_condition
     ut_volatile
     ut_write
 )

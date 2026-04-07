@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/config/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -12,8 +12,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::IActor* CreatePartitionTablet(const NActors::TActorId& tablet,
-                                       NKikimr::TTabletStorageInfo* info);
+NActors::IActor* CreatePartitionTablet(
+    const NActors::TActorId& tablet,
+    NKikimr::TTabletStorageInfo* info);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -744,6 +744,7 @@ public:
         YQL_ENSURE(querySettings.Type);
         queryProto.SetType(GetPhyQueryType(*querySettings.Type));
 
+        AFL_ENSURE(Config->GetEnableOltpSink());
         queryProto.SetEnableOltpSink(Config->GetEnableOltpSink());
         queryProto.SetEnableOlapSink(Config->GetEnableOlapSink());
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
@@ -1386,14 +1387,19 @@ private:
 
             auto [indexMeta, index] = tableMeta->GetIndex(indexName);
 
-            auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
-            YQL_ENSURE(desc, "unexpected index description type");
-            fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
             YQL_ENSURE(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                || index->Type == TIndexDescription::EType::GlobalFulltextPlain);
-            fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
-                : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
+                || index->Type == TIndexDescription::EType::GlobalFulltextPlain
+                || index->Type == TIndexDescription::EType::GlobalJson);
+            if (index->Type == TIndexDescription::EType::GlobalJson) {
+                fullTextProto.SetIndexType(NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson);
+            } else {
+                auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+                YQL_ENSURE(desc, "unexpected index description type");
+                fullTextProto.MutableIndexDescription()->MutableSettings()->CopyFrom(desc->GetSettings());
+                fullTextProto.SetIndexType(index->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    ? NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance
+                    : NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain);
+            }
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
                 columnProto->SetName(columnMeta->Name);

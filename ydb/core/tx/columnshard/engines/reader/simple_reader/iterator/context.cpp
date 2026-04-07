@@ -122,6 +122,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
+    TGuard<TSpinLock> g(DuplicatesManagerLock);
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
         const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
@@ -143,9 +144,16 @@ void TSpecialReadContext::UnregisterActors() {
     if (NActors::TActorSystem::IsStopped()) {
         return;
     }
-    if (DuplicatesManager) {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
-        DuplicatesManager = TActorId();
+
+    NActors::TActorId duplicatesManager;
+    {
+        TGuard<TSpinLock> g(DuplicatesManagerLock);
+        duplicatesManager = DuplicatesManager;
+        DuplicatesManager = NActors::TActorId();
+    }
+
+    if (duplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(duplicatesManager, new NActors::TEvents::TEvPoison);
     }
 }
 

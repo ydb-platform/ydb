@@ -7,6 +7,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/vhost.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -31,6 +33,8 @@ NVhost::TServerConfig CreateDefaultVhostServerConfig()
 
 TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     : Config(config)
+    , Timer(CreateWallClockTimer())
+    , Scheduler(CreateScheduler(Timer))
 {
     TLogSettings logSettings;
     logSettings.FiltrationLevel = static_cast<ELogPriority>(DefaultLogLevel);
@@ -44,14 +48,18 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
     VHostStats = std::make_shared<TVHostStatsSimple>();
 
     VhostServer = NVhost::CreateServer(
-        Logging, VHostStats, NVhost::CreateVhostQueueFactory(),
-        CreateDefaultDeviceHandlerFactory(), CreateDefaultVhostServerConfig(),
+        Logging,
+        VHostStats,
+        NVhost::CreateVhostQueueFactory(),
+        CreateDefaultDeviceHandlerFactory(),
+        CreateDefaultVhostServerConfig(),
         VhostCallbacks);
 }
 
 void TNbsService::Start()
 {
     STORAGE_INFO("TNbsService start");
+    Scheduler->Start();
     VhostServer->Start();
 }
 
@@ -59,6 +67,7 @@ void TNbsService::Stop()
 {
     STORAGE_INFO("TNbsService stop");
     VhostServer->Stop();
+    Scheduler->Stop();
 }
 
 const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const

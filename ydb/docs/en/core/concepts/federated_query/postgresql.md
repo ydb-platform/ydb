@@ -42,7 +42,7 @@ where:
 - `postgresql_datasource` - identifier of the external data source;
 - `<table_name>` - table name within the external data source.
 
-## Limitations
+## Limitations {#limitations}
 
 When working with PostgreSQL clusters, there are a number of limitations:
 

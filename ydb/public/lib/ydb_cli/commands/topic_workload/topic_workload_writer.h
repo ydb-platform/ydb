@@ -70,7 +70,8 @@ namespace NYdb {
             void Close();
             void CloseProducers();
 
-            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId);
+            std::shared_ptr<TTopicWorkloadWriterProducer> CreateProducer(ui64 partitionId,
+                                                                         NTopic::TTopicClient& topicClient);
 
             void WaitTillNextMessageExpectedCreateTimeAndContinuationToken(std::shared_ptr<TTopicWorkloadWriterProducer> producer);
 

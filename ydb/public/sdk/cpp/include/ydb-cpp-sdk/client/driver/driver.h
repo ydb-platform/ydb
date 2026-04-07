@@ -122,6 +122,7 @@ public:
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = "");
+
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
@@ -130,6 +131,11 @@ public:
     //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
+
+    //! Set grpc load balancing policy
+    //! policy - name of the load balancing policy, see grpc documentation for available policies
+    //! default: "round_robin"
+    TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.

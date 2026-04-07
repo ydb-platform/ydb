@@ -71,6 +71,9 @@ enum ELockMode {
     OPTIMISTIC = 0;
     OPTIMISTIC_SNAPSHOT_ISOLATION = 1;
     PESSIMISTIC_EXCLUSIVE = 2;
+    PESSIMISTIC_EXCLUSIVE_NO_KEY = 3;
+    PESSIMISTIC_SHARED = 4;
+    PESSIMISTIC_SHARED_KEY = 5;
 }
 
 enum EDataFormat {
@@ -245,6 +248,7 @@ message TEvLockRowsResult {
         STATUS_SCHEME_ERROR = 6;
         STATUS_SCHEME_CHANGED = 7;
         STATUS_INTERNAL_ERROR = 8;
+        STATUS_DEADLOCK = 9;
     }
 
     // TabletId of the replying shard

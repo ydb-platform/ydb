@@ -88,7 +88,7 @@ public:
         }
     }
 
-    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {   
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) final {
         ClusterConfigs = std::make_shared<TPqClusterConfigsMap>();
         for (const auto& cfg : config->GetClusterMapping()) {
             AddCluster(cfg);

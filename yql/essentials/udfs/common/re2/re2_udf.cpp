@@ -9,6 +9,8 @@
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
+#include <utility>
+
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
@@ -124,11 +126,11 @@ public:
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentlangVersion,
-            const TRegexpGroups& regexpGroups = TRegexpGroups())
+            TRegexpGroups regexpGroups = TRegexpGroups())
             : Mode_(mode)
             , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , RegexpGroups_(regexpGroups)
+            , RegexpGroups_(std::move(regexpGroups))
             , CurrentLangVersion_(currentlangVersion)
         {
         }

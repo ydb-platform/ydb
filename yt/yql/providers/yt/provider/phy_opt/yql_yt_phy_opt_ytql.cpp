@@ -27,13 +27,11 @@ bool NodeHasQLCompatibleType(const TExprNode::TPtr& node, bool allowOptional) {
     if (!dataType) {
         return false;
     }
-    if (!IsDataTypeIntegral(dataType->GetSlot())) {
-        return false;
-    }
-    return true;
+    const auto dataSlot = dataType->GetSlot();
+    return IsDataTypeNumeric(dataSlot) || dataSlot == EDataSlot::Bool || dataSlot == EDataSlot::String || dataSlot == EDataSlot::Utf8;
 }
 
-TExprNode::TPtr CheckQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, bool allowOptional) {
+TExprNode::TPtr ConvertQLConst(const TExprNode::TPtr& node, const TExprNode::TPtr& rowArg, bool allowOptional) {
     if (!NodeHasQLCompatibleType(node, allowOptional)) {
         return nullptr;
     }
@@ -67,10 +65,10 @@ TExprNode::TPtr ConvertQLComparison(const TExprNode::TPtr& node, const TExprNode
     TExprNode::TPtr childLeft;
     TExprNode::TPtr childRight;
     if (childLeft = ConvertQLMember(node->ChildPtr(0), rowArg, newRowArg, ctx, allowOptional)) {
-        childRight = CheckQLConst(node->ChildPtr(1), rowArg, allowOptional);
+        childRight = ConvertQLConst(node->ChildPtr(1), rowArg, allowOptional);
     }
     else if (childRight = ConvertQLMember(node->ChildPtr(1), rowArg, newRowArg, ctx, allowOptional)) {
-        childLeft = CheckQLConst(node->ChildPtr(0), rowArg, allowOptional);
+        childLeft = ConvertQLConst(node->ChildPtr(0), rowArg, allowOptional);
     }
     if (!childLeft || !childRight) {
         return nullptr;

@@ -5,6 +5,8 @@ import pytest
 import random
 import threading
 
+import requests
+
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
 from ydb.tests.library.common.wait_for import wait_for
@@ -328,6 +330,28 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
         ROW_COUNT = 1000
         self.create_tables()
         self.write_data(ROW_COUNT)
+
+        def base_stats_ready(table_name):
+            mon_port = list(self.cluster.slots.values())[0].mon_port
+            try:
+                response = requests.get(
+                    f"http://localhost:{mon_port}/actors/statservice",
+                    params={
+                        "action": "probe_base_stats",
+                        "path": f"{self.database_path}/{table_name}",
+                        "json": 1,
+                    })
+            except requests.exceptions.RequestException:
+                return False
+
+            logger.debug(f"{table_name} table base stats: {response.json()}")
+            if response.status_code == 200:
+                return response.json()["row_count"] > 0
+            return False
+
+        assert wait_for(
+            lambda: all(base_stats_ready(t) for t in self.tables), timeout_seconds=150), \
+            "base stats not ready"
 
         def try_analyze(session_pool, table_name):
             try:

@@ -1,5 +1,6 @@
 #include "aligned_device_handler.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 
@@ -97,6 +98,11 @@ TAlignedDeviceHandler::TAlignedDeviceHandler(
     , MaxBlockCount(maxSubRequestSize / BlockSize)
     , MaxBlockCountForZeroBlocksRequest(
           params.MaxZeroBlocksSubRequestSize / BlockSize)
+    , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
+          .DiskId = DiskId,
+          .BlockSize = BlockSize,
+          .BlockCount = params.BlockCount,
+          .BlocksPerStripe = params.BlocksPerStripeCount}))
 {
     Y_ABORT_UNLESS(MaxBlockCount > 0);
     Y_ABORT_UNLESS(MaxBlockCountForZeroBlocksRequest > 0);
@@ -178,12 +184,14 @@ TFuture<TReadBlocksLocalResponse> TAlignedDeviceHandler::ExecuteReadRequest(
     const ui32 requestBlockCount =
         std::min<ui32>(blocksInfo.Range.Size(), MaxBlockCount);
 
-    auto request = std::make_shared<TReadBlocksLocalRequest>(
-        TRequestHeaders{
-            .RequestId = ctx->RequestId,
-            .ClientId = ClientId,
-            .Timestamp = TInstant::Now()},
-        TBlockRange64::WithLength(blocksInfo.Range.Start, requestBlockCount));
+    auto request = std::make_shared<TReadBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = VolumeConfig,
+        .ClientId = ClientId,
+        .RequestId = ctx->RequestId,
+        .Range = TBlockRange64::WithLength(
+            blocksInfo.Range.Start,
+            requestBlockCount),
+        .Timestamp = TInstant::Now()});
 
     if (requestBlockCount == blocksInfo.Range.Size()) {
         // The request size is quite small. We do all work at once.
@@ -264,12 +272,14 @@ TFuture<TWriteBlocksLocalResponse> TAlignedDeviceHandler::ExecuteWriteRequest(
     const ui32 requestBlockCount =
         std::min<ui32>(blocksInfo.Range.Size(), MaxBlockCount);
 
-    auto request = std::make_shared<TWriteBlocksLocalRequest>(
-        TRequestHeaders{
-            .RequestId = ctx->RequestId,
-            .ClientId = ClientId,
-            .Timestamp = TInstant::Now()},
-        TBlockRange64::WithLength(blocksInfo.Range.Start, requestBlockCount));
+    auto request = std::make_shared<TWriteBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = VolumeConfig,
+        .ClientId = ClientId,
+        .RequestId = ctx->RequestId,
+        .Range = TBlockRange64::WithLength(
+            blocksInfo.Range.Start,
+            requestBlockCount),
+        .Timestamp = TInstant::Now()});
 
     if (requestBlockCount == blocksInfo.Range.Size()) {
         // The request size is quite small. We do all work at once.
@@ -348,12 +358,14 @@ TFuture<TZeroBlocksLocalResponse> TAlignedDeviceHandler::ExecuteZeroRequest(
         blocksInfo.Range.Size(),
         MaxBlockCountForZeroBlocksRequest);
 
-    auto request = std::make_shared<TZeroBlocksLocalRequest>(
-        TRequestHeaders{
-            .RequestId = ctx->RequestId,
-            .ClientId = ClientId,
-            .Timestamp = TInstant::Now()},
-        TBlockRange64::WithLength(blocksInfo.Range.Start, requestBlockCount));
+    auto request = std::make_shared<TZeroBlocksLocalRequest>(TRequestHeaders{
+        .VolumeConfig = VolumeConfig,
+        .ClientId = ClientId,
+        .RequestId = ctx->RequestId,
+        .Range = TBlockRange64::WithLength(
+            blocksInfo.Range.Start,
+            requestBlockCount),
+        .Timestamp = TInstant::Now()});
 
     if (requestBlockCount == blocksInfo.Range.Size()) {
         // The request size is quite small. We do all work at once.

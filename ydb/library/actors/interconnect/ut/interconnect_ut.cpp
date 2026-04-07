@@ -2,10 +2,120 @@
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/digest/md5/md5.h>
+#include <cstring>
 #include <util/random/fast.h>
+#include <util/string/cast.h>
 #include <util/string/vector.h>
 
 using namespace NActors;
+
+namespace {
+
+ui64 GetSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+    const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+    return FromString<ui64>(ExtractPattern(cluster, me, peer, start, "<"));
+}
+
+TDuration GetSessionDurationMetric(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+    const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+    return TDuration::Parse(ExtractPattern(cluster, me, peer, start, "<"));
+}
+
+i64 GetSessionSignedDurationMetricUs(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+    const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+    const TString value = ExtractPattern(cluster, me, peer, start, "<");
+    TStringBuf metric(value);
+    i64 sign = 1;
+    if (metric && (metric[0] == '+' || metric[0] == '-')) {
+        sign = metric[0] == '-' ? -1 : 1;
+        metric = metric.SubStr(1);
+    }
+    return sign * TDuration::Parse(metric).MicroSeconds();
+}
+
+TString GetSessionTextMetric(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name) {
+    const TString start = TStringBuilder() << "<tr><td>" << name << "</td><td>";
+    return ExtractPattern(cluster, me, peer, start, "<");
+}
+
+i64 GetSessionSocketFd(TTestICCluster& cluster, ui32 me, ui32 peer) {
+    return FromString<i64>(ExtractPattern(cluster, me, peer, "<tr><td>Socket</td><td>", "<"));
+}
+
+ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringBuf name,
+        TDuration timeout = TDuration::Seconds(10)) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        try {
+            return GetSessionCounter(cluster, me, peer, name);
+        } catch (const TPatternNotFound&) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+    }
+    UNIT_FAIL(TStringBuilder() << "failed to read session counter " << name << " from " << me << " to " << peer);
+    return 0;
+}
+
+template <typename TCallback>
+void WaitForCondition(TDuration timeout, TCallback&& callback, TStringBuf description) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        if (callback()) {
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_FAIL(TStringBuilder() << "condition failed: " << description);
+}
+
+class TDropRecipientActor : public TActor<TDropRecipientActor> {
+public:
+    TDropRecipientActor()
+        : TActor(&TThis::StateFunc)
+    {}
+
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
+    }
+
+private:
+    void HandlePing(TAutoPtr<IEventHandle>&) {
+        Received.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        fFunc(TEvents::THelloWorld::Ping, HandlePing);
+    )
+
+private:
+    std::atomic<size_t> Received = 0;
+};
+
+class TBurstSenderActor : public TActorBootstrapped<TBurstSenderActor> {
+public:
+    TBurstSenderActor(TActorId recipient, size_t messages, size_t payloadSize)
+        : Recipient(recipient)
+        , Messages(messages)
+        , PayloadSize(payloadSize)
+    {}
+
+    void Bootstrap() {
+        TString payload = TString::Uninitialized(PayloadSize);
+        memset(payload.Detach(), 'x', payload.size());
+        for (size_t i = 0; i < Messages; ++i) {
+            TActivationContext::Send(new IEventHandle(TEvents::THelloWorld::Ping, 0, Recipient, SelfId(),
+                MakeIntrusive<TEventSerializedData>(TString(payload), TEventSerializationInfo{}), i));
+        }
+        PassAway();
+    }
+
+private:
+    const TActorId Recipient;
+    const size_t Messages;
+    const size_t PayloadSize;
+};
+
+} // namespace
 
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
     const TActorId Recipient;
@@ -146,6 +256,284 @@ private:
     std::atomic<size_t> Received;
 };
 
+namespace {
+
+TTestICCluster::Flags GetKernelLivenessFlags(bool withRdma) {
+    return withRdma ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA;
+}
+
+bool SkipIfRdmaUnavailable(bool withRdma, TStringBuf testName) {
+    if (withRdma && NRdmaTest::IsRdmaTestDisabled()) {
+        Cerr << testName << " test skipped" << Endl;
+        return true;
+    }
+    return false;
+}
+
+ui64 MeasureIdleGeneratedPackets(bool enableKernelLiveness, bool withRdma) {
+    auto settingsCustomizer = [enableKernelLiveness](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = enableKernelLiveness;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "initial message delivery");
+
+    const ui64 negotiated = WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness");
+    UNIT_ASSERT_VALUES_EQUAL(negotiated, enableKernelLiveness ? 1ULL : 0ULL);
+
+    Sleep(TDuration::Seconds(1));
+    const ui64 packetsBefore = WaitForSessionCounter(cluster, 2, 1, "PacketsGenerated");
+    Sleep(TDuration::Seconds(4));
+    const ui64 packetsAfter = WaitForSessionCounter(cluster, 2, 1, "PacketsGenerated");
+    UNIT_ASSERT_C(packetsAfter >= packetsBefore, "PacketsGenerated counter regressed while measuring idle traffic");
+    return packetsAfter - packetsBefore;
+}
+
+void RunKernelLivenessMixedConfigAsymmetric(bool withRdma, ui32 kernelLivenessNodeId) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessMixedConfigAsymmetricRdma")) {
+        return;
+    }
+
+    auto settingsCustomizer = [kernelLivenessNodeId](ui32 nodeId, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = (nodeId == kernelLivenessNodeId);
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "mixed cluster initial message delivery");
+
+    const ui64 node2Expected = kernelLivenessNodeId == 2 ? 1ULL : 0ULL;
+    const ui64 node1Expected = kernelLivenessNodeId == 1 ? 1ULL : 0ULL;
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), node2Expected);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), node1Expected);
+}
+
+void RunKernelLivenessSocketSetupFallback(bool withRdma) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessSocketSetupFallbackRdma")) {
+        return;
+    }
+
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+        if (nodeId == 2) {
+            settings.KernelKeepAliveProbes = 0; // force local socket setup failure
+        }
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "socket-setup fallback initial message delivery");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "Params.UseKernelLiveness"), 1ULL);
+}
+
+void RunKernelLivenessReducesIdlePackets(bool withRdma) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessReducesIdlePacketsRdma")) {
+        return;
+    }
+
+    const ui64 legacyPackets = MeasureIdleGeneratedPackets(false, withRdma);
+    const ui64 kernelPackets = MeasureIdleGeneratedPackets(true, withRdma);
+    Cerr << "legacyPackets# " << legacyPackets << " kernelPackets# " << kernelPackets << Endl;
+    UNIT_ASSERT_GT(legacyPackets, kernelPackets);
+}
+
+void RunKernelLivenessPreservesFlowControlConfirms(bool withRdma) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessPreservesFlowControlConfirmsRdma")) {
+        return;
+    }
+
+    constexpr size_t messages = 4000;
+    constexpr size_t payloadSize = 256;
+
+    auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(2), 64 * 1024, settingsCustomizer);
+
+    auto* recipientPtr = new TDropRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TBurstSenderActor(recipient, messages, payloadSize), 2);
+
+    WaitForCondition(TDuration::Seconds(20), [&] {
+        return recipientPtr->GetReceived() >= messages;
+    }, "bulk one-way delivery in kernel liveness mode");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);
+    const ui64 confirmBySize = WaitForSessionCounter(cluster, 1, 2, "ConfirmPacketsForcedBySize");
+    const ui64 confirmByTimeout = WaitForSessionCounter(cluster, 1, 2, "ConfirmPacketsForcedByTimeout");
+    Cerr << "confirmBySize# " << confirmBySize << " confirmByTimeout# " << confirmByTimeout << Endl;
+    UNIT_ASSERT_GT(confirmBySize + confirmByTimeout, 0ULL);
+}
+
+void RunKernelLivenessClockSkewPingTimeoutUpdatesMetrics(bool withRdma) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessClockSkewPingTimeoutUpdatesMetricsRdma")) {
+        return;
+    }
+
+    auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.ClockSkewPingTimeout = TDuration::MilliSeconds(200);
+        settings.PingPeriod = TDuration::Seconds(30);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient, 1), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "initial message delivery for clock-skew metrics");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 1ULL);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionDurationMetric(cluster, 2, 1, "GetPingRTT()") > TDuration::Zero();
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "kernel-liveness ping RTT metric updated");
+
+    const TDuration pingRtt = GetSessionDurationMetric(cluster, 2, 1, "GetPingRTT()");
+    const TDuration sinceLastPing = GetSessionDurationMetric(cluster, 2, 1, "now - LastPingTimestamp");
+    const i64 clockSkewUs = GetSessionSignedDurationMetricUs(cluster, 2, 1, "clockSkew");
+    Cerr << "pingRtt# " << pingRtt << " sinceLastPing# " << sinceLastPing << " clockSkewUs# " << clockSkewUs << Endl;
+
+    UNIT_ASSERT_GT(pingRtt, TDuration::Zero());
+    UNIT_ASSERT_LT(sinceLastPing, TDuration::Seconds(2));
+}
+
+void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
+    if (SkipIfRdmaUnavailable(withRdma, "KernelLivenessReconnectLocalFallbackNotAppliedRdma")) {
+        return;
+    }
+
+    auto settingsCustomizer = [](ui32, TInterconnectSettings& settings) {
+        settings.EnableKernelLiveness = true;
+        settings.PingPeriod = TDuration::MilliSeconds(200);
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, GetKernelLivenessFlags(withRdma),
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* recipientPtr = new TRecipientActor;
+    const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+    cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return recipientPtr->GetReceived() >= 1;
+    }, "initial message delivery for reconnect fallback");
+
+    auto waitKernelMode = [&](ui64 expected, TStringBuf description) {
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness") == expected;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, description);
+    };
+
+    auto reconnectFromNode2 = [&](TStringBuf description) {
+        const TString handshakeBefore = GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone");
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "NumEventsInQueue") > 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "session has pending output before forced reconnect");
+        cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvClosePeerSocket);
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            try {
+                return GetSessionTextMetric(cluster, 2, 1, "LastHandshakeDone") != handshakeBefore &&
+                    GetSessionSocketFd(cluster, 2, 1) >= 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            } catch (const TFromStringException&) {
+                return false;
+            }
+        }, description);
+    };
+
+    waitKernelMode(1ULL, "initial kernel liveness negotiated");
+
+    bool exercisedSameSessionContinuation = false;
+    for (ui32 attempt = 0; attempt < 5; ++attempt) {
+        const TString createdBefore = GetSessionTextMetric(cluster, 2, 1, "Created");
+
+        // Force local fallback on reconnect.
+        cluster.GetNode(2)->MutableInterconnectSettings().EnableKernelLiveness = false;
+        reconnectFromNode2("session reconnected with local kernel liveness disabled");
+
+        const TString createdAfter = GetSessionTextMetric(cluster, 2, 1, "Created");
+        if (createdAfter == createdBefore) {
+            exercisedSameSessionContinuation = true;
+            break;
+        }
+
+        // Session was recreated while local kernel mode was disabled, so this new session template now carries
+        // UseKernelLiveness=false. Force another session recreation after restoring local settings to avoid
+        // continuation within the stale template.
+        cluster.GetNode(2)->MutableInterconnectSettings().EnableKernelLiveness = true;
+        const TString restoreCreatedBefore = GetSessionTextMetric(cluster, 2, 1, "Created");
+        cluster.GetNode(2)->Send(cluster.InterconnectProxy(1, 2), new TEvInterconnect::TEvPoisonSession);
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            try {
+                return GetSessionTextMetric(cluster, 2, 1, "Created") != restoreCreatedBefore &&
+                    GetSessionSocketFd(cluster, 2, 1) >= 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            } catch (const TFromStringException&) {
+                return false;
+            }
+        }, "restore baseline session after forced recreation");
+        waitKernelMode(1ULL, "baseline kernel liveness restored");
+    }
+
+    UNIT_ASSERT_C(exercisedSameSessionContinuation,
+        "failed to exercise continuation within the same session instance");
+
+    // Expected behavior: resumed continuation should apply local fallback and disable kernel liveness.
+    // Buggy behavior: existing session keeps stale Params.UseKernelLiveness from initial connect.
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(Interconnect) {
 
     Y_UNIT_TEST(SessionContinuation) {
@@ -184,6 +572,62 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
             Sleep(TDuration::MilliSeconds(RandomNumber<ui32>(500) + 100));
         }
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {
+        RunKernelLivenessMixedConfigAsymmetric(false, 2);
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverse) {
+        RunKernelLivenessMixedConfigAsymmetric(false, 1);
+    }
+
+    Y_UNIT_TEST(KernelLivenessSocketSetupFallback) {
+        RunKernelLivenessSocketSetupFallback(false);
+    }
+
+    Y_UNIT_TEST(KernelLivenessReducesIdlePackets) {
+        RunKernelLivenessReducesIdlePackets(false);
+    }
+
+    Y_UNIT_TEST(KernelLivenessPreservesFlowControlConfirms) {
+        RunKernelLivenessPreservesFlowControlConfirms(false);
+    }
+
+    Y_UNIT_TEST(KernelLivenessClockSkewPingTimeoutUpdatesMetrics) {
+        RunKernelLivenessClockSkewPingTimeoutUpdatesMetrics(false);
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallbackRdma) {
+        RunKernelLivenessMixedConfigAsymmetric(true, 2);
+    }
+
+    Y_UNIT_TEST(KernelLivenessMixedConfigFallbackReverseRdma) {
+        RunKernelLivenessMixedConfigAsymmetric(true, 1);
+    }
+
+    Y_UNIT_TEST(KernelLivenessSocketSetupFallbackRdma) {
+        RunKernelLivenessSocketSetupFallback(true);
+    }
+
+    Y_UNIT_TEST(KernelLivenessReducesIdlePacketsRdma) {
+        RunKernelLivenessReducesIdlePackets(true);
+    }
+
+    Y_UNIT_TEST(KernelLivenessPreservesFlowControlConfirmsRdma) {
+        RunKernelLivenessPreservesFlowControlConfirms(true);
+    }
+
+    Y_UNIT_TEST(KernelLivenessClockSkewPingTimeoutUpdatesMetricsRdma) {
+        RunKernelLivenessClockSkewPingTimeoutUpdatesMetrics(true);
+    }
+
+    Y_UNIT_TEST(KernelLivenessReconnectLocalFallbackNotApplied) {
+        RunKernelLivenessReconnectLocalFallbackNotApplied(false);
+    }
+
+    Y_UNIT_TEST(KernelLivenessReconnectLocalFallbackNotAppliedRdma) {
+        RunKernelLivenessReconnectLocalFallbackNotApplied(true);
     }
 
     Y_UNIT_TEST(SetupRdmaSession) {

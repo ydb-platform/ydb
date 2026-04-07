@@ -15,11 +15,13 @@ using namespace NYql;
 using namespace NYql::NNodes;
 
 struct TColumnStatisticsResponse: public NYql::IKikimrGateway::TGenericResult {
-    THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
+    // Uses NYql:: type because it feeds into TypeCtx.ColumnStatisticsByTableName
+    // which is typed THashMap<TString, TIntrusivePtr<NYql::TOptimizerStatistics::TColumnStatMap>>.
+    THashMap<TString, NYql::TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
 };
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const TColumnStatistics&)> alreadyHasStatistics);
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics);
 
 } // namespace NKikimr::NKqp

@@ -18,3 +18,4 @@ SRCS(
 )
 
 END()
+RECURSE(benchmark)

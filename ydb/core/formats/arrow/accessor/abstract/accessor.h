@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "minmax_utils.h"
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
@@ -12,7 +13,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/string/builder.h>
-#include "minmax.h"
 
 namespace NKikimr::NScheme {
 class TTypeInfo;

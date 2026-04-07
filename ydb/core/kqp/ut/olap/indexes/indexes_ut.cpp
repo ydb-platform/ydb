@@ -166,22 +166,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 
         auto runDMLQuery = [&] (TString query) -> TString {
-            if (/*UseQueryService*/ true) {
-                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                if (result.GetResultSets().empty()) {
-                    return "[]";
-                }
-                return FormatResultSetYson(result.GetResultSet(0));
-            } else {
-                NYdb::NTable::TDataQueryResult result = tableClient.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                if (result.GetResultSets().empty()) {
-                    return "[]";
-                }
-                return FormatResultSetYson(result.GetResultSet(0));
+            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (result.GetResultSets().empty()) {
+                return "[]";
             }
+            return FormatResultSetYson(result.GetResultSet(0));
         };
 
         assertDDLQueryOk(R"(
@@ -281,22 +271,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 
         auto runDMLQuery = [&] (TString query) -> TString {
-            if (/*UseQueryService*/ true) {
-                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                if (result.GetResultSets().empty()) {
-                    return "[]";
-                }
-                return FormatResultSetYson(result.GetResultSet(0));
-            } else {
-                NYdb::NTable::TDataQueryResult result = tableClient.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                if (result.GetResultSets().empty()) {
-                    return "[]";
-                }
-                return FormatResultSetYson(result.GetResultSet(0));
+            auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (result.GetResultSets().empty()) {
+                return "[]";
             }
+            return FormatResultSetYson(result.GetResultSet(0));
         };
 
         assertDDLQueryOk(R"(
@@ -340,7 +320,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
 
-        CompareYson(runDMLQuery(R"(
+        CompareYson(runSelect(R"(
             SELECT COUNT(*) FROM `/Root/minmax_nulls` WHERE `null_value` > "Value_500000";
         )"), "[[0u]]");
 

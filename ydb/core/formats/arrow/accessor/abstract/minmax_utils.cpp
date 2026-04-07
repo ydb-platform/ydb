@@ -1,4 +1,4 @@
-#include "minmax.h"
+#include "minmax_utils.h"
 
 #include <ydb/core/formats/arrow/program/functions.h>
 
@@ -75,11 +75,11 @@ TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<a
     return *arrow::StructScalar::Make(fields, { "min", "max" }).ValueOrDie();
 }
 
-std::string TMinMax::ToBinaryString() const {
+TString TMinMax::ToBinaryString() const {
     if (IsNull()) {
         return std::string{ NullTMinMaxFlag };
     }
-    std::string res;
+    TString res;
     res.push_back(NullTMinMaxFlag + 1);
     TString minSerialized = NArrow::NScalar::TSerializer::SerializePayloadToString(Min()).DetachResult();
     TString maxSerialized = NArrow::NScalar::TSerializer::SerializePayloadToString(Max()).DetachResult();
@@ -87,7 +87,7 @@ std::string TMinMax::ToBinaryString() const {
         TSizeType dataSize = data.size();
         ui64 resSize = res.size();
         res.resize(resSize + sizeof(TSizeType));
-        memcpy(res.data() + resSize, &dataSize, sizeof(TSizeType));
+        memcpy(res.MutRef().data() + resSize, &dataSize, sizeof(TSizeType));
         res.append(data);
     };
     writeNext(minSerialized);
@@ -95,7 +95,7 @@ std::string TMinMax::ToBinaryString() const {
     return res;
 }
 
-NJson::TJsonValue TMinMax::Json() const {
+NJson::TJsonValue TMinMax::ToJson() const {
     NJson::TJsonValue json;
     json.InsertValue("min", Min()->ToString());
     json.InsertValue("max", Max()->ToString());

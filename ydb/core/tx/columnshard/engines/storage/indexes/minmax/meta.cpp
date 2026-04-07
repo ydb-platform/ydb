@@ -95,7 +95,7 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
     auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-    return NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType).Json();
+    return NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType).ToJson();
 }
 
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {

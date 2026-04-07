@@ -18,19 +18,36 @@ struct TMinMax {
     }
 
     std::shared_ptr<arrow::Scalar>& Min() {
-        return MinMax.value[0];
+        if (MinMax.type->fields()[0]->name() == "min"){
+            return MinMax.value[0];
+        } else {
+            return MinMax.value[1];
+        }
+        
     }
 
     const std::shared_ptr<arrow::Scalar>& Min() const {
-        return MinMax.value[0];
+        if (MinMax.type->fields()[0]->name() == "min"){
+            return MinMax.value[0];
+        } else {
+            return MinMax.value[1];
+        }
     }
 
     std::shared_ptr<arrow::Scalar>& Max() {
-        return MinMax.value[1];
+        if (MinMax.type->fields()[0]->name() == "max"){
+            return MinMax.value[0];
+        } else {
+            return MinMax.value[1];
+        }
     }
 
     const std::shared_ptr<arrow::Scalar>& Max() const {
-        return MinMax.value[1];
+        if (MinMax.type->fields()[0]->name() == "max"){
+            return MinMax.value[0];
+        } else {
+            return MinMax.value[1];
+        }
     }
 
     void UniteWith(TMinMax other);
@@ -40,9 +57,9 @@ struct TMinMax {
     static TMinMax Compute(std::shared_ptr<arrow::Array> arr);
     static TMinMax Compute(std::shared_ptr<arrow::ChunkedArray> arr);
 
-    std::string ToBinaryString() const;
+    TString ToBinaryString() const;
 
-    NJson::TJsonValue Json() const;
+    NJson::TJsonValue ToJson() const;
 };
 
 namespace NArrowCompare {

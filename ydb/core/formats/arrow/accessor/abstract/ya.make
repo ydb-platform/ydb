@@ -16,7 +16,7 @@ SRCS(
     constructor.cpp
     request.cpp
     accessor.cpp
-    minmax.cpp
+    minmax_utils.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(accessor.h)

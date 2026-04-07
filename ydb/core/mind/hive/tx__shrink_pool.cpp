@@ -24,67 +24,69 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_SHRINK_POOL; }
 
-    struct TGroupSort {
-        static auto GetSortKey(const TStorageGroupInfo* group) {
+    struct TGroupCmp {
+        static auto GetKey(const TStorageGroupInfo* group) {
             return group->AcquiredResources.Size;
         }
 
-        struct Ascending {
-            bool operator()(const TStorageGroupInfo* lhs, const TStorageGroupInfo* rhs) {
-                return GetSortKey(lhs) < GetSortKey(rhs);
-            }
-        };
-
-        struct Descending {
-            bool operator()(const TStorageGroupInfo* lhs, const TStorageGroupInfo* rhs) {
-                return GetSortKey(lhs) > GetSortKey(rhs);
-            }
-        };
+        bool operator()(const TStorageGroupInfo* lhs, const TStorageGroupInfo* rhs) {
+            return GetKey(lhs) < GetKey(rhs);
+        }
     };
+
+    void ReplyWithError(const TString& error) {
+        auto reply = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
+        reply->Record.SetStatus(NKikimrProto::ERROR);
+        reply->Record.SetError(error);
+        reply->Record.SetStoragePool(StoragePool);
+        SideEffects.Send(Source, reply.release(), 0, Cookie);
+    }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("THive::TTxShrinkPool::Execute");
         SideEffects.Reset(Self->SelfId());
         NIceDb::TNiceDb db(txc.DB);
-        auto& storagePool = Self->GetStoragePool(StoragePool);
-        i64 groupsToRemove = std::ssize(storagePool.Groups) - static_cast<i64>(NewSize);
-        if (groupsToRemove < 0 || groupsToRemove >= std::ssize(storagePool.Groups)) {
-            auto reply = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
-            reply->Record.SetStatus(NKikimrProto::ERROR);
-            if (groupsToRemove < 0) {
-                reply->Record.SetError("cannot remove negative groups");
-            } else {
-                reply->Record.SetError("not enough groups");
-            }
-            reply->Record.SetStoragePool(StoragePool);
-            SideEffects.Send(Source, reply.release(), 0, Cookie);
+        auto* storagePool = Self->FindStoragePool(StoragePool);
+        if (storagePool == nullptr) {
+            ReplyWithError("unknown storage pool");
+            return true;
+
+        }
+        i64 groupsToRemove = std::ssize(storagePool->Groups) - static_cast<i64>(NewSize);
+        if (groupsToRemove < 0 ) {
+            ReplyWithError("cannot remove negative groups");
             return true;
         }
+        if (groupsToRemove >= std::ssize(storagePool->Groups)) {
+            ReplyWithError("not enough groups");
+            return true;
+        }
+
         // groupsToRemove < InactiveGroups - we are cancelling some group removals
-        std::ranges::sort(storagePool.InactiveGroups, TGroupSort::Ascending(), [&storagePool](auto groupId) { return &storagePool.GetStorageGroup(groupId); });
-        while (groupsToRemove < std::ssize(storagePool.InactiveGroups)) {
-            auto groupId = storagePool.InactiveGroups.back();
+        std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
+        while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
+            auto groupId = storagePool->InactiveGroups.back();
             BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
-            auto& groupInfo = storagePool.GetStorageGroup(groupId);
+            auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
             db.Table<Schema::Group>().Key(groupId).Update(
                 NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),
                 NIceDb::TUpdate<Schema::Group::Status>(EGroupState::Active)
             );
-            storagePool.InactiveGroups.pop_back();
+            storagePool->InactiveGroups.pop_back();
         }
         // groupsToRemove > InactiveGroups - we need to remove some more groups
-        if (groupsToRemove > std::ssize(storagePool.InactiveGroups)) {
+        if (groupsToRemove > std::ssize(storagePool->InactiveGroups)) {
             std::vector<TStorageGroupInfo*> groups;
-            groups.reserve(storagePool.Groups.size());
-            for (auto& [_, groupInfo] : storagePool.Groups) {
+            groups.reserve(storagePool->Groups.size());
+            for (auto& [_, groupInfo] : storagePool->Groups) {
                 groups.push_back(&groupInfo);
             }
-            std::ranges::sort(groups, TGroupSort::Ascending());
+            std::ranges::sort(groups, TGroupCmp());
             auto newGroupsToRemove = groups
                 | std::views::filter([&] (auto* group) { return group->IsActive(); })
-                | std::views::take(groupsToRemove - std::ssize(storagePool.InactiveGroups));
-            storagePool.InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
+                | std::views::take(groupsToRemove - std::ssize(storagePool->InactiveGroups));
+            storagePool->InactiveGroups.reserve(static_cast<size_t>(groupsToRemove));
             for (auto* group : newGroupsToRemove) {
                 BLOG_D("THive::TTxShrinkPool::Execute marking group " << group->Id << "as inactive");
                 group->Status = EGroupState::Inactive;
@@ -92,12 +94,12 @@ public:
                     NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),
                     NIceDb::TUpdate<Schema::Group::Status>(EGroupState::Inactive)
                 );
-                storagePool.InactiveGroups.push_back(group->Id);
+                storagePool->InactiveGroups.push_back(group->Id);
            }
         }
         auto reply = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
         reply->Record.SetStatus(NKikimrProto::OK);
-        reply->Record.MutableGroupsToRemove()->Assign(storagePool.InactiveGroups.begin(), storagePool.InactiveGroups.end());
+        reply->Record.MutableGroupsToRemove()->Assign(storagePool->InactiveGroups.begin(), storagePool->InactiveGroups.end());
         reply->Record.SetStoragePool(StoragePool);
         SideEffects.Send(Source, reply.release(), 0, Cookie);
         return true;

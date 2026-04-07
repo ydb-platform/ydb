@@ -199,7 +199,7 @@ jobs:
                     comment_id: commentToUpdate.id,
                 });
             }
-            core.info(`commit_sha=${pr.commit_sha}`);
+            core.info(`commit_sha=${pr.merge_commit_sha}`);
             core.setOutput('commit_sha', pr.merge_commit_sha);
             return true;
   build_and_test:

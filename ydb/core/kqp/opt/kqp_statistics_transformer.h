@@ -32,7 +32,7 @@ class TKqpStatisticsTransformer : public NYql::TSyncTransformerBase {
     TKqpOptimizeContext& KqpCtx;
     TKqpStatsStore* KqpStats;
     const TKqpProviderContext& KqpPctx;
-    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry,
+    const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
     THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;

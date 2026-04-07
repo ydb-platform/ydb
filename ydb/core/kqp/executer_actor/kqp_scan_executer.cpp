@@ -1,7 +1,6 @@
-#include "kqp_executer.h"
 #include "kqp_executer_impl.h"
-#include "kqp_tasks_graph.h"
-#include "kqp_tasks_validate.h"
+
+#include "tasks_graph/kqp_tasks_graph.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -24,8 +23,7 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NDq;
@@ -159,12 +157,11 @@ private:
             }
         }
 
-        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
+        TasksGraph->BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
         OnEmptyResult();
 
-        TIssue validateIssue;
-        if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
-            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
+        if (auto validateIssue = TasksGraph->ValidateTasks()) {
+            TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, *validateIssue);
             return;
         }
 
@@ -176,8 +173,8 @@ private:
         TVector<ui64> computeTasks;
 
         // calc stats
-        for (const auto& task : TasksGraph.GetTasks()) {
-            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
+        for (const auto& task : TasksGraph->GetTasks()) {
+            const auto& stageInfo = TasksGraph->GetStageInfo(task.StageId);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
                 // TODO: YQL_ENSURE(task.Meta.Type == TTaskMeta::TTaskType::Scan);
@@ -196,14 +193,14 @@ private:
             }
         }
 
-        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
+        if (TasksGraph->GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
             KQP_STLOG_N(KQPSCAN, "Too many compute actors",
-                (total_tasks, TasksGraph.GetTasks().size()),
+                (total_tasks, TasksGraph->GetTasks().size()),
                 (trace_id, TraceId()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
+                    << "Requested too many execution units: " << TasksGraph->GetTasks().size()));
             return;
         }
 
@@ -291,5 +288,4 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
         federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

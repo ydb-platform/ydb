@@ -25,18 +25,77 @@ namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 // ---------------------------------------------------------------------------
 struct TSettings {
     // Production defaults — aggressive test values must be set explicitly via JSON.
-    ui64 InitialBlobBytes    = 1ULL * 1025 * 1024 * 1024;  // 1 GiB
+    // AccumulatorPortionSizeLimit: portions with blob bytes below this threshold are routed
+    // to the accumulator level; larger portions go directly to LastLevel / MiddleLevels.
+    // Default matches PortionExpectedSize so that freshly-written small portions accumulate
+    // and are merged before being promoted.
+    ui64 AccumulatorPortionSizeLimit = 4ULL * 1024 * 1024;  // 4 MiB
     ui64 LastLevelBytes      = 10ULL  * 1024 * 1024;   // 10 MiB
     ui8  K                   = 10;
     ui64 PortionExpectedSize = 4ULL  * 1024 * 1024;   // 4 MiB
 
+    // LastLevel settings
+    ui64 LastLevelCompactionPortions = 1'000;
+    ui64 LastLevelCompactionBytes    = 64ULL * 1024 * 1024;  // 64 MiB
+    ui64 LastLevelCandidatePortionsOverload = 10;
+
+    // Accumulator settings
+    ui64 AccumulatorCompactionPortions = 1'000;
+    ui64 AccumulatorCompactionBytes    = 64ULL * 1024 * 1024;  // 64 MiB
+    ui64 AccumulatorTriggerPortions    = 1'000;
+    ui64 AccumulatorTriggerBytes       = 2ULL * 1024 * 1024;   // 2 MiB
+    ui64 AccumulatorOverloadPortions   = 10'000;
+    ui64 AccumulatorOverloadBytes      = 256ULL * 1024 * 1024; // 256 MiB
+
+    // MiddleLevel settings
+    ui64 MiddleLevelTriggerHeight  = 10;
+    ui64 MiddleLevelOverloadHeight = 15;
+
+    LastLevel::LastLevelSettings MakeLastLevelSettings() const {
+        LastLevel::LastLevelSettings s;
+        s.Compaction.Portions = LastLevelCompactionPortions;
+        s.Compaction.Bytes    = LastLevelCompactionBytes;
+        s.CandidatePortionsOverload = LastLevelCandidatePortionsOverload;
+        return s;
+    }
+
+    Accumulator::AccumulatorSettings MakeAccumulatorSettings() const {
+        Accumulator::AccumulatorSettings s;
+        s.Compaction.Portions = AccumulatorCompactionPortions;
+        s.Compaction.Bytes    = AccumulatorCompactionBytes;
+        s.Trigger.Portions    = AccumulatorTriggerPortions;
+        s.Trigger.Bytes       = AccumulatorTriggerBytes;
+        s.Overload.Portions   = AccumulatorOverloadPortions;
+        s.Overload.Bytes      = AccumulatorOverloadBytes;
+        return s;
+    }
+
+    MiddleLevels::MiddleLevel::MiddleLevelSettings MakeMiddleLevelSettings() const {
+        MiddleLevels::MiddleLevel::MiddleLevelSettings s;
+        s.TriggerHight  = MiddleLevelTriggerHeight;
+        s.OverloadHight = MiddleLevelOverloadHeight;
+        return s;
+    }
+
     // Serialise to the TTilingOptimizer proto (stores as JSON blob).
     void SerializeToProto(NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TTilingOptimizer& proto) const {
         NJson::TJsonValue json(NJson::JSON_MAP);
-        json["initial_blob_bytes"]    = InitialBlobBytes;
+        json["accumulator_portion_size_limit"] = AccumulatorPortionSizeLimit;
         json["last_level_bytes"]      = LastLevelBytes;
         json["k"]                     = (ui64)K;
         json["portion_expected_size"] = PortionExpectedSize;
+        // Level settings
+        json["last_level_compaction_portions"]         = LastLevelCompactionPortions;
+        json["last_level_compaction_bytes"]            = LastLevelCompactionBytes;
+        json["last_level_candidate_portions_overload"] = LastLevelCandidatePortionsOverload;
+        json["accumulator_compaction_portions"]        = AccumulatorCompactionPortions;
+        json["accumulator_compaction_bytes"]           = AccumulatorCompactionBytes;
+        json["accumulator_trigger_portions"]           = AccumulatorTriggerPortions;
+        json["accumulator_trigger_bytes"]              = AccumulatorTriggerBytes;
+        json["accumulator_overload_portions"]          = AccumulatorOverloadPortions;
+        json["accumulator_overload_bytes"]             = AccumulatorOverloadBytes;
+        json["middle_level_trigger_height"]            = MiddleLevelTriggerHeight;
+        json["middle_level_overload_height"]           = MiddleLevelOverloadHeight;
         proto.SetJson(NJson::WriteJson(json, /*formatOutput=*/false));
     }
 
@@ -58,11 +117,11 @@ struct TSettings {
             return TConclusionStatus::Fail("tiling: FEATURES must be a JSON object");
         }
         for (const auto& [name, value] : jsonInfo.GetMapSafe()) {
-            if (name == "initial_blob_bytes") {
+            if (name == "accumulator_portion_size_limit") {
                 if (!value.IsUInteger()) {
-                    return TConclusionStatus::Fail("tiling: initial_blob_bytes must be an unsigned integer");
+                    return TConclusionStatus::Fail("tiling: accumulator_portion_size_limit must be an unsigned integer");
                 }
-                InitialBlobBytes = value.GetUInteger();
+                AccumulatorPortionSizeLimit = value.GetUInteger();
             } else if (name == "last_level_bytes") {
                 if (!value.IsUInteger()) {
                     return TConclusionStatus::Fail("tiling: last_level_bytes must be an unsigned integer");
@@ -82,14 +141,72 @@ struct TSettings {
                     return TConclusionStatus::Fail("tiling: portion_expected_size must be an unsigned integer");
                 }
                 PortionExpectedSize = value.GetUInteger();
+            } else if (name == "last_level_compaction_portions") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: last_level_compaction_portions must be an unsigned integer");
+                }
+                LastLevelCompactionPortions = value.GetUInteger();
+            } else if (name == "last_level_compaction_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: last_level_compaction_bytes must be an unsigned integer");
+                }
+                LastLevelCompactionBytes = value.GetUInteger();
+            } else if (name == "last_level_candidate_portions_overload") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: last_level_candidate_portions_overload must be an unsigned integer");
+                }
+                LastLevelCandidatePortionsOverload = value.GetUInteger();
+            } else if (name == "accumulator_compaction_portions") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_compaction_portions must be an unsigned integer");
+                }
+                AccumulatorCompactionPortions = value.GetUInteger();
+            } else if (name == "accumulator_compaction_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_compaction_bytes must be an unsigned integer");
+                }
+                AccumulatorCompactionBytes = value.GetUInteger();
+            } else if (name == "accumulator_trigger_portions") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_trigger_portions must be an unsigned integer");
+                }
+                AccumulatorTriggerPortions = value.GetUInteger();
+            } else if (name == "accumulator_trigger_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_trigger_bytes must be an unsigned integer");
+                }
+                AccumulatorTriggerBytes = value.GetUInteger();
+            } else if (name == "accumulator_overload_portions") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_overload_portions must be an unsigned integer");
+                }
+                AccumulatorOverloadPortions = value.GetUInteger();
+            } else if (name == "accumulator_overload_bytes") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: accumulator_overload_bytes must be an unsigned integer");
+                }
+                AccumulatorOverloadBytes = value.GetUInteger();
+            } else if (name == "middle_level_trigger_height") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: middle_level_trigger_height must be an unsigned integer");
+                }
+                MiddleLevelTriggerHeight = value.GetUInteger();
+            } else if (name == "middle_level_overload_height") {
+                if (!value.IsUInteger()) {
+                    return TConclusionStatus::Fail("tiling: middle_level_overload_height must be an unsigned integer");
+                }
+                MiddleLevelOverloadHeight = value.GetUInteger();
             } else {
-                return TConclusionStatus::Fail(TStringBuilder() << "tiling: unknown setting '" << name << "'");
+                // Unknown settings are silently ignored for forward-compatibility
+                // (e.g. settings that exist in other tiling variants but not this one).
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                    "event", "tiling_unknown_setting_ignored")("setting", name);
             }
         }
-        if (InitialBlobBytes < LastLevelBytes * K) {
-            return TConclusionStatus::Fail(
-                "tiling: initial_blob_bytes must be at least k * last_level_bytes");
-        }
+        // if (InitialBlobBytes < LastLevelBytes * K) {
+        //     return TConclusionStatus::Fail(
+        //         "tiling: initial_blob_bytes must be at least k * last_level_bytes");
+        // }
         return TConclusionStatus::Success();
     }
 };
@@ -110,9 +227,9 @@ public:
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         const TSettings& settings)
         : IOptimizerPlanner(pathId, std::nullopt)
-        , LastLevel(LastLevel::LastLevelSettings())
-        , MiddleLevels(MiddleLevels::MiddleLevel::MiddleLevelSettings())
-        , Accumulator(Accumulator::AccumulatorSettings())
+        , LastLevel(settings.MakeLastLevelSettings())
+        , MiddleLevels(settings.MakeMiddleLevelSettings())
+        , Accumulator(settings.MakeAccumulatorSettings())
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
         , Settings(settings)
@@ -166,6 +283,15 @@ private:
 
         PortionsInfo->RemovePortion(p);
 
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            "event", "tiling_remove_portion")(
+            "portion_id", p->GetPortionId())(
+            "produced", (ui32)p->GetProduced())(
+            "column_blob_bytes", p->GetColumnBlobBytes())(
+            "total_blob_bytes", p->GetTotalBlobBytes())(
+            "accumulator_size_limit", Settings.AccumulatorPortionSizeLimit)(
+            "passes_limit", p->GetColumnBlobBytes() >= Settings.AccumulatorPortionSizeLimit);
+
         auto lit = InternalLevel.find(p->GetPortionId());
         if (lit == InternalLevel.end()) {
             // Portion was never tracked (e.g. added before planner switch). Log and skip.
@@ -175,12 +301,12 @@ private:
                 "produced", (ui32)produced);
             return;
         }
-        if (InternalLevel.at(p) == 0) {
+        if (lit->second == 0) {
             Accumulator.Remove(p);
-        } else if (InternalLevel.at(p) == 1) {
+        } else if (lit->second == 1) {
             LastLevel.Remove(p);
         } else {
-            MiddleLevels.Remove(p, InternalLevel.at(p));
+            MiddleLevels.Remove(p, lit->second);
         }
         InternalLevel.erase(lit);
     }
@@ -210,17 +336,49 @@ private:
 
         PortionsInfo->AddPortion(p);
 
-        if (p->GetColumnBlobBytes() < 512 * 1024 * 1024) {
+
+
+        if (p->GetColumnBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
             Accumulator.Add(p);
             InternalLevel[p->GetPortionId()] = 0;
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            "event", "tiling_add_portion_acc")(
+            "portion_id", p->GetPortionId())(
+            "produced", (ui32)p->GetProduced())(
+            "total_raw_bytes", p->GetTotalRawBytes())(
+            "total_blob_bytes", p->GetTotalBlobBytes())(
+            "accumulator_size_limit", Settings.AccumulatorPortionSizeLimit)(
+            "passes_limit", p->GetColumnBlobBytes() >= Settings.AccumulatorPortionSizeLimit);
         } else {
-            ui8 level = log10(LastLevel.Measure(p)) + 1;
+            const ui64 measure = LastLevel.Measure(p);
+            // log10(0) is undefined; treat measure==0 as level 1 (LastLevel, no overlaps).
+            const ui8 level = (measure > 0) ? static_cast<ui8>(log(measure) / log(3) + 1) : 1;
             if (level <= 1) {
                 LastLevel.Add(p);
                 InternalLevel[p->GetPortionId()] = 1;
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_add_portion_last")(
+                "portion_id", p->GetPortionId())(
+                "produced", (ui32)p->GetProduced())(
+                "total_raw_bytes", p->GetTotalRawBytes())(
+                "total_blob_bytes", p->GetTotalBlobBytes())(
+                "accumulator_size_limit", Settings.AccumulatorPortionSizeLimit)(
+                "passes_limit", p->GetColumnBlobBytes() >= Settings.AccumulatorPortionSizeLimit)(
+                "measure", measure)(
+                "level", level);
             } else {
                 MiddleLevels.Add(p, level);
                 InternalLevel[p->GetPortionId()] = level;
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_add_portion_middle")(
+                "portion_id", p->GetPortionId())(
+                "produced", (ui32)p->GetProduced())(
+                "total_raw_bytes", p->GetTotalRawBytes())(
+                "total_blob_bytes", p->GetTotalBlobBytes())(
+                "accumulator_size_limit", Settings.AccumulatorPortionSizeLimit)(
+                "passes_limit", p->GetColumnBlobBytes() >= Settings.AccumulatorPortionSizeLimit)(
+                "measure", measure)(
+                "level", level);
             }
         }
     }
@@ -242,23 +400,73 @@ private:
         auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
         auto middleLevelsPriority = MiddleLevels.DoGetUsefulMetric();
 
-        if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
-            auto tasks = Accumulator.GetOptimizationTasks(dataLocksManager);
-            if (tasks.size() > 1) {
-                return {std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager))};
+        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            "event", "tiling_get_optimization_tasks")(
+            "accumulator_priority_level", accumulatorPriority.GetLevel())(
+            "last_level_priority_level", lastLevelPriority.GetLevel())(
+            "middle_levels_priority_level", middleLevelsPriority.GetLevel());
+
+        auto makeConstTasks = [](const std::vector<TPortionInfo::TPtr>& src) {
+            std::vector<TPortionInfo::TConstPtr> result;
+            result.reserve(src.size());
+            for (const auto& p : src) {
+                result.push_back(p);
             }
+            return result;
+        };
+
+        if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
+            auto tasks = makeConstTasks(Accumulator.GetOptimizationTasks(dataLocksManager));
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_accumulator_tasks")(
+                "tasks_size", tasks.size());
+            if (tasks.size() > 1) {
+                auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager));
+                // Use sentinel level 3 so that output portions can be identified in AddPortion
+                // logs as "accumulator output" — makes it easy to see their sizes and verify
+                // they graduate to LastLevel rather than looping back to the accumulator.
+                // The actual routing in AddPortion still uses GetColumnBlobBytes() vs AccumulatorPortionSizeLimit.
+                result->SetTargetCompactionLevel(0);
+                result->SetPortionExpectedSize(Settings.PortionExpectedSize);
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                    "event", "tiling_accumulator_task_created")(
+                    "tasks_size", tasks.size())(
+                    "target_level", 3)(
+                    "portion_expected_size", Settings.PortionExpectedSize);
+                return {result};
+            }
+            // If accumulator is overloaded but we got < 2 tasks, all portions must be locked
+            // (compaction already in progress). Log this so we can diagnose stuck compaction.
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_accumulator_no_task_produced")(
+                "tasks_size", tasks.size())(
+                "accumulator_priority_level", accumulatorPriority.GetLevel());
         }
         else if (lastLevelPriority < middleLevelsPriority) {
-            auto tasks = MiddleLevels.GetOptimizationTasks(dataLocksManager);
+            auto tasks = makeConstTasks(MiddleLevels.GetOptimizationTasks(dataLocksManager));
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_middle_levels_tasks")(
+                "tasks_size", tasks.size());
             if (tasks.size() > 1) {
-                return {std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager))};
+                auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager));
+                result->SetTargetCompactionLevel(0);
+                result->SetPortionExpectedSize(Settings.PortionExpectedSize);
+                return {result};
             }
         }
         else {
-            auto tasks = LastLevel.GetOptimizationTasks(dataLocksManager);
-            if (tasks.size() > 1) {
-                return {std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager))};
-            }
+            auto tasks = makeConstTasks(LastLevel.GetOptimizationTasks(dataLocksManager));
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                "event", "tiling_last_level_tasks")(
+                "tasks_size", tasks.size())(
+                    "portion_expected_size", Settings.PortionExpectedSize
+                );
+            // if (tasks.size() > 1) {
+                auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, tasks, TSaverContext(StoragesManager));
+                result->SetTargetCompactionLevel(1);
+                result->SetPortionExpectedSize(Settings.PortionExpectedSize);
+                return {result};
+            // }
         }
 
         return {};

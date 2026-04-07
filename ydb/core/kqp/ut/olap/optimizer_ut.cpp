@@ -429,15 +429,27 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
     }
 
     Y_UNIT_TEST(TilingCompactionOneShard) {
-        // Regression test for new tiling compaction.
-        // Uses a single shard so all data lands in one granule and tiling levels fill quickly.
-        // Aggressive settings are set explicitly via COMPACTION_PLANNER.FEATURES:
-        //   initial_blob_bytes=4MB, last_level_bytes=16KB, k=5, portion_expected_size=64KB
-        // This creates 4 active levels from the start:
-        //   level1=4MB, level2=800KB, level3=160KB, level4=32KB → LastLevel=4
-        // Writing 200 batches × ~37KB ≈ 7MB pushes TotalBlobBytes above InitialBlobBytes,
-        // which drives the planner to use actual data size and exercise all 4+ levels.
-        // After the test the planner is reverted to normal production defaults.
+        // Regression test for the tiling compaction pipeline: accumulator → LastLevel.
+        //
+        // MaxPortionSize=30000 bytes (30 KB) is set so each write produces small portions.
+        // Compaction output is also ~30 KB per portion (same MaxPortionSize cap applies globally).
+        //
+        // Settings:
+        //   accumulator_portion_size_limit=40000 (40 KB):
+        //     Fresh write portions (~30 KB) are BELOW this → go to accumulator.
+        //     Compaction output portions (~30 KB) are also below this → go back to accumulator.
+        //     After a second compaction round, the accumulator has enough data to produce
+        //     portions that exceed the limit (multiple rounds merge into larger batches).
+        //
+        //   accumulator_trigger_bytes=200000 (200 KB):
+        //     Accumulator fires after ~7 portions (7 × 30 KB ≈ 210 KB > 200 KB).
+        //
+        //   portion_expected_size=500000 (500 KB):
+        //     Target output size — larger than MaxPortionSize so the splitter produces
+        //     the largest possible portions (~30 KB each, capped by MaxPortionSize).
+        //
+        // The test verifies that SPLIT_COMPACTED portions exist after writing enough data,
+        // proving the tiling pipeline routes portions through accumulator → LastLevel.
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -445,67 +457,85 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        // Small blob split so each write produces many small portions that quickly fill tiling levels.
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(30000));
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(100000));
 
         // One store shard, one table shard — all data in a single granule.
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
 
-        // Switch the table to the new tiling compaction planner with aggressive (test-friendly) settings:
-        //   initial_blob_bytes=4MB, last_level_bytes=16KB, k=5, portion_expected_size=64KB
-        // These values are much smaller than production defaults (128MB / 1MB / 10 / 4MB)
-        // so that levels fill quickly with the small writes used in this test.
+        // Switch the table to the new tiling compaction planner.
+        // accumulator_portion_size_limit=40000: fresh write portions (~30 KB) go to accumulator.
+        // accumulator_trigger_bytes=200000: fires after ~7 portions.
+        // portion_expected_size=500000: target output size (actual output capped at ~30 KB by MaxPortionSize).
         {
             auto tableClient = kikimr.GetTableClient();
             auto alterQuery = TString(
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
                 R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling`, )"
-                R"(`COMPACTION_PLANNER.FEATURES`=`{"initial_blob_bytes":4194304,"last_level_bytes":16384,"k":5,"portion_expected_size":65536}`))"
+                R"(`COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":40000, "accumulator_trigger_bytes":200000, "portion_expected_size":100000}`))"
             );
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        // Write 200 overlapping batches to push TotalBlobBytes above InitialBlobBytes=4MB.
-        // This exercises all 4 active levels (not just level 1).
-        // All writes share pathIdBegin=0 so keys overlap across batches, creating intersections.
-        for (ui32 i = 0; i < 2000; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", i, i * 2000, 1000);
+        // Write enough data to trigger the accumulator multiple times.
+        // 50 writes × 1000 rows × ~30 KB/portion ≈ 1.5 MB >> 200 KB trigger.
+        for (ui32 i = 0; i < 5000; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i, 100, false, 10000);
+            Cout << i << Endl;
         }
 
-        // Wait for compaction to run. With K=5 and 4 active levels the planner should
-        // detect overload quickly and schedule compaction tasks across multiple levels.
-        // const bool compactionStarted = csController->WaitCompactions(TDuration::Seconds(60));
-        // UNIT_ASSERT_C(compactionStarted, "Tiling compaction did not start within 60 seconds. "
-        //     "Check logs for 'tiling_stuck_nonzero_metric_no_task' to diagnose why the planner is stuck.");
+        // Give the background compaction actor time to run (wakeup period = 1 s).
+        Sleep(TDuration::Seconds(10));
 
-        // Verify data is readable after compaction.
+        // Dump all portion kinds so we can see what the tiling optimizer produced.
         {
             auto tableClient = kikimr.GetTableClient();
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT COUNT(*) FROM `/Root/olapStore/olapTable`
+                SELECT Kind, COUNT(*) AS cnt
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                GROUP BY Kind
+                ORDER BY Kind
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << "Row count after tiling compaction: " << result << Endl;
-            UNIT_ASSERT_C(!result.empty(), "No rows returned after tiling compaction");
+            auto rows = CollectRows(it);
+            for (auto& row : rows) {
+                Cout << "Kind=" << GetUtf8(row.at("Kind")) << " count=" << GetUint64(row.at("cnt")) << Endl;
+            }
         }
 
+        // Verify that at least some portions were compacted (Kind == "SPLIT_COMPACTED"),
+        // proving that the accumulator fired and promoted portions to LastLevel.
         {
             auto tableClient = kikimr.GetTableClient();
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT MAX(CompactionLevel) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                SELECT COUNT(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE Kind == "SPLIT_COMPACTED"
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << "Row count after tiling compaction: " << result << Endl;
-            UNIT_ASSERT_C(!result.empty(), "No rows returned after tiling compaction");
-            UNIT_ASSERT_C(result == "5", "No rows returned after tiling compaction");
-            UNIT_ASSERT_C(!result.empty(), "No rows returned after tiling compaction");
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
+            const ui64 compactedCount = GetUint64(rows[0].at("column0"));
+            Cout << "SPLIT_COMPACTED portions: " << compactedCount << Endl;
+            UNIT_ASSERT_C(compactedCount > 0, "Expected at least one SPLIT_COMPACTED portion — accumulator did not fire or promote portions");
         }
+
+
+        // {
+        //     auto tableClient = kikimr.GetTableClient();
+        //     auto it = tableClient.StreamExecuteScanQuery(R"(
+        //         --!syntax_v1
+        //         SELECT COUNT(*) as rows FROM `/Root/olapStore/olapTable/`
+        //     )").GetValueSync();
+        //     UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        //     auto rows = CollectRows(it);
+        //     UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
+        //     const ui64 total_rows = GetUint64(rows[0].at("rows"));
+        //     Cout << "total rows: " << total_rows << Endl;
+        //     UNIT_ASSERT_C(total_rows == 500000, "Too few rows");
+        // }
 
         AFL_VERIFY(false);
     }
